@@ -1,0 +1,11 @@
+{
+  "name": "webex",
+  "description": "Webex provider component supporting egress, ingress, and formatting.",
+  "secret_requirements": [
+    {
+      "name": "WEBEX_BOT_TOKEN",
+      "scope": "tenant",
+      "description": "Bot token used for Webex API calls."
+    }
+  ]
+}

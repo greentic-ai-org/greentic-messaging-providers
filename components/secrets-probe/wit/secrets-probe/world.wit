@@ -1,0 +1,9 @@
+package probe:secrets-probe@0.0.1;
+
+use greentic:secrets-store/secrets-store@1.0.0;
+
+world secrets-probe {
+    import secrets-store;
+
+    export run: func() -> string;
+}

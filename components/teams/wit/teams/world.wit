@@ -1,0 +1,18 @@
+package provider:teams@0.0.1;
+
+use greentic:http/http-client@1.0.0;
+use greentic:secrets-store/secrets-store@1.0.0;
+use greentic:state/state-store@1.0.0;
+use greentic:telemetry/logger-api@1.0.0;
+
+world teams {
+    import http-client;
+    import secrets-store;
+    import state-store;
+    import logger-api;
+
+    export send-message: func(destination-json: string, text: string) -> result<string, string>;
+    export handle-webhook: func(headers-json: string, body-json: string) -> result<string, string>;
+    export refresh: func() -> result<string, string>;
+    export format-message: func(destination-json: string, text: string) -> string;
+}

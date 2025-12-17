@@ -1,0 +1,22 @@
+[package]
+name = "secrets-probe"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen.workspace = true
+
+[package.metadata.component]
+package = "probe:secrets-probe"
+
+[package.metadata.component.target]
+path = "wit/secrets-probe"
+world = "secrets-probe"
+
+[package.metadata.component.target.dependencies]
+"greentic:secrets-store" = { path = "wit/secrets-probe/deps/secrets-store" }

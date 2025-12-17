@@ -1,0 +1,26 @@
+package greentic:http@1.0.0;
+
+interface client {
+    record header { name: string, value: string }
+
+    record request {
+        method: string,
+        url: string,
+        headers: list<header>,
+        body: list<u8>,
+    }
+
+    record response {
+        status: u16,
+        headers: list<header>,
+        body: list<u8>,
+    }
+
+    enum http-error {
+        network,
+        invalid,
+        other,
+    }
+
+    send: func(req: request) -> result<response, http-error>;
+}

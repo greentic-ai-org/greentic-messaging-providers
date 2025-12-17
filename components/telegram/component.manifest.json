@@ -1,0 +1,11 @@
+{
+  "name": "telegram",
+  "description": "Telegram provider component supporting egress, ingress, and formatting.",
+  "secret_requirements": [
+    {
+      "name": "TELEGRAM_BOT_TOKEN",
+      "scope": "tenant",
+      "description": "Telegram bot token used for sendMessage requests."
+    }
+  ]
+}

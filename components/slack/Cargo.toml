@@ -1,0 +1,31 @@
+[package]
+name = "slack"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+provider-common = { path = "../../crates/provider-common" }
+wit-bindgen.workspace = true
+
+[package.metadata.component]
+package = "provider:slack"
+
+[package.metadata.component.target]
+path = "wit/slack"
+world = "slack"
+
+[package.metadata.component.target.dependencies]
+"greentic:secrets-store" = { path = "wit/slack/deps/secrets-store" }
+"greentic:http" = { path = "wit/slack/deps/http" }
+"greentic:state" = { path = "wit/slack/deps/state" }
+"greentic:telemetry" = { path = "wit/slack/deps/telemetry" }
+"greentic:interfaces-types" = { path = "wit/slack/deps/interfaces-types" }

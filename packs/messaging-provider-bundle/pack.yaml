@@ -1,0 +1,87 @@
+pack_id: messaging-provider-bundle
+version: 0.0.0
+kind: application
+publisher: Greentic
+
+components:
+  - id: "messaging-provider-bundle.slack"
+    version: 0.0.0
+    world: "provider:slack/slack"
+    supports: ["messaging"]
+    profiles:
+      default: "default"
+      supported: ["default"]
+    capabilities:
+      wasi: {}
+      host: {}
+    wasm: "components/slack.wasm"
+
+  - id: "messaging-provider-bundle.teams"
+    version: 0.0.0
+    world: "provider:teams/teams"
+    supports: ["messaging"]
+    profiles:
+      default: "default"
+      supported: ["default"]
+    capabilities:
+      wasi: {}
+      host: {}
+    wasm: "components/teams.wasm"
+
+  - id: "messaging-provider-bundle.telegram"
+    version: 0.0.0
+    world: "provider:telegram/telegram"
+    supports: ["messaging"]
+    profiles:
+      default: "default"
+      supported: ["default"]
+    capabilities:
+      wasi: {}
+      host: {}
+    wasm: "components/telegram.wasm"
+
+  - id: "messaging-provider-bundle.webchat"
+    version: 0.0.0
+    world: "provider:webchat/webchat"
+    supports: ["messaging"]
+    profiles:
+      default: "default"
+      supported: ["default"]
+    capabilities:
+      wasi: {}
+      host: {}
+    wasm: "components/webchat.wasm"
+
+  - id: "messaging-provider-bundle.webex"
+    version: 0.0.0
+    world: "provider:webex/webex"
+    supports: ["messaging"]
+    profiles:
+      default: "default"
+      supported: ["default"]
+    capabilities:
+      wasi: {}
+      host: {}
+    wasm: "components/webex.wasm"
+
+  - id: "messaging-provider-bundle.whatsapp"
+    version: 0.0.0
+    world: "provider:whatsapp/whatsapp"
+    supports: ["messaging"]
+    profiles:
+      default: "default"
+      supported: ["default"]
+    capabilities:
+      wasi: {}
+      host: {}
+    wasm: "components/whatsapp.wasm"
+
+flows:
+  - id: main
+    file: flows/main.ygtc
+    tags: [default]
+    entrypoints: [default]
+
+dependencies: []
+
+assets: []

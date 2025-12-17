@@ -1,0 +1,65 @@
+{
+  "name": "messaging-provider-bundle",
+  "version": "0.0.0",
+  "description": "Bundle of messaging provider components.",
+  "components": [
+    "slack",
+    "teams",
+    "telegram",
+    "webchat",
+    "webex",
+    "whatsapp"
+  ],
+  "secret_requirements": [
+    {
+      "name": "SLACK_BOT_TOKEN",
+      "scope": "tenant",
+      "description": "Slack bot token used for chat.postMessage."
+    },
+    {
+      "name": "SLACK_SIGNING_SECRET",
+      "scope": "tenant",
+      "description": "Optional signing secret for webhook verification."
+    },
+    {
+      "name": "MS_GRAPH_TENANT_ID",
+      "scope": "tenant",
+      "description": "Tenant ID for Microsoft Graph access."
+    },
+    {
+      "name": "MS_GRAPH_CLIENT_ID",
+      "scope": "tenant",
+      "description": "Client ID for Microsoft Graph access."
+    },
+    {
+      "name": "MS_GRAPH_CLIENT_SECRET",
+      "scope": "tenant",
+      "description": "Client secret used to obtain Graph access tokens."
+    },
+    {
+      "name": "TELEGRAM_BOT_TOKEN",
+      "scope": "tenant",
+      "description": "Telegram bot token used for sendMessage requests."
+    },
+    {
+      "name": "WEBEX_BOT_TOKEN",
+      "scope": "tenant",
+      "description": "Bot token used for Webex API calls."
+    },
+    {
+      "name": "WHATSAPP_TOKEN",
+      "scope": "tenant",
+      "description": "Access token used for WhatsApp Graph API calls."
+    },
+    {
+      "name": "WHATSAPP_PHONE_NUMBER_ID",
+      "scope": "tenant",
+      "description": "Phone number ID associated with the WhatsApp sender."
+    },
+    {
+      "name": "WHATSAPP_VERIFY_TOKEN",
+      "scope": "tenant",
+      "description": "Verify token used for webhook validation (if configured)."
+    }
+  ]
+}

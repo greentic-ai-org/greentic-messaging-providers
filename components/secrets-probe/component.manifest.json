@@ -1,0 +1,11 @@
+{
+  "name": "secrets-probe",
+  "description": "Minimal component that probes greentic:secrets-store for TEST_API_KEY.",
+  "secret_requirements": [
+    {
+      "name": "TEST_API_KEY",
+      "scope": "tenant",
+      "description": "API key required to validate secrets-store integration."
+    }
+  ]
+}

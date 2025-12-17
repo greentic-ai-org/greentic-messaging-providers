@@ -1,0 +1,21 @@
+{
+  "name": "teams",
+  "description": "Microsoft Teams provider component supporting egress, ingress, and formatting.",
+  "secret_requirements": [
+    {
+      "name": "MS_GRAPH_TENANT_ID",
+      "scope": "tenant",
+      "description": "Tenant ID for Microsoft Graph access."
+    },
+    {
+      "name": "MS_GRAPH_CLIENT_ID",
+      "scope": "tenant",
+      "description": "Client ID for Microsoft Graph access."
+    },
+    {
+      "name": "MS_GRAPH_CLIENT_SECRET",
+      "scope": "tenant",
+      "description": "Client secret used to obtain Graph access tokens."
+    }
+  ]
+}

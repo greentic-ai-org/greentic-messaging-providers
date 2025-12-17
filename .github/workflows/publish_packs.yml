@@ -1,0 +1,64 @@
+name: Publish Packs
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+
+jobs:
+  publish-packs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PACK_VERSION: ${{ github.ref_name }}
+      OCI_REGISTRY: ghcr.io
+      OCI_ORG: ${{ github.repository_owner }}
+      OCI_REPO: greentic-packs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (for pack tooling)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install oras
+        uses: oras-project/setup-oras@v1
+        with:
+          version: v1.2.0
+
+      - name: Install packc (optional)
+        run: |
+          set -euo pipefail
+          if command -v packc >/dev/null 2>&1; then
+            echo "packc already available"
+            exit 0
+          fi
+          if cargo install packc --locked; then
+            echo "packc installed via cargo"
+          else
+            echo "packc install failed; publish script will fall back to zip" >&2
+          fi
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publish packs
+        run: ./tools/publish_packs_oci.sh
+
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: packs-lockfile
+          path: packs.lock.json
+          if-no-files-found: error
+
+      - name: Upload built packs
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtpack-artifacts
+          path: dist/packs/*.gtpack
+          if-no-files-found: error

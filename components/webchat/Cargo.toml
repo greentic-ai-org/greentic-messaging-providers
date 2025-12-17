@@ -1,0 +1,29 @@
+[package]
+name = "webchat"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+provider-common = { path = "../../crates/provider-common" }
+wit-bindgen.workspace = true
+
+[package.metadata.component]
+package = "provider:webchat"
+
+[package.metadata.component.target]
+path = "wit/webchat"
+world = "webchat"
+
+[package.metadata.component.target.dependencies]
+"greentic:secrets-store" = { path = "wit/webchat/deps/secrets-store" }
+"greentic:http" = { path = "wit/webchat/deps/http" }
+"greentic:state" = { path = "wit/webchat/deps/state" }
+"greentic:telemetry" = { path = "wit/webchat/deps/telemetry" }
+"greentic:interfaces-types" = { path = "wit/webchat/deps/interfaces-types" }

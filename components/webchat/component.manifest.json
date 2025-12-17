@@ -1,0 +1,6 @@
+{
+  "name": "webchat",
+  "description": "WebChat provider component supporting egress, ingress, and formatting.",
+  "secret_requirements": [
+  ]
+}
