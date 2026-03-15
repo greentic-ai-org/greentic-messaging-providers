@@ -11,6 +11,7 @@ BUILD_TARGET="wasm32-wasip2"
 TARGET_DIR_OVERRIDE="${TARGET_DIR_OVERRIDE:-${ROOT_DIR}/target/${BUILD_TARGET}}"
 WASM_TOOLS_BIN="${WASM_TOOLS_BIN:-wasm-tools}"
 SKIP_WASM_TOOLS_VALIDATION="${SKIP_WASM_TOOLS_VALIDATION:-0}"
+CARGO_COMPONENT_VERSION="${CARGO_COMPONENT_VERSION:-0.21.1}"
 HAS_WASM_TOOLS=0
 
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${ROOT_DIR}/.cache}"
@@ -27,8 +28,8 @@ if ! rustup target list --installed | grep -q "${BUILD_TARGET}"; then
 fi
 
 if ! command -v cargo-component >/dev/null 2>&1; then
-  echo "cargo-component not found; installing..."
-  cargo install cargo-component --locked
+  echo "cargo-component not found; installing ${CARGO_COMPONENT_VERSION}..."
+  cargo install cargo-component --version "${CARGO_COMPONENT_VERSION}" --locked
 fi
 
 if command -v "${WASM_TOOLS_BIN}" >/dev/null 2>&1; then
