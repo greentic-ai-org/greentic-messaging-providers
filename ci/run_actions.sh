@@ -17,11 +17,15 @@ SECRETS_FILE="${ACT_SECRETS_FILE:-.secrets.act}"
 ENV_FILE="${ACT_ENV_FILE:-.env.act}"
 ACT_VERSION="${ACT_VERSION:-v0.2.82}"
 ACT_BIND="${ACT_BIND:-1}"
-ACT_TMPDIR="${ACT_TMPDIR:-${ROOT_DIR}/.tmp/act-tmp}"
+ACT_CAPTURE_MODE="${ACT_CAPTURE_MODE:-auto}"
+ACT_TMPROOT="${ACT_TMPROOT:-${ACT_TMPDIR:-${ROOT_DIR}/.tmp/act-tmp}}"
 ACT_ARTIFACT_PATH="${ACT_ARTIFACT_PATH:-${ROOT_DIR}/.tmp/act-artifacts}"
+RUN_REPORT_DIR="${RUN_REPORT_DIR:-${ROOT_DIR}/.tmp/run-actions}"
 LIST_JOBS="${LIST_JOBS:-0}"
 QUICK_TARGET_ROOT="${QUICK_TARGET_ROOT:-${ROOT_DIR}/.tmp/quick-target}"
 QUICK_PACKS_DIR="${QUICK_PACKS_DIR:-${ROOT_DIR}/.tmp/quick-packs}"
+QUICK_TARGET_ROOT_REL="${QUICK_TARGET_ROOT_REL:-.tmp/quick-target}"
+QUICK_PACKS_DIR_REL="${QUICK_PACKS_DIR_REL:-.tmp/quick-packs}"
 
 usage() {
   cat <<'EOF'
@@ -47,11 +51,14 @@ Environment overrides:
   ACT_ENV_FILE=.env.act
   ACT_VERSION=v0.2.82
   ACT_BIND=1
-  ACT_TMPDIR=.tmp/act-tmp
+  ACT_CAPTURE_MODE=auto
+  ACT_TMPROOT=.tmp/act-tmp
   ACT_ARTIFACT_PATH=.tmp/act-artifacts
   LIST_JOBS=1
   QUICK_TARGET_ROOT=.tmp/quick-target
   QUICK_PACKS_DIR=.tmp/quick-packs
+  QUICK_TARGET_ROOT_REL=.tmp/quick-target
+  QUICK_PACKS_DIR_REL=.tmp/quick-packs
 
 Examples:
   ./ci/run_actions.sh
@@ -68,9 +75,198 @@ EOF
 }
 
 prepare_act_runtime() {
-  mkdir -p "${ACT_TMPDIR}" "${ACT_ARTIFACT_PATH}"
-  find "${ACT_TMPDIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+  mkdir -p "${ACT_TMPROOT}" "${ACT_ARTIFACT_PATH}"
+  ACT_TMPDIR="$(mktemp -d "${ACT_TMPROOT}/run.XXXXXX")"
   export TMPDIR="${ACT_TMPDIR}"
+}
+
+prepare_run_report_dir() {
+  mkdir -p "${RUN_REPORT_DIR}"
+}
+
+strip_ansi_to_file() {
+  local src="$1"
+  local dest="$2"
+  perl -pe 's/\e\[[0-9;?]*[ -\/]*[@-~]//g' "${src}" > "${dest}"
+}
+
+run_command_with_tty_log() {
+  local runner_path="$1"
+  shift
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'set -euo pipefail\n'
+    printf 'cd %q\n' "${ROOT_DIR}"
+    printf 'exec'
+    printf ' %q' "$@"
+    printf '\n'
+  } > "${runner_path}"
+  chmod +x "${runner_path}"
+  script -qefc "${runner_path}" "${RUN_LOG_PATH}"
+}
+
+should_capture_run() {
+  local mode="$1"
+
+  if [ "${ACT_CAPTURE_MODE}" = "1" ] || [ "${ACT_CAPTURE_MODE}" = "always" ]; then
+    return 0
+  fi
+
+  if [ "${ACT_CAPTURE_MODE}" = "0" ] || [ "${ACT_CAPTURE_MODE}" = "never" ]; then
+    return 1
+  fi
+
+  # In auto mode, keep QUICK runs captured, but let act run directly so its
+  # native terminal UI stays intact.
+  [ "${mode}" != "act" ]
+}
+
+append_matches() {
+  local title="$1"
+  local pattern="$2"
+  local source="$3"
+  local limit="${4:-80}"
+  {
+    echo "## ${title}"
+    if ! rg -N -m "${limit}" "${pattern}" "${source}"; then
+      echo "(none)"
+    fi
+    echo
+  } >> "${RUN_SUMMARY_PATH}"
+}
+
+append_step_rerun_hints() {
+  local source="$1"
+  local -a step_numbers
+  local found=0
+
+  mapfile -t step_numbers < <(grep -oE 'Step [0-9]{2}' "${source}" | awk '{print $2}' | sort -u)
+
+  {
+    echo "## Rerun Hints"
+    if [ "${#step_numbers[@]}" -eq 0 ]; then
+      echo "(no numbered CI steps detected in the log)"
+      echo
+      return
+    fi
+
+    for step in "${step_numbers[@]}"; do
+      local matches=()
+      mapfile -t matches < <(compgen -G "${ROOT_DIR}/ci/steps/${step}_*.sh" || true)
+      if [ "${#matches[@]}" -gt 0 ]; then
+        local rel_path="${matches[0]#${ROOT_DIR}/}"
+        echo "./${rel_path}"
+        found=1
+      fi
+    done
+
+    if [ "${found}" -eq 0 ]; then
+      echo "(no matching ci/steps scripts found for detected step numbers)"
+    fi
+    echo
+  } >> "${RUN_SUMMARY_PATH}"
+}
+
+append_artifact_listing() {
+  {
+    echo "## Artifact Files"
+    if [ -d "${ACT_ARTIFACT_PATH}" ]; then
+      if ! find "${ACT_ARTIFACT_PATH}" -type f | sort; then
+        echo "(artifact listing failed)"
+      fi
+    else
+      echo "(artifact directory not present)"
+    fi
+    echo
+  } >> "${RUN_SUMMARY_PATH}"
+}
+
+create_run_summary() {
+  local mode="$1"
+  local exit_code="$2"
+  local raw_log="$3"
+  local clean_log="$4"
+
+  {
+    echo "# ci/run_actions summary"
+    echo
+    echo "- Timestamp (UTC): $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "- Mode: ${mode}"
+    echo "- Exit code: ${exit_code}"
+    echo "- Workflow: ${WORKFLOW}"
+    echo "- Event: ${EVENT}"
+    echo "- Job filter: ${JOB:-<all>}"
+    echo "- Matrix filter: ${MATRIX:-<none>}"
+    echo "- Single filter: ${SINGLE:-<none>}"
+    echo "- Full log: ${raw_log}"
+    echo "- Clean log: ${clean_log}"
+    echo "- Artifact path: ${ACT_ARTIFACT_PATH}"
+    echo
+    echo "## Reproduction"
+    echo "cd ${ROOT_DIR}"
+    echo "JOB='${JOB}' MATRIX='${MATRIX}' SINGLE='${SINGLE}' QUICK='${QUICK}' ./ci/run_actions.sh ${EVENT}"
+    echo
+  } > "${RUN_SUMMARY_PATH}"
+
+  append_matches "Failed Job And Step Lines" '^\[[^]]+\].*(Failure -|failed|Error:|exitcode|panic|panicked)' "${clean_log}" 200
+  append_matches "Rust And Test Errors" '(^error(\[[A-Z0-9]+\])?:|^Error:|^thread .+ panicked|^failures:$|^failures:|^---- .+ ----|assertion .* failed|test result: FAILED|^FAIL \[)' "${clean_log}" 200
+  append_matches "Recent Log Tail" '.' <(tail -n 120 "${clean_log}") 120
+  append_step_rerun_hints "${clean_log}"
+  append_artifact_listing
+}
+
+print_failure_digest() {
+  echo >&2
+  echo "================ ci/run_actions failure digest ================" >&2
+  echo "Failure summary: ${RUN_SUMMARY_PATH}" >&2
+  echo "Full log: ${RUN_LOG_PATH}" >&2
+  echo "Artifact path: ${ACT_ARTIFACT_PATH}" >&2
+  echo >&2
+  sed -n '1,160p' "${RUN_SUMMARY_PATH}" >&2
+  echo "===============================================================" >&2
+}
+
+run_with_reporting() {
+  local mode="$1"
+  shift
+  local timestamp
+  local exit_code
+  local runner_path
+
+  prepare_run_report_dir
+
+  if ! should_capture_run "${mode}"; then
+    "$@"
+    return $?
+  fi
+
+  timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
+  RUN_LOG_PATH="${RUN_REPORT_DIR}/${timestamp}-${mode}.log"
+  RUN_CLEAN_LOG_PATH="${RUN_REPORT_DIR}/${timestamp}-${mode}.clean.log"
+  RUN_SUMMARY_PATH="${RUN_REPORT_DIR}/${timestamp}-${mode}.summary.md"
+
+  set +e
+  if [ "${mode}" = "act" ] && [ -t 1 ] && command -v script >/dev/null 2>&1; then
+    runner_path="${RUN_REPORT_DIR}/${timestamp}-${mode}.runner.sh"
+    run_command_with_tty_log "${runner_path}" "$@"
+    exit_code=$?
+  else
+    "$@" 2>&1 | tee "${RUN_LOG_PATH}"
+    exit_code=${PIPESTATUS[0]}
+  fi
+  set -e
+
+  strip_ansi_to_file "${RUN_LOG_PATH}" "${RUN_CLEAN_LOG_PATH}"
+  create_run_summary "${mode}" "${exit_code}" "${RUN_LOG_PATH}" "${RUN_CLEAN_LOG_PATH}"
+
+  echo "Run summary: ${RUN_SUMMARY_PATH}"
+  echo "Run log: ${RUN_LOG_PATH}"
+
+  if [ "${exit_code}" -ne 0 ]; then
+    print_failure_digest
+  fi
+
+  return "${exit_code}"
 }
 
 prepare_quick_runtime() {
@@ -161,15 +357,7 @@ quick_validate_pack_inputs() {
     lock_backup="$(mktemp)"
     cp -f "${lock_path}" "${lock_backup}"
   fi
-  restore_quick_lock() {
-    if [ -n "${lock_backup}" ] && [ -f "${lock_backup}" ]; then
-      cp -f "${lock_backup}" "${lock_path}"
-      rm -f "${lock_backup}"
-    else
-      rm -f "${lock_path}"
-    fi
-  }
-  trap restore_quick_lock RETURN
+  trap 'if [ -n "'"${lock_backup}"'" ] && [ -f "'"${lock_backup}"'" ]; then cp -f "'"${lock_backup}"'" "'"${lock_path}"'"; rm -f "'"${lock_backup}"'"; else rm -f "'"${lock_path}"'"; fi' RETURN
   TARGET_DIR="${QUICK_TARGET_ROOT}/components" \
     TARGET_COMPONENTS_DIR="${QUICK_TARGET_ROOT}/components" \
     TARGET_COMPONENTS="${QUICK_TARGET_ROOT}/components" \
@@ -181,12 +369,12 @@ quick_validate_pack_inputs() {
     ./ci/steps/04_ensure_templates.sh
   TARGET_COMPONENTS_DIR="${QUICK_TARGET_ROOT}/components" \
     GENERATED_PROVIDERS_DIR="${QUICK_TARGET_ROOT}/generated/providers" \
-    PACKS_DIR="${QUICK_PACKS_DIR}" \
+    PACKS_DIR="${QUICK_PACKS_DIR_REL}" \
     CARGO_TARGET_DIR="${QUICK_TARGET_ROOT}/cargo-steps" \
     ./ci/steps/06_gen_flows.sh
   TARGET_COMPONENTS_DIR="${QUICK_TARGET_ROOT}/components" \
     TARGET_COMPONENTS="${QUICK_TARGET_ROOT}/components" \
-    PACKS_DIR="${QUICK_PACKS_DIR}" \
+    PACKS_DIR="${QUICK_PACKS_DIR_REL}" \
     CARGO_TARGET_DIR="${QUICK_TARGET_ROOT}/cargo-steps" \
     PACK_FILTER="${pack}" \
     ./ci/steps/07a_validate_pack_inputs.sh
@@ -240,7 +428,7 @@ fi
 
 if [ "${QUICK}" = "1" ]; then
   prepare_quick_runtime
-  run_quick_mode
+  run_with_reporting quick run_quick_mode
   exit 0
 fi
 
@@ -300,5 +488,10 @@ echo "Running ${ACT_BIN} ${args[*]}"
 echo "Note: act mirrors the GitHub workflow file locally, but it is not a byte-for-byte GitHub runner."
 echo "Using TMPDIR=${TMPDIR}"
 echo "Using artifact path ${ACT_ARTIFACT_PATH}"
+if should_capture_run act; then
+  echo "Capture mode: enabled (logs and summary will be written under ${RUN_REPORT_DIR})"
+else
+  echo "Capture mode: disabled for native act UI. Set ACT_CAPTURE_MODE=1 to also write detailed failure summaries."
+fi
 
-exec "${ACT_BIN}" "${args[@]}"
+run_with_reporting act "${ACT_BIN}" "${args[@]}"
