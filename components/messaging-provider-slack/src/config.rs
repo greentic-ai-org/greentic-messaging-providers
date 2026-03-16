@@ -143,3 +143,97 @@ pub(crate) fn parse_destination(parsed: &Value) -> Option<Destination> {
         kind: kind.or_else(|| Some("channel".to_string())),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_config_out() -> ProviderConfigOut {
+        ProviderConfigOut {
+            enabled: true,
+            default_channel: Some("C123".to_string()),
+            public_base_url: "https://example.com".to_string(),
+            api_base_url: "https://slack.test/api".to_string(),
+            bot_token: "token".to_string(),
+        }
+    }
+
+    #[test]
+    fn validate_config_out_rejects_invalid_values() {
+        let mut config = valid_config_out();
+        config.public_base_url = String::new();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("invalid config: public_base_url cannot be empty".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.public_base_url = "/relative".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("invalid config: public_base_url must be an absolute URL".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.bot_token = "   ".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("invalid config: bot_token cannot be empty".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.api_base_url = "slack".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("invalid config: api_base_url must be an absolute URL".to_string())
+        );
+    }
+
+    #[test]
+    fn load_config_supports_nested_and_top_level_shapes() {
+        let nested = load_config(&json!({
+            "config": {
+                "public_base_url": "https://example.com",
+                "bot_token": "nested"
+            }
+        }))
+        .expect("nested config");
+        assert!(nested.enabled);
+        assert_eq!(nested.bot_token, "nested");
+
+        let top_level = load_config(&json!({
+            "public_base_url": "https://example.com",
+            "bot_token": "top-level",
+            "default_channel": "C123"
+        }))
+        .expect("top-level config");
+        assert_eq!(top_level.bot_token, "top-level");
+        assert_eq!(top_level.default_channel.as_deref(), Some("C123"));
+    }
+
+    #[test]
+    fn load_config_requires_config_fields() {
+        assert_eq!(
+            load_config(&json!({})).unwrap_err(),
+            "missing config: expected `config` or top-level config fields".to_string()
+        );
+    }
+
+    #[test]
+    fn parse_destination_handles_string_and_object_inputs() {
+        let from_string = parse_destination(&json!({ "to": "  C123  " })).expect("string dest");
+        assert_eq!(from_string.id, "C123");
+        assert_eq!(from_string.kind.as_deref(), Some("channel"));
+
+        let from_object = parse_destination(&json!({
+            "to": { "id": "U123", "kind": "user" }
+        }))
+        .expect("object dest");
+        assert_eq!(from_object.id, "U123");
+        assert_eq!(from_object.kind.as_deref(), Some("user"));
+
+        assert!(parse_destination(&json!({ "to": "   " })).is_none());
+        assert!(parse_destination(&json!({ "to": { "id": "   " } })).is_none());
+    }
+}

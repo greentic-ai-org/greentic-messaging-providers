@@ -232,3 +232,94 @@ pub(crate) fn get_activity_id(activity: &Value) -> Option<String> {
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_config_out() -> ProviderConfigOut {
+        ProviderConfigOut {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            ms_bot_app_id: "app-id".to_string(),
+            ms_bot_app_password: Some("secret".to_string()),
+            default_service_url: Some("https://service.example.com".to_string()),
+            team_id: Some("team-1".to_string()),
+            channel_id: Some("channel-1".to_string()),
+        }
+    }
+
+    #[test]
+    fn validate_config_out_rejects_missing_or_relative_values() {
+        let mut config = valid_config_out();
+        config.ms_bot_app_id = String::new();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: ms_bot_app_id is required".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.public_base_url = "/relative".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: public_base_url must be an absolute URL".to_string())
+        );
+    }
+
+    #[test]
+    fn load_config_supports_nested_and_top_level_inputs() {
+        let nested = load_config(&json!({
+            "config": {
+                "public_base_url": "https://example.com",
+                "ms_bot_app_id": "nested-app"
+            }
+        }))
+        .expect("nested config");
+        assert_eq!(nested.ms_bot_app_id, "nested-app");
+
+        let top_level = load_config(&json!({
+            "public_base_url": "https://example.com",
+            "ms_bot_app_id": "top-level-app",
+            "team_id": "team-1",
+            "channel_id": "channel-1"
+        }))
+        .expect("top-level config");
+        assert_eq!(top_level.team_id.as_deref(), Some("team-1"));
+        assert_eq!(top_level.channel_id.as_deref(), Some("channel-1"));
+    }
+
+    #[test]
+    fn helper_extractors_prefer_activity_data_and_trim_defaults() {
+        let cfg = ProviderConfig {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            ms_bot_app_id: "app-id".to_string(),
+            ms_bot_app_password: None,
+            default_service_url: Some("https://fallback.example.com".to_string()),
+            team_id: Some(" team-1 ".to_string()),
+            channel_id: Some(" channel-1 ".to_string()),
+        };
+        let destination = default_channel_destination(&cfg).expect("channel destination");
+        assert_eq!(destination.id, "team-1:channel-1");
+        assert_eq!(destination.kind.as_deref(), Some("channel"));
+
+        let activity = json!({
+            "serviceUrl": "https://activity.example.com",
+            "conversation": { "id": "conv-1" },
+            "id": "activity-1"
+        });
+        assert_eq!(
+            get_service_url(&activity, &cfg).as_deref(),
+            Some("https://activity.example.com")
+        );
+        assert_eq!(get_conversation_id(&activity).as_deref(), Some("conv-1"));
+        assert_eq!(get_activity_id(&activity).as_deref(), Some("activity-1"));
+
+        let empty_activity = json!({});
+        assert_eq!(
+            get_service_url(&empty_activity, &cfg).as_deref(),
+            Some("https://fallback.example.com")
+        );
+    }
+}

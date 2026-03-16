@@ -137,3 +137,106 @@ pub(crate) fn parse_config_bytes(bytes: &[u8]) -> Result<ProviderConfig, String>
         .map_err(|e| format!("invalid config: {e}"))?;
     validate_provider_config(cfg)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_config_out() -> ProviderConfigOut {
+        ProviderConfigOut {
+            enabled: true,
+            phone_number_id: "123".to_string(),
+            public_base_url: "https://example.com".to_string(),
+            business_account_id: Some("acct".to_string()),
+            api_base_url: DEFAULT_API_BASE.to_string(),
+            api_version: DEFAULT_API_VERSION.to_string(),
+            token: Some("token".to_string()),
+        }
+    }
+
+    #[test]
+    fn validate_config_out_rejects_missing_required_values() {
+        let mut config = valid_config_out();
+        config.phone_number_id = String::new();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: phone_number_id is required".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.public_base_url = "relative".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: public_base_url must be an absolute URL".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.api_base_url = "relative".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: api_base_url must be an absolute URL".to_string())
+        );
+    }
+
+    #[test]
+    fn load_config_supports_nested_and_top_level_shapes() {
+        let nested = load_config(&json!({
+            "config": {
+                "phone_number_id": "321",
+                "public_base_url": "https://example.com"
+            }
+        }))
+        .expect("nested config");
+        assert_eq!(nested.phone_number_id, "321");
+
+        let top_level = load_config(&json!({
+            "phone_number_id": "654",
+            "public_base_url": "https://example.com",
+            "api_version": "v20.0"
+        }))
+        .expect("top-level config");
+        assert_eq!(top_level.api_version.as_deref(), Some("v20.0"));
+    }
+
+    #[test]
+    fn load_config_requires_config_values() {
+        assert_eq!(
+            load_config(&json!({})).unwrap_err(),
+            "config required".to_string()
+        );
+    }
+
+    #[test]
+    fn validate_provider_config_rejects_empty_required_fields() {
+        let err = validate_provider_config(ProviderConfig {
+            enabled: true,
+            phone_number_id: "  ".to_string(),
+            public_base_url: "https://example.com".to_string(),
+            business_account_id: None,
+            api_base_url: None,
+            api_version: None,
+            token: None,
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "invalid config: phone_number_id cannot be empty".to_string()
+        );
+
+        let err = validate_provider_config(ProviderConfig {
+            enabled: true,
+            phone_number_id: "123".to_string(),
+            public_base_url: "  ".to_string(),
+            business_account_id: None,
+            api_base_url: None,
+            api_version: None,
+            token: None,
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "invalid config: public_base_url cannot be empty".to_string()
+        );
+    }
+}

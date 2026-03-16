@@ -1896,3 +1896,116 @@ fn urldecode(input: &str) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::messaging::universal_dto::HttpOutV1;
+    use greentic_types::{Attachment, EnvId, TenantCtx, TenantId};
+
+    fn envelope_json() -> Value {
+        serde_json::to_value(ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("default").expect("env"),
+                TenantId::try_from("default").expect("tenant"),
+            ),
+            channel: "slack".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: vec![Destination {
+                id: "C123".to_string(),
+                kind: Some("channel".to_string()),
+            }],
+            correlation_id: None,
+            text: Some("hello".to_string()),
+            attachments: Vec::new(),
+            metadata: MessageMetadata::new(),
+        })
+        .expect("envelope")
+    }
+
+    fn with_config(mut value: Value) -> Vec<u8> {
+        let obj = value.as_object_mut().expect("object");
+        obj.insert(
+            "public_base_url".to_string(),
+            Value::String("https://example.com".to_string()),
+        );
+        obj.insert("bot_token".to_string(), Value::String("token".to_string()));
+        serde_json::to_vec(&value).expect("bytes")
+    }
+
+    fn parse_json(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json")
+    }
+
+    #[test]
+    fn handle_send_rejects_invalid_json() {
+        let body = parse_json(handle_send(b"{", false));
+        assert_eq!(body.get("ok").and_then(Value::as_bool), Some(false));
+        assert!(
+            body.get("error")
+                .and_then(Value::as_str)
+                .expect("error")
+                .starts_with("invalid json:")
+        );
+    }
+
+    #[test]
+    fn handle_send_rejects_attachments_before_network() {
+        let mut payload = envelope_json();
+        payload.as_object_mut().expect("object").insert(
+            "attachments".to_string(),
+            serde_json::to_value(vec![Attachment {
+                mime_type: "image/png".to_string(),
+                url: "https://example.com/image.png".to_string(),
+                name: None,
+                size_bytes: None,
+            }])
+            .expect("attachments"),
+        );
+
+        let body = parse_json(handle_send(&with_config(payload), false));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("attachments not supported")
+        );
+    }
+
+    #[test]
+    fn handle_send_requires_destination_without_default_channel() {
+        let mut payload = envelope_json();
+        payload
+            .as_object_mut()
+            .expect("object")
+            .insert("to".to_string(), Value::Array(Vec::new()));
+
+        let body = parse_json(handle_send(&with_config(payload), false));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("destination required")
+        );
+    }
+
+    #[test]
+    fn ingest_http_answers_url_verification_challenge() {
+        let request = json!({
+            "method": "POST",
+            "path": "/slack",
+            "query": [],
+            "headers": [],
+            "body_b64": STANDARD.encode(br#"{"type":"url_verification","challenge":"abc123"}"#)
+        });
+        let out: HttpOutV1 = serde_json::from_slice(&ingest_http(
+            &serde_json::to_vec(&request).expect("request bytes"),
+        ))
+        .expect("http out");
+
+        assert_eq!(out.status, 200);
+        assert_eq!(
+            String::from_utf8(STANDARD.decode(out.body_b64).expect("body")).expect("utf8"),
+            "abc123"
+        );
+    }
+}

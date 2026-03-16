@@ -131,3 +131,82 @@ pub(crate) fn get_bot_token(cfg: &ProviderConfig) -> Result<String, String> {
         Err(e) => Err(format!("secret store error: {e:?}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_config_out() -> ProviderConfigOut {
+        ProviderConfigOut {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            default_chat_id: Some("1234".to_string()),
+            api_base_url: "https://api.telegram.org".to_string(),
+            bot_token: Some("token".to_string()),
+        }
+    }
+
+    #[test]
+    fn validate_config_out_catches_bad_urls() {
+        let mut config = valid_config_out();
+        config.public_base_url = "   ".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("invalid config: public_base_url cannot be empty".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.public_base_url = "relative".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("invalid config: public_base_url must be an absolute URL".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.api_base_url = "relative".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("invalid config: api_base_url must be an absolute URL".to_string())
+        );
+    }
+
+    #[test]
+    fn load_config_uses_nested_top_level_or_defaults() {
+        let nested = load_config(&json!({
+            "config": {
+                "public_base_url": "https://example.com",
+                "default_chat_id": "nested"
+            }
+        }))
+        .expect("nested config");
+        assert_eq!(nested.default_chat_id.as_deref(), Some("nested"));
+
+        let top_level = load_config(&json!({
+            "public_base_url": "https://example.com",
+            "bot_token": "top-level"
+        }))
+        .expect("top-level config");
+        assert_eq!(top_level.bot_token.as_deref(), Some("top-level"));
+
+        let defaulted = load_config(&json!({})).expect("default config");
+        assert_eq!(defaulted.public_base_url, "https://invalid.local");
+        assert_eq!(defaulted.api_base_url.as_deref(), Some(DEFAULT_API_BASE));
+    }
+
+    #[test]
+    fn validate_provider_config_rejects_empty_public_base_url() {
+        let err = validate_provider_config(ProviderConfig {
+            enabled: true,
+            public_base_url: "  ".to_string(),
+            default_chat_id: None,
+            api_base_url: None,
+            bot_token: None,
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "invalid config: public_base_url cannot be empty".to_string()
+        );
+    }
+}

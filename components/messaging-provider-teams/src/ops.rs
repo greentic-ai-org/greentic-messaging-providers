@@ -891,3 +891,99 @@ pub(crate) fn extract_sender(value: &Value) -> Option<String> {
         .and_then(Value::as_str)
         .map(|s| s.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::{EnvId, TenantCtx, TenantId};
+
+    fn envelope_json() -> Value {
+        serde_json::to_value(ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("default").expect("env"),
+                TenantId::try_from("default").expect("tenant"),
+            ),
+            channel: "teams".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: vec![Destination {
+                id: "conv-1".to_string(),
+                kind: Some("conversation".to_string()),
+            }],
+            correlation_id: None,
+            text: Some("hello".to_string()),
+            attachments: Vec::new(),
+            metadata: MessageMetadata::new(),
+        })
+        .expect("envelope")
+    }
+
+    fn with_config(mut value: Value) -> Vec<u8> {
+        let obj = value.as_object_mut().expect("object");
+        obj.insert(
+            "public_base_url".to_string(),
+            Value::String("https://example.com".to_string()),
+        );
+        obj.insert(
+            "ms_bot_app_id".to_string(),
+            Value::String("app-id".to_string()),
+        );
+        serde_json::to_vec(&value).expect("bytes")
+    }
+
+    fn parse_json(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json")
+    }
+
+    #[test]
+    fn handle_send_requires_service_url_before_network() {
+        let body = parse_json(handle_send(&with_config(envelope_json())));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some(
+                "service_url required (from metadata.serviceUrl, config.default_service_url, or Activity)"
+            )
+        );
+    }
+
+    #[test]
+    fn handle_reply_checks_required_fields() {
+        let body = parse_json(handle_reply(&with_config(json!({
+            "text": "hello",
+            "conversation_id": "conv-1"
+        }))));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("reply_to_id or thread_id required")
+        );
+
+        let body = parse_json(handle_reply(&with_config(json!({
+            "text": "hello",
+            "reply_to_id": "activity-1",
+            "conversation_id": "conv-1"
+        }))));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("service_url required")
+        );
+    }
+
+    #[test]
+    fn extraction_helpers_read_bot_framework_shapes() {
+        let value = json!({
+            "text": "hello",
+            "channelData": {
+                "team": { "id": "team-1" },
+                "channel": { "id": "channel-1" }
+            },
+            "from": { "id": "user-1" }
+        });
+
+        assert_eq!(extract_bot_text(&value), "hello");
+        assert_eq!(extract_team_id(&value).as_deref(), Some("team-1"));
+        assert_eq!(extract_channel_id(&value).as_deref(), Some("channel-1"));
+        assert_eq!(extract_sender(&value).as_deref(), Some("user-1"));
+    }
+}

@@ -114,3 +114,105 @@ pub(crate) fn parse_config_bytes(bytes: &[u8]) -> Result<ProviderConfig, String>
         .map_err(|e| format!("invalid config: {e}"))?;
     validate_provider_config(cfg)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_config_out() -> ProviderConfigOut {
+        ProviderConfigOut {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            mode: "local_queue".to_string(),
+            route: Some("route-a".to_string()),
+            tenant_channel_id: None,
+            base_url: Some("https://base.example.com".to_string()),
+        }
+    }
+
+    #[test]
+    fn validate_config_out_rejects_empty_or_relative_urls() {
+        let mut config = valid_config_out();
+        config.public_base_url = String::new();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: public_base_url is required".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.mode = String::new();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: mode is required".to_string())
+        );
+
+        let mut config = valid_config_out();
+        config.public_base_url = "/relative".to_string();
+        assert_eq!(
+            validate_config_out(&config),
+            Err("config validation failed: public_base_url must be an absolute URL".to_string())
+        );
+    }
+
+    #[test]
+    fn validate_provider_config_checks_mode_and_routing() {
+        let err = validate_provider_config(ProviderConfig {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            mode: "invalid".to_string(),
+            route: Some("route-a".to_string()),
+            tenant_channel_id: None,
+            base_url: None,
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "invalid config: mode must be local_queue|websocket|pubsub".to_string()
+        );
+
+        let err = validate_provider_config(ProviderConfig {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            mode: "pubsub".to_string(),
+            route: None,
+            tenant_channel_id: None,
+            base_url: None,
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "invalid config: route or tenant_channel_id required".to_string()
+        );
+    }
+
+    #[test]
+    fn load_config_supports_nested_and_top_level_inputs() {
+        let nested = load_config(&json!({
+            "config": {
+                "public_base_url": "https://example.com",
+                "mode": "websocket",
+                "tenant_channel_id": "tenant:channel"
+            }
+        }))
+        .expect("nested config");
+        assert_eq!(nested.mode, "websocket");
+        assert_eq!(nested.tenant_channel_id.as_deref(), Some("tenant:channel"));
+
+        let top_level = load_config(&json!({
+            "public_base_url": "https://example.com",
+            "mode": "local_queue",
+            "route": "route-b"
+        }))
+        .expect("top-level config");
+        assert_eq!(top_level.route.as_deref(), Some("route-b"));
+    }
+
+    #[test]
+    fn load_config_requires_any_config_shape() {
+        assert_eq!(
+            load_config(&json!({})).unwrap_err(),
+            "config required".to_string()
+        );
+    }
+}
