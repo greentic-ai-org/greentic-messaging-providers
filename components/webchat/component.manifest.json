@@ -1,4 +1,5 @@
 {
+  "id": "webchat",
   "name": "webchat",
   "description": "WebChat provider component supporting egress, ingress, and formatting.",
   "config_schema": {
@@ -8,6 +9,5 @@
       "injected_as": "provider_runtime_config.json"
     }
   },
-  "secret_requirements": [
-  ]
+  "secret_requirements": []
 }

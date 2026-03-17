@@ -1,4 +1,5 @@
 {
+  "id": "telegram",
   "name": "telegram",
   "description": "Telegram provider component supporting egress, ingress, and formatting.",
   "config_schema": {

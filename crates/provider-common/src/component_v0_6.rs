@@ -64,9 +64,33 @@ pub struct I18nText {
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum QuestionKind {
     Text,
-    Choice { options: Vec<ChoiceOption> },
+    Choice {
+        options: Vec<ChoiceOption>,
+    },
     Number,
     Bool,
+    /// Inline JSON input with optional JSON Schema validation.
+    InlineJson {
+        /// Optional JSON Schema for validation (Draft 2020-12).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        schema: Option<serde_json::Value>,
+    },
+    /// Asset file/directory path reference with optional existence check.
+    AssetRef {
+        /// Allowed file extensions (e.g., `["json", "yaml"]`).
+        #[serde(default)]
+        file_types: Vec<String>,
+        /// Base path for resolving relative paths (e.g., `"assets/"`).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        base_path: Option<String>,
+        /// Whether to check file existence (default: `true`).
+        #[serde(default = "default_true")]
+        check_exists: bool,
+    },
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Choice option for `QuestionKind::Choice`.
@@ -74,6 +98,41 @@ pub enum QuestionKind {
 pub struct ChoiceOption {
     pub value: String,
     pub label: I18nText,
+}
+
+/// Skip condition expression — supports AND/OR with nesting.
+///
+/// Used for conditional questions that should be skipped based on previous answers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkipExpression {
+    /// Single condition: field equals/not_equals/is_empty/is_not_empty.
+    Condition(SkipCondition),
+    /// All conditions must be true (logical AND).
+    And(Vec<SkipExpression>),
+    /// At least one condition must be true (logical OR).
+    Or(Vec<SkipExpression>),
+    /// Negate the inner expression (logical NOT).
+    Not(Box<SkipExpression>),
+}
+
+/// Single skip condition for field comparison.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkipCondition {
+    /// The field name to check in the answers.
+    pub field: String,
+    /// Skip if field equals this value.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub equals: Option<serde_json::Value>,
+    /// Skip if field does not equal this value.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub not_equals: Option<serde_json::Value>,
+    /// Skip if field is empty (null, missing, or empty string).
+    #[serde(default)]
+    pub is_empty: bool,
+    /// Skip if field is not empty.
+    #[serde(default)]
+    pub is_not_empty: bool,
 }
 
 /// QA question — matches `ComponentQaSpec.Question` in greentic-types.
@@ -89,6 +148,9 @@ pub struct QaQuestionSpec {
     pub required: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<serde_json::Value>,
+    /// Condition to skip this question based on previous answers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip_if: Option<SkipExpression>,
 }
 
 /// QA spec — matches `ComponentQaSpec` in greentic-types.

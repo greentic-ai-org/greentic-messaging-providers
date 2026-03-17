@@ -103,7 +103,6 @@ jobs:
       fail-fast: false
       matrix:
         component:
-          - provision
           - questions
           - secrets-probe
           - slack
@@ -129,14 +128,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Lint for legacy HTTP imports
-        if: matrix.component == 'provision'
-        run: |
-          if rg -n 'greentic:http/http-client@' components/ -S; then
-            echo "legacy greentic:http/http-client@ import still present in components/"
-            exit 1
-          fi
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master

@@ -1,6 +1,10 @@
 {
   "provider": "messaging.dummy",
-  "config_required": [],
+  "config_required": [
+    "enabled",
+    "api_token",
+    "endpoint_url"
+  ],
   "config_optional": [],
   "secret_required": [],
   "secret_optional": [],

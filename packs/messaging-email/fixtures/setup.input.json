@@ -1,11 +1,15 @@
 {
-  "mode": "dry-run",
+  "mode": "setup",
   "config": {
-    "host": "<value>",
-    "username": "<value>",
-    "from_address": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "host": "smtp.example.com",
+    "port": 587,
+    "username": "user@example.com",
+    "from_address": "noreply@example.com",
+    "tls_mode": "starttls"
   },
   "secrets": {
-    "EMAIL_PASSWORD": "<redacted>"
+    "password": "test-password"
   }
 }

@@ -1,9 +1,11 @@
 {
-  "mode": "dry-run",
+  "mode": "setup",
   "config": {
-    "public_base_url": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "api_base_url": "https://slack.com/api"
   },
   "secrets": {
-    "SLACK_BOT_TOKEN": "<redacted>"
+    "SLACK_BOT_TOKEN": "xoxb-test-token"
   }
 }

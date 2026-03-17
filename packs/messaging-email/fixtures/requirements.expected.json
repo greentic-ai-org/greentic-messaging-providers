@@ -1,18 +1,21 @@
 {
   "provider": "messaging.email.smtp",
   "config_required": [
+    "enabled",
+    "public_base_url",
     "host",
+    "port",
     "username",
-    "from_address"
+    "from_address",
+    "tls_mode"
   ],
   "config_optional": [
-    "port",
-    "use_tls"
+    "default_to_address"
   ],
-  "secret_required": [
-    "EMAIL_PASSWORD"
+  "secret_required": [],
+  "secret_optional": [
+    "password"
   ],
-  "secret_optional": [],
   "oauth_required": false,
   "subscriptions_required": false
 }

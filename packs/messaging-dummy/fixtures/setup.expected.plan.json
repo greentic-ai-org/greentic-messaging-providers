@@ -1,5 +1,9 @@
 {
-  "config_patch": {},
+  "config_patch": {
+    "enabled": true,
+    "api_token": "test-token",
+    "endpoint_url": "https://example.com/dummy"
+  },
   "secrets_patch": {
     "set": {},
     "delete": []

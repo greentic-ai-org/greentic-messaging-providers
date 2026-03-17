@@ -1,6 +1,7 @@
 {
   "provider": "messaging.webex.bot",
   "config_required": [
+    "enabled",
     "public_base_url"
   ],
   "config_optional": [

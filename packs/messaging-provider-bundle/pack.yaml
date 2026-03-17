@@ -33,6 +33,7 @@ components:
       clocks: false
     host: {}
   wasm: components/messaging-provider-dummy/component.wasm
+  manifest: components/messaging-provider-dummy/component.manifest.json
 - id: ai.greentic.component-provision
   version: 0.4.38
   world: greentic:component/component@0.5.0

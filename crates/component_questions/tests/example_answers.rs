@@ -18,6 +18,7 @@ fn example_answers_uses_defaults() {
                 choices: vec![],
                 validate: None,
                 secret: false,
+                skip_if: None,
             },
             QuestionSpecItem {
                 name: "name".to_string(),
@@ -29,6 +30,7 @@ fn example_answers_uses_defaults() {
                 choices: vec![],
                 validate: None,
                 secret: false,
+                skip_if: None,
             },
         ],
     };

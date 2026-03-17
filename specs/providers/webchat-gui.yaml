@@ -24,12 +24,8 @@ components:
     export: schema-core-api
 flows:
   include:
-  - setup_default
-  - update
-  - remove
   - default
   - diagnostics
-  - requirements
   - verify_webhooks
 source:
   pack_dir: ../../packs/messaging-webchat-gui

@@ -1,18 +1,18 @@
 {
   "config_patch": {
-    "public_base_url": "<value>",
-    "default_chat_id": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com"
   },
   "secrets_patch": {
     "set": {
-      "TELEGRAM_BOT_TOKEN": "<redacted>"
+      "TELEGRAM_BOT_TOKEN": "test-bot-token"
     },
     "delete": []
   },
   "webhook_ops": [
     {
       "op": "register",
-      "url": "<public_base_url>/webhook"
+      "url": "https://example.com"
     }
   ],
   "subscription_ops": [],

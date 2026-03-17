@@ -1,20 +1,19 @@
 {
   "config_patch": {
-    "public_base_url": "<value>",
-    "default_channel": "<value>",
-    "team_id": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "api_base_url": "https://slack.com/api"
   },
   "secrets_patch": {
     "set": {
-      "SLACK_BOT_TOKEN": "<redacted>",
-      "SLACK_SIGNING_SECRET": "<redacted>"
+      "SLACK_BOT_TOKEN": "xoxb-test-token"
     },
     "delete": []
   },
   "webhook_ops": [
     {
       "op": "register",
-      "url": "<public_base_url>/webhook"
+      "url": "https://example.com"
     }
   ],
   "subscription_ops": [],

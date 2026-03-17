@@ -461,6 +461,7 @@ fn qa_q(key: &str, text: &str, required: bool) -> QaQuestionSpec {
         kind: provider_common::component_v0_6::QuestionKind::Text,
         required,
         default: None,
+        skip_if: None,
     }
 }
 

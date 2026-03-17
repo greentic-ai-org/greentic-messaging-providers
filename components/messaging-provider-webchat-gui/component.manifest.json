@@ -1,11 +1,24 @@
 {
+  "id": "messaging-provider-webchat-gui",
   "name": "messaging-provider-webchat-gui",
+  "version": "0.4.38",
+  "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core WebChat GUI messaging provider (Direct Line backend + hosted GUI metadata).",
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
   "config_schema": {
     "provider_config": {
       "format": "json",
       "path": "schemas/messaging/webchat-gui/public.config.schema.json"
     }
   },
-  "secret_requirements": []
+  "secret_requirements": [],
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
 }

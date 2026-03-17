@@ -1,9 +1,10 @@
 {
-  "mode": "dry-run",
+  "mode": "setup",
   "config": {
-    "public_base_url": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com"
   },
   "secrets": {
-    "WEBEX_BOT_TOKEN": "<redacted>"
+    "WEBEX_BOT_TOKEN": "test-bot-token"
   }
 }

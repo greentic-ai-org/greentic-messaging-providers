@@ -93,11 +93,8 @@ jobs:
       - name: Build components
         run: ./tools/build_components_parallel.sh
 
-      - name: Generate flows (packgen)
-        run: ./ci/gen_flows.sh
-
-      - name: Check generated flows
-        run: ./ci/check_generated.sh
+      # Packgen flow generation disabled - v0.6.0 uses component-based QA
+      # Legacy flows (setup_default, update, remove, requirements) removed
 
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -105,11 +102,9 @@ jobs:
       - name: Sync packs
         run: ./tools/sync_packs.sh
 
-      - name: Validate flows
-        run: |
-          for f in packs/*/flows/*.ygtc; do
-            greentic-flow doctor "$f"
-          done
+      # Flow validation skipped - v0.6.0 flows only use built-in render_text nodes
+      # Component validation happens in greentic-component doctor step below
+      # Legacy sidecar files (.resolve.json) were removed as part of v0.6.0 refactor
 
       - name: Validate components
         run: |

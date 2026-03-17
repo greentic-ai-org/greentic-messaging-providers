@@ -106,75 +106,41 @@ PY
 }
 
 ensure_helper_components_in_pack_yaml() {
-  local yaml_path="$1"
-  [ -f "${yaml_path}" ] || return 0
-  python3 - "$yaml_path" "${ROOT_DIR}" "$VERSION" <<'PY'
+  # Legacy helper injection removed in v0.6.0 - components now implement qa-spec/apply-answers directly
+  return 0
+}
+
+stamp_manifest_version() {
+  local manifest_path="$1"
+  local pack_yaml_path="${2:-}"
+  local comp_id="${3:-}"
+  [ -f "${manifest_path}" ] || return 0
+  python3 - "$manifest_path" "$VERSION" "$pack_yaml_path" "$comp_id" <<'PY'
 from pathlib import Path
 import json
 import sys
 import yaml
 
-yaml_path = Path(sys.argv[1])
-root = Path(sys.argv[2])
-version = sys.argv[3]
-data = yaml.safe_load(yaml_path.read_text()) or {}
-components = data.setdefault("components", [])
-if not isinstance(components, list):
-    sys.exit(0)
-
-helper_specs = [
-    (
-        root / "components" / "provision" / "component.manifest.json",
-        "components/provision/provision.wasm",
-    ),
-    (
-        root / "components" / "qa" / "component.manifest.json",
-        "components/qa/qa.wasm",
-    ),
-]
-
-existing_ids = {
-    comp.get("id")
-    for comp in components
-    if isinstance(comp, dict) and comp.get("id")
-}
-
-for manifest_path, wasm_path in helper_specs:
-    if not manifest_path.exists():
-        continue
-    manifest = json.loads(manifest_path.read_text())
-    comp_id = manifest.get("id")
-    if not comp_id or comp_id in existing_ids:
-        continue
-    components.append(
-        {
-            "id": comp_id,
-            "version": version,
-            "world": manifest.get("world"),
-            "supports": manifest.get("supports", []),
-            "profiles": manifest.get("profiles", {"default": "stateless", "supported": ["stateless"]}),
-            "capabilities": manifest.get("capabilities", {}),
-            "wasm": wasm_path,
-        }
-    )
-
-yaml_path.write_text(yaml.safe_dump(data, sort_keys=False))
-PY
-}
-
-stamp_manifest_version() {
-  local manifest_path="$1"
-  [ -f "${manifest_path}" ] || return 0
-  python3 - "$manifest_path" "$VERSION" <<'PY'
-from pathlib import Path
-import json
-import sys
-
-path = Path(sys.argv[1])
+manifest_path = Path(sys.argv[1])
 version = sys.argv[2]
-data = json.loads(path.read_text())
+pack_yaml_path = sys.argv[3] if len(sys.argv) > 3 else ""
+comp_id = sys.argv[4] if len(sys.argv) > 4 else ""
+
+data = json.loads(manifest_path.read_text())
 data["version"] = version
-path.write_text(json.dumps(data, indent=2) + "\n")
+
+# Extract component config from pack.yaml if available
+if pack_yaml_path and comp_id and Path(pack_yaml_path).exists():
+    pack_data = yaml.safe_load(Path(pack_yaml_path).read_text())
+    for comp in pack_data.get("components", []):
+        if comp.get("id") == comp_id:
+            if "world" in comp:
+                data["world"] = comp["world"]
+            if "profiles" in comp:
+                data["profiles"] = comp["profiles"]
+            break
+
+manifest_path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 }
 
@@ -461,9 +427,14 @@ for dir in "${PACKS_DIR}"/*; do
     dest="${dir}/${wasm_rel}"
     manifest_src=""
     manifest_dest=""
+    root_manifest_src=""
     if [ -n "${manifest_rel}" ]; then
       manifest_dest="${dir}/${manifest_rel}"
-      manifest_src="${TARGET_COMPONENTS}/$(basename "${manifest_rel}")"
+      # Use component-specific filename to avoid collisions when multiple components
+      # have manifests with the same basename (e.g., component.manifest.json)
+      manifest_src="${TARGET_COMPONENTS}/${comp}.manifest.json"
+      # Also check the root component directory as the canonical source
+      root_manifest_src="${ROOT_DIR}/components/${comp}/component.manifest.json"
     fi
     # Fill in default OCI metadata for template components when missing.
     if [ "${is_templates_component}" -eq 1 ] && [ -z "${oci_image}" ]; then
@@ -497,12 +468,19 @@ for dir in "${PACKS_DIR}"/*; do
       fi
     fi
     cp "${src}" "${dest}"
-    if [ -n "${manifest_rel}" ] && [ -f "${manifest_src}" ]; then
+    # Copy manifest to pack directory, preferring root component manifest as canonical source
+    if [ -n "${manifest_rel}" ]; then
       mkdir -p "$(dirname "${manifest_dest}")"
-      cp "${manifest_src}" "${manifest_dest}"
+      if [ -n "${root_manifest_src}" ] && [ -f "${root_manifest_src}" ]; then
+        # Use root component manifest as canonical source
+        cp "${root_manifest_src}" "${manifest_dest}"
+      elif [ -f "${manifest_src}" ]; then
+        # Fallback to TARGET_COMPONENTS cache
+        cp "${manifest_src}" "${manifest_dest}"
+      fi
       case "${comp}" in
         messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-          stamp_manifest_version "${manifest_dest}"
+          stamp_manifest_version "${manifest_dest}" "${dir}/pack.yaml" "${comp}"
           ;;
       esac
     fi
@@ -512,7 +490,7 @@ for dir in "${PACKS_DIR}"/*; do
     [ -z "${comp}" ] && continue
     case "${comp}" in
       messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-        stamp_manifest_version "${dir}/components/${comp}/component.manifest.json"
+        stamp_manifest_version "${dir}/components/${comp}/component.manifest.json" "${dir}/pack.yaml" "${comp}"
         ;;
     esac
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
@@ -540,37 +518,6 @@ for dir in "${PACKS_DIR}"/*; do
         fi
       fi
     done < <(jq -r '.components[]? | [.name, .ref, .digest] | @tsv' "${lock_file}")
-  fi
-
-  # Flow sidecars emitted by packgen still reference the legacy qa helper path.
-  # Keep it materialized in synced packs until flows are migrated to questions.
-  if [ -f "${ROOT_DIR}/components/qa/qa.wasm" ]; then
-    qa_dir="${dir}/components/qa"
-    mkdir -p "${qa_dir}"
-    cp "${ROOT_DIR}/components/qa/qa.wasm" "${qa_dir}/qa.wasm"
-    if [ -f "${ROOT_DIR}/components/qa/component.manifest.json" ]; then
-      cp "${ROOT_DIR}/components/qa/component.manifest.json" "${qa_dir}/component.manifest.json"
-      stamp_manifest_version "${qa_dir}/component.manifest.json"
-    fi
-    if [ -d "${ROOT_DIR}/components/qa/schemas" ]; then
-      rm -rf "${qa_dir}/schemas"
-      cp -R "${ROOT_DIR}/components/qa/schemas" "${qa_dir}/schemas"
-    fi
-  fi
-
-  # Generated setup/update/remove flows still reference the provision helper path.
-  if [ -f "${ROOT_DIR}/components/provision/provision.wasm" ]; then
-    provision_dir="${dir}/components/provision"
-    mkdir -p "${provision_dir}"
-    cp "${ROOT_DIR}/components/provision/provision.wasm" "${provision_dir}/provision.wasm"
-    if [ -f "${ROOT_DIR}/components/provision/component.manifest.json" ]; then
-      cp "${ROOT_DIR}/components/provision/component.manifest.json" "${provision_dir}/component.manifest.json"
-      stamp_manifest_version "${provision_dir}/component.manifest.json"
-    fi
-    if [ -d "${ROOT_DIR}/components/provision/schemas" ]; then
-      rm -rf "${provision_dir}/schemas"
-      cp -R "${ROOT_DIR}/components/provision/schemas" "${provision_dir}/schemas"
-    fi
   fi
 
   sync_pack_yaml_component_versions "${dir}"

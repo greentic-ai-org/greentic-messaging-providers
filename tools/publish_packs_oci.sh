@@ -510,9 +510,14 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
 
     manifest_src=""
     manifest_dest=""
+    root_manifest_src=""
     if [ -n "${manifest_rel}" ]; then
-      manifest_src="${TARGET_COMPONENTS}/$(basename "${manifest_rel}")"
+      # Use component-specific filename to avoid collisions when multiple components
+      # have manifests with the same basename (e.g., component.manifest.json)
+      manifest_src="${TARGET_COMPONENTS}/${comp_id}.manifest.json"
       manifest_dest="${dir}/${manifest_rel}"
+      # Also check the root component directory as the canonical source
+      root_manifest_src="${ROOT_DIR}/components/${comp_id}/component.manifest.json"
     fi
 
     src="${TARGET_COMPONENTS}/${fname}"
@@ -534,9 +539,49 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
     fi
     mkdir -p "$(dirname "${dest}")"
     cp "${src}" "${dest}"
-    if [ -n "${manifest_rel}" ] && [ -f "${manifest_src}" ]; then
+    # Copy manifest to pack directory, preferring root component manifest as canonical source
+    if [ -n "${manifest_rel}" ]; then
       mkdir -p "$(dirname "${manifest_dest}")"
-      cp "${manifest_src}" "${manifest_dest}"
+      if [ -n "${root_manifest_src}" ] && [ -f "${root_manifest_src}" ]; then
+        # Use root component manifest as canonical source
+        cp "${root_manifest_src}" "${manifest_dest}"
+      elif [ -f "${manifest_src}" ]; then
+        # Fallback to TARGET_COMPONENTS cache
+        cp "${manifest_src}" "${manifest_dest}"
+      fi
+      # Stamp version, world, and profiles on provider/ingress component manifests
+      case "${comp_id}" in
+        messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
+          python3 - "${manifest_dest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
+from pathlib import Path
+import json
+import sys
+import yaml
+
+manifest_path = Path(sys.argv[1])
+version = sys.argv[2]
+pack_yaml_path = Path(sys.argv[3])
+comp_id = sys.argv[4]
+
+if manifest_path.exists():
+    data = json.loads(manifest_path.read_text())
+    data["version"] = version
+
+    # Extract component config from pack.yaml
+    if pack_yaml_path.exists():
+        pack_data = yaml.safe_load(pack_yaml_path.read_text())
+        for comp in pack_data.get("components", []):
+            if comp.get("id") == comp_id:
+                if "world" in comp:
+                    data["world"] = comp["world"]
+                if "profiles" in comp:
+                    data["profiles"] = comp["profiles"]
+                break
+
+    manifest_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+          ;;
+      esac
     fi
   done
 

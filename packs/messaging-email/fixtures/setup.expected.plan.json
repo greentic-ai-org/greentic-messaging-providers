@@ -1,14 +1,16 @@
 {
   "config_patch": {
-    "host": "<value>",
-    "username": "<value>",
-    "from_address": "<value>",
-    "port": "<value>",
-    "use_tls": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "host": "smtp.example.com",
+    "port": 587,
+    "username": "user@example.com",
+    "from_address": "noreply@example.com",
+    "tls_mode": "starttls"
   },
   "secrets_patch": {
     "set": {
-      "EMAIL_PASSWORD": "<redacted>"
+      "password": "test-password"
     },
     "delete": []
   },

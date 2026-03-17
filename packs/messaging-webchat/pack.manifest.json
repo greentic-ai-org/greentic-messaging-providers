@@ -1,18 +1,18 @@
 {
-  "capabilities_cache": [],
+  "name": "messaging-webchat",
+  "version": "0.4.38",
+  "kind": "application",
+  "publisher": "Greentic",
+  "description": "WebChat messaging provider — Direct Line protocol with inline ingress",
   "component_sources": [
     {
       "id": "messaging-provider-webchat",
       "version": "0.4.38",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": [
-        "messaging"
-      ],
+      "supports": ["messaging"],
       "profiles": {
         "default": "default",
-        "supported": [
-          "default"
-        ]
+        "supported": ["default"]
       },
       "capabilities": {
         "wasi": {
@@ -24,96 +24,17 @@
           "state-store": true
         }
       },
-      "wasm": "components/messaging-provider-webchat/component.wasm"
-    },
-    {
-      "id": "ai.greentic.component-provision",
-      "version": "0.4.38",
-      "world": "greentic:component/component@0.5.0",
-      "supports": [
-        "messaging"
-      ],
-      "profiles": {
-        "default": "stateless",
-        "supported": [
-          "stateless"
-        ]
-      },
-      "capabilities": {
-        "host": {
-          "state": {
-            "delete": false,
-            "read": false,
-            "write": true
-          },
-          "telemetry": {
-            "scope": "node"
-          }
-        },
-        "wasi": {
-          "clocks": false,
-          "filesystem": {
-            "mode": "none",
-            "mounts": []
-          },
-          "random": false
-        }
-      },
-      "wasm": "components/provision/provision.wasm"
-    },
-    {
-      "id": "ai.greentic.component-qa",
-      "version": "0.4.38",
-      "world": "greentic:component/component@0.5.0",
-      "supports": [
-        "messaging"
-      ],
-      "profiles": {
-        "default": "stateless",
-        "supported": [
-          "stateless"
-        ]
-      },
-      "capabilities": {
-        "host": {
-          "messaging": {
-            "inbound": true,
-            "outbound": true
-          },
-          "qa": {
-            "process": true
-          },
-          "secrets": {
-            "required": []
-          },
-          "telemetry": {
-            "scope": "node"
-          }
-        },
-        "wasi": {
-          "clocks": true,
-          "filesystem": {
-            "mode": "none",
-            "mounts": []
-          },
-          "random": true
-        }
-      },
-      "wasm": "components/qa/qa.wasm"
+      "wasm": "components/messaging-provider-webchat/component.wasm",
+      "manifest": "components/messaging-provider-webchat/component.manifest.json"
     }
   ],
-  "components": [
-    "messaging-provider-webchat",
-    "ai.greentic.component-provision",
-    "ai.greentic.component-qa"
-  ],
+  "components": ["messaging-provider-webchat"],
   "config_schema": {
     "provider_config": {
       "format": "json",
       "path": "schemas/messaging/webchat/public.config.schema.json"
     }
   },
-  "description": "Provider-core WebChat messaging pack (send + ingest).",
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
@@ -132,7 +53,7 @@
             "priority": 100,
             "requires_setup": true,
             "setup": {
-              "qa_ref": "setup.yaml"
+              "qa_ref": "components/messaging-provider-webchat"
             }
           }
         ]
@@ -158,16 +79,8 @@
         "providers": [
           {
             "provider_type": "messaging.webchat",
-            "capabilities": [
-              "messaging"
-            ],
-            "ops": [
-              "send",
-              "ingest",
-              "qa-spec",
-              "apply-answers",
-              "i18n-keys"
-            ],
+            "capabilities": ["messaging"],
+            "ops": ["send", "ingest", "qa-spec", "apply-answers", "i18n-keys"],
             "config_schema_ref": "schemas/messaging/webchat/public.config.schema.json",
             "runtime": {
               "component_ref": "messaging-provider-webchat",
@@ -178,28 +91,12 @@
         ]
       }
     },
-    "messaging.provider_flow_hints": {
-      "kind": "messaging.provider_flow_hints",
-      "version": "0.4.38",
-      "inline": {
-        "messaging.webchat": {
-          "default": "default",
-          "diagnostics": "diagnostics",
-          "remove": "remove",
-          "setup_default": "setup_default",
-          "update": "update",
-          "verify_webhooks": "verify_webhooks"
-        }
-      }
-    },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
       "version": "0.4.38",
       "inline": {
         "capabilities": {
-          "content_types": [
-            "application/json"
-          ],
+          "content_types": ["application/json"],
           "supports_webhook_validation": false
         },
         "component_ref": "messaging-provider-webchat",
@@ -208,89 +105,6 @@
       }
     }
   },
-  "flows": [
-    {
-      "id": "default",
-      "file": "flows/default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "default"
-      ]
-    },
-    {
-      "id": "diagnostics",
-      "file": "flows/diagnostics.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "diagnostics"
-      ]
-    },
-    {
-      "id": "remove",
-      "file": "flows/remove.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "remove"
-      ]
-    },
-    {
-      "id": "setup_default",
-      "file": "flows/setup_default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "setup"
-      ]
-    },
-    {
-      "id": "requirements",
-      "file": "flows/requirements.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "requirements"
-      ]
-    },
-    {
-      "id": "sync_subscriptions",
-      "file": "flows/sync_subscriptions.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "subscriptions"
-      ]
-    },
-    {
-      "id": "update",
-      "file": "flows/update.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "update"
-      ]
-    },
-    {
-      "id": "verify_webhooks",
-      "file": "flows/verify_webhooks.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "verify_webhooks"
-      ]
-    }
-  ],
-  "kind": "application",
   "messaging": {
     "adapters": [
       {
@@ -300,14 +114,11 @@
       }
     ]
   },
-  "name": "messaging-webchat",
-  "publisher": "Greentic",
   "secret_requirements": [
     {
       "name": "WEBCHAT_TOKEN",
       "scope": "tenant",
       "description": "Optional token used for webchat setup validation and conformance checks."
     }
-  ],
-  "version": "0.4.38"
+  ]
 }

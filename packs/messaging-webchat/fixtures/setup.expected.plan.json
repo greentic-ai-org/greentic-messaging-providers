@@ -1,18 +1,14 @@
 {
   "config_patch": {
-    "public_base_url": "<value>",
-    "ingress_path": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "mode": "local_queue"
   },
   "secrets_patch": {
     "set": {},
     "delete": []
   },
-  "webhook_ops": [
-    {
-      "op": "register",
-      "url": "<public_base_url>"
-    }
-  ],
+  "webhook_ops": [],
   "subscription_ops": [],
   "oauth_ops": []
 }

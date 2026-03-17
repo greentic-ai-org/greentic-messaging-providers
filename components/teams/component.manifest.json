@@ -1,4 +1,5 @@
 {
+  "id": "teams",
   "name": "teams",
   "description": "Microsoft Teams provider component supporting egress, ingress, and formatting.",
   "config_schema": {

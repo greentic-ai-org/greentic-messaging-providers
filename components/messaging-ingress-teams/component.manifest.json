@@ -1,6 +1,15 @@
 {
+  "id": "messaging-ingress-teams",
   "name": "messaging-ingress-teams",
+  "version": "0.4.38",
+  "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Ingress and subscription lifecycle component for Microsoft Teams.",
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
   "secret_requirements": [
     {
       "name": "MS_GRAPH_CLIENT_SECRET",
@@ -12,5 +21,9 @@
       "scope": "tenant",
       "description": "Refresh token used for Graph token acquisition when configured."
     }
-  ]
+  ],
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
 }

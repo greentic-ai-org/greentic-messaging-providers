@@ -1,11 +1,24 @@
 {
+  "id": "messaging-ingress-slack",
   "name": "messaging-ingress-slack",
+  "version": "0.4.38",
+  "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Ingress-only Slack messaging component for webhook validation and normalization.",
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
   "secret_requirements": [
     {
       "name": "SLACK_SIGNING_SECRET",
       "scope": "tenant",
       "description": "Slack signing secret used to verify webhook signatures (optional)."
     }
-  ]
+  ],
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
 }

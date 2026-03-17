@@ -3,23 +3,16 @@
   "version": "0.4.38",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Ephemeral in-memory key-value state provider for development and testing.",
-  "components": [
-    "state-provider-memory"
-  ],
+  "description": "In-memory key-value state provider. Suitable for development and testing.",
   "component_sources": [
     {
       "id": "state-provider-memory",
-      "version": "0.4.0",
-      "world": "greentic:component/component-v0-v6-v0",
-      "supports": [
-        "component_config"
-      ],
+      "version": "0.4.38",
+      "world": "greentic:component/component-v0-v6-v0@0.6.1",
+      "supports": ["component_config"],
       "profiles": {
         "default": "default",
-        "supported": [
-          "default"
-        ]
+        "supported": ["default"]
       },
       "capabilities": {
         "wasi": {
@@ -28,44 +21,34 @@
         },
         "host": {}
       },
-      "wasm": "components/state-provider-memory.wasm"
+      "wasm": "components/state-provider-memory/state-provider-memory.wasm",
+      "manifest": "components/state-provider-memory/component.manifest.json"
     }
   ],
-  "flows": [
-    {
-      "id": "setup_default",
-      "file": "flows/setup_default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "default"
-      ]
-    }
-  ],
+  "components": ["state-provider-memory"],
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
       "version": "0.4.38",
       "inline": {
+        "schema_version": 1,
         "offers": [
           {
-            "cap_id": "greentic.cap.state.kv.v1",
-            "metadata": {
-              "backend": "memory",
-              "ephemeral": true
-            },
             "offer_id": "state.memory.kv.01",
-            "priority": 100,
+            "cap_id": "greentic.cap.state.kv.v1",
+            "version": "0.4.38",
             "provider": {
               "component_ref": "state-provider-memory",
               "op": "state.dispatch"
             },
+            "priority": 100,
             "requires_setup": false,
-            "version": "0.4.38"
+            "metadata": {
+              "backend": "memory",
+              "ephemeral": true
+            }
           }
-        ],
-        "schema_version": 1
+        ]
       }
     }
   },

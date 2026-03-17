@@ -1,12 +1,11 @@
 {
-  "mode": "dry-run",
+  "mode": "setup",
   "config": {
-    "tenant_id": "<value>",
-    "client_id": "<value>",
-    "public_base_url": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "ms_bot_app_id": "test-app-id"
   },
   "secrets": {
-    "MS_GRAPH_CLIENT_SECRET": "<redacted>",
-    "MS_GRAPH_REFRESH_TOKEN": "<redacted>"
+    "MS_BOT_APP_PASSWORD": "test-app-password"
   }
 }

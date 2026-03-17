@@ -14,6 +14,10 @@ expression: json_value
       "secret": false,
       "title": "Public base URL",
       "validate": {
+        "base_path": null,
+        "check_exists": true,
+        "file_types": [],
+        "json_schema": null,
         "max": null,
         "min": null,
         "regex": "^https://"

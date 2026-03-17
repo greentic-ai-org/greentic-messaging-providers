@@ -1,18 +1,18 @@
 {
-  "capabilities_cache": [],
+  "name": "messaging-teams",
+  "version": "0.4.38",
+  "kind": "application",
+  "publisher": "Greentic",
+  "description": "Microsoft Teams messaging provider — Bot Framework with webhook ingress",
   "component_sources": [
     {
       "id": "messaging-provider-teams",
       "version": "0.4.38",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": [
-        "messaging"
-      ],
+      "supports": ["messaging"],
       "profiles": {
         "default": "default",
-        "supported": [
-          "default"
-        ]
+        "supported": ["default"]
       },
       "capabilities": {
         "wasi": {
@@ -24,20 +24,17 @@
           "http-client": true
         }
       },
-      "wasm": "components/messaging-provider-teams/component.wasm"
+      "wasm": "components/messaging-provider-teams/component.wasm",
+      "manifest": "components/messaging-provider-teams/component.manifest.json"
     },
     {
       "id": "messaging-ingress-teams",
       "version": "0.4.38",
       "world": "greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1",
-      "supports": [
-        "messaging"
-      ],
+      "supports": ["messaging"],
       "profiles": {
         "default": "default",
-        "supported": [
-          "default"
-        ]
+        "supported": ["default"]
       },
       "capabilities": {
         "wasi": {
@@ -50,97 +47,17 @@
           "http-client": true
         }
       },
-      "wasm": "components/messaging-ingress-teams/component.wasm"
-    },
-    {
-      "id": "ai.greentic.component-provision",
-      "version": "0.4.38",
-      "world": "greentic:component/component@0.5.0",
-      "supports": [
-        "messaging"
-      ],
-      "profiles": {
-        "default": "stateless",
-        "supported": [
-          "stateless"
-        ]
-      },
-      "capabilities": {
-        "host": {
-          "state": {
-            "delete": false,
-            "read": false,
-            "write": true
-          },
-          "telemetry": {
-            "scope": "node"
-          }
-        },
-        "wasi": {
-          "clocks": false,
-          "filesystem": {
-            "mode": "none",
-            "mounts": []
-          },
-          "random": false
-        }
-      },
-      "wasm": "components/provision/provision.wasm"
-    },
-    {
-      "id": "ai.greentic.component-qa",
-      "version": "0.4.38",
-      "world": "greentic:component/component@0.5.0",
-      "supports": [
-        "messaging"
-      ],
-      "profiles": {
-        "default": "stateless",
-        "supported": [
-          "stateless"
-        ]
-      },
-      "capabilities": {
-        "host": {
-          "messaging": {
-            "inbound": true,
-            "outbound": true
-          },
-          "qa": {
-            "process": true
-          },
-          "secrets": {
-            "required": []
-          },
-          "telemetry": {
-            "scope": "node"
-          }
-        },
-        "wasi": {
-          "clocks": true,
-          "filesystem": {
-            "mode": "none",
-            "mounts": []
-          },
-          "random": true
-        }
-      },
-      "wasm": "components/qa/qa.wasm"
+      "wasm": "components/messaging-ingress-teams/component.wasm",
+      "manifest": "components/messaging-ingress-teams/component.manifest.json"
     }
   ],
-  "components": [
-    "messaging-provider-teams",
-    "messaging-ingress-teams",
-    "ai.greentic.component-provision",
-    "ai.greentic.component-qa"
-  ],
+  "components": ["messaging-provider-teams", "messaging-ingress-teams"],
   "config_schema": {
     "provider_config": {
       "format": "json",
       "path": "schemas/messaging/teams/public.config.schema.json"
     }
   },
-  "description": "Provider-core Microsoft Teams messaging pack (Graph send).",
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
@@ -159,7 +76,7 @@
             "priority": 100,
             "requires_setup": true,
             "setup": {
-              "qa_ref": "setup.yaml"
+              "qa_ref": "components/messaging-provider-teams"
             }
           }
         ]
@@ -185,19 +102,8 @@
         "providers": [
           {
             "provider_type": "messaging.teams.bot",
-            "capabilities": [
-              "messaging"
-            ],
-            "ops": [
-              "send",
-              "reply",
-              "subscription_ensure",
-              "subscription_renew",
-              "subscription_delete",
-              "qa-spec",
-              "apply-answers",
-              "i18n-keys"
-            ],
+            "capabilities": ["messaging"],
+            "ops": ["send", "reply", "subscription_ensure", "subscription_renew", "subscription_delete", "qa-spec", "apply-answers", "i18n-keys"],
             "config_schema_ref": "schemas/messaging/teams/public.config.schema.json",
             "runtime": {
               "component_ref": "messaging-provider-teams",
@@ -208,20 +114,6 @@
         ]
       }
     },
-    "messaging.provider_flow_hints": {
-      "kind": "messaging.provider_flow_hints",
-      "version": "0.4.38",
-      "inline": {
-        "messaging.teams.bot": {
-          "default": "default",
-          "diagnostics": "diagnostics",
-          "remove": "remove",
-          "setup_default": "setup_default",
-          "update": "update",
-          "verify_webhooks": "verify_webhooks"
-        }
-      }
-    },
     "messaging.oauth.v1": {
       "kind": "messaging.oauth.v1",
       "version": "0.4.38",
@@ -230,12 +122,8 @@
         "authorize_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
         "provider_id": "teams",
         "redirect_path": "/oauth/callback/teams",
-        "scopes": [
-          "https://graph.microsoft.com/.default"
-        ],
-        "secret_keys": [
-          "TEAMS_BOT_TOKEN"
-        ],
+        "scopes": ["https://graph.microsoft.com/.default"],
+        "secret_keys": ["TEAMS_BOT_TOKEN"],
         "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token"
       }
     },
@@ -244,9 +132,7 @@
       "version": "0.4.38",
       "inline": {
         "capabilities": {
-          "content_types": [
-            "application/json"
-          ],
+          "content_types": ["application/json"],
           "supports_webhook_validation": false
         },
         "component_ref": "messaging-ingress-teams",
@@ -262,97 +148,11 @@
         "export": "sync-subscriptions",
         "pattern": "sync",
         "renewal_window_hours": 24,
-        "resources": [
-          "message",
-          "reaction"
-        ],
+        "resources": ["message", "reaction"],
         "world": "greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1"
       }
     }
   },
-  "flows": [
-    {
-      "id": "default",
-      "file": "flows/default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "default"
-      ]
-    },
-    {
-      "id": "diagnostics",
-      "file": "flows/diagnostics.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "diagnostics"
-      ]
-    },
-    {
-      "id": "remove",
-      "file": "flows/remove.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "remove"
-      ]
-    },
-    {
-      "id": "setup_default",
-      "file": "flows/setup_default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "setup"
-      ]
-    },
-    {
-      "id": "requirements",
-      "file": "flows/requirements.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "requirements"
-      ]
-    },
-    {
-      "id": "sync_subscriptions",
-      "file": "flows/sync_subscriptions.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "subscriptions"
-      ]
-    },
-    {
-      "id": "update",
-      "file": "flows/update.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "update"
-      ]
-    },
-    {
-      "id": "verify_webhooks",
-      "file": "flows/verify_webhooks.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "verify_webhooks"
-      ]
-    }
-  ],
-  "kind": "application",
   "messaging": {
     "adapters": [
       {
@@ -367,8 +167,6 @@
       }
     ]
   },
-  "name": "messaging-teams",
-  "publisher": "Greentic",
   "secret_requirements": [
     {
       "name": "MS_GRAPH_TENANT_ID",
@@ -390,6 +188,5 @@
       "scope": "tenant",
       "description": "Refresh token used when auth_mode selects refresh_token grant."
     }
-  ],
-  "version": "0.4.38"
+  ]
 }
