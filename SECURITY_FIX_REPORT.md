@@ -23,6 +23,9 @@
   - `all-code-scanning-alerts.json`
   - `pr-vulnerable-changes.json`
 - Enumerated dependency files in repo (Rust workspace `Cargo.toml` files and `Cargo.lock`).
+- Checked for PR-introduced dependency-file changes with:
+  - `git diff --name-only -- '*Cargo.toml' Cargo.lock`
+  - Result: no changed Rust dependency manifests or lockfile in this workspace.
 - Attempted `cargo audit -q` for extra validation; blocked by CI sandbox constraints:
   - Rustup temp path is read-only (`/home/runner/.rustup/tmp`, OS error 30).
 
