@@ -669,6 +669,12 @@ jobs:
           path: target/components
           merge-multiple: true
 
+      - name: Download templates artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: component-templates-local
+          path: target/components
+
       - name: Set publish version
         run: |
           python3 - <<'PY'
