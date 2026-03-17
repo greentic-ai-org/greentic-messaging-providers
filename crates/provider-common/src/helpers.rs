@@ -60,6 +60,90 @@ pub fn qa_q(key: &str, text_key: &str, required: bool) -> QaQuestionSpec {
         kind: crate::component_v0_6::QuestionKind::Text,
         required,
         default: None,
+        skip_if: None,
+    }
+}
+
+/// Build a [`QaQuestionSpec`] for inline JSON input with optional schema validation.
+pub fn qa_inline_json(key: &str, text_key: &str, required: bool) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: key.to_string(),
+        label: i18n(text_key),
+        help: None,
+        error: None,
+        kind: crate::component_v0_6::QuestionKind::InlineJson { schema: None },
+        required,
+        default: None,
+        skip_if: None,
+    }
+}
+
+/// Build a [`QaQuestionSpec`] for inline JSON input with JSON Schema validation.
+pub fn qa_inline_json_with_schema(
+    key: &str,
+    text_key: &str,
+    required: bool,
+    schema: serde_json::Value,
+) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: key.to_string(),
+        label: i18n(text_key),
+        help: None,
+        error: None,
+        kind: crate::component_v0_6::QuestionKind::InlineJson {
+            schema: Some(schema),
+        },
+        required,
+        default: None,
+        skip_if: None,
+    }
+}
+
+/// Build a [`QaQuestionSpec`] for asset file reference.
+pub fn qa_asset_ref(
+    key: &str,
+    text_key: &str,
+    required: bool,
+    file_types: Vec<String>,
+) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: key.to_string(),
+        label: i18n(text_key),
+        help: None,
+        error: None,
+        kind: crate::component_v0_6::QuestionKind::AssetRef {
+            file_types,
+            base_path: Some("assets/".to_string()),
+            check_exists: true,
+        },
+        required,
+        default: None,
+        skip_if: None,
+    }
+}
+
+/// Build a [`QaQuestionSpec`] for asset file reference with custom base path.
+pub fn qa_asset_ref_with_base(
+    key: &str,
+    text_key: &str,
+    required: bool,
+    file_types: Vec<String>,
+    base_path: Option<String>,
+    check_exists: bool,
+) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: key.to_string(),
+        label: i18n(text_key),
+        help: None,
+        error: None,
+        kind: crate::component_v0_6::QuestionKind::AssetRef {
+            file_types,
+            base_path,
+            check_exists,
+        },
+        required,
+        default: None,
+        skip_if: None,
     }
 }
 

@@ -1,27 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${ROOT_DIR}"
-GENERATED_PROVIDERS_DIR="${GENERATED_PROVIDERS_DIR:-${ROOT_DIR}/target/generated/providers}"
-PACKS_DIR="${PACKS_DIR:-${ROOT_DIR}/packs}"
+# v0.6.0: Packgen flow generation disabled - components now implement qa-spec/apply-answers directly
+# Legacy flows (setup_default, update, remove, requirements) were removed in v0.6.0 refactor
+#
+# Previously this script ran greentic-messaging-packgen to generate:
+# - setup_default.ygtc
+# - update.ygtc
+# - remove.ygtc
+# - requirements.ygtc
+#
+# Now flows are manually maintained in packs/*/flows/ and only include:
+# - default.ygtc (message routing)
+# - diagnostics.ygtc
+# - verify_webhooks.ygtc (for providers with webhooks)
+# - sync_subscriptions.ygtc (for providers with subscriptions)
+# - rotate_credentials.ygtc (for OAuth providers)
 
-rm -rf "${GENERATED_PROVIDERS_DIR}"
-
-cargo run -p greentic-messaging-packgen -- generate-all \
-  --spec-dir specs/providers \
-  --out "${GENERATED_PROVIDERS_DIR}"
-
-for dir in "${GENERATED_PROVIDERS_DIR}"/*; do
-  [ -d "${dir}" ] || continue
-  pack_id="$(basename "${dir}")"
-  src_flows="${dir}/flows"
-  dest_flows="${PACKS_DIR}/${pack_id}/flows"
-  if [ ! -d "${src_flows}" ]; then
-    echo "No flows found for ${pack_id} under ${src_flows}" >&2
-    continue
-  fi
-  rm -rf "${dest_flows}"
-  mkdir -p "${dest_flows}"
-  cp -a "${src_flows}/." "${dest_flows}/"
-done
+echo "Skipping flow generation - v0.6.0 uses component-based QA contract"
+echo "Flows are now manually maintained in packs/*/flows/"
+exit 0

@@ -29,12 +29,8 @@ components:
     export: handle-webhook
 flows:
   include:
-  - setup_default
-  - update
-  - remove
   - default
   - diagnostics
-  - requirements
   - verify_webhooks
   - sync_subscriptions
 source:

@@ -1,4 +1,5 @@
 {
+  "id": "whatsapp",
   "name": "whatsapp",
   "description": "WhatsApp provider component supporting egress, ingress, and formatting.",
   "config_schema": {

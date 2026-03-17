@@ -1,18 +1,15 @@
 {
   "provider": "messaging.whatsapp.cloud",
   "config_required": [
+    "enabled",
     "phone_number_id",
     "public_base_url"
   ],
-  "config_optional": [
-    "business_account_id"
-  ],
+  "config_optional": [],
   "secret_required": [
     "WHATSAPP_TOKEN"
   ],
-  "secret_optional": [
-    "WHATSAPP_VERIFY_TOKEN"
-  ],
+  "secret_optional": [],
   "oauth_required": false,
   "subscriptions_required": false
 }

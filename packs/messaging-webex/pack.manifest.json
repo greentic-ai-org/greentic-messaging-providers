@@ -1,18 +1,18 @@
 {
-  "capabilities_cache": [],
+  "name": "messaging-webex",
+  "version": "0.4.38",
+  "kind": "application",
+  "publisher": "Greentic",
+  "description": "Webex messaging provider — Bot API with Adaptive Cards",
   "component_sources": [
     {
       "id": "messaging-provider-webex",
       "version": "0.4.38",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": [
-        "messaging"
-      ],
+      "supports": ["messaging"],
       "profiles": {
         "default": "default",
-        "supported": [
-          "default"
-        ]
+        "supported": ["default"]
       },
       "capabilities": {
         "wasi": {
@@ -24,96 +24,17 @@
           "http-client": true
         }
       },
-      "wasm": "components/messaging-provider-webex/component.wasm"
-    },
-    {
-      "id": "ai.greentic.component-provision",
-      "version": "0.4.38",
-      "world": "greentic:component/component@0.5.0",
-      "supports": [
-        "messaging"
-      ],
-      "profiles": {
-        "default": "stateless",
-        "supported": [
-          "stateless"
-        ]
-      },
-      "capabilities": {
-        "host": {
-          "state": {
-            "delete": false,
-            "read": false,
-            "write": true
-          },
-          "telemetry": {
-            "scope": "node"
-          }
-        },
-        "wasi": {
-          "clocks": false,
-          "filesystem": {
-            "mode": "none",
-            "mounts": []
-          },
-          "random": false
-        }
-      },
-      "wasm": "components/provision/provision.wasm"
-    },
-    {
-      "id": "ai.greentic.component-qa",
-      "version": "0.4.38",
-      "world": "greentic:component/component@0.5.0",
-      "supports": [
-        "messaging"
-      ],
-      "profiles": {
-        "default": "stateless",
-        "supported": [
-          "stateless"
-        ]
-      },
-      "capabilities": {
-        "host": {
-          "messaging": {
-            "inbound": true,
-            "outbound": true
-          },
-          "qa": {
-            "process": true
-          },
-          "secrets": {
-            "required": []
-          },
-          "telemetry": {
-            "scope": "node"
-          }
-        },
-        "wasi": {
-          "clocks": true,
-          "filesystem": {
-            "mode": "none",
-            "mounts": []
-          },
-          "random": true
-        }
-      },
-      "wasm": "components/qa/qa.wasm"
+      "wasm": "components/messaging-provider-webex/component.wasm",
+      "manifest": "components/messaging-provider-webex/component.manifest.json"
     }
   ],
-  "components": [
-    "messaging-provider-webex",
-    "ai.greentic.component-provision",
-    "ai.greentic.component-qa"
-  ],
+  "components": ["messaging-provider-webex"],
   "config_schema": {
     "provider_config": {
       "format": "json",
       "path": "schemas/messaging/webex/public.config.schema.json"
     }
   },
-  "description": "Provider-core Webex messaging pack (messages API).",
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
@@ -132,7 +53,7 @@
             "priority": 100,
             "requires_setup": true,
             "setup": {
-              "qa_ref": "setup.yaml"
+              "qa_ref": "components/messaging-provider-webex"
             }
           }
         ]
@@ -158,16 +79,8 @@
         "providers": [
           {
             "provider_type": "messaging.webex.bot",
-            "capabilities": [
-              "messaging"
-            ],
-            "ops": [
-              "send",
-              "reply",
-              "qa-spec",
-              "apply-answers",
-              "i18n-keys"
-            ],
+            "capabilities": ["messaging"],
+            "ops": ["send", "reply", "qa-spec", "apply-answers", "i18n-keys"],
             "config_schema_ref": "schemas/messaging/webex/public.config.schema.json",
             "runtime": {
               "component_ref": "messaging-provider-webex",
@@ -177,105 +90,8 @@
           }
         ]
       }
-    },
-    "messaging.provider_flow_hints": {
-      "kind": "messaging.provider_flow_hints",
-      "version": "0.4.38",
-      "inline": {
-        "messaging.webex.bot": {
-          "default": "default",
-          "diagnostics": "diagnostics",
-          "remove": "remove",
-          "setup_default": "setup_default",
-          "update": "update",
-          "verify_webhooks": "verify_webhooks"
-        }
-      }
     }
   },
-  "flows": [
-    {
-      "id": "default",
-      "file": "flows/default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "default"
-      ]
-    },
-    {
-      "id": "diagnostics",
-      "file": "flows/diagnostics.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "diagnostics"
-      ]
-    },
-    {
-      "id": "remove",
-      "file": "flows/remove.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "remove"
-      ]
-    },
-    {
-      "id": "setup_default",
-      "file": "flows/setup_default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "setup"
-      ]
-    },
-    {
-      "id": "requirements",
-      "file": "flows/requirements.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "requirements"
-      ]
-    },
-    {
-      "id": "sync_subscriptions",
-      "file": "flows/sync_subscriptions.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "subscriptions"
-      ]
-    },
-    {
-      "id": "update",
-      "file": "flows/update.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "update"
-      ]
-    },
-    {
-      "id": "verify_webhooks",
-      "file": "flows/verify_webhooks.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "verify_webhooks"
-      ]
-    }
-  ],
-  "kind": "application",
   "messaging": {
     "adapters": [
       {
@@ -285,14 +101,11 @@
       }
     ]
   },
-  "name": "messaging-webex",
-  "publisher": "Greentic",
   "secret_requirements": [
     {
       "name": "WEBEX_BOT_TOKEN",
       "scope": "tenant",
       "description": "Webex bot access token used for Messages API calls."
     }
-  ],
-  "version": "0.4.38"
+  ]
 }

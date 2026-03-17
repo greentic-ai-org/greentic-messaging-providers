@@ -1,5 +1,18 @@
 {
+  "id": "messaging-ingress-telegram",
   "name": "messaging-ingress-telegram",
+  "version": "0.4.38",
+  "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Ingress-only Telegram component for webhook normalization.",
-  "secret_requirements": []
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
+  "secret_requirements": [],
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
 }

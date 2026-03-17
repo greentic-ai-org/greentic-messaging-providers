@@ -1,10 +1,12 @@
 {
   "provider": "messaging.telegram.bot",
   "config_required": [
+    "enabled",
     "public_base_url"
   ],
   "config_optional": [
-    "default_chat_id"
+    "default_chat_id",
+    "api_base_url"
   ],
   "secret_required": [
     "TELEGRAM_BOT_TOKEN"

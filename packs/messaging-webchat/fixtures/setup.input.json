@@ -1,7 +1,9 @@
 {
-  "mode": "local_queue",
+  "mode": "setup",
   "config": {
-    "public_base_url": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "mode": "local_queue"
   },
   "secrets": {}
 }

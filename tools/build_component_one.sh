@@ -31,9 +31,6 @@ if [ ! -f "${ARTIFACT_PATH}" ]; then
 fi
 
 cp "${ARTIFACT_PATH}" "${TARGET_DIR}/${PACKAGE_NAME}.wasm"
-if [ "${PACKAGE_NAME}" = "provision" ]; then
-  cp "${ARTIFACT_PATH}" "${ROOT_DIR}/components/provision/provision.wasm"
-fi
 if [ "${PACKAGE_NAME}" = "questions" ]; then
   cp "${ARTIFACT_PATH}" "${ROOT_DIR}/components/questions/questions.wasm"
 fi

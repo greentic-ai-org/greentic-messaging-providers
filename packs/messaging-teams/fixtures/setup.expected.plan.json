@@ -1,27 +1,21 @@
 {
   "config_patch": {
-    "tenant_id": "<value>",
-    "client_id": "<value>",
-    "public_base_url": "<value>",
-    "default_channel": "<value>"
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "ms_bot_app_id": "test-app-id"
   },
   "secrets_patch": {
     "set": {
-      "MS_GRAPH_CLIENT_SECRET": "<redacted>",
-      "MS_GRAPH_REFRESH_TOKEN": "<redacted>"
+      "MS_BOT_APP_PASSWORD": "test-app-password"
     },
     "delete": []
   },
   "webhook_ops": [
     {
       "op": "register",
-      "url": "<public_base_url>/webhook"
+      "url": "https://example.com"
     }
   ],
-  "subscription_ops": [
-    {
-      "op": "sync"
-    }
-  ],
+  "subscription_ops": [],
   "oauth_ops": []
 }

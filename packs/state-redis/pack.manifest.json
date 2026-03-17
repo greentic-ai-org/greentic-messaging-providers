@@ -3,23 +3,16 @@
   "version": "0.4.38",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Persistent key-value state provider backed by Redis.",
-  "components": [
-    "state-provider-redis"
-  ],
+  "description": "Persistent key-value state provider backed by Redis. Suitable for production environments with distributed state requirements.",
   "component_sources": [
     {
       "id": "state-provider-redis",
-      "version": "0.4.0",
-      "world": "greentic:component/component-v0-v6-v0",
-      "supports": [
-        "component_config"
-      ],
+      "version": "0.4.38",
+      "world": "greentic:component/component-v0-v6-v0@0.6.1",
+      "supports": ["component_config"],
       "profiles": {
         "default": "default",
-        "supported": [
-          "default"
-        ]
+        "supported": ["default"]
       },
       "capabilities": {
         "wasi": {
@@ -28,41 +21,11 @@
         },
         "host": {}
       },
-      "wasm": "components/state-provider-redis.wasm"
+      "wasm": "components/state-provider-redis/state-provider-redis.wasm",
+      "manifest": "components/state-provider-redis/component.manifest.json"
     }
   ],
-  "flows": [
-    {
-      "id": "setup_default",
-      "file": "flows/setup_default.ygtc",
-      "tags": [
-        "default"
-      ],
-      "entrypoints": [
-        "default"
-      ]
-    },
-    {
-      "id": "update",
-      "file": "flows/update.ygtc",
-      "tags": [
-        "update"
-      ],
-      "entrypoints": [
-        "default"
-      ]
-    },
-    {
-      "id": "remove",
-      "file": "flows/remove.ygtc",
-      "tags": [
-        "remove"
-      ],
-      "entrypoints": [
-        "default"
-      ]
-    }
-  ],
+  "components": ["state-provider-redis"],
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
@@ -81,7 +44,7 @@
             "priority": 50,
             "requires_setup": true,
             "setup": {
-              "qa_ref": "qa/state-redis-setup.json"
+              "qa_ref": "components/state-provider-redis"
             },
             "metadata": {
               "ephemeral": false,

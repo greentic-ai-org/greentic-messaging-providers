@@ -1,18 +1,15 @@
 {
   "provider": "messaging.teams.bot",
   "config_required": [
-    "tenant_id",
-    "client_id",
-    "public_base_url"
+    "enabled",
+    "public_base_url",
+    "ms_bot_app_id"
   ],
-  "config_optional": [
-    "default_channel"
-  ],
+  "config_optional": [],
   "secret_required": [
-    "MS_GRAPH_CLIENT_SECRET",
-    "MS_GRAPH_REFRESH_TOKEN"
+    "MS_BOT_APP_PASSWORD"
   ],
   "secret_optional": [],
   "oauth_required": false,
-  "subscriptions_required": true
+  "subscriptions_required": false
 }

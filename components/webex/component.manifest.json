@@ -1,4 +1,5 @@
 {
+  "id": "webex",
   "name": "webex",
   "description": "Webex provider component supporting egress, ingress, and formatting.",
   "config_schema": {

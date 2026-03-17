@@ -1,6 +1,15 @@
 {
+  "id": "secrets-probe",
   "name": "secrets-probe",
+  "version": "0.4.38",
+  "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Minimal component that probes greentic:secrets-store for TEST_API_KEY.",
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
   "secret_requirements": [
     {
       "name": "TEST_API_KEY",
