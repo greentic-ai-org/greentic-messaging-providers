@@ -64,6 +64,7 @@ extensions:
         ops:
         - send
         - ingest
+        - ingest_http
         - qa-spec
         - apply-answers
         - i18n-keys

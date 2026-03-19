@@ -85,6 +85,7 @@ extensions:
         ops:
         - send
         - reply
+        - ingest_http
         - subscription_ensure
         - subscription_renew
         - subscription_delete
