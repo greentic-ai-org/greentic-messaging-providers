@@ -1,11 +1,11 @@
 pack_id: messaging-webchat
-version: 0.4.38
+version: 0.4.39
 kind: application
 publisher: Greentic
 description: "WebChat messaging provider \u2014 Direct Line protocol with inline ingress"
 components:
 - id: messaging-provider-webchat
-  version: 0.4.38
+  version: 0.4.39
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -31,13 +31,13 @@ assets:
 extensions:
   greentic.ext.capabilities.v1:
     kind: greentic.ext.capabilities.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       schema_version: 1
       offers:
       - offer_id: messaging-webchat-v1
         cap_id: greentic.cap.messaging.provider.v1
-        version: 0.4.38
+        version: 0.4.39
         provider:
           component_ref: messaging-provider-webchat
           op: messaging.configure
@@ -47,7 +47,7 @@ extensions:
           qa_ref: components/messaging-provider-webchat
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       validators:
       - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
@@ -55,7 +55,7 @@ extensions:
         world: greentic:pack-validate/pack-validator@0.1.0
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       providers:
       - provider_type: messaging.webchat
@@ -75,7 +75,7 @@ extensions:
           world: greentic:provider/schema-core@1.0.0
   messaging.provider_ingress.v1:
     kind: messaging.provider_ingress.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       capabilities:
         content_types:
