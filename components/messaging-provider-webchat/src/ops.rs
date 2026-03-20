@@ -17,7 +17,7 @@ use crate::config::load_config;
 use crate::directline::jwt::DirectLineContext;
 use crate::directline::state::{StoredActivity, conversation_key};
 use crate::directline::store::StateStore as _;
-use crate::directline::{HostSecretStore, HostStateStore, handle_directline_request};
+use crate::directline::{ConfigAwareSecretStore, HostStateStore, handle_directline_request};
 
 pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
     let parsed: Value = match serde_json::from_slice(input_json) {
@@ -145,7 +145,9 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
             config: request.config.clone(),
         };
         let mut state_driver = HostStateStore;
-        let secrets_driver = HostSecretStore;
+        // Use ConfigAwareSecretStore to check injected secrets from request config first,
+        // falling back to host secrets_store interface if not found.
+        let secrets_driver = ConfigAwareSecretStore::new(request.config.clone());
         let mut out = handle_directline_request(&dl_request, &mut state_driver, &secrets_driver);
 
         // Emit ChannelMessageEnvelope for POST /activities so the operator can
