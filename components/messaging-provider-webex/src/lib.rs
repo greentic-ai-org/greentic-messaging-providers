@@ -430,7 +430,7 @@ mod tests {
             .into_iter()
             .map(|question| question.id)
             .collect::<Vec<_>>();
-        assert_eq!(keys, vec!["public_base_url"]);
+        assert_eq!(keys, vec!["public_base_url", "bot_token"]);
     }
 
     #[test]
