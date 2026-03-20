@@ -1,11 +1,11 @@
 pack_id: messaging-slack
-version: 0.4.38
+version: 0.4.39
 kind: application
 publisher: Greentic
 description: "Slack messaging provider \u2014 Bot API with Events API ingress"
 components:
 - id: messaging-provider-slack
-  version: 0.4.38
+  version: 0.4.39
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -23,7 +23,7 @@ components:
   wasm: components/messaging-provider-slack/component.wasm
   manifest: components/messaging-provider-slack/component.manifest.json
 - id: messaging-ingress-slack
-  version: 0.4.38
+  version: 0.4.39
   world: greentic:messaging-ingress-slack/messaging-ingress-slack@0.0.1
   supports:
   - messaging
@@ -50,13 +50,13 @@ assets:
 extensions:
   greentic.ext.capabilities.v1:
     kind: greentic.ext.capabilities.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       schema_version: 1
       offers:
       - offer_id: messaging-slack-v1
         cap_id: greentic.cap.messaging.provider.v1
-        version: 0.4.38
+        version: 0.4.39
         provider:
           component_ref: messaging-provider-slack
           op: messaging.configure
@@ -66,7 +66,7 @@ extensions:
           qa_ref: components/messaging-provider-slack
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       validators:
       - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
@@ -74,7 +74,7 @@ extensions:
         world: greentic:pack-validate/pack-validator@0.1.0
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       providers:
       - provider_type: messaging.slack.api
@@ -94,7 +94,7 @@ extensions:
           world: greentic:provider/schema-core@1.0.0
   messaging.oauth.v1:
     kind: messaging.oauth.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       auth_type: oauth2
       authorize_url: https://slack.com/oauth/v2/authorize
@@ -109,7 +109,7 @@ extensions:
       token_url: https://slack.com/api/oauth.v2.access
   messaging.provider_ingress.v1:
     kind: messaging.provider_ingress.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       capabilities:
         content_types:

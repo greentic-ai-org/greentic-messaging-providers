@@ -66,10 +66,10 @@ pub(crate) const SETUP_QUESTIONS: &[QaQuestionDef] = &[
         false,
     ),
     ("api_base_url", "webex.qa.setup.api_base_url", true),
-    ("bot_token", "webex.qa.setup.bot_token", false),
+    ("bot_token", "webex.qa.setup.bot_token", true),
 ];
 
-pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url"];
+pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "bot_token"];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
