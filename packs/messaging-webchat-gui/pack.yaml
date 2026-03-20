@@ -1,10 +1,10 @@
 pack_id: messaging-webchat-gui
-version: 0.4.38
+version: 0.4.39
 kind: application
 publisher: Greentic
 components:
 - id: messaging-provider-webchat-gui
-  version: 0.4.38
+  version: 0.4.39
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -31,13 +31,13 @@ assets:
 extensions:
   greentic.ext.capabilities.v1:
     kind: greentic.ext.capabilities.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       schema_version: 1
       offers:
       - offer_id: messaging-webchat-gui-v1
         cap_id: greentic.cap.messaging.provider.v1
-        version: 0.4.38
+        version: 0.4.39
         provider:
           component_ref: messaging-provider-webchat-gui
           op: messaging.configure
@@ -47,7 +47,7 @@ extensions:
           qa_ref: components/messaging-provider-webchat-gui
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       validators:
       - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
@@ -55,7 +55,7 @@ extensions:
         world: greentic:pack-validate/pack-validator@0.1.0
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       providers:
       - provider_type: messaging.webchat-gui
@@ -75,7 +75,7 @@ extensions:
           world: greentic:provider/schema-core@1.0.0
   greentic.static-routes.v1:
     kind: greentic.static-routes.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       version: 1
       routes:
@@ -89,7 +89,7 @@ extensions:
         spa_fallback: index.html
   messaging.provider_ingress.v1:
     kind: messaging.provider_ingress.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       capabilities:
         content_types:
@@ -100,7 +100,7 @@ extensions:
       world: greentic:provider/schema-core@1.0.0
   messaging.provider_routes.v1:
     kind: messaging.provider_routes.v1
-    version: 0.4.38
+    version: 0.4.39
     inline:
       backend_base_path: /v1/messaging/webchat/{tenant}
       provider_type: messaging.webchat-gui
