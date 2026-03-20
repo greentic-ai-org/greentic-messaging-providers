@@ -1,13 +1,13 @@
 {
   "name": "messaging-slack",
-  "version": "0.4.38",
+  "version": "0.4.39",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Slack messaging provider — Bot API with Events API ingress",
   "component_sources": [
     {
       "id": "messaging-provider-slack",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
       "supports": ["messaging"],
       "profiles": {
@@ -29,7 +29,7 @@
     },
     {
       "id": "messaging-ingress-slack",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "world": "greentic:messaging-ingress-slack/messaging-ingress-slack@0.0.1",
       "supports": ["messaging"],
       "profiles": {
@@ -61,14 +61,14 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "schema_version": 1,
         "offers": [
           {
             "offer_id": "messaging-slack-v1",
             "cap_id": "greentic.cap.messaging.provider.v1",
-            "version": "0.4.38",
+            "version": "0.4.39",
             "provider": {
               "component_ref": "messaging-provider-slack",
               "op": "messaging.configure"
@@ -84,7 +84,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "validators": [
           {
@@ -97,7 +97,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "providers": [
           {
@@ -116,7 +116,7 @@
     },
     "messaging.oauth.v1": {
       "kind": "messaging.oauth.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "auth_type": "oauth2",
         "authorize_url": "https://slack.com/oauth/v2/authorize",
@@ -129,7 +129,7 @@
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "capabilities": {
           "content_types": ["application/json"],
@@ -164,7 +164,20 @@
     {
       "name": "SLACK_SIGNING_SECRET",
       "scope": "tenant",
-      "description": "Slack signing secret (optional for future webhook validation)."
+      "description": "Slack signing secret (optional for future webhook validation).",
+      "required": false
+    },
+    {
+      "name": "SLACK_APP_ID",
+      "scope": "tenant",
+      "description": "Slack app ID for manifest updates during webhook registration.",
+      "required": false
+    },
+    {
+      "name": "SLACK_CONFIGURATION_TOKEN",
+      "scope": "tenant",
+      "description": "Slack configuration token for manifest updates during webhook registration.",
+      "required": false
     }
   ]
 }

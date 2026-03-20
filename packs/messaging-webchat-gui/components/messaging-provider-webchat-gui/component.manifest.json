@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-webchat-gui",
-  "version": "0.4.38",
+  "version": "0.4.39",
   "supports": [
     "messaging"
   ],
@@ -13,7 +13,12 @@
   },
   "capabilities": {
     "wasi": {},
-    "host": {}
+    "host": {
+      "state": {
+        "read": true,
+        "write": true
+      }
+    }
   },
   "operations": [],
   "resources": {},

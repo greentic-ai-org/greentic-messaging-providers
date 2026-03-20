@@ -1,13 +1,13 @@
 {
   "name": "messaging-teams",
-  "version": "0.4.38",
+  "version": "0.4.39",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Microsoft Teams messaging provider — Bot Framework with webhook ingress",
   "component_sources": [
     {
       "id": "messaging-provider-teams",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
       "supports": ["messaging"],
       "profiles": {
@@ -29,7 +29,7 @@
     },
     {
       "id": "messaging-ingress-teams",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "world": "greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1",
       "supports": ["messaging"],
       "profiles": {
@@ -61,14 +61,14 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "schema_version": 1,
         "offers": [
           {
             "offer_id": "messaging-teams-v1",
             "cap_id": "greentic.cap.messaging.provider.v1",
-            "version": "0.4.38",
+            "version": "0.4.39",
             "provider": {
               "component_ref": "messaging-provider-teams",
               "op": "messaging.configure"
@@ -84,7 +84,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "validators": [
           {
@@ -97,7 +97,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "providers": [
           {
@@ -116,7 +116,7 @@
     },
     "messaging.oauth.v1": {
       "kind": "messaging.oauth.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "auth_type": "oauth2",
         "authorize_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
@@ -129,7 +129,7 @@
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "capabilities": {
           "content_types": ["application/json"],
@@ -142,7 +142,7 @@
     },
     "messaging.subscriptions.v1": {
       "kind": "messaging.subscriptions.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "component_ref": "messaging-ingress-teams",
         "export": "sync-subscriptions",

@@ -1,13 +1,13 @@
 {
   "name": "messaging-webex",
-  "version": "0.4.38",
+  "version": "0.4.39",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Webex messaging provider — Bot API with Adaptive Cards",
   "component_sources": [
     {
       "id": "messaging-provider-webex",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
       "supports": ["messaging"],
       "profiles": {
@@ -38,14 +38,14 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "schema_version": 1,
         "offers": [
           {
             "offer_id": "messaging-webex-v1",
             "cap_id": "greentic.cap.messaging.provider.v1",
-            "version": "0.4.38",
+            "version": "0.4.39",
             "provider": {
               "component_ref": "messaging-provider-webex",
               "op": "messaging.configure"
@@ -61,7 +61,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "validators": [
           {
@@ -74,7 +74,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.38",
+      "version": "0.4.39",
       "inline": {
         "providers": [
           {
