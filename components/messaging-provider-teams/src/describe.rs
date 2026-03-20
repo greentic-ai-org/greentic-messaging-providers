@@ -78,7 +78,7 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
     (
         "ms_bot_app_password",
         "teams.qa.setup.ms_bot_app_password",
-        false,
+        true,
     ),
     (
         "default_service_url",
@@ -90,7 +90,8 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
 ];
 
 /// Keys required for default/minimal setup
-pub(crate) const DEFAULT_KEYS: &[&str] = &["ms_bot_app_id", "public_base_url"];
+pub(crate) const DEFAULT_KEYS: &[&str] =
+    &["ms_bot_app_id", "ms_bot_app_password", "public_base_url"];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();

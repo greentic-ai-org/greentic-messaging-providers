@@ -68,15 +68,20 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
     ("api_base_url", "slack.qa.setup.api_base_url", true),
     ("bot_token", "slack.qa.setup.bot_token", true),
     ("default_channel", "slack.qa.setup.default_channel", false),
-    ("slack_app_id", "slack.qa.setup.slack_app_id", false),
+    ("slack_app_id", "slack.qa.setup.slack_app_id", true),
     (
         "slack_configuration_token",
         "slack.qa.setup.slack_configuration_token",
-        false,
+        true,
     ),
 ];
 
-pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "bot_token"];
+pub(crate) const DEFAULT_KEYS: &[&str] = &[
+    "public_base_url",
+    "bot_token",
+    "slack_app_id",
+    "slack_configuration_token",
+];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
