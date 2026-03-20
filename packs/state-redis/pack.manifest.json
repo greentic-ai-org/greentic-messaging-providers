@@ -1,6 +1,6 @@
 {
   "name": "state-redis",
-  "version": "0.4.39",
+  "version": "0.4.40",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Persistent key-value state provider backed by Redis. Suitable for production environments with distributed state requirements.",
@@ -9,10 +9,14 @@
       "id": "state-provider-redis",
       "version": "0.4.39",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": ["component_config"],
+      "supports": [
+        "component_config"
+      ],
       "profiles": {
         "default": "default",
-        "supported": ["default"]
+        "supported": [
+          "default"
+        ]
       },
       "capabilities": {
         "wasi": {
@@ -25,18 +29,20 @@
       "manifest": "components/state-provider-redis/component.manifest.json"
     }
   ],
-  "components": ["state-provider-redis"],
+  "components": [
+    "state-provider-redis"
+  ],
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "schema_version": 1,
         "offers": [
           {
             "offer_id": "state.redis.kv.01",
             "cap_id": "greentic.cap.state.kv.v1",
-            "version": "0.4.39",
+            "version": "0.4.40",
             "provider": {
               "component_ref": "state-provider-redis",
               "op": "state.dispatch"

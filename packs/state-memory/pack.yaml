@@ -1,12 +1,12 @@
 pack_id: state-memory
-version: 0.4.39
+version: 0.4.40
 kind: application
 publisher: Greentic
 name: In-Memory State Provider
-description: "In-memory key-value state provider. Suitable for development and testing."
+description: In-memory key-value state provider. Suitable for development and testing.
 components:
 - id: state-provider-memory
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - component_config
@@ -39,3 +39,5 @@ extensions:
         metadata:
           backend: memory
           ephemeral: true
+assets:
+- path: secret-requirements.json

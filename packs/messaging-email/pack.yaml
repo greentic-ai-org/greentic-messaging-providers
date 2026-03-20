@@ -1,11 +1,11 @@
 pack_id: messaging-email
-version: 0.4.39
+version: 0.4.40
 kind: application
 publisher: Greentic
 description: "Email messaging provider \u2014 Microsoft Graph API with SMTP fallback"
 components:
 - id: messaging-provider-email
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -23,6 +23,7 @@ components:
   wasm: components/messaging-provider-email/component.wasm
   manifest: components/messaging-provider-email/component.manifest.json
 assets:
+- path: secret-requirements.json
 - path: schemas/messaging/email/public.config.schema.json
 - path: fixtures/egress.request.json
 - path: fixtures/egress.expected.summary.json

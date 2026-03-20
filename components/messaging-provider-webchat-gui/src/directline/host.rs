@@ -34,20 +34,6 @@ impl StateStore for HostStateStore {
     }
 }
 
-/// Secret store that doesn't use host secrets_store interface.
-/// This is kept for backwards compatibility but should not be used
-/// when running in provider_core_only mode.
-pub struct HostSecretStore;
-
-impl SecretStore for HostSecretStore {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>, String> {
-        match secrets_store::get(key) {
-            Ok(opt) => Ok(opt),
-            Err(err) => Err(format!("secret error: {} - {}", err.name(), err.message())),
-        }
-    }
-}
-
 /// Config-aware secret store that first checks injected config for secrets
 /// before falling back to the host secrets_store interface.
 ///

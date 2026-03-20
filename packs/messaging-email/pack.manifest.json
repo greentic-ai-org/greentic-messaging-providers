@@ -1,18 +1,22 @@
 {
   "name": "messaging-email",
-  "version": "0.4.39",
+  "version": "0.4.40",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Email messaging provider — Microsoft Graph API with SMTP fallback",
+  "description": "Email messaging provider \u2014 Microsoft Graph API with SMTP fallback",
   "component_sources": [
     {
       "id": "messaging-provider-email",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": ["messaging"],
+      "supports": [
+        "messaging"
+      ],
       "profiles": {
         "default": "default",
-        "supported": ["default"]
+        "supported": [
+          "default"
+        ]
       },
       "capabilities": {
         "wasi": {
@@ -28,7 +32,9 @@
       "manifest": "components/messaging-provider-email/component.manifest.json"
     }
   ],
-  "components": ["messaging-provider-email"],
+  "components": [
+    "messaging-provider-email"
+  ],
   "config_schema": {
     "provider_config": {
       "format": "json",
@@ -38,27 +44,30 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "schema_version": 1,
         "offers": [
           {
             "offer_id": "messaging-email-v1",
             "cap_id": "greentic.cap.messaging.provider.v1",
-            "version": "0.4.39",
+            "version": "0.4.40",
             "provider": {
               "component_ref": "messaging-provider-email",
               "op": "messaging.configure"
             },
             "priority": 100,
-            "requires_setup": true
+            "requires_setup": true,
+            "setup": {
+              "qa_ref": "components/messaging-provider-email"
+            }
           }
         ]
       }
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "validators": [
           {
@@ -71,13 +80,21 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "providers": [
           {
             "provider_type": "messaging.email.smtp",
-            "capabilities": ["messaging"],
-            "ops": ["send", "reply", "qa-spec", "apply-answers", "i18n-keys"],
+            "capabilities": [
+              "messaging"
+            ],
+            "ops": [
+              "send",
+              "reply",
+              "qa-spec",
+              "apply-answers",
+              "i18n-keys"
+            ],
             "config_schema_ref": "schemas/messaging/email/public.config.schema.json",
             "runtime": {
               "component_ref": "messaging-provider-email",

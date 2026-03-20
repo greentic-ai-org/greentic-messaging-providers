@@ -1,10 +1,10 @@
 pack_id: messaging-webchat-gui
-version: 0.4.39
+version: 0.4.40
 kind: application
 publisher: Greentic
 components:
 - id: messaging-provider-webchat-gui
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -23,6 +23,7 @@ components:
   manifest: components/messaging-provider-webchat-gui/component.manifest.json
 dependencies: []
 assets:
+- path: secret-requirements.json
 - path: schemas/messaging/webchat-gui/public.config.schema.json
 - path: assets/webchat-gui/index.html
 - path: assets/webchat-gui/404.html

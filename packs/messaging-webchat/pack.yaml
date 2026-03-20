@@ -1,11 +1,11 @@
 pack_id: messaging-webchat
-version: 0.4.39
+version: 0.4.40
 kind: application
 publisher: Greentic
 description: "WebChat messaging provider \u2014 Direct Line protocol with inline ingress"
 components:
 - id: messaging-provider-webchat
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -23,6 +23,7 @@ components:
   wasm: components/messaging-provider-webchat/component.wasm
   manifest: components/messaging-provider-webchat/component.manifest.json
 assets:
+- path: secret-requirements.json
 - path: schemas/messaging/webchat/public.config.schema.json
 - path: fixtures/egress.request.json
 - path: fixtures/egress.expected.summary.json

@@ -1,11 +1,12 @@
 pack_id: messaging-teams
-version: 0.4.39
+version: 0.4.40
 kind: application
 publisher: Greentic
-description: "Microsoft Teams messaging provider \u2014 Bot Framework with webhook ingress"
+description: "Microsoft Teams messaging provider \u2014 Bot Framework with webhook\
+  \ ingress"
 components:
 - id: messaging-provider-teams
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -23,7 +24,7 @@ components:
   wasm: components/messaging-provider-teams/component.wasm
   manifest: components/messaging-provider-teams/component.manifest.json
 - id: messaging-ingress-teams
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1
   supports:
   - messaging
@@ -42,6 +43,7 @@ components:
   wasm: components/messaging-ingress-teams/component.wasm
   manifest: components/messaging-ingress-teams/component.manifest.json
 assets:
+- path: secret-requirements.json
 - path: schemas/messaging/teams/public.config.schema.json
 - path: fixtures/egress.request.json
 - path: fixtures/egress.expected.summary.json

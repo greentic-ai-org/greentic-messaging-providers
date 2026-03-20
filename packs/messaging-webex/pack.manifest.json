@@ -1,18 +1,22 @@
 {
   "name": "messaging-webex",
-  "version": "0.4.39",
+  "version": "0.4.40",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Webex messaging provider — Bot API with Adaptive Cards",
+  "description": "Webex messaging provider \u2014 Bot API with Adaptive Cards",
   "component_sources": [
     {
       "id": "messaging-provider-webex",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": ["messaging"],
+      "supports": [
+        "messaging"
+      ],
       "profiles": {
         "default": "default",
-        "supported": ["default"]
+        "supported": [
+          "default"
+        ]
       },
       "capabilities": {
         "wasi": {
@@ -28,7 +32,9 @@
       "manifest": "components/messaging-provider-webex/component.manifest.json"
     }
   ],
-  "components": ["messaging-provider-webex"],
+  "components": [
+    "messaging-provider-webex"
+  ],
   "config_schema": {
     "provider_config": {
       "format": "json",
@@ -38,14 +44,14 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "schema_version": 1,
         "offers": [
           {
             "offer_id": "messaging-webex-v1",
             "cap_id": "greentic.cap.messaging.provider.v1",
-            "version": "0.4.39",
+            "version": "0.4.40",
             "provider": {
               "component_ref": "messaging-provider-webex",
               "op": "messaging.configure"
@@ -61,7 +67,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "validators": [
           {
@@ -74,13 +80,22 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "providers": [
           {
             "provider_type": "messaging.webex.bot",
-            "capabilities": ["messaging"],
-            "ops": ["send", "reply", "qa-spec", "apply-answers", "i18n-keys"],
+            "capabilities": [
+              "messaging"
+            ],
+            "ops": [
+              "send",
+              "reply",
+              "ingest_http",
+              "qa-spec",
+              "apply-answers",
+              "i18n-keys"
+            ],
             "config_schema_ref": "schemas/messaging/webex/public.config.schema.json",
             "runtime": {
               "component_ref": "messaging-provider-webex",

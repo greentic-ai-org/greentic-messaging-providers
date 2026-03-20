@@ -1,57 +1,482 @@
 {
   "name": "messaging-telegram",
-  "version": "0.4.39",
+  "version": "0.4.40",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Telegram messaging provider — bot API with webhook ingress",
+  "description": "Telegram messaging provider \u2014 bot API with webhook ingress",
   "component_sources": [
     {
-      "id": "messaging-provider-telegram",
-      "version": "0.4.39",
-      "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": ["messaging"],
+      "id": "ai.greentic.component-templates",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
       "profiles": {
         "default": "default",
-        "supported": ["default"]
+        "supported": [
+          "default"
+        ]
       },
       "capabilities": {
         "wasi": {
           "random": false,
           "clocks": false
         },
-        "host": {
-          "secrets-store": true,
-          "http-client": true
-        }
+        "host": {}
       },
-      "wasm": "components/messaging-provider-telegram/component.wasm",
-      "manifest": "components/messaging-provider-telegram/component.manifest.json"
+      "wasm": "components/templates/templates.wasm"
+    },
+    {
+      "id": "ai.greentic.component-templates",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/ai.greentic.component-templates.wasm"
+    },
+    {
+      "id": "diagnostics___optional_send",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___optional_send.wasm"
+    },
+    {
+      "id": "diagnostics___preflight",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___preflight.wasm"
+    },
+    {
+      "id": "diagnostics___summary",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___summary.wasm"
+    },
+    {
+      "id": "diagnostics___verify_token",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___verify_token.wasm"
+    },
+    {
+      "id": "diagnostics__optional_send",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__optional_send.wasm"
+    },
+    {
+      "id": "diagnostics__preflight",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__preflight.wasm"
+    },
+    {
+      "id": "diagnostics__summary",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__summary.wasm"
+    },
+    {
+      "id": "diagnostics__verify_token",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__verify_token.wasm"
+    },
+    {
+      "id": "ingress_default___ingress_default__summary",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/ingress_default___ingress_default__summary.wasm"
     },
     {
       "id": "messaging-ingress-telegram",
-      "version": "0.4.39",
-      "world": "greentic:messaging-ingress-telegram/messaging-ingress-telegram@0.0.1",
-      "supports": ["messaging"],
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
       "profiles": {
         "default": "default",
-        "supported": ["default"]
+        "supported": [
+          "default"
+        ]
       },
       "capabilities": {
         "wasi": {
           "random": false,
           "clocks": false
         },
-        "host": {
-          "secrets-store": true,
-          "state-store": true,
-          "http-client": true
-        }
+        "host": {}
       },
-      "wasm": "components/messaging-ingress-telegram/component.wasm",
-      "manifest": "components/messaging-ingress-telegram/component.manifest.json"
+      "wasm": "components/messaging-ingress-telegram/component.wasm"
+    },
+    {
+      "id": "messaging-ingress-telegram",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-ingress-telegram.wasm"
+    },
+    {
+      "id": "messaging-provider-telegram",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-provider-telegram.wasm"
+    },
+    {
+      "id": "messaging-provider-telegram",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-provider-telegram/component.wasm"
+    },
+    {
+      "id": "sync_subscriptions___summary",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/sync_subscriptions___summary.wasm"
+    },
+    {
+      "id": "sync_subscriptions___sync_subscriptions__summary",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/sync_subscriptions___sync_subscriptions__summary.wasm"
+    },
+    {
+      "id": "templates",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/templates.wasm"
+    },
+    {
+      "id": "verify_webhooks___steps",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/verify_webhooks___steps.wasm"
+    },
+    {
+      "id": "verify_webhooks___summary",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/verify_webhooks___summary.wasm"
+    },
+    {
+      "id": "verify_webhooks__steps",
+      "version": "0.4.40",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/verify_webhooks__steps.wasm"
     }
   ],
-  "components": ["messaging-provider-telegram", "messaging-ingress-telegram"],
+  "components": [
+    "ai.greentic.component-templates",
+    "ai.greentic.component-templates",
+    "messaging-ingress-telegram",
+    "messaging-ingress-telegram",
+    "messaging-provider-telegram",
+    "messaging-provider-telegram",
+    "templates"
+  ],
   "config_schema": {
     "provider_config": {
       "format": "json",
@@ -61,30 +486,30 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
-        "schema_version": 1,
         "offers": [
           {
-            "offer_id": "messaging-telegram-v1",
             "cap_id": "greentic.cap.messaging.provider.v1",
-            "version": "0.4.39",
+            "offer_id": "messaging-telegram-v1",
+            "priority": 100,
             "provider": {
               "component_ref": "messaging-provider-telegram",
               "op": "messaging.configure"
             },
-            "priority": 100,
             "requires_setup": true,
             "setup": {
               "qa_ref": "components/messaging-provider-telegram"
-            }
+            },
+            "version": "0.4.40"
           }
-        ]
+        ],
+        "schema_version": 1
       }
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "validators": [
           {
@@ -97,13 +522,22 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "providers": [
           {
             "provider_type": "messaging.telegram.bot",
-            "capabilities": ["messaging"],
-            "ops": ["send", "reply", "qa-spec", "apply-answers", "i18n-keys"],
+            "capabilities": [
+              "messaging"
+            ],
+            "ops": [
+              "send",
+              "reply",
+              "ingest_http",
+              "qa-spec",
+              "apply-answers",
+              "i18n-keys"
+            ],
             "config_schema_ref": "schemas/messaging/telegram/public.config.schema.json",
             "runtime": {
               "component_ref": "messaging-provider-telegram",
@@ -116,10 +550,12 @@
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "capabilities": {
-          "content_types": ["application/json"],
+          "content_types": [
+            "application/json"
+          ],
           "supports_webhook_validation": true
         },
         "component_ref": "messaging-ingress-telegram",
@@ -147,6 +583,23 @@
       "name": "TELEGRAM_BOT_TOKEN",
       "scope": "tenant",
       "description": "Telegram bot token used for sendMessage requests."
+    }
+  ],
+  "capabilities_cache": [
+    {
+      "component": "ai.greentic.component-templates",
+      "version": "v1",
+      "path": "components/ai.greentic.component-templates-capabilities_v1.json"
+    },
+    {
+      "component": "ai.greentic.component-templates",
+      "version": "v1",
+      "path": "components/ai.greentic.component-templates-capabilities_v1.json"
+    },
+    {
+      "component": "templates",
+      "version": "v1",
+      "path": "components/templates-capabilities_v1.json"
     }
   ]
 }

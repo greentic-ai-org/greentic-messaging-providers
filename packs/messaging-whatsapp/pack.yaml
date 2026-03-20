@@ -1,11 +1,11 @@
 pack_id: messaging-whatsapp
-version: 0.4.39
+version: 0.4.40
 kind: application
 publisher: Greentic
 description: "WhatsApp messaging provider \u2014 Cloud API with webhook ingress"
 components:
 - id: messaging-provider-whatsapp
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -23,7 +23,7 @@ components:
   wasm: components/messaging-provider-whatsapp/component.wasm
   manifest: components/messaging-provider-whatsapp/component.manifest.json
 - id: messaging-ingress-whatsapp
-  version: 0.4.39
+  version: 0.4.40
   world: greentic:messaging-ingress-whatsapp/messaging-ingress-whatsapp@0.0.1
   supports:
   - messaging
@@ -42,6 +42,7 @@ components:
   wasm: components/messaging-ingress-whatsapp/component.wasm
   manifest: components/messaging-ingress-whatsapp/component.manifest.json
 assets:
+- path: secret-requirements.json
 - path: schemas/messaging/whatsapp/public.config.schema.json
 - path: fixtures/egress.request.json
 - path: fixtures/egress.expected.summary.json

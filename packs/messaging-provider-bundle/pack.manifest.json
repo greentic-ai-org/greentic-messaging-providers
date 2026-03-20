@@ -1,18 +1,16 @@
 {
   "name": "messaging-provider-bundle",
   "publisher": "Greentic",
-  "version": "0.4.39",
+  "version": "0.4.40",
   "kind": "application",
   "components": [
     "templates",
-    "messaging-provider-dummy",
-    "ai.greentic.component-provision",
-    "ai.greentic.component-qa"
+    "messaging-provider-dummy"
   ],
   "component_sources": [
     {
       "id": "templates",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "world": "greentic:component/component@0.5.0",
       "supports": [
         "messaging"
@@ -34,7 +32,7 @@
     },
     {
       "id": "messaging-provider-dummy",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "world": "greentic:provider/schema-core@1.0.0",
       "supports": [
         "messaging"
@@ -52,11 +50,12 @@
         },
         "host": {}
       },
-      "wasm": "components/messaging-provider-dummy/component.wasm"
+      "wasm": "components/messaging-provider-dummy/component.wasm",
+      "manifest": "components/messaging-provider-dummy/component.manifest.json"
     },
     {
       "id": "ai.greentic.component-provision",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "world": "greentic:component/component@0.5.0",
       "supports": [
         "messaging"
@@ -91,7 +90,7 @@
     },
     {
       "id": "ai.greentic.component-qa",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "world": "greentic:component/component@0.5.0",
       "supports": [
         "messaging"
@@ -133,7 +132,7 @@
   "extensions": {
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.39",
+      "version": "0.4.40",
       "inline": {
         "providers": [
           {

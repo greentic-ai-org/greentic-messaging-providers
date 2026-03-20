@@ -520,7 +520,8 @@ pub fn validate_answers_for_spec(
                                 errors.push(ValidationError {
                                     path: format!(
                                         "{}.{}",
-                                        question.name, validation_error.instance_path
+                                        question.name,
+                                        validation_error.instance_path()
                                     ),
                                     message: validation_error.to_string(),
                                 });

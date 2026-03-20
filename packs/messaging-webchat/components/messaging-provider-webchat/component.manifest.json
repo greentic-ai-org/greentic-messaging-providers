@@ -1,20 +1,22 @@
 {
   "id": "messaging-provider-webchat",
-  "version": "0.4.39",
-  "supports": [
-    "messaging"
-  ],
+  "name": "messaging-provider-webchat",
+  "version": "0.4.40",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
+  "description": "Provider-core WebChat messaging provider (send + ingest).",
   "profiles": {
     "default": "default",
     "supported": [
       "default"
     ]
   },
-  "capabilities": {
-    "wasi": {},
-    "host": {}
+  "config_schema": {
+    "provider_config": {
+      "format": "json",
+      "path": "schemas/messaging/webchat/public.config.schema.json"
+    }
   },
+  "secret_requirements": [],
   "operations": [
     {
       "name": "qa-spec",
@@ -89,6 +91,8 @@
       }
     }
   ],
-  "resources": {},
-  "dev_flows": {}
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
 }
