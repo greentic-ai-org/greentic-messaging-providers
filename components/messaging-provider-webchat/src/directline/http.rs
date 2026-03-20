@@ -94,7 +94,7 @@ where
         return resp;
     }
 
-    let signing_key = match load_signing_key(secrets) {
+    let signing_key = match load_signing_key(request, secrets) {
         Ok(key) => key,
         Err(resp) => return resp,
     };
@@ -124,7 +124,7 @@ where
         Some(header) => header,
         None => return respond_unauthorized("missing Authorization header"),
     };
-    let signing_key = match load_signing_key(secrets) {
+    let signing_key = match load_signing_key(request, secrets) {
         Ok(key) => key,
         Err(resp) => return resp,
     };
@@ -187,7 +187,7 @@ where
         Some(token) => token,
         None => return respond_unauthorized("missing Authorization header"),
     };
-    let signing_key = match load_signing_key(secrets) {
+    let signing_key = match load_signing_key(request, secrets) {
         Ok(key) => key,
         Err(resp) => return resp,
     };
@@ -264,7 +264,7 @@ where
         Some(token) => token,
         None => return respond_unauthorized("missing Authorization header"),
     };
-    let signing_key = match load_signing_key(secrets) {
+    let signing_key = match load_signing_key(request, secrets) {
         Ok(key) => key,
         Err(resp) => return resp,
     };
@@ -460,7 +460,33 @@ fn rate_limit_key(ctx: &DirectLineContext, user_id: &str) -> String {
     )
 }
 
-fn load_signing_key<SE: SecretStore>(secrets: &SE) -> Result<Vec<u8>, HttpOutV1> {
+/// Load the JWT signing key from either injected config or secrets store.
+/// Injected config takes priority (for provider_core_only mode where host pre-fetches secrets).
+fn load_signing_key<SE: SecretStore>(request: &HttpInV1, secrets: &SE) -> Result<Vec<u8>, HttpOutV1> {
+    // First, check for host-injected secret in config (for provider_core_only mode)
+    if let Some(config) = &request.config {
+        let config_key = format!("{TOKEN_SECRET_KEY}_b64");
+        if let Some(b64_value) = config.get(&config_key).and_then(|v| v.as_str()) {
+            return general_purpose::STANDARD
+                .decode(b64_value)
+                .map_err(|err| {
+                    respond_error(
+                        500,
+                        "config_decode_error",
+                        format!("failed to decode {config_key} from config: {err}"),
+                    )
+                })
+                .and_then(|bytes| {
+                    if bytes.is_empty() {
+                        Err(respond_error(500, "invalid_secret", "signing key is empty"))
+                    } else {
+                        Ok(bytes)
+                    }
+                });
+        }
+    }
+
+    // Fall back to secrets store
     match secrets.get(TOKEN_SECRET_KEY) {
         Ok(Some(bytes)) if !bytes.is_empty() => Ok(bytes),
         Ok(Some(_)) => Err(respond_error(500, "invalid_secret", "signing key is empty")),
