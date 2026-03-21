@@ -652,14 +652,19 @@ PY
     readme_path="${dir}/README.md"
     pack_desc="$(jq -r '.description // empty' "${dir}/pack.manifest.json")"
     pack_title="$(jq -r '.name // empty' "${dir}/pack.manifest.json")"
-    oras_files=("${pack_out}:${MEDIA_TYPE}")
+    # Use relative paths to avoid absolute paths being embedded in OCI artifacts.
+    # This prevents "path traversal disallowed" errors when pulling.
+    pack_basename="$(basename "${pack_out}")"
+    pack_dir="$(dirname "${pack_out}")"
+    oras_files=("${pack_basename}:${MEDIA_TYPE}")
     if [ -f "${readme_path}" ]; then
-      oras_files+=("${readme_path}:text/markdown")
+      # Copy README to pack output directory for relative path push
+      cp "${readme_path}" "${pack_dir}/README.md"
+      oras_files+=("README.md:text/markdown")
     fi
     digest="$(
-      oras push \
+      cd "${pack_dir}" && oras push \
         --artifact-type "${MEDIA_TYPE}" \
-        --disable-path-validation \
         --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
         --annotation "org.opencontainers.image.revision=${git_sha}" \
         --annotation "org.opencontainers.image.version=${PACK_VERSION}" \
@@ -670,18 +675,20 @@ PY
         | awk '/Digest:/{print $2}' | tail -n1
     )"
     if [[ "${PUBLISH_LATEST}" =~ ^(1|true|TRUE|yes|YES)$ ]]; then
-      oras push \
-        --artifact-type "${MEDIA_TYPE}" \
-        --disable-path-validation \
-        --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
-        --annotation "org.opencontainers.image.revision=${git_sha}" \
-        --annotation "org.opencontainers.image.version=${PACK_VERSION}" \
-        --annotation "org.opencontainers.image.title=${pack_title}" \
-        --annotation "org.opencontainers.image.description=${pack_desc}" \
-        "${latest_ref}" \
-        "${oras_files[@]}" \
-        >/dev/null
+      (
+        cd "${pack_dir}" && oras push \
+          --artifact-type "${MEDIA_TYPE}" \
+          --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
+          --annotation "org.opencontainers.image.revision=${git_sha}" \
+          --annotation "org.opencontainers.image.version=${PACK_VERSION}" \
+          --annotation "org.opencontainers.image.title=${pack_title}" \
+          --annotation "org.opencontainers.image.description=${pack_desc}" \
+          "${latest_ref}" \
+          "${oras_files[@]}"
+      ) >/dev/null
     fi
+    # Clean up copied README from pack directory
+    rm -f "${pack_dir}/README.md"
   else
     echo "[DRY RUN] Would push ${pack_out} to ${oci_ref}"
   fi
