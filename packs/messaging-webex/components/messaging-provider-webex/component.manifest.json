@@ -1,28 +1,20 @@
 {
   "id": "messaging-provider-webex",
-  "name": "messaging-provider-webex",
   "version": "0.4.40",
+  "supports": [
+    "messaging"
+  ],
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
-  "description": "Provider-core Webex messaging provider (messages API).",
   "profiles": {
     "default": "default",
     "supported": [
       "default"
     ]
   },
-  "config_schema": {
-    "provider_config": {
-      "format": "json",
-      "path": "schemas/messaging/webex/public.config.schema.json"
-    }
+  "capabilities": {
+    "wasi": {},
+    "host": {}
   },
-  "secret_requirements": [
-    {
-      "name": "WEBEX_BOT_TOKEN",
-      "scope": "tenant",
-      "description": "Webex bot access token used for Messages API calls."
-    }
-  ],
   "operations": [
     {
       "name": "qa-spec",
@@ -97,8 +89,6 @@
       }
     }
   ],
-  "capabilities": {
-    "wasi": {},
-    "host": {}
-  }
+  "resources": {},
+  "dev_flows": {}
 }
