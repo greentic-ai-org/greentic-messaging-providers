@@ -13,7 +13,12 @@
   },
   "capabilities": {
     "wasi": {},
-    "host": {}
+    "host": {
+      "state": {
+        "read": true,
+        "write": true
+      }
+    }
   },
   "operations": [],
   "resources": {},

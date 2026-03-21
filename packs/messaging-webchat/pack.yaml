@@ -2,11 +2,10 @@ pack_id: messaging-webchat
 version: 0.4.40
 kind: application
 publisher: Greentic
-description: "WebChat messaging provider \u2014 Direct Line protocol with inline ingress"
 components:
-- id: messaging-provider-webchat
+- id: ai.greentic.component-templates
   version: 0.4.40
-  world: greentic:component/component-v0-v6-v0@0.6.1
+  world: root:component/root
   supports:
   - messaging
   profiles:
@@ -17,13 +16,251 @@ components:
     wasi:
       random: false
       clocks: false
-    host:
-      secrets-store: true
-      state-store: true
+    host: {}
+  wasm: components/templates/templates.wasm
+- id: ai.greentic.component-templates
+  version: 0.1.0
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/ai.greentic.component-templates.wasm
+- id: diagnostics___check_secret
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics___check_secret.wasm
+- id: diagnostics___optional_loopback
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics___optional_loopback.wasm
+- id: diagnostics___summary
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics___summary.wasm
+- id: diagnostics__check_secret
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics__check_secret.wasm
+- id: diagnostics__optional_loopback
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics__optional_loopback.wasm
+- id: diagnostics__summary
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics__summary.wasm
+- id: ingress_default___ingress_default__summary
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/ingress_default___ingress_default__summary.wasm
+- id: messaging-provider-webchat
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
   wasm: components/messaging-provider-webchat/component.wasm
-  manifest: components/messaging-provider-webchat/component.manifest.json
+- id: messaging-provider-webchat
+  version: 0.1.0
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/messaging-provider-webchat.wasm
+- id: sync_subscriptions___summary
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/sync_subscriptions___summary.wasm
+- id: sync_subscriptions___sync_subscriptions__summary
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/sync_subscriptions___sync_subscriptions__summary.wasm
+- id: templates
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/templates.wasm
+- id: verify_webhooks___steps
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/verify_webhooks___steps.wasm
+- id: verify_webhooks___summary
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/verify_webhooks___summary.wasm
+- id: verify_webhooks__steps
+  version: 0.4.40
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/verify_webhooks__steps.wasm
+dependencies: []
+flows: []
 assets:
-- path: secret-requirements.json
 - path: schemas/messaging/webchat/public.config.schema.json
 - path: fixtures/egress.request.json
 - path: fixtures/egress.expected.summary.json
@@ -32,23 +269,23 @@ assets:
 extensions:
   greentic.ext.capabilities.v1:
     kind: greentic.ext.capabilities.v1
-    version: 0.4.39
+    version: 0.4.40
     inline:
-      schema_version: 1
       offers:
-      - offer_id: messaging-webchat-v1
-        cap_id: greentic.cap.messaging.provider.v1
-        version: 0.4.39
+      - cap_id: greentic.cap.messaging.provider.v1
+        offer_id: messaging-webchat-v1
+        priority: 100
         provider:
           component_ref: messaging-provider-webchat
           op: messaging.configure
-        priority: 100
         requires_setup: true
         setup:
           qa_ref: components/messaging-provider-webchat
+        version: 0.4.40
+      schema_version: 1
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
-    version: 0.4.39
+    version: 0.4.40
     inline:
       validators:
       - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
@@ -56,7 +293,7 @@ extensions:
         world: greentic:pack-validate/pack-validator@0.1.0
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.39
+    version: 0.4.40
     inline:
       providers:
       - provider_type: messaging.webchat
@@ -76,7 +313,7 @@ extensions:
           world: greentic:provider/schema-core@1.0.0
   messaging.provider_ingress.v1:
     kind: messaging.provider_ingress.v1
-    version: 0.4.39
+    version: 0.4.40
     inline:
       capabilities:
         content_types:
