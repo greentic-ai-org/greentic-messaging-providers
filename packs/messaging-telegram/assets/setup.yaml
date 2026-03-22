@@ -20,7 +20,7 @@ questions:
     help: "Telegram Bot API base URL (default: https://api.telegram.org)"
     validate:
       regex: "^https?://"
-  - name: bot_token
+  - name: telegram_bot_token
     title: Telegram bot token
     kind: string
     required: false

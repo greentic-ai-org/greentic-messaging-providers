@@ -29,8 +29,14 @@ questions:
     kind: string
     required: true
     help: "WhatsApp Cloud API version (e.g. v17.0)"
-  - name: token
+  - name: whatsapp_token
     title: WhatsApp access token
     kind: string
     required: false
     secret: true
+  - name: whatsapp_verify_token
+    title: WhatsApp verify token
+    kind: string
+    required: false
+    secret: true
+    help: "Verification token for webhook registration"
