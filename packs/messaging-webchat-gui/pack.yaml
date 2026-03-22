@@ -64,7 +64,7 @@ components:
     host: {}
   wasm: components/messaging-provider-webchat-gui/component.wasm
 - id: messaging-provider-webchat-gui
-  version: 0.1.0
+  version: __PACK_VERSION__
   world: root:component/root
   supports:
   - messaging
