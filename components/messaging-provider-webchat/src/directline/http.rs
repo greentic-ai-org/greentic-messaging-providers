@@ -72,6 +72,10 @@ where
                 _ => method_not_allowed(),
             }
         }
+        ["v3", "directline", "conversations", conv_id] if method_is(request, "GET") => {
+            handle_reconnect_conversation(request, state_store, secrets, conv_id)
+        }
+        ["v3", "directline", "conversations", _conv_id] => method_not_allowed(),
         ["v3", "directline", "conversations", _conv_id, "stream"] => respond_not_implemented(),
         _ => respond_not_found("unknown directline endpoint"),
     }
@@ -164,6 +168,79 @@ where
 
     respond_json(
         201,
+        json!({
+            "conversationId": conversation_id,
+            "token": token,
+            "expires_in": TTL_SECONDS,
+            "streamUrl": Value::Null,
+        }),
+    )
+}
+
+/// Handle GET /v3/directline/conversations/{conversationId} - reconnect to existing conversation.
+/// Returns conversation info with a refreshed token if the conversation exists and token is valid.
+fn handle_reconnect_conversation<S, SE>(
+    request: &HttpInV1,
+    state_store: &mut S,
+    secrets: &SE,
+    conversation_id: &str,
+) -> HttpOutV1
+where
+    S: StateStore,
+    SE: SecretStore,
+{
+    let authorization = match extract_bearer(request.headers.as_slice()) {
+        Some(header) => header,
+        None => return respond_unauthorized("missing Authorization header"),
+    };
+    let signing_key = match load_signing_key(request, secrets) {
+        Ok(key) => key,
+        Err(resp) => return resp,
+    };
+    let claims = match verify_token(&signing_key, &authorization) {
+        Ok(claims) => claims,
+        Err(err) => return respond_unauthorized(&format!("invalid token: {err:?}")),
+    };
+
+    // Token must be bound to this conversation (or unbound for first reconnect)
+    if let Some(ref bound_conv) = claims.conv {
+        if bound_conv != conversation_id {
+            return respond_forbidden("token bound to different conversation");
+        }
+    }
+
+    let ctx = claims.ctx.clone();
+    let conv_key = conversation_key(&ctx, conversation_id);
+
+    // Verify conversation exists
+    match load_conversation_state(state_store, &conv_key) {
+        Ok(conversation) => {
+            if conversation.ctx != ctx {
+                return respond_forbidden("token context mismatch");
+            }
+        }
+        Err(resp) => return resp,
+    };
+
+    // Issue a new token bound to this conversation
+    let (token, _exp) = match issue_token(
+        &signing_key,
+        ctx,
+        &claims.sub,
+        Some(conversation_id.to_string()),
+    ) {
+        Ok(pair) => pair,
+        Err(err) => {
+            return respond_error(
+                500,
+                "token_issue_failed",
+                format!("failed to mint reconnect token: {err:?}"),
+            );
+        }
+    };
+
+    respond_json(
+        200,
         json!({
             "conversationId": conversation_id,
             "token": token,
