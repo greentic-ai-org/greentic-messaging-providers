@@ -24,7 +24,7 @@ questions:
     help: "Webex API base URL (default: https://webexapis.com/v1)"
     validate:
       regex: "^https?://"
-  - name: bot_token
+  - name: webex_bot_token
     title: Webex bot token
     kind: string
     required: false

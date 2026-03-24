@@ -16,7 +16,7 @@ questions:
     help: "Slack API base URL (default: https://slack.com/api)"
     validate:
       regex: "^https?://"
-  - name: bot_token
+  - name: slack_bot_token
     title: Slack bot token
     kind: string
     required: true

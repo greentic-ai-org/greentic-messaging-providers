@@ -6,18 +6,21 @@ questions:
     title: Public base URL
     kind: string
     required: true
-    help: "Example: https://xxxx.trycloudflare.com"
+    default: "http://localhost:8080"
+    help: "Example: https://xxxx.trycloudflare.com (auto-replaced by gtc start when using tunnel)"
     validate:
-      regex: "^https://"
+      regex: "^https?://"
   - name: mode
     title: Mode
     kind: string
     required: true
-    help: "WebChat mode (e.g. directline, embedded)"
+    default: "local_queue"
+    help: "WebChat mode: local_queue | websocket | pubsub"
   - name: route
     title: Route
     kind: string
     required: false
+    default: "webchat"
   - name: tenant_channel_id
     title: Tenant channel ID
     kind: string
