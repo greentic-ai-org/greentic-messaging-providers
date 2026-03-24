@@ -1,5 +1,9 @@
 # SECURITY_FIX_REPORT
 
+## Run Metadata
+- Date (UTC): 2026-03-24
+- Branch: `chore/cleanup-ds-store`
+
 ## Scope
 - Reviewed provided security alert inputs.
 - Checked pull request dependency vulnerability input.
@@ -13,7 +17,7 @@
 ## Repository Checks Performed
 - Enumerated dependency manifests/lockfiles (Rust workspace with `Cargo.toml` and `Cargo.lock`).
 - Checked git diff for dependency files (`Cargo.toml`/`Cargo.lock` across workspace).
-- Result: no dependency file changes detected in current diff.
+- Result: no dependency file changes detected in current diff (`git diff --name-only` returned only `pr-comment.md`).
 
 ## Remediation Actions
 - No vulnerabilities were reported in the provided alert feeds.

@@ -5,3 +5,6 @@ seeds.yaml
 components/provision/provision.wasm
 .env
 .tmp/
+
+# OS
+.DS_Store
