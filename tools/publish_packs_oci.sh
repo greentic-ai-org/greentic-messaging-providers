@@ -456,11 +456,11 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
   pack_out="${ROOT_DIR}/${pack_out_rel}"
   secrets_out="${dir}/.secret_requirements.json"
 
+  update_pack_yaml_version "${dir}"
   generate_pack_manifest "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset_entry "${dir}"
   ensure_pack_readme "${dir}"
-  update_pack_yaml_version "${dir}"
   (cd "${dir}" && "${PACKC_BIN}" config)
 
   components=()
@@ -562,10 +562,8 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
         # Fallback to TARGET_COMPONENTS cache
         cp "${manifest_src}" "${manifest_dest}"
       fi
-      # Stamp version, world, and profiles on provider/ingress component manifests
-      case "${comp_id}" in
-        messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-          python3 - "${manifest_dest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
+      # Stamp version, world, and profiles on component manifests
+      python3 - "${manifest_dest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
 from pathlib import Path
 import json
 import sys
@@ -593,8 +591,6 @@ if manifest_path.exists():
 
     manifest_path.write_text(json.dumps(data, indent=2) + "\n")
 PY
-          ;;
-      esac
     fi
   done
 

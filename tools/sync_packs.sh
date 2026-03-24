@@ -491,21 +491,13 @@ for dir in "${PACKS_DIR}"/*; do
         # Fallback to TARGET_COMPONENTS cache
         cp "${manifest_src}" "${manifest_dest}"
       fi
-      case "${comp}" in
-        messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-          stamp_manifest_version "${manifest_dest}" "${dir}/pack.yaml" "${comp}"
-          ;;
-      esac
+      stamp_manifest_version "${manifest_dest}" "${dir}/pack.yaml" "${comp}"
     fi
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then {id: ., wasm: ("components/" + . + ".wasm")} else {id: .id, wasm: (.wasm // ("components/" + .id + ".wasm")), manifest: (.manifest // ""), oci: (.oci // {})} end | [.id, .wasm, (.oci.image // ""), (.oci.digest // ""), (.oci.artifact // ""), (.manifest // ""), (.oci.manifest // "")] | @tsv' "${dir}/pack.manifest.json")
 
   while IFS= read -r comp; do
     [ -z "${comp}" ] && continue
-    case "${comp}" in
-      messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-        stamp_manifest_version "${dir}/components/${comp}/component.manifest.json" "${dir}/pack.yaml" "${comp}"
-        ;;
-    esac
+    stamp_manifest_version "${dir}/components/${comp}/component.manifest.json" "${dir}/pack.yaml" "${comp}"
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
 
   while IFS= read -r schema; do
