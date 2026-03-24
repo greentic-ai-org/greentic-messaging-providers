@@ -371,17 +371,30 @@ import sys
 path = Path(sys.argv[1])
 version = sys.argv[2]
 lines = path.read_text().splitlines()
-updated = False
-out = []
+
+# Detect current root version so we can replace all matching occurrences.
+old_version = None
 for line in lines:
     stripped = line.lstrip()
     indent = len(line) - len(stripped)
     if indent == 0 and stripped.startswith("version:"):
-        prefix = line.split("version:")[0] + "version: "
-        out.append(f"{prefix}{version}")
-        updated = True
-    else:
-        out.append(line.replace("__PACK_VERSION__", version))
+        old_version = stripped.split(":", 1)[1].strip().strip("'\"")
+        break
+
+out = []
+updated = False
+for line in lines:
+    stripped = line.lstrip()
+    # Replace all version: fields that match the old pack version.
+    if stripped.startswith("version:"):
+        current = stripped.split(":", 1)[1].strip().strip("'\"")
+        if current == old_version or current == version:
+            prefix = line.split("version:")[0] + "version: "
+            out.append(f"{prefix}{version}")
+            updated = True
+            continue
+    out.append(line.replace("__PACK_VERSION__", version))
+
 if not updated:
     out.append(f"version: {version}")
 path.write_text("\n".join(out) + "\n")
