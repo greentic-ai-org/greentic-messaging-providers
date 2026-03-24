@@ -4,33 +4,30 @@
 - Date (UTC): 2026-03-24
 - Branch: `fix/ci-pack-version-sync`
 
-## Scope
-- Reviewed provided security alert payloads.
-- Checked PR dependency vulnerability payload.
-- Inspected repository dependency manifests/lockfiles for potential newly introduced risk in this PR context.
-
 ## Inputs Reviewed
-- Dependabot alerts: `[]`
-- Code scanning alerts: `[]`
+- Security alerts JSON: `{"dependabot": [], "code_scanning": []}`
 - New PR dependency vulnerabilities: `[]`
+- Repository alert files:
+  - `dependabot-alerts.json` -> `[]`
+  - `code-scanning-alerts.json` -> `[]`
+  - `pr-vulnerable-changes.json` -> `[]`
 
-## Repository Checks Performed
-- Enumerated dependency files (Rust workspace, including root `Cargo.toml` and `Cargo.lock` plus workspace member `Cargo.toml` files).
-- Checked branch diff indicators:
-  - `git diff --name-only origin/main...HEAD` returned no changed files in this CI checkout.
-  - `git diff --name-only HEAD~1..HEAD` showed only non-dependency script changes (`tools/publish_packs_oci.sh`, `tools/sync_packs.sh`).
-- Confirmed no current dependency-file modifications requiring remediation in this run.
+## PR Dependency Review
+- Enumerated dependency manifests and lockfiles (Rust workspace `Cargo.toml` files, root `Cargo.toml`, root `Cargo.lock`).
+- Checked dependency-file deltas in current PR commit window:
+  - `git diff --name-only HEAD~1..HEAD -- '*.toml' 'Cargo.lock' 'packs.lock.json'` -> no matches.
+- Checked full changed files in `HEAD~1..HEAD` for context:
+  - `tools/generate_pack_metadata.py`
+  - `tools/publish_packs_oci.sh`
+  - `tools/sync_packs.sh`
+- Assessment: no dependency-file changes were introduced by the current PR changeset.
 
-## Vulnerability Assessment
-- No Dependabot vulnerabilities provided.
-- No code scanning vulnerabilities provided.
-- No PR dependency vulnerabilities provided.
-- Conclusion: no actionable security vulnerabilities identified from provided data and observed dependency diffs.
+## Findings
+- Dependabot alerts: none.
+- Code scanning alerts: none.
+- New PR dependency vulnerabilities: none.
+- No actionable security vulnerabilities identified from supplied CI inputs.
 
 ## Remediation Actions
-- No code changes were required to remediate vulnerabilities.
-- Kept repository contents unchanged except this report refresh.
-
-## CI Constraints / Notes
-- Attempted to run `cargo audit`, but this CI sandbox cannot write to Rustup temp paths (`/home/runner/.rustup/tmp`, read-only), so a live RustSec audit could not be completed here.
-- Given all supplied vulnerability feeds are empty and no dependency changes were detected for this PR context, no minimal fix patch was necessary.
+- No code or dependency fixes were required.
+- Updated this report to document verification steps and outcome.
