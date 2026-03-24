@@ -189,8 +189,14 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                 } else {
                     text
                 };
-                let mut envelope =
-                    build_webchat_envelope_with_ctx(effective_text, user, conv_id.clone(), None, &env_id, &tenant_id);
+                let mut envelope = build_webchat_envelope_with_ctx(
+                    effective_text,
+                    user,
+                    conv_id.clone(),
+                    None,
+                    &env_id,
+                    &tenant_id,
+                );
                 // Forward ALL Action.Submit data fields to metadata so the
                 // operator can handle MCP actions, token saves, card routing, etc.
                 if let Some(val) = action_value
@@ -461,8 +467,10 @@ fn build_webchat_envelope_with_ctx(
     env_id: &str,
     tenant_id: &str,
 ) -> ChannelMessageEnvelope {
-    let env = EnvId::try_from(env_id).unwrap_or_else(|_| EnvId::try_from("default").expect("env id"));
-    let tenant = TenantId::try_from(tenant_id).unwrap_or_else(|_| TenantId::try_from("default").expect("tenant id"));
+    let env =
+        EnvId::try_from(env_id).unwrap_or_else(|_| EnvId::try_from("default").expect("env id"));
+    let tenant = TenantId::try_from(tenant_id)
+        .unwrap_or_else(|_| TenantId::try_from("default").expect("tenant id"));
     let mut metadata = MessageMetadata::new();
     metadata.insert("universal".to_string(), "true".to_string());
     metadata.insert("env".to_string(), env_id.to_string());

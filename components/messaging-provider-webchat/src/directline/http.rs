@@ -203,10 +203,10 @@ where
     };
 
     // Token must be bound to this conversation (or unbound for first reconnect)
-    if let Some(ref bound_conv) = claims.conv {
-        if bound_conv != conversation_id {
-            return respond_forbidden("token bound to different conversation");
-        }
+    if let Some(ref bound_conv) = claims.conv
+        && bound_conv != conversation_id
+    {
+        return respond_forbidden("token bound to different conversation");
     }
 
     let ctx = claims.ctx.clone();
@@ -487,12 +487,12 @@ fn activity_to_value(activity: &StoredActivity) -> Value {
     if let Some(text) = &activity.text {
         map.insert("text".to_string(), Value::String(text.clone()));
     }
-    if !map.contains_key("from") {
-        if let Some(from) = &activity.from {
-            let mut from_map = Map::new();
-            from_map.insert("id".to_string(), Value::String(from.clone()));
-            map.insert("from".to_string(), Value::Object(from_map));
-        }
+    if !map.contains_key("from")
+        && let Some(from) = &activity.from
+    {
+        let mut from_map = Map::new();
+        from_map.insert("id".to_string(), Value::String(from.clone()));
+        map.insert("from".to_string(), Value::Object(from_map));
     }
     Value::Object(map)
 }
