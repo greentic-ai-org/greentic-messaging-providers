@@ -16,7 +16,7 @@
     "locale": "en-US"
   },
   "statusBar": {
-    "show": true,
+    "show": false,
     "brand": {
       "ok": "#22c55e",
       "warn": "#f59e0b",
