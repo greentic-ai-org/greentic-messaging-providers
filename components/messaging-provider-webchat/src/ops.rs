@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::{
-    HttpInV1, HttpOutV1, ProviderPayloadV1, SendPayloadInV1,
+    Header, HttpInV1, HttpOutV1, ProviderPayloadV1, SendPayloadInV1,
 };
 use greentic_types::{Actor, ChannelMessageEnvelope, EnvId, MessageMetadata, TenantCtx, TenantId};
 use provider_common::helpers::{
@@ -169,6 +169,10 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                 .strip_prefix("/v3/directline/conversations/")
                 .and_then(|rest| rest.split('/').next())
                 .map(|s| s.to_string());
+            // Extract env and tenant from response headers (set by handle_post_activities)
+            // This ensures we use the same context that was validated from the JWT
+            let (env_id, tenant_id) = extract_context_from_response_headers(&out.headers)
+                .unwrap_or_else(|| ("default".to_string(), "default".to_string()));
             let has_content = !text.is_empty() || action_value.is_some();
             if has_content {
                 // For Action.Submit, derive a text label from the action data.
@@ -186,7 +190,7 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                     text
                 };
                 let mut envelope =
-                    build_webchat_envelope(effective_text, user, conv_id.clone(), None);
+                    build_webchat_envelope_with_ctx(effective_text, user, conv_id.clone(), None, &env_id, &tenant_id);
                 // Forward ALL Action.Submit data fields to metadata so the
                 // operator can handle MCP actions, token saves, card routing, etc.
                 if let Some(val) = action_value
@@ -274,6 +278,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     // Pass through adaptive_card from envelope metadata (set by app flow for AC output).
     let adaptive_card = encode_message.metadata.get("adaptive_card").cloned();
     let tenant = encode_message.metadata.get("tenant").cloned();
+    let env = encode_message.metadata.get("env").cloned();
     let mut payload_body = json!({
         "text": text,
         "route": route_value.clone(),
@@ -281,6 +286,12 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     });
     if let Some(ac) = &adaptive_card {
         payload_body["adaptive_card"] = Value::String(ac.clone());
+    }
+    if let Some(ref tenant) = tenant {
+        payload_body["tenant"] = Value::String(tenant.clone());
+    }
+    if let Some(ref env) = env {
+        payload_body["env"] = Value::String(env.clone());
     }
     let body_bytes = serde_json::to_vec(&payload_body).unwrap_or_else(|_| b"{}".to_vec());
     let mut metadata = BTreeMap::new();
@@ -304,7 +315,7 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
             return send_payload_error(&format!("invalid send_payload input: {err}"), false);
         }
     };
-    if send_in.provider_type != PROVIDER_TYPE {
+    if !send_in.provider_type.starts_with("messaging.webchat") {
         return send_payload_error("provider type mismatch", false);
     }
     let payload_bytes = match general_purpose::STANDARD.decode(&send_in.payload.body_b64) {
@@ -339,11 +350,13 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
     // If session_id is present, try to append the bot response as a Direct Line
     // activity so that GET /activities polling returns it to the frontend.
     if let Some(session_id) = value_as_trimmed_string(payload.get("session_id")) {
+        let env = value_as_trimmed_string(payload.get("env"));
         let tenant = value_as_trimmed_string(payload.get("tenant"));
         let _ = append_bot_activity_to_conversation(
             &session_id,
             &text,
             adaptive_card_json.as_deref(),
+            env.as_deref(),
             tenant.as_deref(),
         );
     }
@@ -363,16 +376,17 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
 }
 
 /// Append a bot-originated activity to the Direct Line conversation state.
-/// Uses default context (env=default, tenant=default, team=_) matching the demo setup.
+/// Uses provided env/tenant context from envelope metadata, falling back to "default".
 /// Best-effort: silently ignores errors (conversation may not exist).
 fn append_bot_activity_to_conversation(
     conversation_id: &str,
     text: &str,
     adaptive_card_json: Option<&str>,
+    env: Option<&str>,
     tenant: Option<&str>,
 ) -> Result<(), String> {
     let ctx = DirectLineContext {
-        env: "default".into(),
+        env: env.unwrap_or("default").to_string(),
         tenant: tenant.unwrap_or("default").to_string(),
         team: None,
     };
@@ -390,7 +404,7 @@ fn append_bot_activity_to_conversation(
     let watermark = conversation.bump_watermark();
     let mut raw = json!({
         "type": "message",
-        "from": {"id": "bot", "name": "Bot"},
+        "from": {"id": "bot", "name": "Bot", "role": "bot"},
     });
     if !text.is_empty() {
         raw["text"] = Value::String(text.to_string());
@@ -422,6 +436,63 @@ fn append_bot_activity_to_conversation(
     let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
     store.write(&conv_key, &updated)?;
     Ok(())
+}
+
+/// Extract env and tenant from X-Greentic-Env and X-Greentic-Tenant response headers.
+/// These headers are set by handle_post_activities after JWT validation.
+fn extract_context_from_response_headers(headers: &[Header]) -> Option<(String, String)> {
+    let env = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Env"))
+        .map(|h| h.value.clone())?;
+    let tenant = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Tenant"))
+        .map(|h| h.value.clone())?;
+    Some((env, tenant))
+}
+
+/// Build envelope with explicit env/tenant context (used by Direct Line ingest).
+fn build_webchat_envelope_with_ctx(
+    text: String,
+    user_id: Option<String>,
+    session_id: Option<String>,
+    tenant_channel_id: Option<String>,
+    env_id: &str,
+    tenant_id: &str,
+) -> ChannelMessageEnvelope {
+    let env = EnvId::try_from(env_id).unwrap_or_else(|_| EnvId::try_from("default").expect("env id"));
+    let tenant = TenantId::try_from(tenant_id).unwrap_or_else(|_| TenantId::try_from("default").expect("tenant id"));
+    let mut metadata = MessageMetadata::new();
+    metadata.insert("universal".to_string(), "true".to_string());
+    metadata.insert("env".to_string(), env_id.to_string());
+    metadata.insert("tenant".to_string(), tenant_id.to_string());
+    if let Some(channel) = &tenant_channel_id {
+        metadata.insert("tenant_channel_id".to_string(), channel.clone());
+    }
+    let channel = session_id
+        .clone()
+        .or_else(|| tenant_channel_id.clone())
+        .unwrap_or_else(|| "webchat".to_string());
+    if let Some(sid) = &session_id {
+        metadata.insert("route".to_string(), sid.clone());
+    }
+    ChannelMessageEnvelope {
+        id: format!("webchat-{channel}"),
+        tenant: TenantCtx::new(env.clone(), tenant.clone()),
+        channel: channel.clone(),
+        session_id: channel,
+        reply_scope: None,
+        from: user_id.map(|id| Actor {
+            id,
+            kind: Some("user".into()),
+        }),
+        to: Vec::new(),
+        correlation_id: None,
+        text: Some(text),
+        attachments: Vec::new(),
+        metadata,
+    }
 }
 
 fn build_webchat_envelope(

@@ -324,7 +324,18 @@ where
         return resp;
     }
 
-    respond_json(201, json!({"id": activity.id}))
+    // Include context in headers so ingest_http can extract env/tenant for envelope routing
+    let mut headers = json_headers();
+    headers.push(Header {
+        name: "X-Greentic-Env".to_string(),
+        value: claims.ctx.env.clone(),
+    });
+    headers.push(Header {
+        name: "X-Greentic-Tenant".to_string(),
+        value: claims.ctx.tenant.clone(),
+    });
+
+    respond_json_with_headers(201, json!({"id": activity.id}), headers)
 }
 
 fn handle_get_activities<S, SE>(
@@ -373,7 +384,7 @@ where
         .activities
         .iter()
         .filter(|activity| match watermark {
-            Some(watermark) => activity.watermark > watermark,
+            Some(watermark) => activity.watermark >= watermark,
             None => true,
         })
         .map(activity_to_value)
@@ -476,10 +487,12 @@ fn activity_to_value(activity: &StoredActivity) -> Value {
     if let Some(text) = &activity.text {
         map.insert("text".to_string(), Value::String(text.clone()));
     }
-    if let Some(from) = &activity.from {
-        let mut from_map = Map::new();
-        from_map.insert("id".to_string(), Value::String(from.clone()));
-        map.insert("from".to_string(), Value::Object(from_map));
+    if !map.contains_key("from") {
+        if let Some(from) = &activity.from {
+            let mut from_map = Map::new();
+            from_map.insert("id".to_string(), Value::String(from.clone()));
+            map.insert("from".to_string(), Value::Object(from_map));
+        }
     }
     Value::Object(map)
 }
@@ -685,10 +698,14 @@ fn json_headers() -> Vec<Header> {
 }
 
 fn respond_json(status: u16, payload: Value) -> HttpOutV1 {
+    respond_json_with_headers(status, payload, json_headers())
+}
+
+fn respond_json_with_headers(status: u16, payload: Value, headers: Vec<Header>) -> HttpOutV1 {
     let body = serde_json::to_vec(&payload).unwrap_or_else(|_| b"{}".to_vec());
     HttpOutV1 {
         status,
-        headers: json_headers(),
+        headers,
         body_b64: general_purpose::STANDARD.encode(&body),
         events: Vec::new(),
     }
