@@ -2,7 +2,9 @@ use provider_common::component_v0_6::{
     DescribePayload, I18nText, QaQuestionSpec, QaSpec, SchemaIr, SkipCondition, SkipExpression,
     canonical_cbor_bytes, schema_hash,
 };
-use provider_common::helpers::{op, schema_bool_ir, schema_obj, schema_str, schema_str_fmt};
+use provider_common::helpers::{
+    op, schema_bool_ir, schema_obj, schema_secret, schema_str, schema_str_fmt,
+};
 use serde_json::{Value, json};
 
 use crate::{PROVIDER_ID, WORLD_ID};
@@ -168,6 +170,20 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.schema.config.tenant_channel_id.description",
     "webchat.schema.config.base_url.title",
     "webchat.schema.config.base_url.description",
+    "webchat.schema.config.jwt_signing_key.title",
+    "webchat.schema.config.jwt_signing_key.description",
+    "webchat.schema.config.oauth_google_client_id.title",
+    "webchat.schema.config.oauth_google_client_id.description",
+    "webchat.schema.config.oauth_google_client_secret.title",
+    "webchat.schema.config.oauth_google_client_secret.description",
+    "webchat.schema.config.oauth_microsoft_client_id.title",
+    "webchat.schema.config.oauth_microsoft_client_id.description",
+    "webchat.schema.config.oauth_microsoft_client_secret.title",
+    "webchat.schema.config.oauth_microsoft_client_secret.description",
+    "webchat.schema.config.oauth_github_client_id.title",
+    "webchat.schema.config.oauth_github_client_id.description",
+    "webchat.schema.config.oauth_github_client_secret.title",
+    "webchat.schema.config.oauth_github_client_secret.description",
     "webchat.qa.default.title",
     "webchat.qa.setup.title",
     "webchat.qa.upgrade.title",
@@ -551,6 +567,62 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "webchat.schema.config.oauth_providers.description",
         "JSON array of configured OAuth providers",
     ),
+    (
+        "webchat.schema.config.jwt_signing_key.title",
+        "JWT signing key",
+    ),
+    (
+        "webchat.schema.config.jwt_signing_key.description",
+        "Secret key used for Direct Line JWT token signing and verification",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_id.title",
+        "Google OAuth client ID",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_id.description",
+        "Client ID from Google Cloud Console for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_secret.title",
+        "Google OAuth client secret",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_secret.description",
+        "Client secret from Google Cloud Console for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_id.title",
+        "Microsoft OAuth client ID",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_id.description",
+        "Client ID from Azure App Registration for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_secret.title",
+        "Microsoft OAuth client secret",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_secret.description",
+        "Client secret from Azure App Registration for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_id.title",
+        "GitHub OAuth client ID",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_id.description",
+        "Client ID from GitHub OAuth App for sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_secret.title",
+        "GitHub OAuth client secret",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_secret.description",
+        "Client secret from GitHub OAuth App for sign-in",
+    ),
 ];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
@@ -738,6 +810,62 @@ fn config_schema() -> SchemaIr {
                 schema_str(
                     "webchat.schema.config.oauth_providers.title",
                     "webchat.schema.config.oauth_providers.description",
+                ),
+            ),
+            (
+                "jwt_signing_key",
+                false,
+                schema_secret(
+                    "webchat.schema.config.jwt_signing_key.title",
+                    "webchat.schema.config.jwt_signing_key.description",
+                ),
+            ),
+            (
+                "oauth_google_client_id",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_google_client_id.title",
+                    "webchat.schema.config.oauth_google_client_id.description",
+                ),
+            ),
+            (
+                "oauth_google_client_secret",
+                false,
+                schema_secret(
+                    "webchat.schema.config.oauth_google_client_secret.title",
+                    "webchat.schema.config.oauth_google_client_secret.description",
+                ),
+            ),
+            (
+                "oauth_microsoft_client_id",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_microsoft_client_id.title",
+                    "webchat.schema.config.oauth_microsoft_client_id.description",
+                ),
+            ),
+            (
+                "oauth_microsoft_client_secret",
+                false,
+                schema_secret(
+                    "webchat.schema.config.oauth_microsoft_client_secret.title",
+                    "webchat.schema.config.oauth_microsoft_client_secret.description",
+                ),
+            ),
+            (
+                "oauth_github_client_id",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_github_client_id.title",
+                    "webchat.schema.config.oauth_github_client_id.description",
+                ),
+            ),
+            (
+                "oauth_github_client_secret",
+                false,
+                schema_secret(
+                    "webchat.schema.config.oauth_github_client_secret.title",
+                    "webchat.schema.config.oauth_github_client_secret.description",
                 ),
             ),
         ],
