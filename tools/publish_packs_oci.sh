@@ -594,6 +594,38 @@ PY
     fi
   done
 
+  # Stamp version on all component.manifest.json files inside the pack components directory.
+  while IFS= read -r comp_id; do
+    [ -z "${comp_id}" ] && continue
+    local_manifest="${dir}/components/${comp_id}/component.manifest.json"
+    [ -f "${local_manifest}" ] || continue
+    python3 - "${local_manifest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
+from pathlib import Path
+import json
+import sys
+import yaml
+
+manifest_path = Path(sys.argv[1])
+version = sys.argv[2]
+pack_yaml_path = Path(sys.argv[3])
+comp_id = sys.argv[4]
+
+if manifest_path.exists():
+    data = json.loads(manifest_path.read_text())
+    data["version"] = version
+    if pack_yaml_path.exists():
+        pack_data = yaml.safe_load(pack_yaml_path.read_text())
+        for comp in pack_data.get("components", []):
+            if comp.get("id") == comp_id:
+                if "world" in comp:
+                    data["world"] = comp["world"]
+                if "profiles" in comp:
+                    data["profiles"] = comp["profiles"]
+                break
+    manifest_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+  done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
+
   if [ ! -f "${dir}/pack.yaml" ]; then
     echo "Missing pack.yaml in ${dir}; greentic-pack requires pack.yaml inputs" >&2
     exit 1

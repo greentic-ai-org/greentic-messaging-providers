@@ -15,5 +15,6 @@
       "scope": "tenant",
       "description": "Bot token used for Webex API calls."
     }
-  ]
+  ],
+  "version": "0.4.41"
 }

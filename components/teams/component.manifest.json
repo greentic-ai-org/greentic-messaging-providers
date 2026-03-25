@@ -25,5 +25,6 @@
       "scope": "tenant",
       "description": "Client secret used to obtain Graph access tokens."
     }
-  ]
+  ],
+  "version": "0.4.41"
 }
