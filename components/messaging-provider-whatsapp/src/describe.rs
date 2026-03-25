@@ -322,7 +322,7 @@ fn config_schema() -> SchemaIr {
             (
                 "phone_number_id",
                 true,
-                schema_str(
+                schema_secret(
                     "whatsapp.schema.config.phone_number_id.title",
                     "whatsapp.schema.config.phone_number_id.description",
                 ),

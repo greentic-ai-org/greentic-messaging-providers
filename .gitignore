@@ -3,8 +3,11 @@
 .greentic/
 seeds.yaml
 components/provision/provision.wasm
+temp_auto_push.bat
 .env
 .tmp/
 
 # OS
 .DS_Store
+.gitignore
+branch_structure.json
