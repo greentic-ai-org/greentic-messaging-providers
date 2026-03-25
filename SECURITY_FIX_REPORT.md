@@ -1,33 +1,30 @@
-# SECURITY_FIX_REPORT
+# Security Fix Report
 
-## Run Metadata
-- Date (UTC): 2026-03-24
-- Branch: `fix/ci-pack-version-sync`
+Date: 2026-03-25 (UTC)
+Branch: `ci/tighten-workflow-permissions`
 
 ## Inputs Reviewed
-- Security alerts JSON: `{"dependabot": [], "code_scanning": []}`
+- Dependabot alerts: `[]`
+- Code scanning alerts: `[]`
 - New PR dependency vulnerabilities: `[]`
-- Repository alert files:
-  - `dependabot-alerts.json` -> `[]`
-  - `code-scanning-alerts.json` -> `[]`
-  - `pr-vulnerable-changes.json` -> `[]`
 
-## PR Dependency Review
-- Enumerated dependency manifests and lockfiles (Rust workspace `Cargo.toml` files, root `Cargo.toml`, root `Cargo.lock`).
-- Checked dependency-file deltas in current PR commit window:
-  - `git diff --name-only HEAD~1..HEAD -- '*.toml' 'Cargo.lock' 'packs.lock.json'` -> no matches.
-- Checked full changed files in `HEAD~1..HEAD` for context:
-  - `tools/generate_pack_metadata.py`
-  - `tools/publish_packs_oci.sh`
-  - `tools/sync_packs.sh`
-- Assessment: no dependency-file changes were introduced by the current PR changeset.
+## Analysis Performed
+1. Checked repository state and dependency manifests/lockfiles.
+2. Compared PR branch against `origin/main` to identify changed files.
+3. Verified whether any dependency files were modified in the PR.
 
 ## Findings
-- Dependabot alerts: none.
-- Code scanning alerts: none.
-- New PR dependency vulnerabilities: none.
-- No actionable security vulnerabilities identified from supplied CI inputs.
+- No Dependabot vulnerabilities were reported.
+- No code scanning vulnerabilities were reported.
+- No new PR dependency vulnerabilities were reported.
+- PR diff vs `origin/main` includes:
+  - `.github/workflows/build-and-publish.yml`
+- No dependency manifest or lockfile changes were detected in the PR.
 
 ## Remediation Actions
 - No code or dependency fixes were required.
-- Updated this report to document verification steps and outcome.
+- No security vulnerabilities were identified that required remediation.
+
+## Final Status
+- Repository security alert review completed.
+- Status: **No actionable vulnerabilities found**.
