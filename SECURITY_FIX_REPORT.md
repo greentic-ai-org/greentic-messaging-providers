@@ -1,7 +1,7 @@
 # Security Fix Report
 
 Date: 2026-03-25 (UTC)
-Branch: `ci/tighten-workflow-permissions`
+Branch: `feat/webchat-oauth-login`
 
 ## Inputs Reviewed
 - Dependabot alerts: `[]`
@@ -9,16 +9,24 @@ Branch: `ci/tighten-workflow-permissions`
 - New PR dependency vulnerabilities: `[]`
 
 ## Analysis Performed
-1. Checked repository state and dependency manifests/lockfiles.
-2. Compared PR branch against `origin/main` to identify changed files.
-3. Verified whether any dependency files were modified in the PR.
+1. Parsed provided alert payloads (`security-alerts.json`, `dependabot-alerts.json`, `code-scanning-alerts.json`, `pr-vulnerable-changes.json`).
+2. Reviewed PR diff against `origin/main`.
+3. Checked whether any dependency manifests or lockfiles were changed in this PR.
 
 ## Findings
 - No Dependabot vulnerabilities were reported.
 - No code scanning vulnerabilities were reported.
 - No new PR dependency vulnerabilities were reported.
 - PR diff vs `origin/main` includes:
-  - `.github/workflows/build-and-publish.yml`
+  - `components/messaging-provider-webchat-gui/src/lib.rs`
+  - `components/messaging-provider-webchat/src/config.rs`
+  - `components/messaging-provider-webchat/src/describe.rs`
+  - `components/messaging-provider-webchat/src/lib.rs`
+  - `components/messaging-provider-webchat/src/ops.rs`
+  - `packs/messaging-webchat-gui/assets/webchat-gui/runtime-bootstrap.js`
+  - `packs/messaging-webchat-gui/components/messaging-provider-webchat-gui/component.wasm`
+  - `packs/messaging-webchat-gui/dist/manifest.cbor`
+  - `packs/messaging-webchat-gui/setup.yaml`
 - No dependency manifest or lockfile changes were detected in the PR.
 
 ## Remediation Actions
