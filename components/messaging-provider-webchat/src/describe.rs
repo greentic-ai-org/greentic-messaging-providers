@@ -128,7 +128,7 @@ pub(crate) fn i18n_keys_vec() -> Vec<String> {
 }
 
 /// Static i18n keys for dispatch_qa_ops_with_i18n (must be &[&str]).
-/// Only base keys needed — OAuth keys are in I18N_PAIRS and served via i18n_bundle.
+/// Includes both base keys and OAuth keys referenced by QA questions.
 pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.op.run.title",
     "webchat.op.run.description",
@@ -178,6 +178,39 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.qa.setup.route",
     "webchat.qa.setup.tenant_channel_id",
     "webchat.qa.setup.base_url",
+    // OAuth QA keys
+    "webchat.qa.oauth.enabled",
+    "webchat.qa.oauth.enabled.help",
+    "webchat.qa.oauth.google.enable",
+    "webchat.qa.oauth.google.enable.help",
+    "webchat.qa.oauth.google.client_id",
+    "webchat.qa.oauth.google.client_id.help",
+    "webchat.qa.oauth.google.client_secret",
+    "webchat.qa.oauth.google.client_secret.help",
+    "webchat.qa.oauth.microsoft.enable",
+    "webchat.qa.oauth.microsoft.enable.help",
+    "webchat.qa.oauth.microsoft.client_id",
+    "webchat.qa.oauth.microsoft.client_id.help",
+    "webchat.qa.oauth.microsoft.client_secret",
+    "webchat.qa.oauth.microsoft.client_secret.help",
+    "webchat.qa.oauth.github.enable",
+    "webchat.qa.oauth.github.enable.help",
+    "webchat.qa.oauth.github.client_id",
+    "webchat.qa.oauth.github.client_id.help",
+    "webchat.qa.oauth.github.client_secret",
+    "webchat.qa.oauth.github.client_secret.help",
+    "webchat.qa.oauth.custom.enable",
+    "webchat.qa.oauth.custom.enable.help",
+    "webchat.qa.oauth.custom.label",
+    "webchat.qa.oauth.custom.label.help",
+    "webchat.qa.oauth.custom.auth_url",
+    "webchat.qa.oauth.custom.auth_url.help",
+    "webchat.qa.oauth.custom.token_url",
+    "webchat.qa.oauth.custom.token_url.help",
+    "webchat.qa.oauth.custom.client_id",
+    "webchat.qa.oauth.custom.client_id.help",
+    "webchat.qa.oauth.custom.scopes",
+    "webchat.qa.oauth.custom.scopes.help",
 ];
 
 /// Build OAuth-specific questions with per-provider guided flow.
