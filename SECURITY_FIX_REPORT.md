@@ -9,7 +9,7 @@ Role: CI Security Reviewer
 - New PR dependency vulnerabilities: `0`
 
 ## PR Dependency Change Review
-Reviewed changed files in the current PR/worktree:
+Reviewed the current worktree/PR diff for dependency-manifest and lockfile changes.
 - Changed file(s): `pr-comment.md`
 - Dependency manifests/lockfiles changed: `none`
 
@@ -20,6 +20,7 @@ Result: No new dependency changes were introduced by this PR, so no new dependen
 - No dependency vulnerability entries were present for this PR.
 - No code or dependency fixes were required.
 
-## Notes
-- An additional local `cargo audit` execution could not be completed in this CI sandbox because rustup attempted to write to a read-only location.
-- This does not affect the conclusion above, since all provided security alert inputs were empty and no dependency files were changed in the PR.
+## Verification Notes
+- Attempted command: `cargo audit -q`
+- In this CI sandbox, `cargo audit` could not run because rustup attempted to create files under `/home/runner/.rustup/tmp`, which is read-only.
+- This limitation does not change the conclusions above, since all provided alert inputs were empty and no dependency files were modified.
