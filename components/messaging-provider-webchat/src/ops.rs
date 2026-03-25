@@ -16,7 +16,7 @@ use crate::PROVIDER_TYPE;
 use crate::config::load_config;
 use crate::directline::jwt::DirectLineContext;
 use crate::directline::state::{StoredActivity, conversation_key};
-use crate::directline::store::StateStore as _;
+use crate::directline::store::{SecretStore as _, StateStore as _};
 use crate::directline::{ConfigAwareSecretStore, HostStateStore, handle_directline_request};
 
 pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
@@ -130,6 +130,11 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
             Err(err) => return http_out_error(400, &format!("invalid http input: {err}")),
         },
     };
+    // Serve OAuth configuration for the frontend SPA.
+    if request.path.ends_with("/auth/config") && request.method.eq_ignore_ascii_case("GET") {
+        return handle_auth_config(&request);
+    }
+
     // Extract Direct Line sub-path from operator-prefixed or direct paths.
     // Operator forwards full URI like /messaging/ingress/webchat/default/_/v3/directline/...
     if let Some(offset) = request.path.find("/v3/directline") {
@@ -539,6 +544,110 @@ fn build_webchat_envelope(
         attachments: Vec::new(),
         metadata,
     }
+}
+
+/// Return OAuth configuration as JSON for the frontend SPA.
+/// Reads oauth_* fields from secrets store (host interface).
+/// Never exposes client_secret — only public-safe fields are returned.
+fn handle_auth_config(request: &HttpInV1) -> Vec<u8> {
+    let secrets = ConfigAwareSecretStore::new(request.config.clone());
+    let read_secret = |key: &str| -> Option<String> {
+        secrets
+            .get(key)
+            .ok()
+            .flatten()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+
+    let enabled = read_secret("oauth_enabled")
+        .map(|v| v == "true")
+        .unwrap_or(false);
+
+    let body = if enabled {
+        // Try pre-composed oauth_providers first, then build from individual fields
+        let providers = if let Some(providers_json) = read_secret("oauth_providers") {
+            serde_json::from_str(&providers_json).unwrap_or(json!([]))
+        } else {
+            let mut list = Vec::new();
+            if read_secret("oauth_enable_google").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_google_client_id")
+            {
+                let mut p = json!({
+                    "id": "google", "label": "Google",
+                    "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+                    "token_url": "https://oauth2.googleapis.com/token",
+                    "client_id": client_id, "scopes": "openid profile email"
+                });
+                if let Some(secret) = read_secret("oauth_google_client_secret") {
+                    p["client_secret"] = Value::String(secret);
+                }
+                list.push(p);
+            }
+            if read_secret("oauth_enable_microsoft").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_microsoft_client_id")
+            {
+                let mut p = json!({
+                    "id": "microsoft", "label": "Microsoft",
+                    "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+                    "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+                    "client_id": client_id, "scopes": "openid profile email"
+                });
+                if let Some(secret) = read_secret("oauth_microsoft_client_secret") {
+                    p["client_secret"] = Value::String(secret);
+                }
+                list.push(p);
+            }
+            if read_secret("oauth_enable_github").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_github_client_id")
+            {
+                let mut p = json!({
+                    "id": "github", "label": "GitHub",
+                    "auth_url": "https://github.com/login/oauth/authorize",
+                    "token_url": "https://github.com/login/oauth/access_token",
+                    "client_id": client_id, "scopes": "read:user user:email"
+                });
+                if let Some(secret) = read_secret("oauth_github_client_secret") {
+                    p["client_secret"] = Value::String(secret);
+                }
+                list.push(p);
+            }
+            if read_secret("oauth_enable_custom").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_custom_client_id")
+            {
+                let label = read_secret("oauth_custom_label").unwrap_or_else(|| "SSO".to_string());
+                let auth_url = read_secret("oauth_custom_auth_url").unwrap_or_default();
+                let token_url = read_secret("oauth_custom_token_url").unwrap_or_default();
+                let scopes = read_secret("oauth_custom_scopes")
+                    .unwrap_or_else(|| "openid profile email".to_string());
+                list.push(json!({
+                    "id": "custom", "label": label,
+                    "auth_url": auth_url, "token_url": token_url,
+                    "client_id": client_id, "scopes": scopes
+                }));
+            }
+            Value::Array(list)
+        };
+        json!({
+            "enabled": true,
+            "providers": providers,
+        })
+    } else {
+        json!({ "enabled": false })
+    };
+
+    let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
+    let out = HttpOutV1 {
+        status: 200,
+        headers: vec![Header {
+            name: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+        }],
+        body_b64: general_purpose::STANDARD.encode(&body_bytes),
+        events: Vec::new(),
+    };
+    http_out_v1_bytes(&out)
 }
 
 fn extract_text(value: &Value) -> String {
