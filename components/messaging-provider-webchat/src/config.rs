@@ -178,6 +178,8 @@ mod tests {
             route: Some("route-a".to_string()),
             tenant_channel_id: None,
             base_url: None,
+            oauth_enabled: None,
+            oauth_providers: None,
         })
         .unwrap_err();
         assert_eq!(
@@ -192,6 +194,8 @@ mod tests {
             route: None,
             tenant_channel_id: None,
             base_url: None,
+            oauth_enabled: None,
+            oauth_providers: None,
         })
         .unwrap_err();
         assert_eq!(

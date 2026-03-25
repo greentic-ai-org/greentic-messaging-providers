@@ -122,6 +122,7 @@ pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url"];
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = BASE_SETUP_QUESTIONS;
 
 /// All i18n keys — derived from I18N_PAIRS at runtime.
+#[allow(dead_code)]
 pub(crate) fn i18n_keys_vec() -> Vec<String> {
     I18N_PAIRS.iter().map(|(k, _)| (*k).to_string()).collect()
 }
