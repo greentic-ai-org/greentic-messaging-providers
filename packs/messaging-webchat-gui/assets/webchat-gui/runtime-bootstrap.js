@@ -63,6 +63,10 @@ console.log('[runtime-bootstrap] loaded');
     'zh': '中文'
   };
 
+  // ---------------------------------------------------------------------------
+  // Tenant / env / locale resolution
+  // ---------------------------------------------------------------------------
+
   function resolveTenant() {
     var match = window.location.pathname.match(/\/v1\/web\/webchat\/([^\/?#]+)/i);
     if (match && match[1]) {
@@ -114,6 +118,445 @@ console.log('[runtime-bootstrap] loaded');
   window.__SUPPORTED_LOCALES__ = SUPPORTED_LOCALES;
   window.__SELECTED_LOCALE__ = selectedLocale;
 
+  // ---------------------------------------------------------------------------
+  // OAuth helper functions
+  // ---------------------------------------------------------------------------
+
+  var OAUTH_STORAGE_PREFIX = 'greentic_oauth_';
+
+  function oauthStorageKey(key) {
+    return OAUTH_STORAGE_PREFIX + key;
+  }
+
+  function getOAuthSession() {
+    try {
+      var handle = sessionStorage.getItem(oauthStorageKey('token_handle'));
+      var flowId = sessionStorage.getItem(oauthStorageKey('flow_id'));
+      if (handle && flowId) {
+        return { token_handle: handle, flow_id: flowId };
+      }
+    } catch (_) { /* sessionStorage unavailable */ }
+    return null;
+  }
+
+  function saveOAuthSession(tokenHandle, flowId) {
+    try {
+      sessionStorage.setItem(oauthStorageKey('token_handle'), tokenHandle);
+      sessionStorage.setItem(oauthStorageKey('flow_id'), flowId);
+    } catch (_) { /* sessionStorage unavailable */ }
+  }
+
+  function clearOAuthSession() {
+    try {
+      sessionStorage.removeItem(oauthStorageKey('token_handle'));
+      sessionStorage.removeItem(oauthStorageKey('flow_id'));
+      sessionStorage.removeItem(oauthStorageKey('user_name'));
+      sessionStorage.removeItem(oauthStorageKey('user_email'));
+      sessionStorage.removeItem(oauthStorageKey('user_picture'));
+      sessionStorage.removeItem(oauthStorageKey('provider'));
+    } catch (_) { /* sessionStorage unavailable */ }
+  }
+
+  /**
+   * Check URL for OAuth callback params (?code=...&state=...).
+   * If found, exchange code for tokens via PKCE, save session, clean URL.
+   * Returns true if callback was detected (async exchange happens in background).
+   */
+  function handleOAuthCallback() {
+    var params = new URLSearchParams(window.location.search);
+    var code = params.get('code');
+    var state = params.get('state');
+    var error = params.get('error');
+
+    if (error) {
+      var errorDesc = params.get('error_description') || error;
+      console.error('[oauth] provider returned error:', errorDesc);
+      cleanCallbackParams(params);
+      showAuthError('Authentication failed: ' + errorDesc);
+      return true;
+    }
+
+    if (!code || !state) {
+      return false;
+    }
+
+    // Verify state matches what we stored
+    var storedState;
+    try { storedState = sessionStorage.getItem(oauthStorageKey('state')); } catch (_) {}
+    if (storedState && storedState !== state) {
+      console.error('[oauth] state mismatch');
+      cleanCallbackParams(params);
+      showAuthError('Authentication failed: invalid state. Please try again.');
+      return true;
+    }
+
+    cleanCallbackParams(params);
+
+    // Exchange code for tokens via server-side proxy (avoids CORS)
+    var codeVerifier, redirectUri, storedProvider;
+    try {
+      codeVerifier = sessionStorage.getItem(oauthStorageKey('code_verifier'));
+      redirectUri = sessionStorage.getItem(oauthStorageKey('redirect_uri'));
+      var providerStr = sessionStorage.getItem(oauthStorageKey('provider'));
+      if (providerStr) storedProvider = JSON.parse(providerStr);
+    } catch (_) {}
+
+    if (!storedProvider || !storedProvider.token_url || !storedProvider.client_id) {
+      // Fallback: save as authenticated without user info
+      console.log('[oauth] no provider info, saving basic session');
+      saveOAuthSession('authenticated', 'oauth-code');
+      removeOAuthOverlay();
+      injectLogoutButton();
+      return true;
+    }
+
+    var proxyUrl = backendBase(tenant) + '/oauth/token-exchange';
+    console.log('[oauth] exchanging code via proxy');
+
+    fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token_url: storedProvider.token_url,
+        code: code,
+        redirect_uri: redirectUri || window.location.href.split('?')[0],
+        client_id: storedProvider.client_id,
+        client_secret: storedProvider.client_secret || '',
+        code_verifier: codeVerifier || ''
+      })
+    })
+      .then(function (resp) { return resp.json(); })
+      .then(function (tokens) {
+        if (tokens.error) {
+          throw new Error(tokens.error_description || tokens.error);
+        }
+        // Decode id_token JWT payload (base64url) to get user info
+        var userInfo = {};
+        if (tokens.id_token) {
+          try {
+            var parts = tokens.id_token.split('.');
+            var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            userInfo = {
+              name: payload.name || '',
+              email: payload.email || '',
+              picture: payload.picture || ''
+            };
+          } catch (_) {}
+        }
+        console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
+        saveOAuthSession(tokens.id_token || tokens.access_token || 'authenticated', 'oauth-code');
+        try {
+          if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
+          if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
+          if (userInfo.picture) sessionStorage.setItem(oauthStorageKey('user_picture'), userInfo.picture);
+          sessionStorage.removeItem(oauthStorageKey('code_verifier'));
+          sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
+          sessionStorage.removeItem(oauthStorageKey('state'));
+        } catch (_) {}
+        removeOAuthOverlay();
+        injectLogoutButton();
+      })
+      .catch(function (err) {
+        console.warn('[oauth] token exchange failed, saving basic session:', err.message);
+        saveOAuthSession('authenticated', 'oauth-code');
+        removeOAuthOverlay();
+        injectLogoutButton();
+      });
+
+    return true;
+  }
+
+  function cleanCallbackParams(params) {
+    params.delete('code');
+    params.delete('state');
+    params.delete('error');
+    params.delete('error_description');
+    var cleanUrl = window.location.pathname;
+    var remaining = params.toString();
+    if (remaining) {
+      cleanUrl += '?' + remaining;
+    }
+    window.history.replaceState({}, '', cleanUrl);
+  }
+
+  /**
+   * Generate a random string for PKCE code verifier.
+   */
+  function generateCodeVerifier() {
+    var array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return btoa(String.fromCharCode.apply(null, array))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  /**
+   * Compute S256 code challenge from a code verifier.
+   */
+  async function generateCodeChallenge(verifier) {
+    var data = new TextEncoder().encode(verifier);
+    var digest = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  /**
+   * Initiate OAuth flow by building the authorize URL directly (PKCE).
+   * No server-side call needed — standard SPA OIDC flow.
+   */
+  /**
+   * Initiate OAuth for a specific provider.
+   * Provider object: { id, label, auth_url, token_url, client_id, scopes }
+   */
+  function initiateOAuthFlow(provider) {
+    if (!provider.auth_url || !provider.client_id) {
+      showAuthError('OAuth not configured for ' + (provider.label || provider.id) + '. Set auth_url and client_id.');
+      return;
+    }
+
+    // Use clean URL without query params — Google requires exact redirect_uri match
+    var redirectUri = window.location.href.split('?')[0];
+
+    var codeVerifier = generateCodeVerifier();
+    try {
+      sessionStorage.setItem(oauthStorageKey('code_verifier'), codeVerifier);
+      sessionStorage.setItem(oauthStorageKey('redirect_uri'), redirectUri);
+      // Store which provider was used so callback knows token_url + client_id
+      sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify(provider));
+    } catch (_) {}
+
+    var scopes = provider.scopes || 'openid profile email';
+    var state = 'webchat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+
+    try {
+      sessionStorage.setItem(oauthStorageKey('state'), state);
+    } catch (_) {}
+
+    generateCodeChallenge(codeVerifier).then(function (codeChallenge) {
+      var params = new URLSearchParams({
+        response_type: 'code',
+        client_id: provider.client_id,
+        redirect_uri: redirectUri,
+        scope: scopes,
+        state: state,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        access_type: 'offline',
+        prompt: 'select_account'
+      });
+
+      var authorizeUrl = provider.auth_url + '?' + params.toString();
+      console.log('[oauth] redirecting to provider:', provider.id, provider.auth_url);
+      window.location.href = authorizeUrl;
+    });
+  }
+
+  // Map provider IDs to friendly display names
+  var PROVIDER_LABELS = {
+    'oauth-oidc-generic': 'SSO',
+    'generic_oidc': 'SSO',
+    'google': 'Google',
+    'microsoft': 'Microsoft',
+    'msgraph': 'Microsoft',
+    'github': 'GitHub',
+    'apple': 'Apple',
+    'okta': 'Okta',
+    'auth0': 'Auth0',
+    'keycloak': 'Keycloak'
+  };
+
+  function providerLabel(providerId) {
+    return PROVIDER_LABELS[providerId] || providerId;
+  }
+
+  function performLogout() {
+    clearOAuthSession();
+    window.location.reload();
+  }
+
+  /**
+   * Remove any existing OAuth overlay.
+   */
+  function removeOAuthOverlay() {
+    var existing = document.getElementById('greentic-oauth-overlay');
+    if (existing) existing.remove();
+  }
+
+  /**
+   * Show a fullscreen login overlay with buttons for each OAuth provider.
+   */
+  function showLoginScreen(authConfig) {
+    removeOAuthOverlay();
+    var providers = (authConfig && authConfig.providers) || [];
+    var overlay = document.createElement('div');
+    overlay.id = 'greentic-oauth-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f5f5f5;font-family:system-ui,-apple-system,sans-serif;';
+    var card = document.createElement('div');
+    card.style.cssText = 'max-width:400px;width:90%;padding:40px 32px;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;background:#fff;';
+    card.innerHTML =
+      '<h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a1a;">Welcome</h2>' +
+      '<p style="margin:0 0 28px;color:#666;font-size:14px;line-height:1.5;">Please sign in to access the chat.</p>';
+    var btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+    providers.forEach(function (provider) {
+      var label = provider.label || providerLabel(provider.id) || 'SSO';
+      var btn = document.createElement('button');
+      btn.textContent = 'Sign in with ' + label;
+      btn.style.cssText = 'padding:12px 28px;border:none;border-radius:8px;background:#0F62FE;color:#fff;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s;min-width:200px;';
+      btn.onmouseover = function () { btn.style.background = '#0043CE'; };
+      btn.onmouseout = function () { btn.style.background = '#0F62FE'; };
+      btn.onclick = function () {
+        btn.disabled = true;
+        btn.textContent = 'Redirecting...';
+        btn.style.opacity = '0.7';
+        initiateOAuthFlow(provider);
+      };
+      btnContainer.appendChild(btn);
+    });
+    if (providers.length === 0) {
+      card.innerHTML += '<p style="color:#d32f2f;font-size:13px;">No OAuth providers configured.</p>';
+    }
+    card.appendChild(btnContainer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  function showAuthError(message) {
+    removeOAuthOverlay();
+    var overlay = document.createElement('div');
+    overlay.id = 'greentic-oauth-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f5f5f5;font-family:system-ui,-apple-system,sans-serif;';
+    var card = document.createElement('div');
+    card.style.cssText = 'max-width:400px;width:90%;padding:40px 32px;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;background:#fff;';
+    card.innerHTML =
+      '<h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#d32f2f;">Authentication Error</h2>' +
+      '<p style="margin:0 0 28px;color:#666;font-size:14px;line-height:1.5;">' + message + '</p>';
+    var retryBtn = document.createElement('button');
+    retryBtn.textContent = 'Try Again';
+    retryBtn.style.cssText = 'padding:12px 28px;border:none;border-radius:8px;background:#0F62FE;color:#fff;font-size:15px;font-weight:500;cursor:pointer;min-width:200px;';
+    retryBtn.onclick = function () {
+      clearOAuthSession();
+      window.location.reload();
+    };
+    card.appendChild(retryBtn);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  /**
+   * Inject logout button into the existing header bar (next to locale picker).
+   * Uses MutationObserver to wait for the header to render.
+   */
+  // Flag: should inject logout when locale picker mounts
+  window.__OAUTH_SHOW_LOGOUT__ = false;
+
+  function injectLogoutButton() {
+    window.__OAUTH_SHOW_LOGOUT__ = true;
+    // If locale picker already mounted, inject now
+    var container = document.getElementById('greentic-header-controls');
+    if (container && !document.getElementById('greentic-logout-btn')) {
+      appendLogoutToContainer(container);
+    }
+  }
+
+  function appendLogoutToContainer(container) {
+    // Show user avatar + name if available
+    var userName, userPicture;
+    try {
+      userName = sessionStorage.getItem(oauthStorageKey('user_name'));
+      userPicture = sessionStorage.getItem(oauthStorageKey('user_picture'));
+    } catch (_) {}
+
+    if (userPicture) {
+      var avatar = document.createElement('img');
+      avatar.src = userPicture;
+      avatar.referrerPolicy = 'no-referrer';
+      avatar.style.cssText = 'width:24px;height:24px;border-radius:50%;object-fit:cover;';
+      container.appendChild(avatar);
+    }
+
+    if (userName) {
+      var nameEl = document.createElement('span');
+      nameEl.textContent = userName;
+      nameEl.style.cssText = 'font-size:12px;color:#555;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      container.appendChild(nameEl);
+    }
+
+    var btn = document.createElement('button');
+    btn.textContent = 'Logout';
+    btn.id = 'greentic-logout-btn';
+    btn.style.cssText = 'padding:4px 12px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#555;font-size:12px;cursor:pointer;transition:background .15s;white-space:nowrap;';
+    btn.onmouseover = function () { btn.style.background = '#f0f0f0'; };
+    btn.onmouseout = function () { btn.style.background = '#fff'; };
+    btn.onclick = performLogout;
+    container.appendChild(btn);
+  }
+
+  // ---------------------------------------------------------------------------
+  // OAuth gate: fetch auth config and gate the SPA if needed
+  // ---------------------------------------------------------------------------
+
+  // Cache for auth config (fetched once)
+  window.__OAUTH_CONFIG__ = null;
+  window.__OAUTH_CHECKED__ = false;
+
+  /**
+   * Fetch OAuth config from the backend /auth/config endpoint.
+   * Blocks SPA rendering until auth is resolved.
+   */
+  function checkOAuthGate() {
+    var authConfigUrl = backendBase(tenant) + '/auth/config';
+    fetch(authConfigUrl)
+      .then(function (response) {
+        if (!response.ok) {
+          console.log('[oauth] auth/config not available, skipping auth gate');
+          window.__OAUTH_CONFIG__ = { enabled: false };
+          window.__OAUTH_CHECKED__ = true;
+          return;
+        }
+        return response.json();
+      })
+      .then(function (authConfig) {
+        if (!authConfig) return;
+        window.__OAUTH_CONFIG__ = authConfig;
+        window.__OAUTH_CHECKED__ = true;
+        console.log('[oauth] auth config:', authConfig.enabled ? 'enabled' : 'disabled');
+
+        if (!authConfig.enabled) {
+          return; // No auth required, SPA proceeds normally
+        }
+
+        // Step 1: Check if returning from OAuth callback (?code=...&state=...)
+        if (handleOAuthCallback()) {
+          // Callback detected — token exchange in progress
+          return;
+        }
+
+        // Step 2: Check if we already have a valid session
+        var session = getOAuthSession();
+        if (session) {
+          console.log('[oauth] existing session found');
+          injectLogoutButton();
+          return;
+        }
+
+        // Step 3: No session, show login screen
+        console.log('[oauth] no session, showing login');
+        showLoginScreen(authConfig);
+      })
+      .catch(function (err) {
+        console.warn('[oauth] failed to fetch auth config, proceeding without auth:', err);
+        window.__OAUTH_CONFIG__ = { enabled: false };
+        window.__OAUTH_CHECKED__ = true;
+      });
+  }
+
+  // Run OAuth check immediately
+  checkOAuthGate();
+
+  // ---------------------------------------------------------------------------
+  // Fetch interceptor (tenant config + skin.json patching)
+  // ---------------------------------------------------------------------------
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     var requestUrl = typeof input === 'string' ? input : input.url;
@@ -123,6 +566,14 @@ console.log('[runtime-bootstrap] loaded');
     if (/\/config\/tenants\/[^/]+\.json$/i.test(url.pathname)) {
       var tenantId = decodeURIComponent(url.pathname.split('/').pop().replace(/\.json$/i, ''));
       var locale = selectedLocale || 'en-US';
+      var authProviders = [
+        {
+          id: tenantId + '-demo',
+          label: 'Demo Login',
+          type: 'dummy',
+          enabled: true
+        }
+      ];
       var payload = {
         tenant_id: tenantId,
         legacy_skin: '_template',
@@ -137,14 +588,7 @@ console.log('[runtime-bootstrap] loaded');
           locale: locale
         },
         auth: {
-          providers: [
-            {
-              id: tenantId + '-demo',
-              label: 'Demo Login',
-              type: 'dummy',
-              enabled: true
-            }
-          ]
+          providers: authProviders
         }
       };
       return Promise.resolve(
@@ -184,8 +628,18 @@ console.log('[runtime-bootstrap] loaded');
     return originalFetch(input, init);
   };
 
-  // Build locale picker dynamically (DOMPurify strips <select>/<svg> from shell HTML)
+  // ---------------------------------------------------------------------------
+  // Locale picker
+  // ---------------------------------------------------------------------------
+
+  // Build locale picker + logout button inside a single flex container
   function initLocalePicker(mountEl) {
+    // Create flex container that holds both locale picker and logout
+    var container = document.createElement('div');
+    container.id = 'greentic-header-controls';
+    container.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    // Locale picker
     var globeSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/></svg>';
 
     var wrapper = document.createElement('label');
@@ -214,7 +668,14 @@ console.log('[runtime-bootstrap] loaded');
     });
 
     wrapper.appendChild(selectEl);
-    mountEl.appendChild(wrapper);
+    container.appendChild(wrapper);
+
+    // If OAuth is active and user is logged in, add logout button
+    if (window.__OAUTH_SHOW_LOGOUT__) {
+      appendLogoutToContainer(container);
+    }
+
+    mountEl.appendChild(container);
     console.log('[runtime-bootstrap] locale picker initialized, current:', current);
   }
 
