@@ -18,6 +18,8 @@ pub(crate) struct ProviderConfig {
     pub(crate) api_version: Option<String>,
     #[serde(default)]
     pub(crate) token: Option<String>,
+    #[serde(default)]
+    pub(crate) default_locale: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +31,8 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) api_base_url: String,
     pub(crate) api_version: String,
     pub(crate) token: Option<String>,
+    #[serde(default)]
+    pub(crate) default_locale: Option<String>,
 }
 
 pub(crate) fn default_enabled() -> bool {
@@ -44,6 +48,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         api_base_url: DEFAULT_API_BASE.to_string(),
         api_version: DEFAULT_API_VERSION.to_string(),
         token: None,
+        default_locale: None,
     }
 }
 
@@ -100,6 +105,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "api_base_url",
         "api_version",
         "token",
+        "default_locale",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());

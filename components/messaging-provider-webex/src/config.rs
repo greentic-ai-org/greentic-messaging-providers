@@ -15,6 +15,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         default_to_person_email: None,
         api_base_url: DEFAULT_API_BASE.to_string(),
         bot_token: None,
+        default_locale: None,
     }
 }
 
@@ -62,6 +63,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "default_to_person_email",
         "api_base_url",
         "bot_token",
+        "default_locale",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -78,6 +80,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         default_to_person_email: None,
         api_base_url: Some(DEFAULT_API_BASE.to_string()),
         bot_token: None,
+        default_locale: None,
     })
 }
 
