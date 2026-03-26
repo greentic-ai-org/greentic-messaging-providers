@@ -44,6 +44,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.schema.config.api_base_url.description",
     "webex.schema.config.bot_token.title",
     "webex.schema.config.bot_token.description",
+    "webex.schema.config.default_locale.title",
+    "webex.schema.config.default_locale.description",
     "webex.qa.default.title",
     "webex.qa.setup.title",
     "webex.qa.upgrade.title",
@@ -224,6 +226,14 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "webex.schema.config.bot_token.description",
         "Bot token for Webex API calls",
     ),
+    (
+        "webex.schema.config.default_locale.title",
+        "Default locale",
+    ),
+    (
+        "webex.schema.config.default_locale.description",
+        "Default locale for message localization",
+    ),
     ("webex.qa.default.title", "Default"),
     ("webex.qa.setup.title", "Setup"),
     ("webex.qa.upgrade.title", "Upgrade"),
@@ -338,6 +348,14 @@ pub(crate) fn config_schema() -> SchemaIr {
                 schema_secret(
                     "webex.schema.config.bot_token.title",
                     "webex.schema.config.bot_token.description",
+                ),
+            ),
+            (
+                "default_locale",
+                false,
+                schema_str(
+                    "webex.schema.config.default_locale.title",
+                    "webex.schema.config.default_locale.description",
                 ),
             ),
         ],
