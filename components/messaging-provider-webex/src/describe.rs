@@ -226,10 +226,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "webex.schema.config.bot_token.description",
         "Bot token for Webex API calls",
     ),
-    (
-        "webex.schema.config.default_locale.title",
-        "Default locale",
-    ),
+    ("webex.schema.config.default_locale.title", "Default locale"),
     (
         "webex.schema.config.default_locale.description",
         "Default locale for message localization",
