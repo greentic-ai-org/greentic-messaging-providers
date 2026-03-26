@@ -553,7 +553,12 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
             };
 
         let cb_locale = extract_language_code(callback);
-        let mut envelope = build_telegram_envelope_with_locale(action_text, chat_id.clone(), from.clone(), cb_locale);
+        let mut envelope = build_telegram_envelope_with_locale(
+            action_text,
+            chat_id.clone(),
+            from.clone(),
+            cb_locale,
+        );
         if !route_to_card.is_empty() {
             envelope
                 .metadata
@@ -591,7 +596,12 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
     let chat_id = extract_chat_id(&message);
     let from = extract_from_user(&message);
     let msg_locale = extract_language_code(&message);
-    let mut envelope = build_telegram_envelope_with_locale(text.clone(), chat_id.clone(), from.clone(), msg_locale);
+    let mut envelope = build_telegram_envelope_with_locale(
+        text.clone(),
+        chat_id.clone(),
+        from.clone(),
+        msg_locale,
+    );
 
     // Detect reply-to-bot messages (form input responses from ForceReply).
     // When user replies to a bot message that had a form prompt, mark the
@@ -867,10 +877,10 @@ fn build_telegram_envelope_with_locale(
     if let Some(sender) = &from {
         metadata.insert("from".to_string(), sender.clone());
     }
-    if let Some(lang) = &locale {
-        if !lang.is_empty() {
-            metadata.insert("locale".to_string(), lang.clone());
-        }
+    if let Some(lang) = &locale
+        && !lang.is_empty()
+    {
+        metadata.insert("locale".to_string(), lang.clone());
     }
     let channel = "telegram".to_string();
     let sender = from.map(|id| Actor {

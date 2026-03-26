@@ -419,9 +419,11 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         .map(|s| s.to_string());
     // Fetch user locale from Slack API (users.info) for i18n card translation.
     let slack_cfg = load_config(&body_val).ok();
-    let user_locale = sender
-        .as_deref()
-        .and_then(|uid| slack_cfg.as_ref().and_then(|c| fetch_slack_user_locale(c, uid)));
+    let user_locale = sender.as_deref().and_then(|uid| {
+        slack_cfg
+            .as_ref()
+            .and_then(|c| fetch_slack_user_locale(c, uid))
+    });
     let mut envelope = build_slack_envelope(text, channel.clone(), sender);
     if let Some(locale) = user_locale {
         envelope.metadata.insert("locale".to_string(), locale);

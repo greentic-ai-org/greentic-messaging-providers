@@ -158,6 +158,7 @@ mod tests {
             api_base_url: DEFAULT_API_BASE.to_string(),
             api_version: DEFAULT_API_VERSION.to_string(),
             token: Some("token".to_string()),
+            default_locale: None,
         }
     }
 
@@ -223,6 +224,7 @@ mod tests {
             api_base_url: None,
             api_version: None,
             token: None,
+            default_locale: None,
         })
         .unwrap_err();
         assert_eq!(
@@ -238,6 +240,7 @@ mod tests {
             api_base_url: None,
             api_version: None,
             token: None,
+            default_locale: None,
         })
         .unwrap_err();
         assert_eq!(

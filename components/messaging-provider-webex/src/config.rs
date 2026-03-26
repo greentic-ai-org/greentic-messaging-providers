@@ -239,6 +239,7 @@ mod tests {
             default_to_person_email: None,
             api_base_url: "https://webex.example.com/v1".to_string(),
             bot_token: Some("token".to_string()),
+            default_locale: None,
         }
     }
 
@@ -250,6 +251,7 @@ mod tests {
             default_to_person_email: None,
             api_base_url: Some("https://webex.example.com/v1".to_string()),
             bot_token: Some("token".to_string()),
+            default_locale: None,
         }
     }
 

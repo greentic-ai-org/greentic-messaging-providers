@@ -1080,10 +1080,10 @@ fn build_webhook_metadata(
         metadata.insert("webex.attachmentTypes".to_string(), types);
     }
     // Webex doesn't include locale in webhooks; use provider config default.
-    if let Some(locale) = default_locale {
-        if !locale.is_empty() {
-            metadata.insert("locale".to_string(), locale.clone());
-        }
+    if let Some(locale) = default_locale
+        && !locale.is_empty()
+    {
+        metadata.insert("locale".to_string(), locale.clone());
     }
     metadata
 }

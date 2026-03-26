@@ -603,12 +603,13 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         .map(str::to_string);
     let mut envelope = build_whatsapp_envelope(text.clone(), from.clone(), cloud_phone_id);
     // WhatsApp doesn't include locale in webhooks; use provider config default.
-    if let Ok(wa_cfg) = load_config(&body_val) {
-        if let Some(locale) = &wa_cfg.default_locale {
-            if !locale.is_empty() {
-                envelope.metadata.insert("locale".to_string(), locale.clone());
-            }
-        }
+    if let Ok(wa_cfg) = load_config(&body_val)
+        && let Some(locale) = &wa_cfg.default_locale
+        && !locale.is_empty()
+    {
+        envelope
+            .metadata
+            .insert("locale".to_string(), locale.clone());
     }
     let normalized = json!({
         "ok": true,
