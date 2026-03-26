@@ -552,7 +552,13 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                 )
             };
 
-        let mut envelope = build_telegram_envelope(action_text, chat_id.clone(), from.clone());
+        let cb_locale = extract_language_code(callback);
+        let mut envelope = build_telegram_envelope_with_locale(
+            action_text,
+            chat_id.clone(),
+            from.clone(),
+            cb_locale,
+        );
         if !route_to_card.is_empty() {
             envelope
                 .metadata
@@ -589,7 +595,13 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
     let text = extract_message_text(&message);
     let chat_id = extract_chat_id(&message);
     let from = extract_from_user(&message);
-    let mut envelope = build_telegram_envelope(text.clone(), chat_id.clone(), from.clone());
+    let msg_locale = extract_language_code(&message);
+    let mut envelope = build_telegram_envelope_with_locale(
+        text.clone(),
+        chat_id.clone(),
+        from.clone(),
+        msg_locale,
+    );
 
     // Detect reply-to-bot messages (form input responses from ForceReply).
     // When user replies to a bot message that had a form prompt, mark the
@@ -849,10 +861,11 @@ pub(crate) fn forward_send_payload(payload: &Value) -> Result<(), String> {
     }
 }
 
-pub(crate) fn build_telegram_envelope(
+fn build_telegram_envelope_with_locale(
     text: String,
     chat_id: Option<String>,
     from: Option<String>,
+    locale: Option<String>,
 ) -> ChannelMessageEnvelope {
     let env = EnvId::try_from("default").expect("env id");
     let tenant = TenantId::try_from("default").expect("tenant id");
@@ -863,6 +876,11 @@ pub(crate) fn build_telegram_envelope(
     }
     if let Some(sender) = &from {
         metadata.insert("from".to_string(), sender.clone());
+    }
+    if let Some(lang) = &locale
+        && !lang.is_empty()
+    {
+        metadata.insert("locale".to_string(), lang.clone());
     }
     let channel = "telegram".to_string();
     let sender = from.map(|id| Actor {
@@ -1949,6 +1967,16 @@ pub(crate) fn extract_from_user(value: &Value) -> Option<String> {
         .and_then(|from| from.get("id"))
         .and_then(Value::as_i64)
         .map(|id| id.to_string())
+}
+
+/// Extract the user's preferred language from the Telegram `from.language_code` field.
+fn extract_language_code(value: &Value) -> Option<String> {
+    value
+        .get("from")
+        .and_then(|from| from.get("language_code"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
 }
 
 pub(crate) fn extract_ids(body: &Value) -> (String, String) {

@@ -417,7 +417,17 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         .or_else(|| payload.get("user_id"))
         .and_then(Value::as_str)
         .map(|s| s.to_string());
-    let envelope = build_slack_envelope(text, channel.clone(), sender);
+    // Fetch user locale from Slack API (users.info) for i18n card translation.
+    let slack_cfg = load_config(&body_val).ok();
+    let user_locale = sender.as_deref().and_then(|uid| {
+        slack_cfg
+            .as_ref()
+            .and_then(|c| fetch_slack_user_locale(c, uid))
+    });
+    let mut envelope = build_slack_envelope(text, channel.clone(), sender);
+    if let Some(locale) = user_locale {
+        envelope.metadata.insert("locale".to_string(), locale);
+    }
     let normalized = json!({
         "ok": true,
         "event": body_val,
@@ -431,6 +441,35 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         events: vec![envelope],
     };
     http_out_v1_bytes(&out)
+}
+
+/// Fetch user locale from Slack `users.info` API.
+fn fetch_slack_user_locale(cfg: &ProviderConfig, user_id: &str) -> Option<String> {
+    let token = resolve_bot_token(cfg);
+    if token.is_empty() {
+        return None;
+    }
+    let api_base = cfg
+        .api_base_url
+        .as_deref()
+        .unwrap_or("https://slack.com/api");
+    let url = format!("{api_base}/users.info?user={user_id}");
+    let request = client::Request {
+        method: "GET".into(),
+        url,
+        headers: vec![("Authorization".into(), format!("Bearer {token}"))],
+        body: None,
+    };
+    let resp = client::send(&request, None, None).ok()?;
+    if resp.status < 200 || resp.status >= 300 {
+        return None;
+    }
+    let body: Value = serde_json::from_slice(&resp.body.unwrap_or_default()).ok()?;
+    body.get("user")
+        .and_then(|u| u.get("locale"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
 }
 
 /// Check if the request is a Slack retry (X-Slack-Retry-Num header present).

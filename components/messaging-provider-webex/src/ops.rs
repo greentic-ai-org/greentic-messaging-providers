@@ -637,6 +637,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                 None,
                 None,
                 None,
+                cfg.default_locale.as_ref(),
                 Some(400),
             );
             let envelope = build_webhook_envelope(
@@ -703,6 +704,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
             webhook_person_id.as_ref(),
             None,
             None,
+            cfg.default_locale.as_ref(),
             Some(200),
         );
         if !route_to_card.is_empty() {
@@ -793,6 +795,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                         details.person_id.as_ref().or(webhook_person_id.as_ref()),
                         None,
                         attachment_types.clone(),
+                        cfg.default_locale.as_ref(),
                         Some(200),
                     );
                     let envelope = build_webhook_envelope(
@@ -822,6 +825,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                         webhook_person_id.as_ref(),
                         Some(&err),
                         None,
+                        cfg.default_locale.as_ref(),
                         Some(502),
                     );
                     let envelope = build_webhook_envelope(
@@ -851,6 +855,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                     webhook_person_id.as_ref(),
                     Some(&err),
                     None,
+                    cfg.default_locale.as_ref(),
                     Some(500),
                 );
                 let envelope = build_webhook_envelope(
@@ -889,6 +894,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
         webhook_person_id.as_ref(),
         None,
         None,
+        cfg.default_locale.as_ref(),
         Some(200),
     );
     let envelope = build_webhook_envelope(
@@ -1042,6 +1048,7 @@ fn build_webhook_metadata(
     person_id: Option<&String>,
     error: Option<&String>,
     attachment_types: Option<String>,
+    default_locale: Option<&String>,
     status: Option<u16>,
 ) -> MessageMetadata {
     let mut metadata = MessageMetadata::new();
@@ -1071,6 +1078,12 @@ fn build_webhook_metadata(
     );
     if let Some(types) = attachment_types {
         metadata.insert("webex.attachmentTypes".to_string(), types);
+    }
+    // Webex doesn't include locale in webhooks; use provider config default.
+    if let Some(locale) = default_locale
+        && !locale.is_empty()
+    {
+        metadata.insert("locale".to_string(), locale.clone());
     }
     metadata
 }

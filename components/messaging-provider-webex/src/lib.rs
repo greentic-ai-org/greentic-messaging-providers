@@ -52,6 +52,8 @@ pub(crate) struct ProviderConfig {
     pub api_base_url: Option<String>,
     #[serde(default)]
     pub bot_token: Option<String>,
+    #[serde(default)]
+    pub default_locale: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +64,8 @@ pub(crate) struct ProviderConfigOut {
     pub default_to_person_email: Option<String>,
     pub api_base_url: String,
     pub bot_token: Option<String>,
+    #[serde(default)]
+    pub default_locale: Option<String>,
 }
 
 // ============================================================================

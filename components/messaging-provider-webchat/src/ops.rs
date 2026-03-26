@@ -202,6 +202,15 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                     &env_id,
                     &tenant_id,
                 );
+                // Forward locale from the activity so the runner can resolve
+                // i18n translations in card responses.
+                if let Some(locale) = body.get("locale").and_then(Value::as_str)
+                    && !locale.is_empty()
+                {
+                    envelope
+                        .metadata
+                        .insert("locale".to_string(), locale.to_string());
+                }
                 // Forward ALL Action.Submit data fields to metadata so the
                 // operator can handle MCP actions, token saves, card routing, etc.
                 if let Some(val) = action_value
