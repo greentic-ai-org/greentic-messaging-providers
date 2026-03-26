@@ -1,7 +1,7 @@
 {
   "id": "secrets-probe",
   "name": "secrets-probe",
-  "version": "0.4.42",
+  "version": "0.4.43",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Minimal component that probes greentic:secrets-store for TEST_API_KEY.",
   "profiles": {

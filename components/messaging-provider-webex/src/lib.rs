@@ -64,7 +64,7 @@ pub(crate) struct ProviderConfigOut {
     pub default_to_person_email: Option<String>,
     pub api_base_url: String,
     pub bot_token: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_locale: Option<String>,
 }
 
