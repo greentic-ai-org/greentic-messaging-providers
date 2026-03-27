@@ -1,6 +1,6 @@
 # Security Fix Report
 
-Date (UTC): 2026-03-26
+Date (UTC): 2026-03-27
 Role: CI Security Reviewer
 
 ## Inputs Reviewed
@@ -16,8 +16,11 @@ Role: CI Security Reviewer
 - `Cargo.toml` files across workspace crates/components.
 - Root `Cargo.lock`.
 
-3. Checked working tree for dependency-file changes that could introduce new risk:
+3. Checked dependency-file diffs in this checkout for potential newly introduced risk:
 - No dependency manifest or lockfile changes detected in current checkout.
+
+4. Attempted dependency vulnerability scan:
+- `cargo audit` could not run in this sandbox due to rustup temporary-file write restrictions under CI (`/home/runner/.rustup` read-only). Alert artifacts and PR vulnerability input remained the authoritative source for this run.
 
 ## Remediation Actions
 - No fixes were required because no vulnerabilities were reported and no new vulnerable PR dependency changes were identified.
