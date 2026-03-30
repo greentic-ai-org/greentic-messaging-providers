@@ -23,6 +23,10 @@
  *         iconSize: 28,                  // icon size inside bubble (px)
  *         label: 'Chat with us',         // tooltip text on hover
  *         borderRadius: '50%',           // '50%' circle, '12px' rounded square
+ *         badge: true,                   // show unread message counter
+ *         badgeColor: '#ef4444',         // badge background color
+ *         greeting: '',                  // greeting text above bubble (e.g. 'Need help?')
+ *         greetingDelay: 3000,           // ms before greeting appears (0 = immediate)
  *       },
  *       window: {
  *         width: 400,                    // chat window width (px)
@@ -35,19 +39,35 @@
  *         logo: null,                    // header logo URL — defaults to skin brand.logo
  *         logoSize: 24,                  // header logo size (px)
  *       },
+ *       fontFamily: 'Inter,system-ui,sans-serif', // font for all widget UI
+ *       locale: '',                      // locale passed to iframe (e.g. 'id', 'en', 'ja')
  *       openOnLoad: false,               // auto-open on page load
  *       openDelay: 0,                    // delay (ms) before auto-open
  *       closeOnEscape: true,             // close with Escape key
  *       mobileFullscreen: true,          // fullscreen on mobile (<480px)
+ *       persist: false,                  // persist open/close state across page navigation
+ *       zIndex: 2147483646,              // z-index for bubble and window
+ *       sound: false,                    // play notification sound on new bot message
+ *       soundUrl: '',                    // custom notification sound URL (default: built-in beep)
+ *       animation: true,                 // entrance animation for bubble on mount
+ *
+ *       // Event callbacks
+ *       onOpen: null,                    // function() — called when chat opens
+ *       onClose: null,                   // function() — called when chat closes
+ *       onMessage: null,                 // function(data) — called on bot message
+ *       onUserMessage: null,             // function(data) — called on user message
  *     };
  *   </script>
  *   <script src="https://your-domain.com/v1/web/webchat/demo/embed.js" defer></script>
  *
  * Public API (available after mount):
- *   greenticChat.open()    — open the chat window
- *   greenticChat.close()   — close the chat window
- *   greenticChat.toggle()  — toggle open/close
- *   greenticChat.isOpen()  — returns boolean
+ *   greenticChat.open()       — open the chat window
+ *   greenticChat.close()      — close the chat window
+ *   greenticChat.toggle()     — toggle open/close
+ *   greenticChat.isOpen()     — returns boolean
+ *   greenticChat.hide()       — completely hide bubble + window
+ *   greenticChat.show()       — show bubble again
+ *   greenticChat.resetBadge() — clear unread counter
  */
 (function () {
   'use strict';
@@ -72,8 +92,9 @@
     baseUrl = window.location.origin;
   }
 
+  var locale = config.locale || '';
   var webchatBase = baseUrl + '/v1/web/webchat/' + tenant;
-  var chatUrl = webchatBase + '/';
+  var chatUrl = webchatBase + '/' + (locale ? '?lang=' + encodeURIComponent(locale) : '');
   var skinUrl = webchatBase + '/skins/' + tenant + '/skin.json';
 
   // ── Fetch skin.json, then initialize ──
@@ -97,6 +118,10 @@
     var bubbleIconSize = bubble.iconSize || 28;
     var bubbleLabel = bubble.label || '';
     var bubbleBorderRadius = bubble.borderRadius || '50%';
+    var bubbleBadge = bubble.badge !== false;
+    var bubbleBadgeColor = bubble.badgeColor || '#ef4444';
+    var bubbleGreeting = bubble.greeting || '';
+    var bubbleGreetingDelay = bubble.greetingDelay != null ? bubble.greetingDelay : 3000;
 
     var win = config.window || {};
     var winWidth = win.width || 400;
@@ -114,10 +139,57 @@
     var openDelay = config.openDelay || 0;
     var closeOnEscape = config.closeOnEscape !== false;
     var mobileFullscreen = config.mobileFullscreen !== false;
+    var persist = config.persist || false;
+    var zIndex = config.zIndex || 2147483646;
+
+    var fontFamily = config.fontFamily || 'Inter,system-ui,sans-serif';
+    var enableSound = config.sound || false;
+    var soundUrl = config.soundUrl || '';
+    var enableAnimation = config.animation !== false;
+
+    var onOpen = typeof config.onOpen === 'function' ? config.onOpen : null;
+    var onClose = typeof config.onClose === 'function' ? config.onClose : null;
+    var onMessage = typeof config.onMessage === 'function' ? config.onMessage : null;
+    var onUserMessage = typeof config.onUserMessage === 'function' ? config.onUserMessage : null;
 
     var isOpen = false;
+    var isHidden = false;
+    var unreadCount = 0;
     var PREFIX = 'gtc-embed';
     var headerHeight = winHeader ? 44 : 0;
+    var PERSIST_KEY = 'gtc-embed-state-' + tenant;
+
+    // ── Sound notification ──
+    var audioCtx = null;
+    function playNotificationSound() {
+      if (!enableSound || isOpen) return;
+      if (soundUrl) {
+        try { new Audio(soundUrl).play(); } catch (e) { /* ignore */ }
+        return;
+      }
+      // Built-in beep using Web Audio API
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.value = 0.15;
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.3);
+      } catch (e) { /* ignore */ }
+    }
+
+    // ── Restore persisted state ──
+    if (persist) {
+      try {
+        var saved = sessionStorage.getItem(PERSIST_KEY);
+        if (saved === 'open') { openOnLoad = true; openDelay = 0; }
+      } catch (e) { /* ignore */ }
+    }
 
     // ── SVG Icons ──
     var CHAT_ICON =
@@ -154,7 +226,7 @@
         'position:fixed;bottom:' + bubbleOffsetBottom + 'px;' + posCSS +
         'width:' + bubbleSize + 'px;height:' + bubbleSize + 'px;' +
         'border-radius:' + bubbleBorderRadius + ';background:' + bubbleColor + ';' +
-        'border:none;cursor:pointer;z-index:2147483646;' +
+        'border:none;cursor:pointer;z-index:' + zIndex + ';' +
         'display:flex;align-items:center;justify-content:center;' +
         'box-shadow:0 4px 16px rgba(0,0,0,0.18);' +
         'transition:transform 0.2s ease,box-shadow 0.2s ease,background 0.2s ease;' +
@@ -164,18 +236,43 @@
         'transform:scale(1.08);box-shadow:0 6px 24px rgba(0,0,0,0.22);' +
       '}' +
       hoverBg +
+      '#' + PREFIX + '-badge{' +
+        'position:absolute;top:-4px;' + (isRight ? 'right' : 'left') + ':-4px;' +
+        'min-width:20px;height:20px;padding:0 6px;' +
+        'background:' + bubbleBadgeColor + ';color:#fff;' +
+        'font-family:' + fontFamily + ';font-size:11px;font-weight:700;' +
+        'border-radius:10px;display:none;align-items:center;justify-content:center;' +
+        'line-height:1;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.2);' +
+      '}' +
+      '#' + PREFIX + '-badge.visible{display:flex;}' +
       '#' + PREFIX + '-label{' +
         'position:fixed;bottom:' + (bubbleOffsetBottom + bubbleSize + 8) + 'px;' + posCSS +
         'background:#1f2937;color:#fff;padding:6px 12px;border-radius:8px;' +
-        'font-family:Inter,system-ui,sans-serif;font-size:13px;font-weight:500;' +
+        'font-family:' + fontFamily + ';font-size:13px;font-weight:500;' +
         'white-space:nowrap;pointer-events:none;opacity:0;' +
-        'transition:opacity 0.2s ease;z-index:2147483646;' +
+        'transition:opacity 0.2s ease;z-index:' + zIndex + ';' +
       '}' +
       '#' + PREFIX + '-bubble:hover~#' + PREFIX + '-label{opacity:1;}' +
+      '#' + PREFIX + '-greeting{' +
+        'position:fixed;bottom:' + (bubbleOffsetBottom + bubbleSize + 12) + 'px;' + posCSS +
+        'max-width:260px;background:#fff;color:#1f2937;' +
+        'padding:12px 16px;border-radius:12px;' +
+        'box-shadow:0 4px 20px rgba(0,0,0,0.12);border:1px solid #e5e7eb;' +
+        'font-family:' + fontFamily + ';font-size:14px;line-height:1.4;' +
+        'z-index:' + zIndex + ';cursor:pointer;' +
+        'opacity:0;transform:translateY(8px);' +
+        'transition:opacity 0.3s ease,transform 0.3s ease;' +
+      '}' +
+      '#' + PREFIX + '-greeting.visible{opacity:1;transform:translateY(0);}' +
+      '#' + PREFIX + '-greeting-close{' +
+        'position:absolute;top:4px;right:8px;background:none;border:none;' +
+        'cursor:pointer;font-size:16px;color:#9ca3af;line-height:1;padding:2px;' +
+      '}' +
+      '#' + PREFIX + '-greeting-close:hover{color:#6b7280;}' +
       '#' + PREFIX + '-window{' +
         'position:fixed;bottom:' + (bubbleOffsetBottom + bubbleSize + 16) + 'px;' + winPosCSS +
         'width:' + winWidth + 'px;height:' + (winHeight + headerHeight) + 'px;' +
-        'border:none;border-radius:' + winBorderRadius + 'px;z-index:2147483645;' +
+        'border:none;border-radius:' + winBorderRadius + 'px;z-index:' + (zIndex - 1) + ';' +
         'box-shadow:' + winShadow + ';' +
         'overflow:hidden;' +
         'display:none;flex-direction:column;' +
@@ -186,7 +283,7 @@
         'display:flex;align-items:center;gap:8px;' +
         'padding:0 12px;height:' + headerHeight + 'px;min-height:' + headerHeight + 'px;' +
         'background:' + winHeaderColor + ';color:' + winHeaderTextColor + ';' +
-        'font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:600;' +
+        'font-family:' + fontFamily + ';font-size:14px;font-weight:600;' +
       '}' +
       '#' + PREFIX + '-header-logo{width:' + winLogoSize + 'px;height:' + winLogoSize + 'px;border-radius:4px;' +
         'filter:brightness(0) invert(1);}' +
@@ -199,6 +296,15 @@
       '#' + PREFIX + '-header-close:hover{background:rgba(255,255,255,0.15);}' +
       '#' + PREFIX + '-iframe{' +
         'flex:1;width:100%;border:none;' +
+      '}' +
+      '.' + PREFIX + '-hidden{display:none!important;}' +
+      '@keyframes ' + PREFIX + '-pop-in{' +
+        '0%{transform:scale(0);opacity:0;}' +
+        '70%{transform:scale(1.12);}' +
+        '100%{transform:scale(1);opacity:1;}' +
+      '}' +
+      '#' + PREFIX + '-bubble.' + PREFIX + '-animate{' +
+        'animation:' + PREFIX + '-pop-in 0.4s cubic-bezier(0.34,1.56,0.64,1) both;' +
       '}' +
       (mobileFullscreen ? (
         '@media(max-width:480px){' +
@@ -217,10 +323,26 @@
     btn.innerHTML = bubbleOpenContent();
     btn.setAttribute('aria-label', bubbleLabel || 'Open chat');
 
+    // ── Create badge ──
+    var badgeEl = document.createElement('span');
+    badgeEl.id = PREFIX + '-badge';
+    badgeEl.textContent = '0';
+    btn.appendChild(badgeEl);
+
     // ── Create label tooltip ──
     var labelEl = document.createElement('div');
     labelEl.id = PREFIX + '-label';
     labelEl.textContent = bubbleLabel;
+
+    // ── Create greeting bubble ──
+    var greetingEl = null;
+    var greetingDismissed = false;
+    if (bubbleGreeting) {
+      greetingEl = document.createElement('div');
+      greetingEl.id = PREFIX + '-greeting';
+      greetingEl.innerHTML = '<span>' + bubbleGreeting + '</span>' +
+        '<button id="' + PREFIX + '-greeting-close">&times;</button>';
+    }
 
     // ── Create chat window ──
     var chatWindow = document.createElement('div');
@@ -261,6 +383,58 @@
     iframe.title = winTitle;
     chatWindow.appendChild(iframe);
 
+    // ── Badge logic ──
+    function updateBadge() {
+      if (!bubbleBadge) return;
+      if (unreadCount > 0 && !isOpen) {
+        badgeEl.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+        badgeEl.classList.add('visible');
+      } else {
+        badgeEl.classList.remove('visible');
+      }
+    }
+
+    function resetBadge() {
+      unreadCount = 0;
+      updateBadge();
+    }
+
+    // ── Greeting logic ──
+    function showGreeting() {
+      if (greetingEl && !greetingDismissed && !isOpen) {
+        greetingEl.classList.add('visible');
+      }
+    }
+
+    function dismissGreeting() {
+      greetingDismissed = true;
+      if (greetingEl) greetingEl.classList.remove('visible');
+    }
+
+    // ── iframe message listener (for unread badge + callbacks) ──
+    window.addEventListener('message', function (event) {
+      if (!event.data || typeof event.data !== 'object') return;
+      var type = event.data.type || '';
+
+      // Direct Line activity messages
+      if (type === 'DIRECT_LINE/INCOMING_ACTIVITY' || type === 'gtc:botMessage') {
+        if (!isOpen) {
+          unreadCount++;
+          updateBadge();
+          playNotificationSound();
+        }
+        if (onMessage) {
+          try { onMessage(event.data.payload || event.data); } catch (e) { /* ignore */ }
+        }
+      }
+
+      if (type === 'WEB_CHAT/SEND_MESSAGE' || type === 'gtc:userMessage') {
+        if (onUserMessage) {
+          try { onUserMessage(event.data.payload || event.data); } catch (e) { /* ignore */ }
+        }
+      }
+    });
+
     // ── Toggle logic ──
     function toggleChat(forceState) {
       isOpen = forceState != null ? forceState : !isOpen;
@@ -270,9 +444,19 @@
         }
         chatWindow.classList.add('open');
         btn.innerHTML = CLOSE_ICON;
+        btn.appendChild(badgeEl);
+        resetBadge();
+        dismissGreeting();
+        if (onOpen) { try { onOpen(); } catch (e) { /* ignore */ } }
       } else {
         chatWindow.classList.remove('open');
         btn.innerHTML = bubbleOpenContent();
+        btn.appendChild(badgeEl);
+        if (onClose) { try { onClose(); } catch (e) { /* ignore */ } }
+      }
+
+      if (persist) {
+        try { sessionStorage.setItem(PERSIST_KEY, isOpen ? 'open' : 'closed'); } catch (e) { /* ignore */ }
       }
     }
 
@@ -287,9 +471,26 @@
     }
 
     // ── Mount ──
+    if (enableAnimation) btn.classList.add(PREFIX + '-animate');
     document.body.appendChild(btn);
     if (bubbleLabel) {
       document.body.appendChild(labelEl);
+    }
+    if (greetingEl) {
+      document.body.appendChild(greetingEl);
+      greetingEl.querySelector('#' + PREFIX + '-greeting-close').addEventListener('click', function (e) {
+        e.stopPropagation();
+        dismissGreeting();
+      });
+      greetingEl.addEventListener('click', function () {
+        dismissGreeting();
+        toggleChat(true);
+      });
+      if (bubbleGreetingDelay > 0) {
+        setTimeout(showGreeting, bubbleGreetingDelay);
+      } else {
+        showGreeting();
+      }
     }
     document.body.appendChild(chatWindow);
 
@@ -303,6 +504,21 @@
       close: function () { toggleChat(false); },
       toggle: function () { toggleChat(); },
       isOpen: function () { return isOpen; },
+      hide: function () {
+        isHidden = true;
+        btn.classList.add(PREFIX + '-hidden');
+        chatWindow.classList.add(PREFIX + '-hidden');
+        if (labelEl) labelEl.classList.add(PREFIX + '-hidden');
+        if (greetingEl) greetingEl.classList.add(PREFIX + '-hidden');
+      },
+      show: function () {
+        isHidden = false;
+        btn.classList.remove(PREFIX + '-hidden');
+        chatWindow.classList.remove(PREFIX + '-hidden');
+        if (labelEl) labelEl.classList.remove(PREFIX + '-hidden');
+        if (greetingEl) greetingEl.classList.remove(PREFIX + '-hidden');
+      },
+      resetBadge: resetBadge,
     };
   }
 })();
