@@ -112,6 +112,28 @@ When adding a new config field to a provider:
 6. Update the schema hash in `standard_provider_tests!` if present
 7. Regenerate fixtures: `./tools/regenerate_registry_fixtures.sh`
 
+## WebChat GUI Assets & Embed
+
+The `messaging-webchat-gui` pack includes:
+
+### Skin System
+- Skins live in `packs/messaging-webchat-gui/assets/webchat-gui/skins/`
+- `default/` and `demo/` skins are self-contained (point to own files, not `_template`)
+- Each skin has: `skin.json`, `fullpage/index.html`, `fullpage/page.css`, `webchat/styleOptions.json`, `webchat/hostconfig.json`, `webchat/hooks.js`, `assets/` (logo, favicon, hero)
+- Skin `default/` serves as template for bundle scaffold — copied and renamed to tenant name
+
+### Tenant Config
+- `config/tenants/default.json` — OAuth providers (Guest, Microsoft, Google) + i18n branding
+- OAuth providers are `enabled: false` by default — user enables via capability or manual config
+- Tenant config is scaffolded per-tenant when bundle_assets capability is enabled
+
+### embed.js
+- `assets/webchat-gui/embed.js` — chat bubble widget script
+- Auto-loads defaults (color, title, logo) from tenant's `skin.json`
+- Config via `window.greenticChatConfig` — tenant, baseUrl, bubble, window options
+- Public API: `greenticChat.open()`, `.close()`, `.toggle()`, `.isOpen()`
+- Mobile responsive — fullscreen on <480px viewport
+
 ## Greentic Reuse-First Policy
 
 Before adding new core types or interfaces, check if they exist in shared Greentic crates: `greentic-interfaces`, `greentic-types`, `greentic-secrets`, `greentic-oauth`, `greentic-messaging`, `greentic-events`. Only introduce new shared concepts when no existing crate fits.

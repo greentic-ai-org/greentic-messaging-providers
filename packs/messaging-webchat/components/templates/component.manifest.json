@@ -164,15 +164,15 @@
     }
   ],
   "profiles": {
-    "default": "stateless",
+    "default": "default",
     "supported": [
-      "stateless"
+      "default"
     ]
   },
   "secret_requirements": [],
   "supports": [
     "messaging"
   ],
-  "version": "0.4.43",
-  "world": "greentic:component/component@0.5.0"
+  "version": "0.4.44",
+  "world": "root:component/root"
 }

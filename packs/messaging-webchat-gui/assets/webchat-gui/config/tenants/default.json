@@ -1,0 +1,58 @@
+{
+  "tenant_id": "default",
+  "legacy_skin": "default",
+  "branding": {
+    "company_name": { "i18n": "tenant.default.company_name" },
+    "tagline": { "i18n": "tenant.default.tagline" },
+    "logo": "/skins/default/assets/logo.svg"
+  },
+  "navigation": {
+    "menu": []
+  },
+  "webchat": {
+    "directline": {},
+    "style_options": {
+      "accent": "#0F62FE",
+      "bubbleBackground": "#eef4ff",
+      "bubbleFromUserBackground": "#0F62FE",
+      "bubbleFromUserTextColor": "#ffffff"
+    },
+    "adaptive_cards_host_config": {
+      "fontFamily": "Inter, system-ui, sans-serif"
+    },
+    "locale": "en-US"
+  },
+  "auth": {
+    "providers": [
+      {
+        "id": "guest",
+        "label": "Continue as Guest",
+        "type": "dummy",
+        "enabled": true
+      },
+      {
+        "id": "microsoft",
+        "label": "Sign in with Microsoft",
+        "type": "oidc",
+        "enabled": false,
+        "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "clientId": "YOUR_CLIENT_ID",
+        "redirectUri": "https://YOUR_DOMAIN/auth/callback/microsoft",
+        "scope": "openid profile email",
+        "responseType": "code",
+        "prompt": "login"
+      },
+      {
+        "id": "google",
+        "label": "Sign in with Google",
+        "type": "oidc",
+        "enabled": false,
+        "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+        "clientId": "YOUR_CLIENT_ID",
+        "redirectUri": "https://YOUR_DOMAIN/auth/callback/google",
+        "scope": "openid profile email",
+        "responseType": "code"
+      }
+    ]
+  }
+}
