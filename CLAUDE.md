@@ -143,3 +143,7 @@ Before adding new core types or interfaces, check if they exist in shared Greent
 - Rust toolchain: **1.91.0**
 - GitHub Actions: `.github/workflows/build-and-publish.yml` (fmt, clippy, schema check, build+test, packs)
 - Required env vars for OCI publishing: `GHCR_USERNAME`, `GHCR_TOKEN` (see `.env.example`)
+
+## Git Conventions
+
+Do NOT add Claude co-author attribution to commits or PRs.
