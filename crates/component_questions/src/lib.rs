@@ -20,6 +20,9 @@ use greentic_interfaces_guest::component_v0_6::node::{
     self, ComponentDescriptor, Guest, InvocationEnvelope, InvocationResult, NodeError,
 };
 
+#[cfg(target_arch = "wasm32")]
+use greentic_interfaces_guest::component_v0_6::{component_i18n, component_qa};
+
 #[derive(Debug, Deserialize)]
 struct EmitInput {
     id: String,
@@ -162,7 +165,32 @@ impl Guest for QuestionsComponent {
 }
 
 #[cfg(target_arch = "wasm32")]
-greentic_interfaces_guest::export_component_v060!(QuestionsComponent);
+impl component_qa::Guest for QuestionsComponent {
+    fn qa_spec(_mode: component_qa::QaMode) -> Vec<u8> {
+        vec![]
+    }
+    fn apply_answers(
+        _mode: component_qa::QaMode,
+        _current_config: Vec<u8>,
+        _answers: Vec<u8>,
+    ) -> Vec<u8> {
+        vec![]
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl component_i18n::Guest for QuestionsComponent {
+    fn i18n_keys() -> Vec<String> {
+        vec![]
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+greentic_interfaces_guest::export_component_v060!(
+    QuestionsComponent,
+    component_qa: QuestionsComponent,
+    component_i18n: QuestionsComponent,
+);
 
 #[cfg(target_arch = "wasm32")]
 fn decode_cbor_payload(cbor: &[u8]) -> Result<String, NodeError> {
