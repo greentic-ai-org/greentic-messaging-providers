@@ -2,21 +2,19 @@
   "tenant": "_template",
   "mode": "fullpage",
   "brand": {
-    "name": "Template Tenant",
+    "name": "AI Assistant",
     "favicon": "/skins/_template/assets/favicon.ico",
     "logo": "/skins/_template/assets/logo.svg",
-    "primary": "#0F62FE"
+    "primary": "#059669"
   },
-  "directLine": {
-    "tokenUrl": "https://demo.greentic.ai/token?tenant=_template"
-  },
+  "directLine": {},
   "webchat": {
     "styleOptions": "/skins/_template/webchat/styleOptions.json",
     "adaptiveCardsHostConfig": "/skins/_template/webchat/hostconfig.json",
     "locale": "en-US"
   },
   "statusBar": {
-    "show": false,
+    "show": true,
     "brand": {
       "ok": "#22c55e",
       "warn": "#f59e0b",
