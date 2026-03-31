@@ -675,8 +675,8 @@ PY
 
   python3 "${ROOT_DIR}/tools/validate_pack_fixtures.py"
 
-  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/${pack_name}:${PACK_VERSION}"
-  latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/${pack_name}:latest"
+  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:${PACK_VERSION}"
+  latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:latest"
   # Compute local content digest (used for dry-run and lockfile regardless of push).
   digest="$(python3 - <<'PY' "${pack_out}"
 import hashlib, sys
