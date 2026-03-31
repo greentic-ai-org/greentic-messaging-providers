@@ -165,10 +165,11 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function applyUiTranslations() {
-    // Translate topbar title "WebChat" -> i18n
+    // Set topbar title from skin brand.name, fall back to i18n, then 'AI Assistant'
     var titleEl = document.querySelector('.topbar__title');
     if (titleEl) {
-      titleEl.textContent = uiT('product.greentic.long', 'WebChat');
+      var brandName = (window.__SKIN__ && window.__SKIN__.brand && window.__SKIN__.brand.name) || '';
+      titleEl.textContent = brandName || uiT('product.greentic.long', 'AI Assistant');
     }
     // Translate logout button if already injected
     var logoutBtn = document.getElementById('greentic-logout-btn');
@@ -700,6 +701,12 @@ console.log('[runtime-bootstrap] loaded');
         }
         skinData.statusBar = skinData.statusBar || {};
         skinData.statusBar.show = false;
+        window.__SKIN__ = skinData;
+        // Update topbar title with brand name from skin
+        var titleEl = document.querySelector('.topbar__title');
+        if (titleEl && skinData.brand && skinData.brand.name) {
+          titleEl.textContent = skinData.brand.name;
+        }
         console.log('[bootstrap] skin.json patched:', skinData.directLine, 'locale:', skinData.webchat?.locale);
         return new Response(JSON.stringify(skinData), {
           status: 200,

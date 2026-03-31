@@ -114,6 +114,11 @@ body {
   outline-offset: 1px;
 }
 
+.locale-picker__select option {
+  color: #161616;
+  background: #ffffff;
+}
+
 /* ── Logout button ───────────────────────────────────────────── */
 
 .logout-btn,
