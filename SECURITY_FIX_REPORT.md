@@ -1,13 +1,14 @@
 # Security Fix Report
 
 Date: 2026-03-30 (UTC)
-Reviewer: CI Security Reviewer
+Branch: `feat/codeql`
+Commit: `007cfc6`
 
 ## Inputs Reviewed
 - Security alerts JSON:
-  - `dependabot`: 0 alerts
-  - `code_scanning`: 0 alerts
-- New PR Dependency Vulnerabilities: 0
+  - `dependabot`: `[]`
+  - `code_scanning`: `[]`
+- New PR Dependency Vulnerabilities: `[]`
 
 ## PR/Dependency Review
 - Checked repository manifests/lockfiles (`Cargo.toml` workspace and root `Cargo.lock`).
