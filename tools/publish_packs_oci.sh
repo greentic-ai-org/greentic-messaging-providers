@@ -14,7 +14,7 @@ if [ -z "${OCI_NAMESPACE}" ] && [ -n "${GITHUB_REPOSITORY_OWNER:-}" ]; then
 fi
 OCI_NAMESPACE="${OCI_NAMESPACE:-greenticai/greentic-messaging-providers}"
 OCI_ORG="${OCI_ORG:-${OCI_NAMESPACE%%/*}}"
-OCI_REPO="${OCI_REPO:-greentic-packs}"
+OCI_REPO="${OCI_REPO:-packs}"
 PACK_VERSION="${PACK_VERSION:-}"
 if [ -z "${PACK_VERSION}" ]; then
   command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }

@@ -1,5 +1,5 @@
 pack_id: messaging-webchat-gui
-version: 0.4.48
+version: 0.4.49
 kind: application
 publisher: Greentic
 components:
@@ -49,7 +49,7 @@ components:
     host: {}
   wasm: components/templates/templates.wasm
 - id: messaging-provider-webchat-gui
-  version: 0.4.48
+  version: 0.4.49
   world: root:component/root
   supports:
   - messaging
@@ -64,7 +64,7 @@ components:
     host: {}
   wasm: components/messaging-provider-webchat-gui/component.wasm
 - id: messaging-provider-webchat-gui
-  version: 0.4.48
+  version: 0.4.49
   world: root:component/root
   supports:
   - messaging
@@ -91,7 +91,7 @@ assets:
 extensions:
   greentic.ext.capabilities.v1:
     kind: greentic.ext.capabilities.v1
-    version: 0.4.48
+    version: 0.4.49
     inline:
       offers:
       - cap_id: greentic.cap.messaging.provider.v1
@@ -103,11 +103,11 @@ extensions:
         requires_setup: true
         setup:
           qa_ref: components/messaging-provider-webchat-gui
-        version: 0.4.48
+        version: 0.4.49
       schema_version: 1
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
-    version: 0.4.48
+    version: 0.4.49
     inline:
       validators:
       - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
@@ -115,7 +115,7 @@ extensions:
         world: greentic:pack-validate/pack-validator@0.1.0
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.48
+    version: 0.4.49
     inline:
       providers:
       - provider_type: messaging.webchat-gui
@@ -135,7 +135,7 @@ extensions:
           world: greentic:provider/schema-core@1.0.0
   greentic.static-routes.v1:
     kind: greentic.static-routes.v1
-    version: 0.4.48
+    version: 0.4.49
     inline:
       routes:
       - id: webchat-gui
@@ -149,7 +149,7 @@ extensions:
       version: 1
   messaging.provider_ingress.v1:
     kind: messaging.provider_ingress.v1
-    version: 0.4.48
+    version: 0.4.49
     inline:
       capabilities:
         content_types:
@@ -160,7 +160,7 @@ extensions:
       world: greentic:provider/schema-core@1.0.0
   messaging.provider_routes.v1:
     kind: messaging.provider_routes.v1
-    version: 0.4.48
+    version: 0.4.49
     inline:
       backend_base_path: /v1/messaging/webchat/{tenant}
       provider_type: messaging.webchat-gui
