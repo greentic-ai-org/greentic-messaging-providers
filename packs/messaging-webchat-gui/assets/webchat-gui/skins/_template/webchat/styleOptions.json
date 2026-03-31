@@ -1,8 +1,8 @@
 {
-  "accent": "#0F62FE",
-  "botAvatarBackgroundColor": "#0F62FE",
-  "botAvatarInitials": "GA",
-  "userAvatarBackgroundColor": "#021D4A",
+  "accent": "#6c3bcc",
+  "botAvatarBackgroundColor": "#6c3bcc",
+  "botAvatarInitials": "AI",
+  "userAvatarBackgroundColor": "#1e293b",
   "userAvatarInitials": "You",
   "hideUploadButton": true,
   "bubbleBorderRadius": 8,
@@ -10,11 +10,11 @@
   "bubbleNubSize": 4,
   "bubbleNubOffset": 0,
   "sendBoxBackground": "#FFFFFF",
-  "sendBoxBorderTop": "1px solid #d7d8de",
-  "sendBoxButtonColor": "#8424b8",
-  "sendBoxButtonColorOnHover": "#6f1e9b",
-  "sendBoxButtonColorOnFocus": "#6f1e9b",
-  "sendBoxButtonColorOnDisabled": "#b8a4c9",
-  "sendBoxPlaceholderColor": "#b2b4bd",
-  "sendBoxTextColor": "#6b7280"
+  "sendBoxBorderTop": "1px solid #e2e8f0",
+  "sendBoxButtonColor": "#6c3bcc",
+  "sendBoxButtonColorOnHover": "#5b32a8",
+  "sendBoxButtonColorOnFocus": "#5b32a8",
+  "sendBoxButtonColorOnDisabled": "#c4b5fd",
+  "sendBoxPlaceholderColor": "#94a3b8",
+  "sendBoxTextColor": "#334155"
 }

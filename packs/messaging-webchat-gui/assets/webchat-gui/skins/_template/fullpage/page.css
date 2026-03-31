@@ -2,8 +2,9 @@
   color-scheme: light;
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.5;
-  --brand-primary: #0f62fe;
-  --brand-surface: #f4f4f4;
+  --brand-primary: #6c3bcc;
+  --brand-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #d946ef 100%);
+  --brand-surface: #ebebeb;
 }
 
 body {
@@ -14,12 +15,10 @@ body {
 
 /* ── SPA class overrides ─────────────────────────────────────── */
 
-/* Hide the SPA status bar ("Connecting..." badge) */
 .fullpage-status {
   display: none !important;
 }
 
-/* Make the fullpage shell fill the viewport */
 .fullpage-shell {
   display: flex;
   flex-direction: column;
@@ -38,33 +37,43 @@ body {
 
 .topbar {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  height: 56px;
-  padding: 0 1rem;
-  background: #ffffff;
-  border-bottom: 1px solid #e0e0e0;
+  justify-content: center;
+  padding: 2rem 1rem 1.5rem;
+  background: var(--brand-gradient);
+  position: relative;
   flex-shrink: 0;
 }
 
 .topbar__brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem;
 }
 
 .topbar__logo {
-  height: 28px;
-  width: auto;
+  display: none;
 }
 
 .topbar__title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #161616;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+.topbar__subtitle {
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 400;
 }
 
 .topbar__controls {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -77,7 +86,7 @@ body {
   align-items: center;
   gap: 0.35rem;
   cursor: pointer;
-  color: #525252;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .locale-picker svg {
@@ -87,19 +96,42 @@ body {
 .locale-picker__select {
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
   padding: 0.3rem 1.6rem 0.3rem 0.5rem;
   font-size: 0.8125rem;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23525252'/%3E%3C/svg%3E") no-repeat right 0.5rem center;
+  background: rgba(255, 255, 255, 0.15)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,0.8)'/%3E%3C/svg%3E")
+    no-repeat right 0.5rem center;
   cursor: pointer;
-  color: #161616;
+  color: #ffffff;
   max-width: 180px;
+  backdrop-filter: blur(4px);
 }
 
 .locale-picker__select:focus {
-  outline: 2px solid var(--brand-primary);
+  outline: 2px solid rgba(255, 255, 255, 0.5);
   outline-offset: 1px;
+}
+
+/* ── Logout button ───────────────────────────────────────────── */
+
+.logout-btn,
+button[data-action="logout"] {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8125rem;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  font-family: inherit;
+}
+
+.logout-btn:hover,
+button[data-action="logout"]:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* ── Chat panel ──────────────────────────────────────────────── */
@@ -109,12 +141,16 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  padding: 1.5rem;
 }
 
 .chat-panel__surface {
   flex: 1 1 0%;
   min-height: 0;
   background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
 }
 
 #webchat > * {
@@ -125,16 +161,28 @@ body {
 
 @media (max-width: 480px) {
   .topbar {
-    padding: 0 0.75rem;
-    height: 48px;
+    padding: 1.5rem 0.75rem 1rem;
   }
 
   .topbar__title {
-    font-size: 0.875rem;
+    font-size: 1.25rem;
+  }
+
+  .topbar__controls {
+    top: 0.5rem;
+    right: 0.5rem;
   }
 
   .locale-picker__select {
     max-width: 140px;
     font-size: 0.75rem;
+  }
+
+  .chat-panel {
+    padding: 0.75rem;
+  }
+
+  .chat-panel__surface {
+    border-radius: 8px;
   }
 }
