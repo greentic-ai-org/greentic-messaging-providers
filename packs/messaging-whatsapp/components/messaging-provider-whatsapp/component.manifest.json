@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-whatsapp",
-  "version": "0.4.44",
+  "version": "0.4.49",
   "supports": [
     "messaging"
   ],
