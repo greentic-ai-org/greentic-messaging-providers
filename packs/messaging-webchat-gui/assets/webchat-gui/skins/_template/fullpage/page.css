@@ -2,9 +2,9 @@
   color-scheme: light;
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.5;
-  --brand-primary: #6c3bcc;
-  --brand-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #d946ef 100%);
-  --brand-surface: #ebebeb;
+  --brand-primary: #059669;
+  --brand-gradient: linear-gradient(135deg, #064e3b 0%, #059669 50%, #10b981 100%);
+  --brand-surface: #f0fdf7;
 }
 
 body {
