@@ -22,15 +22,15 @@ questions:
   - name: ms_graph_refresh_token
     title: Graph refresh token
     kind: string
-    required: false
+    required: true
     secret: true
     help: "OAuth refresh token (delegated permissions, /me/sendMail)"
   - name: ms_graph_client_secret
     title: Graph client secret
     kind: string
-    required: false
+    required: true
     secret: true
-    help: "App client secret (for client_credentials grant, optional if using refresh token)"
+    help: "App client secret (for client_credentials grant)"
   - name: public_base_url
     title: Public base URL
     kind: string

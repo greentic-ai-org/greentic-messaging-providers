@@ -16,7 +16,7 @@ questions:
   - name: business_account_id
     title: Business account ID
     kind: string
-    required: false
+    required: true
   - name: api_base_url
     title: API base URL
     kind: string
@@ -32,11 +32,11 @@ questions:
   - name: whatsapp_token
     title: WhatsApp access token
     kind: string
-    required: false
+    required: true
     secret: true
   - name: whatsapp_verify_token
     title: WhatsApp verify token
     kind: string
-    required: false
+    required: true
     secret: true
     help: "Verification token for webhook registration"

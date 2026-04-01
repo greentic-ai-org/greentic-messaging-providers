@@ -28,11 +28,11 @@ questions:
   - name: slack_app_id
     title: Slack App ID
     kind: string
-    required: false
+    required: true
     help: "Required for automatic webhook registration. Find in Slack App settings → Basic Information → App ID"
   - name: slack_configuration_token
     title: Slack Configuration Token
     kind: string
-    required: false
+    required: true
     secret: true
     help: "Required for automatic webhook registration. Generate at api.slack.com → Your Apps → App Configuration Tokens"

@@ -23,5 +23,5 @@ questions:
   - name: telegram_bot_token
     title: Telegram bot token
     kind: string
-    required: false
+    required: true
     secret: true

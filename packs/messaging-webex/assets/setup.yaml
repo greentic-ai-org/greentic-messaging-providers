@@ -27,5 +27,5 @@ questions:
   - name: webex_bot_token
     title: Webex bot token
     kind: string
-    required: false
+    required: true
     secret: true
