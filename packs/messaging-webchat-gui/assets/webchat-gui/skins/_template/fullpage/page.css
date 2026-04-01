@@ -231,6 +231,39 @@ button[data-action="logout"]:hover,
   height: 100%;
 }
 
+/* ── Footer ─────────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1.5rem;
+  font-size: 0.75rem;
+  color: var(--text-light);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.footer__copy {
+  white-space: nowrap;
+}
+
+.footer__links {
+  display: flex;
+  gap: 1rem;
+}
+
+.footer__links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.footer__links a:hover {
+  color: var(--brand);
+}
+
 /* ── Responsive ─────────────────────────────────────────── */
 
 @media (min-width: 769px) {
@@ -277,6 +310,13 @@ button[data-action="logout"]:hover,
 
   .chat-panel__surface {
     border-radius: 0;
+  }
+
+  .footer {
+    flex-direction: column;
+    gap: 0.25rem;
+    text-align: center;
+    padding: 0.5rem 0.75rem;
   }
 }
 
