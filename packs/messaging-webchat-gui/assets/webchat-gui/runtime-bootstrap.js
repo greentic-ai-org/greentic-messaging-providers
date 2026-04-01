@@ -610,7 +610,7 @@ console.log('[runtime-bootstrap] loaded');
     if (userName) {
       var nameEl = document.createElement('span');
       nameEl.textContent = userName;
-      nameEl.style.cssText = 'font-size:12px;color:#555;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      nameEl.style.cssText = 'font-size:12px;color:var(--text-muted, #555);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
       container.appendChild(nameEl);
     }
 
