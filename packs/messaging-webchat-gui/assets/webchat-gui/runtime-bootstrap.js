@@ -556,25 +556,30 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function tryInjectLogout() {
-    // Already injected — skip
     if (document.getElementById('greentic-logout-btn')) return;
 
-    var container = document.getElementById('greentic-header-controls')
-      || document.getElementById('locale-picker-mount');
+    // Only inject into greentic-header-controls (built by locale picker)
+    // NOT into locale-picker-mount (raw mount point) — to preserve order
+    var container = document.getElementById('greentic-header-controls');
     if (container) {
+      var div = document.createElement('span');
+      div.className = 'topbar__divider';
+      container.appendChild(div);
       appendLogoutToContainer(container);
       return;
     }
-    // Element not in DOM yet — observe for it
+    // Wait for locale picker to build greentic-header-controls
     if (typeof MutationObserver !== 'undefined') {
       var observer = new MutationObserver(function () {
         if (document.getElementById('greentic-logout-btn')) {
           observer.disconnect();
           return;
         }
-        var c = document.getElementById('greentic-header-controls')
-          || document.getElementById('locale-picker-mount');
+        var c = document.getElementById('greentic-header-controls');
         if (c) {
+          var d = document.createElement('span');
+          d.className = 'topbar__divider';
+          c.appendChild(d);
           appendLogoutToContainer(c);
           observer.disconnect();
         }
@@ -947,15 +952,12 @@ console.log('[runtime-bootstrap] loaded');
 
       container.appendChild(wrapper);
 
-      // If OAuth is active and user is logged in, add divider + logout
-      if (window.__OAUTH_SHOW_LOGOUT__) {
-        var div2 = document.createElement('span');
-        div2.className = 'topbar__divider';
-        container.appendChild(div2);
-        appendLogoutToContainer(container);
-      }
-
       mountEl.appendChild(container);
+
+      // Now that greentic-header-controls exists, retry logout injection
+      if (window.__OAUTH_SHOW_LOGOUT__) {
+        tryInjectLogout();
+      }
       console.log('[runtime-bootstrap] locale picker initialized, current:', current);
     }
 
