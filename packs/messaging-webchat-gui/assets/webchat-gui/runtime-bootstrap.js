@@ -685,8 +685,24 @@ console.log('[runtime-bootstrap] loaded');
 
     if (/skins\/[^/]+\/skin\.json$/i.test(url.pathname)) {
       return originalFetch(input, init).then(async function (response) {
-        if (!response.ok) return response;
-        var skinData = await response.json();
+        // Fallback: tenant skin not found or SPA fallback returned HTML
+        var skinData;
+        if (response.ok) {
+          var contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('json')) {
+            skinData = await response.json();
+          } else {
+            // SPA fallback returned HTML instead of JSON — skin doesn't exist
+            response = null;
+          }
+        }
+        if (!skinData) {
+          var fallbackUrl = url.pathname.replace(/skins\/[^/]+\//, 'skins/_template/');
+          console.log('[bootstrap] skin not found, falling back to _template:', fallbackUrl);
+          var fbResponse = await originalFetch(fallbackUrl);
+          if (!fbResponse.ok) return fbResponse;
+          skinData = await fbResponse.json();
+        }
         skinData.directLine = skinData.directLine || {};
         var ctxParams = 'env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
         if (!skinData.directLine.tokenUrl) {
