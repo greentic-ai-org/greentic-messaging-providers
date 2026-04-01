@@ -1,5 +1,8 @@
 Cargo.lock
 Cargo.toml
+SECURITY_FIX_REPORT.md
+all-code-scanning-alerts.json
+codex-prompt.txt
 packs/messaging-webchat-gui/assets/webchat-gui/config/tenants/cisco.json
 packs/messaging-webchat-gui/assets/webchat-gui/config/tenants/default.json
 packs/messaging-webchat-gui/assets/webchat-gui/config/tenants/greentic.json
@@ -58,3 +61,4 @@ packs/messaging-webchat-gui/components/messaging-provider-webchat-gui.wasm
 packs/messaging-webchat-gui/components/messaging-provider-webchat-gui/component.manifest.json
 packs/messaging-webchat-gui/pack.manifest.json
 packs/messaging-webchat-gui/pack.yaml
+pr-changed-files.txt
