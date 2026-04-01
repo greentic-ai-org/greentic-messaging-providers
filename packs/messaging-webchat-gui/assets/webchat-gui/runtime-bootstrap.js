@@ -392,6 +392,18 @@ console.log('[runtime-bootstrap] loaded');
    * Provider object: { id, label, auth_url, token_url, client_id, scopes }
    */
   function initiateOAuthFlow(provider) {
+    // Dummy/guest providers skip OAuth — just save session and proceed
+    if (provider.type === 'dummy') {
+      saveOAuthSession('guest', 'dummy');
+      try {
+        sessionStorage.setItem(oauthStorageKey('user_name'), 'Guest');
+        sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'dummy' }));
+      } catch (_) {}
+      removeOAuthOverlay();
+      injectLogoutButton();
+      return;
+    }
+
     if (!provider.auth_url || !provider.client_id) {
       showAuthError('OAuth not configured for ' + (provider.label || provider.id) + '. Set auth_url and client_id.');
       return;
@@ -408,7 +420,7 @@ console.log('[runtime-bootstrap] loaded');
       sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify(provider));
     } catch (_) {}
 
-    var scopes = provider.scopes || 'openid profile email';
+    var scopes = provider.scope || provider.scopes || 'openid profile email';
     var state = 'webchat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
 
     try {
@@ -481,44 +493,28 @@ console.log('[runtime-bootstrap] loaded');
     logoWrap.style.cssText = 'width:56px;height:56px;border-radius:50%;background:#ecfdf5;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;';
     logoWrap.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
     card.appendChild(logoWrap);
-    var titleEl = document.createElement('h2');
-    titleEl.textContent = 'Welcome';
-    titleEl.style.cssText = 'margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;';
-    card.appendChild(titleEl);
-    var descEl = document.createElement('p');
-    descEl.textContent = 'Sign in to start chatting';
-    descEl.style.cssText = 'margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;';
-    card.appendChild(descEl);
+    card.innerHTML += '<h2 style="margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;">Welcome</h2>' +
+      '<p style="margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;">Sign in to start chatting</p>';
     var btnContainer = document.createElement('div');
-    btnContainer.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
+    btnContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
     providers.forEach(function (provider) {
       var label = provider.label || providerLabel(provider.id) || 'SSO';
-      var displayLabel = /^(sign in|log in|continue)/i.test(label) ? label : 'Sign in with ' + label;
-      var isDummy = provider.type === 'dummy';
       var btn = document.createElement('button');
-      btn.textContent = displayLabel;
-      if (isDummy) {
-        btn.style.cssText = 'padding:12px 24px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;color:#1f2937;font-size:0.875rem;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s;min-width:200px;';
-        btn.onmouseover = function () { btn.style.borderColor = '#059669'; btn.style.color = '#059669'; };
-        btn.onmouseout = function () { btn.style.borderColor = '#e5e7eb'; btn.style.color = '#1f2937'; };
-      } else {
-        btn.style.cssText = 'padding:12px 24px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:0.875rem;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s;min-width:200px;';
-        btn.onmouseover = function () { btn.style.background = '#047857'; };
-        btn.onmouseout = function () { btn.style.background = '#059669'; };
-      }
+      // Avoid double prefix like "Sign in with Sign in with Google"
+      btn.textContent = /^(sign in|log in|continue)/i.test(label) ? label : 'Sign in with ' + label;
+      btn.style.cssText = 'padding:12px 28px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s;min-width:200px;';
+      btn.onmouseover = function () { btn.style.background = '#047857'; };
+      btn.onmouseout = function () { btn.style.background = '#059669'; };
       btn.onclick = function () {
         btn.disabled = true;
         btn.textContent = 'Redirecting...';
-        btn.style.opacity = '0.6';
+        btn.style.opacity = '0.7';
         initiateOAuthFlow(provider);
       };
       btnContainer.appendChild(btn);
     });
     if (providers.length === 0) {
-      var noP = document.createElement('p');
-      noP.textContent = 'No sign-in providers configured.';
-      noP.style.cssText = 'color:#6b7280;font-size:0.8125rem;';
-      card.appendChild(noP);
+      card.innerHTML += '<p style="color:#ef4444;font-size:13px;">No OAuth providers configured.</p>';
     }
     card.appendChild(btnContainer);
     overlay.appendChild(card);
@@ -532,23 +528,12 @@ console.log('[runtime-bootstrap] loaded');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f8fafb;font-family:Poppins,system-ui,-apple-system,sans-serif;';
     var card = document.createElement('div');
     card.style.cssText = 'max-width:380px;width:90%;padding:48px 36px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.06);text-align:center;background:#fff;border:1px solid #e5e7eb;';
-    var iconWrap = document.createElement('div');
-    iconWrap.style.cssText = 'width:56px;height:56px;border-radius:50%;background:#fef2f2;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;';
-    iconWrap.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>';
-    card.appendChild(iconWrap);
-    var titleEl = document.createElement('h2');
-    titleEl.textContent = 'Something went wrong';
-    titleEl.style.cssText = 'margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;';
-    card.appendChild(titleEl);
-    var descEl = document.createElement('p');
-    descEl.textContent = message;
-    descEl.style.cssText = 'margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;';
-    card.appendChild(descEl);
+    card.innerHTML =
+      '<h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#ef4444;">Something went wrong</h2>' +
+      '<p style="margin:0 0 28px;color:#666;font-size:14px;line-height:1.5;">' + message + '</p>';
     var retryBtn = document.createElement('button');
     retryBtn.textContent = 'Try Again';
-    retryBtn.style.cssText = 'padding:12px 24px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:0.875rem;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s;min-width:200px;';
-    retryBtn.onmouseover = function () { retryBtn.style.background = '#047857'; };
-    retryBtn.onmouseout = function () { retryBtn.style.background = '#059669'; };
+    retryBtn.style.cssText = 'padding:12px 28px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:15px;font-weight:500;cursor:pointer;min-width:200px;';
     retryBtn.onclick = function () {
       clearOAuthSession();
       window.location.reload();
@@ -567,10 +552,35 @@ console.log('[runtime-bootstrap] loaded');
 
   function injectLogoutButton() {
     window.__OAUTH_SHOW_LOGOUT__ = true;
-    // If locale picker already mounted, inject now
-    var container = document.getElementById('greentic-header-controls');
-    if (container && !document.getElementById('greentic-logout-btn')) {
+    tryInjectLogout();
+  }
+
+  function tryInjectLogout() {
+    // Already injected — skip
+    if (document.getElementById('greentic-logout-btn')) return;
+
+    var container = document.getElementById('greentic-header-controls')
+      || document.getElementById('locale-picker-mount');
+    if (container) {
       appendLogoutToContainer(container);
+      return;
+    }
+    // Element not in DOM yet — observe for it
+    if (typeof MutationObserver !== 'undefined') {
+      var observer = new MutationObserver(function () {
+        if (document.getElementById('greentic-logout-btn')) {
+          observer.disconnect();
+          return;
+        }
+        var c = document.getElementById('greentic-header-controls')
+          || document.getElementById('locale-picker-mount');
+        if (c) {
+          appendLogoutToContainer(c);
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      setTimeout(function () { observer.disconnect(); }, 10000);
     }
   }
 
@@ -624,18 +634,78 @@ console.log('[runtime-bootstrap] loaded');
     fetch(authConfigUrl)
       .then(function (response) {
         if (!response.ok) {
-          console.log('[oauth] auth/config not available, skipping auth gate');
-          window.__OAUTH_CONFIG__ = { enabled: false };
-          window.__OAUTH_CHECKED__ = true;
-          return;
+          console.log('[oauth] auth/config not available, falling back to tenant config');
+          return loadAuthFromTenantConfig();
         }
         return response.json();
       })
       .then(function (authConfig) {
         if (!authConfig) return;
+        // If backend returned empty config, fall back to tenant config
+        if (!authConfig.enabled && (!authConfig.providers || authConfig.providers.length === 0)) {
+          console.log('[oauth] backend auth/config empty, falling back to tenant config');
+          return loadAuthFromTenantConfig().then(function (fallback) {
+            if (fallback) return applyAuthConfig(fallback);
+          });
+        }
+        return applyAuthConfig(authConfig);
+      })
+      .catch(function (err) {
+        console.warn('[oauth] failed to fetch auth config, trying tenant config:', err);
+        return loadAuthFromTenantConfig().then(function (fallback) {
+          if (fallback) return applyAuthConfig(fallback);
+          window.__OAUTH_CONFIG__ = { enabled: false };
+          window.__OAUTH_CHECKED__ = true;
+        });
+      });
+  }
+
+  function loadAuthFromTenantConfig() {
+    var basePath = window.location.pathname.replace(/\/$/, '');
+    // Try tenant-specific file first, then default.json
+    var urls = [
+      basePath + '/config/tenants/' + tenant + '.json',
+      basePath + '/config/tenants/default.json'
+    ];
+    return tryFetchFirst(urls)
+      .then(function (r) { return r ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.auth) return null;
+        var enabledProviders = (data.auth.providers || []).filter(function (p) { return p.enabled; });
+        if (enabledProviders.length === 0) return null;
+        // Has real OIDC providers (not just dummy)?
+        var hasOidc = enabledProviders.some(function (p) { return p.type === 'oidc'; });
+        return {
+          enabled: hasOidc,
+          providers: data.auth.providers
+        };
+      })
+      .catch(function () { return null; });
+  }
+
+  function applyAuthConfig(authConfig) {
+        // Normalize provider field names and filter disabled providers
+        if (authConfig.providers) {
+          authConfig.providers = authConfig.providers
+            .filter(function (p) { return p.enabled; })
+            .map(function (p) {
+              return {
+                id: p.id,
+                label: p.label,
+                type: p.type,
+                enabled: p.enabled,
+                auth_url: p.auth_url || p.authorizationUrl,
+                token_url: p.token_url || p.tokenUrl,
+                client_id: p.client_id || p.clientId,
+                redirect_uri: p.redirect_uri || p.redirectUri,
+                scope: p.scope || p.scopes,
+                response_type: p.response_type || p.responseType || 'code'
+              };
+            });
+        }
         window.__OAUTH_CONFIG__ = authConfig;
         window.__OAUTH_CHECKED__ = true;
-        console.log('[oauth] auth config:', authConfig.enabled ? 'enabled' : 'disabled');
+        console.log('[oauth] auth config:', authConfig.enabled ? 'enabled' : 'disabled', 'providers:', (authConfig.providers || []).length);
 
         if (!authConfig.enabled) {
           return; // No auth required, SPA proceeds normally
@@ -658,16 +728,19 @@ console.log('[runtime-bootstrap] loaded');
         // Step 3: No session, show login screen
         console.log('[oauth] no session, showing login');
         showLoginScreen(authConfig);
-      })
-      .catch(function (err) {
-        console.warn('[oauth] failed to fetch auth config, proceeding without auth:', err);
-        window.__OAUTH_CONFIG__ = { enabled: false };
-        window.__OAUTH_CHECKED__ = true;
-      });
   }
 
-  // Run OAuth check immediately
-  checkOAuthGate();
+  function tryFetchFirst(urls) {
+    if (urls.length === 0) return Promise.resolve(null);
+    return originalFetch(urls[0]).then(function (r) {
+      if (r.ok) return r;
+      return tryFetchFirst(urls.slice(1));
+    }).catch(function () {
+      return tryFetchFirst(urls.slice(1));
+    });
+  }
+
+  // NOTE: checkOAuthGate is called AFTER the fetch interceptor is installed (see below)
 
   // ---------------------------------------------------------------------------
   // Fetch interceptor (tenant config + skin.json patching)
@@ -680,60 +753,62 @@ console.log('[runtime-bootstrap] loaded');
     console.log('[bootstrap] fetch:', url.pathname);
 
     if (/\/config\/tenants\/[^/]+\.json$/i.test(url.pathname)) {
-      var tenantId = decodeURIComponent(url.pathname.split('/').pop().replace(/\.json$/i, ''));
-      var locale = selectedLocale || 'en-US';
-      var authProviders = [
-        {
-          id: tenantId + '-demo',
-          label: 'Demo Login',
-          type: 'dummy',
-          enabled: true
+      return originalFetch(input, init).then(async function (response) {
+        var tenantId = decodeURIComponent(url.pathname.split('/').pop().replace(/\.json$/i, ''));
+        var locale = selectedLocale || 'en-US';
+        var payload;
+        if (response.ok) {
+          // Use actual tenant config file and patch missing fields
+          payload = await response.json();
+        } else {
+          // Fallback: generate minimal config if file doesn't exist
+          payload = {
+            tenant_id: tenantId,
+            legacy_skin: '_template',
+            branding: { company_name: tenantId },
+            auth: {
+              providers: [
+                { id: tenantId + '-demo', label: 'Demo Login', type: 'dummy', enabled: true }
+              ]
+            }
+          };
         }
-      ];
-      var payload = {
-        tenant_id: tenantId,
-        legacy_skin: '_template',
-        branding: {
-          company_name: tenantId
-        },
-        webchat: {
-          directline: {
-            token_url: window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/token',
-            domain: window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/v3/directline'
-          },
-          locale: locale
-        },
-        auth: {
-          providers: authProviders
+        // Ensure directline config is set
+        payload.webchat = payload.webchat || {};
+        payload.webchat.directline = payload.webchat.directline || {};
+        if (!payload.webchat.directline.token_url) {
+          payload.webchat.directline.token_url = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/token';
         }
-      };
-      return Promise.resolve(
-        new Response(JSON.stringify(payload), {
+        if (!payload.webchat.directline.domain) {
+          payload.webchat.directline.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/v3/directline';
+        }
+        payload.webchat.locale = locale;
+        console.log('[bootstrap] tenant config patched:', tenantId, 'auth providers:', (payload.auth && payload.auth.providers || []).length);
+        return new Response(JSON.stringify(payload), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
-        })
-      );
+        });
+      });
     }
 
     if (/skins\/[^/]+\/skin\.json$/i.test(url.pathname)) {
       return originalFetch(input, init).then(async function (response) {
-        // Fallback: tenant skin not found or SPA fallback returned HTML
+        // Fallback: tenant skin not found or SPA returned HTML
         var skinData;
         if (response.ok) {
-          var contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('json')) {
+          var ct = response.headers.get('content-type') || '';
+          if (ct.includes('json')) {
             skinData = await response.json();
           } else {
-            // SPA fallback returned HTML instead of JSON — skin doesn't exist
             response = null;
           }
         }
         if (!skinData) {
-          var fallbackUrl = url.pathname.replace(/skins\/[^/]+\//, 'skins/_template/');
-          console.log('[bootstrap] skin not found, falling back to _template:', fallbackUrl);
-          var fbResponse = await originalFetch(fallbackUrl);
-          if (!fbResponse.ok) return fbResponse;
-          skinData = await fbResponse.json();
+          var fbUrl = url.pathname.replace(/skins\/[^/]+\//, 'skins/_template/');
+          console.log('[bootstrap] skin not found, falling back to _template:', fbUrl);
+          var fbResp = await originalFetch(fbUrl);
+          if (!fbResp.ok) return fbResp;
+          skinData = await fbResp.json();
         }
         skinData.directLine = skinData.directLine || {};
         var ctxParams = 'env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
@@ -765,6 +840,9 @@ console.log('[runtime-bootstrap] loaded');
 
     return originalFetch(input, init);
   };
+
+  // Run OAuth check AFTER fetch interceptor is installed
+  checkOAuthGate();
 
   // ---------------------------------------------------------------------------
   // Locale picker
