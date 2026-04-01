@@ -558,28 +558,33 @@ console.log('[runtime-bootstrap] loaded');
   function tryInjectLogout() {
     if (document.getElementById('greentic-logout-btn')) return;
 
-    // Only inject into greentic-header-controls (built by locale picker)
-    // NOT into locale-picker-mount (raw mount point) — to preserve order
-    var container = document.getElementById('greentic-header-controls');
+    // Prefer greentic-header-controls (built by locale picker), fallback to raw mount point
+    var container = document.getElementById('greentic-header-controls')
+      || document.getElementById('locale-picker-mount');
     if (container) {
-      var div = document.createElement('span');
-      div.className = 'topbar__divider';
-      container.appendChild(div);
+      if (container.id === 'greentic-header-controls') {
+        var div = document.createElement('span');
+        div.className = 'topbar__divider';
+        container.appendChild(div);
+      }
       appendLogoutToContainer(container);
       return;
     }
-    // Wait for locale picker to build greentic-header-controls
+    // Element not in DOM yet — observe for it
     if (typeof MutationObserver !== 'undefined') {
       var observer = new MutationObserver(function () {
         if (document.getElementById('greentic-logout-btn')) {
           observer.disconnect();
           return;
         }
-        var c = document.getElementById('greentic-header-controls');
+        var c = document.getElementById('greentic-header-controls')
+          || document.getElementById('locale-picker-mount');
         if (c) {
-          var d = document.createElement('span');
-          d.className = 'topbar__divider';
-          c.appendChild(d);
+          if (c.id === 'greentic-header-controls') {
+            var d = document.createElement('span');
+            d.className = 'topbar__divider';
+            c.appendChild(d);
+          }
           appendLogoutToContainer(c);
           observer.disconnect();
         }
