@@ -473,31 +473,52 @@ console.log('[runtime-bootstrap] loaded');
     var providers = (authConfig && authConfig.providers) || [];
     var overlay = document.createElement('div');
     overlay.id = 'greentic-oauth-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f5f5f5;font-family:system-ui,-apple-system,sans-serif;';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f8fafb;font-family:Poppins,system-ui,-apple-system,sans-serif;';
     var card = document.createElement('div');
-    card.style.cssText = 'max-width:400px;width:90%;padding:40px 32px;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;background:#fff;';
-    card.innerHTML =
-      '<h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a1a;">Welcome</h2>' +
-      '<p style="margin:0 0 28px;color:#666;font-size:14px;line-height:1.5;">Please sign in to access the chat.</p>';
+    card.style.cssText = 'max-width:380px;width:90%;padding:48px 36px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.06);text-align:center;background:#fff;border:1px solid #e5e7eb;';
+    // Logo icon
+    var logoWrap = document.createElement('div');
+    logoWrap.style.cssText = 'width:56px;height:56px;border-radius:50%;background:#ecfdf5;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;';
+    logoWrap.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
+    card.appendChild(logoWrap);
+    var titleEl = document.createElement('h2');
+    titleEl.textContent = 'Welcome';
+    titleEl.style.cssText = 'margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;';
+    card.appendChild(titleEl);
+    var descEl = document.createElement('p');
+    descEl.textContent = 'Sign in to start chatting';
+    descEl.style.cssText = 'margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;';
+    card.appendChild(descEl);
     var btnContainer = document.createElement('div');
-    btnContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+    btnContainer.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
     providers.forEach(function (provider) {
       var label = provider.label || providerLabel(provider.id) || 'SSO';
+      var displayLabel = /^(sign in|log in|continue)/i.test(label) ? label : 'Sign in with ' + label;
+      var isDummy = provider.type === 'dummy';
       var btn = document.createElement('button');
-      btn.textContent = 'Sign in with ' + label;
-      btn.style.cssText = 'padding:12px 28px;border:none;border-radius:8px;background:#0F62FE;color:#fff;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s;min-width:200px;';
-      btn.onmouseover = function () { btn.style.background = '#0043CE'; };
-      btn.onmouseout = function () { btn.style.background = '#0F62FE'; };
+      btn.textContent = displayLabel;
+      if (isDummy) {
+        btn.style.cssText = 'padding:12px 24px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;color:#1f2937;font-size:0.875rem;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s;min-width:200px;';
+        btn.onmouseover = function () { btn.style.borderColor = '#059669'; btn.style.color = '#059669'; };
+        btn.onmouseout = function () { btn.style.borderColor = '#e5e7eb'; btn.style.color = '#1f2937'; };
+      } else {
+        btn.style.cssText = 'padding:12px 24px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:0.875rem;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s;min-width:200px;';
+        btn.onmouseover = function () { btn.style.background = '#047857'; };
+        btn.onmouseout = function () { btn.style.background = '#059669'; };
+      }
       btn.onclick = function () {
         btn.disabled = true;
         btn.textContent = 'Redirecting...';
-        btn.style.opacity = '0.7';
+        btn.style.opacity = '0.6';
         initiateOAuthFlow(provider);
       };
       btnContainer.appendChild(btn);
     });
     if (providers.length === 0) {
-      card.innerHTML += '<p style="color:#d32f2f;font-size:13px;">No OAuth providers configured.</p>';
+      var noP = document.createElement('p');
+      noP.textContent = 'No sign-in providers configured.';
+      noP.style.cssText = 'color:#6b7280;font-size:0.8125rem;';
+      card.appendChild(noP);
     }
     card.appendChild(btnContainer);
     overlay.appendChild(card);
@@ -508,15 +529,26 @@ console.log('[runtime-bootstrap] loaded');
     removeOAuthOverlay();
     var overlay = document.createElement('div');
     overlay.id = 'greentic-oauth-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f5f5f5;font-family:system-ui,-apple-system,sans-serif;';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f8fafb;font-family:Poppins,system-ui,-apple-system,sans-serif;';
     var card = document.createElement('div');
-    card.style.cssText = 'max-width:400px;width:90%;padding:40px 32px;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;background:#fff;';
-    card.innerHTML =
-      '<h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#d32f2f;">Authentication Error</h2>' +
-      '<p style="margin:0 0 28px;color:#666;font-size:14px;line-height:1.5;">' + message + '</p>';
+    card.style.cssText = 'max-width:380px;width:90%;padding:48px 36px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.06);text-align:center;background:#fff;border:1px solid #e5e7eb;';
+    var iconWrap = document.createElement('div');
+    iconWrap.style.cssText = 'width:56px;height:56px;border-radius:50%;background:#fef2f2;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;';
+    iconWrap.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>';
+    card.appendChild(iconWrap);
+    var titleEl = document.createElement('h2');
+    titleEl.textContent = 'Something went wrong';
+    titleEl.style.cssText = 'margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;';
+    card.appendChild(titleEl);
+    var descEl = document.createElement('p');
+    descEl.textContent = message;
+    descEl.style.cssText = 'margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;';
+    card.appendChild(descEl);
     var retryBtn = document.createElement('button');
     retryBtn.textContent = 'Try Again';
-    retryBtn.style.cssText = 'padding:12px 28px;border:none;border-radius:8px;background:#0F62FE;color:#fff;font-size:15px;font-weight:500;cursor:pointer;min-width:200px;';
+    retryBtn.style.cssText = 'padding:12px 24px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:0.875rem;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s;min-width:200px;';
+    retryBtn.onmouseover = function () { retryBtn.style.background = '#047857'; };
+    retryBtn.onmouseout = function () { retryBtn.style.background = '#059669'; };
     retryBtn.onclick = function () {
       clearOAuthSession();
       window.location.reload();
