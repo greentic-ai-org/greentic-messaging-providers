@@ -913,10 +913,45 @@ console.log('[runtime-bootstrap] loaded');
       });
 
       wrapper.appendChild(selectEl);
+
+      // Theme toggle button
+      var themeBtn = document.createElement('button');
+      themeBtn.className = 'theme-toggle';
+      themeBtn.title = 'Toggle theme';
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+        (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      themeBtn.textContent = isDark ? '☀️' : '🌙';
+      themeBtn.onclick = function () {
+        var html = document.documentElement;
+        var current = html.getAttribute('data-theme');
+        var next = current === 'dark' ? 'light' : (current === 'light' ? 'dark' : (isDark ? 'light' : 'dark'));
+        html.setAttribute('data-theme', next);
+        themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
+        try { sessionStorage.setItem('greentic-theme', next); } catch (_) {}
+      };
+      // Restore saved theme
+      try {
+        var saved = sessionStorage.getItem('greentic-theme');
+        if (saved) {
+          document.documentElement.setAttribute('data-theme', saved);
+          themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
+        }
+      } catch (_) {}
+
+      // Build controls with dividers: [theme] | [locale] | [session]
+      container.appendChild(themeBtn);
+
+      var div1 = document.createElement('span');
+      div1.className = 'topbar__divider';
+      container.appendChild(div1);
+
       container.appendChild(wrapper);
 
-      // If OAuth is active and user is logged in, add logout button
+      // If OAuth is active and user is logged in, add divider + logout
       if (window.__OAUTH_SHOW_LOGOUT__) {
+        var div2 = document.createElement('span');
+        div2.className = 'topbar__divider';
+        container.appendChild(div2);
         appendLogoutToContainer(container);
       }
 

@@ -67,8 +67,8 @@ body {
 }
 
 .topbar__avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--brand-light);
   display: flex;
@@ -78,21 +78,15 @@ body {
 }
 
 .topbar__logo {
-  width: 22px;
-  height: 22px;
-}
-
-.topbar__info {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  width: 20px;
+  height: 20px;
 }
 
 .topbar__title {
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text);
-  line-height: 1.2;
+  line-height: 1;
 }
 
 .topbar__status {
@@ -100,7 +94,8 @@ body {
   color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
+  margin-left: -0.25rem;
 }
 
 .topbar__status-dot {
@@ -114,7 +109,41 @@ body {
 .topbar__controls {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.625rem;
+}
+
+/* ── Control dividers ───────────────────────────────────── */
+
+.topbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* ── Theme toggle ───────────────────────────────────────── */
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.theme-toggle:hover {
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 /* ── Locale picker ──────────────────────────────────────── */
@@ -252,9 +281,9 @@ button[data-action="logout"]:hover,
 }
 
 /* ── Dark mode ──────────────────────────────────────────── */
-
+/* Auto dark mode (system preference) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --surface: #111827;
     --bg: #0a0f1a;
     --border: #374151;
@@ -265,27 +294,55 @@ button[data-action="logout"]:hover,
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
   }
+}
 
-  .locale-picker__select {
+/* Manual dark mode (toggle) */
+[data-theme="dark"] {
+  --surface: #111827;
+  --bg: #0a0f1a;
+  --border: #374151;
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-light: #6b7280;
+  --brand-light: rgba(5,150,105,0.25);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* Dark overrides for controls */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .locale-picker__select,
+  :root:not([data-theme="light"]) .theme-toggle {
     border-color: #4b5563;
     background-color: #1f2937;
     color: #f3f4f6;
   }
-
-  .logout-btn,
-  button[data-action="logout"],
-  #greentic-logout-btn {
+  :root:not([data-theme="light"]) #greentic-logout-btn {
     border-color: #4b5563;
     color: #d1d5db;
   }
-
-  .topbar__avatar {
+  :root:not([data-theme="light"]) .topbar__avatar {
     background: rgba(5,150,105,0.3);
   }
-
-  .topbar__logo {
+  :root:not([data-theme="light"]) .topbar__logo {
     filter: brightness(1.5);
   }
+}
+[data-theme="dark"] .locale-picker__select,
+[data-theme="dark"] .theme-toggle {
+  border-color: #4b5563;
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+[data-theme="dark"] #greentic-logout-btn {
+  border-color: #4b5563;
+  color: #d1d5db;
+}
+[data-theme="dark"] .topbar__avatar {
+  background: rgba(5,150,105,0.3);
+}
+[data-theme="dark"] .topbar__logo {
+  filter: brightness(1.5);
 }
 
 /* ── RTL support ────────────────────────────────────────── */
