@@ -257,13 +257,34 @@ button[data-action="logout"]:hover,
   :root {
     --surface: #111827;
     --bg: #0a0f1a;
-    --border: #1f2937;
+    --border: #374151;
     --text: #f3f4f6;
     --text-muted: #9ca3af;
     --text-light: #6b7280;
-    --brand-light: rgba(5,150,105,0.15);
+    --brand-light: rgba(5,150,105,0.25);
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  }
+
+  .locale-picker__select {
+    border-color: #4b5563;
+    background-color: #1f2937;
+    color: #f3f4f6;
+  }
+
+  .logout-btn,
+  button[data-action="logout"],
+  #greentic-logout-btn {
+    border-color: #4b5563;
+    color: #d1d5db;
+  }
+
+  .topbar__avatar {
+    background: rgba(5,150,105,0.3);
+  }
+
+  .topbar__logo {
+    filter: brightness(1.5);
   }
 }
 
