@@ -585,6 +585,8 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function appendLogoutToContainer(container) {
+    // Prevent duplicate injection
+    if (document.getElementById('greentic-logout-btn')) return;
     // Show user avatar + name if available
     var userName, userPicture;
     try {
