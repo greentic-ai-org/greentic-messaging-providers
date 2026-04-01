@@ -1,5 +1,1 @@
-packs/messaging-email/assets/setup.yaml
-packs/messaging-slack/assets/setup.yaml
-packs/messaging-telegram/assets/setup.yaml
-packs/messaging-webex/assets/setup.yaml
-packs/messaging-whatsapp/assets/setup.yaml
+.github/workflows/dependency-review.yml
