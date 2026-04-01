@@ -7,7 +7,9 @@ questions:
     kind: string
     required: true
     default: "http://localhost:8080"
-    help: "Example: https://xxxx.trycloudflare.com (auto-replaced by gtc start when using tunnel)"
+    help: "Auto-replaced by gtc start when using tunnel"
+    placeholder: "https://xxxx.trycloudflare.com"
+    group: Connection
     validate:
       regex: "^https?://"
   - name: mode
@@ -15,27 +17,36 @@ questions:
     kind: string
     required: true
     default: "local_queue"
-    help: "WebChat mode: local_queue | websocket | pubsub"
+    help: "WebChat connection mode"
+    placeholder: "local_queue"
+    group: Connection
   - name: route
     title: Route
     kind: string
     required: false
     default: "webchat"
+    placeholder: "webchat"
+    group: Connection
   - name: tenant_channel_id
     title: Tenant channel ID
     kind: string
     required: false
+    group: Connection
   - name: jwt_signing_key
     title: JWT signing key
     kind: string
     required: true
     secret: true
     help: "Secret key used to sign Direct Line tokens. Use any random string (e.g. openssl rand -hex 32)."
+    placeholder: "paste-your-key-here"
+    group: Authentication
   - name: base_url
     title: Base URL
     kind: string
     required: false
     help: "Optional DirectLine or WebChat server base URL"
+    placeholder: "https://directline.example.com"
+    group: Connection
     validate:
       regex: "^https?://"
 
@@ -46,6 +57,7 @@ questions:
     required: false
     default: "false"
     help: "Require users to sign in before accessing the chat"
+    group: OAuth
 
   # ── Google ───────────────────────────────────────────────
   - name: oauth_enable_google
@@ -54,6 +66,7 @@ questions:
     required: false
     default: "false"
     help: "Allow users to sign in with their Google account"
+    group: OAuth - Google
     visible_if:
       field: oauth_enabled
       eq: "true"
@@ -61,12 +74,10 @@ questions:
     title: Google Client ID
     kind: string
     required: false
-    help: |
-      Setup instructions:
-      1. Go to https://console.cloud.google.com/apis/credentials
-      2. Create OAuth 2.0 Client ID (Web application)
-      3. Add your WebChat URL as Authorized redirect URI
-      4. Copy the Client ID here
+    help: "Create OAuth 2.0 Client ID at Google Cloud Console"
+    placeholder: "123456789.apps.googleusercontent.com"
+    group: OAuth - Google
+    docs_url: "https://console.cloud.google.com/apis/credentials"
     visible_if:
       field: oauth_enable_google
       eq: "true"
@@ -76,6 +87,8 @@ questions:
     required: false
     secret: true
     help: "Copy the Client Secret from Google Cloud Console"
+    group: OAuth - Google
+    docs_url: "https://console.cloud.google.com/apis/credentials"
     visible_if:
       field: oauth_enable_google
       eq: "true"
@@ -87,6 +100,7 @@ questions:
     required: false
     default: "false"
     help: "Allow users to sign in with their Microsoft account"
+    group: OAuth - Microsoft
     visible_if:
       field: oauth_enabled
       eq: "true"
@@ -94,12 +108,10 @@ questions:
     title: Microsoft Client ID
     kind: string
     required: false
-    help: |
-      Setup instructions:
-      1. Go to https://portal.azure.com → App registrations
-      2. Create new registration (Web / Single-page application)
-      3. Add your WebChat URL as Redirect URI
-      4. Copy the Application (client) ID here
+    help: "Application (client) ID from Azure App Registration"
+    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    group: OAuth - Microsoft
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
     visible_if:
       field: oauth_enable_microsoft
       eq: "true"
@@ -108,7 +120,9 @@ questions:
     kind: string
     required: false
     secret: true
-    help: "Copy the Client Secret from Azure App Registration → Certificates & secrets"
+    help: "Client Secret from Azure → Certificates & secrets"
+    group: OAuth - Microsoft
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
     visible_if:
       field: oauth_enable_microsoft
       eq: "true"
@@ -120,6 +134,7 @@ questions:
     required: false
     default: "false"
     help: "Allow users to sign in with their GitHub account"
+    group: OAuth - GitHub
     visible_if:
       field: oauth_enabled
       eq: "true"
@@ -127,12 +142,10 @@ questions:
     title: GitHub Client ID
     kind: string
     required: false
-    help: |
-      Setup instructions:
-      1. Go to https://github.com/settings/developers
-      2. Create a new OAuth App
-      3. Set Homepage URL and Callback URL to your WebChat URL
-      4. Copy the Client ID here
+    help: "Client ID from GitHub OAuth App"
+    placeholder: "Iv1.xxxxxxxxxxxxxxxx"
+    group: OAuth - GitHub
+    docs_url: "https://github.com/settings/developers"
     visible_if:
       field: oauth_enable_github
       eq: "true"
@@ -141,7 +154,9 @@ questions:
     kind: string
     required: false
     secret: true
-    help: "Copy the Client Secret from GitHub OAuth App settings"
+    help: "Client Secret from GitHub OAuth App settings"
+    group: OAuth - GitHub
+    docs_url: "https://github.com/settings/developers"
     visible_if:
       field: oauth_enable_github
       eq: "true"
@@ -153,6 +168,7 @@ questions:
     required: false
     default: "false"
     help: "Add a custom OpenID Connect provider (Okta, Auth0, Keycloak, etc.)"
+    group: OAuth - Custom OIDC
     visible_if:
       field: oauth_enabled
       eq: "true"
@@ -160,7 +176,9 @@ questions:
     title: Provider display name
     kind: string
     required: false
-    help: "Name shown on the login button (e.g. 'Company SSO')"
+    help: "Name shown on the login button"
+    placeholder: "Company SSO"
+    group: OAuth - Custom OIDC
     visible_if:
       field: oauth_enable_custom
       eq: "true"
@@ -168,7 +186,9 @@ questions:
     title: Authorization URL
     kind: string
     required: false
-    help: "OIDC authorization endpoint (e.g. https://your-idp.com/authorize)"
+    help: "OIDC authorization endpoint"
+    placeholder: "https://your-idp.com/authorize"
+    group: OAuth - Custom OIDC
     visible_if:
       field: oauth_enable_custom
       eq: "true"
@@ -178,7 +198,9 @@ questions:
     title: Token URL
     kind: string
     required: false
-    help: "OIDC token endpoint (e.g. https://your-idp.com/oauth/token)"
+    help: "OIDC token endpoint"
+    placeholder: "https://your-idp.com/oauth/token"
+    group: OAuth - Custom OIDC
     visible_if:
       field: oauth_enable_custom
       eq: "true"
@@ -189,6 +211,7 @@ questions:
     kind: string
     required: false
     help: "OAuth client ID from your identity provider"
+    group: OAuth - Custom OIDC
     visible_if:
       field: oauth_enable_custom
       eq: "true"
@@ -197,7 +220,9 @@ questions:
     kind: string
     required: false
     default: "openid profile email"
-    help: "Space-separated scopes (default: openid profile email)"
+    help: "Space-separated scopes"
+    placeholder: "openid profile email"
+    group: OAuth - Custom OIDC
     visible_if:
       field: oauth_enable_custom
       eq: "true"

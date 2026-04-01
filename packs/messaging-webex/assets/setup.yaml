@@ -6,26 +6,37 @@ questions:
     title: Public base URL
     kind: string
     required: true
-    help: "Example: https://xxxx.trycloudflare.com"
+    help: "Public-facing URL for webhook callbacks"
+    placeholder: "https://xxxx.trycloudflare.com"
+    group: Connection
     validate:
       regex: "^https://"
   - name: default_room_id
     title: Default room ID
     kind: string
     required: false
+    placeholder: "Y2lzY29zcGFyazovL3VzL1JPT00v..."
+    group: Defaults
   - name: default_to_person_email
     title: Default person email
     kind: string
     required: false
+    placeholder: "user@example.com"
+    group: Defaults
   - name: api_base_url
     title: API base URL
     kind: string
     required: true
     help: "Webex API base URL (default: https://webexapis.com/v1)"
+    placeholder: "https://webexapis.com/v1"
+    group: Connection
     validate:
       regex: "^https?://"
   - name: webex_bot_token
     title: Webex bot token
     kind: string
-    required: false
+    required: true
     secret: true
+    help: "Access token from your Webex bot"
+    group: Authentication
+    docs_url: "https://developer.webex.com/my-apps/new/bot"

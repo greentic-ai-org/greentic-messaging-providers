@@ -6,7 +6,9 @@ questions:
     title: Public base URL
     kind: string
     required: true
-    help: "Example: https://xxxx.trycloudflare.com"
+    help: "Public-facing URL for webhook callbacks (auto-replaced by gtc start when using tunnel)"
+    placeholder: "https://xxxx.trycloudflare.com"
+    group: Connection
     validate:
       regex: "^https://"
   - name: api_base_url
@@ -14,6 +16,8 @@ questions:
     kind: string
     required: true
     help: "Slack API base URL (default: https://slack.com/api)"
+    placeholder: "https://slack.com/api"
+    group: Connection
     validate:
       regex: "^https?://"
   - name: slack_bot_token
@@ -21,18 +25,28 @@ questions:
     kind: string
     required: true
     secret: true
+    placeholder: "xoxb-your-token-here"
+    group: Authentication
+    docs_url: "https://api.slack.com/apps"
   - name: default_channel
     title: Default channel
     kind: string
     required: false
+    placeholder: "#general"
+    group: Defaults
   - name: slack_app_id
     title: Slack App ID
     kind: string
-    required: false
-    help: "Required for automatic webhook registration. Find in Slack App settings → Basic Information → App ID"
+    required: true
+    help: "Find in Slack App settings → Basic Information → App ID"
+    placeholder: "A0XXXXXXXXX"
+    group: Authentication
+    docs_url: "https://api.slack.com/apps"
   - name: slack_configuration_token
     title: Slack Configuration Token
     kind: string
-    required: false
+    required: true
     secret: true
-    help: "Required for automatic webhook registration. Generate at api.slack.com → Your Apps → App Configuration Tokens"
+    help: "Generate at api.slack.com → Your Apps → App Configuration Tokens"
+    group: Authentication
+    docs_url: "https://api.slack.com/apps"

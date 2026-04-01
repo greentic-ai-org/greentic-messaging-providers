@@ -1,5 +1,5 @@
 <h1>Dependency Review</h1>
 ✅ No vulnerabilities or license issues or OpenSSF Scorecard issues found.<h2>Snapshot Warnings</h2>
-<blockquote>⚠️: No snapshots were found for the head SHA 78ff7370b517686aa9fa3738f96fd31a704433ce.</blockquote>
+<blockquote>⚠️: No snapshots were found for the head SHA b003fe906ed045743c55662b18fbc82b4b92f10f.</blockquote>
 Ensure that dependencies are being submitted on PR branches and consider enabling <em>retry-on-snapshot-warnings</em>. See <a href="https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review#best-practices-for-using-the-dependency-review-api-and-the-dependency-submission-api-together">the documentation</a> for more information and troubleshooting advice.<h2>Scanned Files</h2>
 None
