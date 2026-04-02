@@ -231,6 +231,82 @@ button[data-action="logout"]:hover,
   height: 100%;
 }
 
+/* ── Adaptive Card · shadcn/ui style ───────────────────── */
+
+/* Card typography */
+[class*="webchat__bubble__content"] .ac-textBlock {
+  font-family: var(--font) !important;
+}
+
+/* FactSet — table style */
+.ac-factSet {
+  display: table !important;
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-family: var(--font) !important;
+  font-size: 0.8125rem !important;
+}
+
+.ac-fact {
+  display: table-row !important;
+}
+
+.ac-fact .ac-factTitle {
+  display: table-cell !important;
+  font-weight: 600 !important;
+  color: var(--text) !important;
+  padding: 0.375rem 1rem 0.375rem 0 !important;
+  vertical-align: top !important;
+  border-bottom: 1px solid var(--border) !important;
+  min-width: 6rem !important;
+}
+
+.ac-fact .ac-factValue {
+  display: table-cell !important;
+  color: var(--text-muted) !important;
+  padding: 0.375rem 0 !important;
+  vertical-align: top !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.ac-fact:last-child .ac-factTitle,
+.ac-fact:last-child .ac-factValue {
+  border-bottom: none !important;
+}
+
+/* Action buttons — shadcn outline variant */
+.ac-pushButton {
+  font-family: var(--font) !important;
+  font-weight: 500 !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.25rem !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--border) !important;
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  padding: 0.5rem 0.875rem !important;
+  cursor: pointer !important;
+  transition: background 0.15s, border-color 0.15s !important;
+}
+
+.ac-pushButton div,
+.ac-pushButton span,
+.ac-pushButton p {
+  color: inherit !important;
+}
+
+.ac-pushButton:hover {
+  background-color: var(--bg) !important;
+  border-color: var(--text-muted) !important;
+}
+
+/* Action set — flex-wrap so buttons don't overflow */
+.ac-actionSet {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.375rem !important;
+}
+
 /* ── Footer ─────────────────────────────────────────────── */
 
 .footer {
@@ -383,6 +459,54 @@ button[data-action="logout"]:hover,
 }
 [data-theme="dark"] .topbar__logo {
   filter: brightness(1.5);
+}
+
+/* Dark card button overrides */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ac-fact .ac-factTitle {
+    color: #f3f4f6 !important;
+    border-bottom-color: #374151 !important;
+  }
+  :root:not([data-theme="light"]) .ac-fact .ac-factValue {
+    color: #9ca3af !important;
+    border-bottom-color: #374151 !important;
+  }
+  :root:not([data-theme="light"]) .ac-pushButton {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+    color: #f3f4f6 !important;
+  }
+  :root:not([data-theme="light"]) .ac-pushButton div,
+  :root:not([data-theme="light"]) .ac-pushButton span,
+  :root:not([data-theme="light"]) .ac-pushButton p {
+    color: #f3f4f6 !important;
+  }
+  :root:not([data-theme="light"]) .ac-pushButton:hover {
+    background-color: #374151 !important;
+    border-color: #6b7280 !important;
+  }
+}
+[data-theme="dark"] .ac-fact .ac-factTitle {
+  color: #f3f4f6 !important;
+  border-bottom-color: #374151 !important;
+}
+[data-theme="dark"] .ac-fact .ac-factValue {
+  color: #9ca3af !important;
+  border-bottom-color: #374151 !important;
+}
+[data-theme="dark"] .ac-pushButton {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f3f4f6 !important;
+}
+[data-theme="dark"] .ac-pushButton div,
+[data-theme="dark"] .ac-pushButton span,
+[data-theme="dark"] .ac-pushButton p {
+  color: #f3f4f6 !important;
+}
+[data-theme="dark"] .ac-pushButton:hover {
+  background-color: #374151 !important;
+  border-color: #6b7280 !important;
 }
 
 /* ── RTL support ────────────────────────────────────────── */
