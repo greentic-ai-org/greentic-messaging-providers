@@ -4,6 +4,10 @@ on:
     branches: [main]
   schedule:
     - cron: "30 4 * * 1"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   security-events: write
   contents: read

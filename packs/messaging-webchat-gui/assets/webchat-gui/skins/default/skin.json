@@ -2,20 +2,19 @@
   "tenant": "default",
   "mode": "fullpage",
   "brand": {
-    "name": "Greentic",
-    "favicon": "/skins/default/assets/favicon.ico",
-    "logo": "/skins/default/assets/logo.svg",
-    "primary": "#0F62FE"
+    "name": "AI Assistant",
+    "favicon": "/skins/_template/assets/favicon.ico",
+    "logo": "/skins/_template/assets/logo.svg",
+    "primary": "#059669"
   },
-  "directLine": {
-  },
+  "directLine": {},
   "webchat": {
-    "styleOptions": "/skins/default/webchat/styleOptions.json",
-    "adaptiveCardsHostConfig": "/skins/default/webchat/hostconfig.json",
+    "styleOptions": "/skins/_template/webchat/styleOptions.json",
+    "adaptiveCardsHostConfig": "/skins/_template/webchat/hostconfig.json",
     "locale": "en-US"
   },
   "statusBar": {
-    "show": true,
+    "show": false,
     "brand": {
       "ok": "#22c55e",
       "warn": "#f59e0b",
@@ -23,10 +22,10 @@
     }
   },
   "fullpage": {
-    "index": "/skins/default/fullpage/index.html",
-    "css": "/skins/default/fullpage/page.css"
+    "index": "/skins/_template/fullpage/index.html",
+    "css": "/skins/_template/fullpage/page.css"
   },
   "hooks": {
-    "script": "/skins/default/webchat/hooks.js"
+    "script": "/skins/_template/webchat/hooks.js"
   }
 }

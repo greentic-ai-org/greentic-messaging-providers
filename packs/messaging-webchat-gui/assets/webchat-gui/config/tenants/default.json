@@ -1,24 +1,20 @@
 {
   "tenant_id": "default",
-  "legacy_skin": "default",
+  "legacy_skin": "_template",
   "branding": {
-    "company_name": { "i18n": "tenant.default.company_name" },
-    "tagline": { "i18n": "tenant.default.tagline" },
-    "logo": "/skins/default/assets/logo.svg"
-  },
-  "navigation": {
-    "menu": []
+    "company_name": "AI Assistant",
+    "logo": "/skins/_template/assets/logo.svg"
   },
   "webchat": {
     "directline": {},
     "style_options": {
-      "accent": "#0F62FE",
-      "bubbleBackground": "#eef4ff",
-      "bubbleFromUserBackground": "#0F62FE",
+      "accent": "#059669",
+      "bubbleBackground": "#f0fdf7",
+      "bubbleFromUserBackground": "#059669",
       "bubbleFromUserTextColor": "#ffffff"
     },
     "adaptive_cards_host_config": {
-      "fontFamily": "Inter, system-ui, sans-serif"
+      "fontFamily": "Poppins, system-ui, sans-serif"
     },
     "locale": "en-US"
   },
@@ -31,25 +27,22 @@
         "enabled": true
       },
       {
-        "id": "microsoft",
-        "label": "Sign in with Microsoft",
-        "type": "oidc",
-        "enabled": false,
-        "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-        "clientId": "YOUR_CLIENT_ID",
-        "redirectUri": "https://YOUR_DOMAIN/auth/callback/microsoft",
-        "scope": "openid profile email",
-        "responseType": "code",
-        "prompt": "login"
-      },
-      {
         "id": "google",
         "label": "Sign in with Google",
         "type": "oidc",
         "enabled": false,
         "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
-        "clientId": "YOUR_CLIENT_ID",
-        "redirectUri": "https://YOUR_DOMAIN/auth/callback/google",
+        "clientId": "",
+        "scope": "openid profile email",
+        "responseType": "code"
+      },
+      {
+        "id": "microsoft",
+        "label": "Sign in with Microsoft",
+        "type": "oidc",
+        "enabled": false,
+        "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "clientId": "",
         "scope": "openid profile email",
         "responseType": "code"
       }
