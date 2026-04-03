@@ -1,5 +1,2 @@
-.github/workflows/build-and-publish.yml
-.github/workflows/dependency-review.yml
-.github/workflows/e2e-dry-run.yml
-.github/workflows/e2e-live.yml
-.github/workflows/publish-questions.yml
+Cargo.lock
+ci/steps/11_build_packs.sh
