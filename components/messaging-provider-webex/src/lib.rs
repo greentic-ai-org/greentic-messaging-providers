@@ -32,7 +32,9 @@ use config::{default_config_out, validate_config_out};
 use describe::{
     DEFAULT_KEYS, I18N_KEYS, I18N_PAIRS, SETUP_QUESTIONS, build_describe_payload, build_qa_spec,
 };
-use ops::{encode_op, handle_reply, handle_send, ingest_http, render_plan, send_payload};
+use ops::{
+    encode_op, handle_reply, handle_send, ingest_http, render_plan, send_payload, setup_webhook,
+};
 
 // ============================================================================
 // Configuration types (shared with config.rs)
@@ -176,6 +178,7 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
         "render_plan" => render_plan(input_json),
         "encode" => encode_op(input_json),
         "send_payload" => send_payload(input_json),
+        "setup_webhook" => setup_webhook(input_json),
         other => json_bytes(&json!({"ok": false, "error": format!("unsupported op: {other}")})),
     }
 }
