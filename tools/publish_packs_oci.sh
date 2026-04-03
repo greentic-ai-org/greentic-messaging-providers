@@ -14,7 +14,7 @@ if [ -z "${OCI_NAMESPACE}" ] && [ -n "${GITHUB_REPOSITORY_OWNER:-}" ]; then
 fi
 OCI_NAMESPACE="${OCI_NAMESPACE:-greenticai/greentic-messaging-providers}"
 OCI_ORG="${OCI_ORG:-${OCI_NAMESPACE%%/*}}"
-OCI_REPO="${OCI_REPO:-greentic-packs}"
+OCI_REPO="${OCI_REPO:-packs}"
 PACK_VERSION="${PACK_VERSION:-}"
 if [ -z "${PACK_VERSION}" ]; then
   command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
@@ -675,8 +675,8 @@ PY
 
   python3 "${ROOT_DIR}/tools/validate_pack_fixtures.py"
 
-  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/${pack_name}:${PACK_VERSION}"
-  latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/${pack_name}:latest"
+  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:${PACK_VERSION}"
+  latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:latest"
   # Compute local content digest (used for dry-run and lockfile regardless of push).
   digest="$(python3 - <<'PY' "${pack_out}"
 import hashlib, sys
