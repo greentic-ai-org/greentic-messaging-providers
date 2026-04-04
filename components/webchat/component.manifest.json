@@ -9,5 +9,6 @@
       "injected_as": "provider_runtime_config.json"
     }
   },
-  "secret_requirements": []
+  "secret_requirements": [],
+  "version": "0.4.43"
 }

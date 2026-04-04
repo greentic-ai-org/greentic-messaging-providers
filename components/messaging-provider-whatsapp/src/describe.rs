@@ -47,6 +47,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "whatsapp.schema.config.api_version.description",
     "whatsapp.schema.config.token.title",
     "whatsapp.schema.config.token.description",
+    "whatsapp.schema.config.default_locale.title",
+    "whatsapp.schema.config.default_locale.description",
     "whatsapp.qa.default.title",
     "whatsapp.qa.setup.title",
     "whatsapp.qa.upgrade.title",
@@ -248,6 +250,14 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "whatsapp.schema.config.token.description",
         "Access token for WhatsApp API calls",
     ),
+    (
+        "whatsapp.schema.config.default_locale.title",
+        "Default locale",
+    ),
+    (
+        "whatsapp.schema.config.default_locale.description",
+        "Default locale for message localization",
+    ),
     ("whatsapp.qa.default.title", "Default"),
     ("whatsapp.qa.setup.title", "Setup"),
     ("whatsapp.qa.upgrade.title", "Upgrade"),
@@ -322,7 +332,7 @@ fn config_schema() -> SchemaIr {
             (
                 "phone_number_id",
                 true,
-                schema_str(
+                schema_secret(
                     "whatsapp.schema.config.phone_number_id.title",
                     "whatsapp.schema.config.phone_number_id.description",
                 ),
@@ -367,6 +377,14 @@ fn config_schema() -> SchemaIr {
                 schema_secret(
                     "whatsapp.schema.config.token.title",
                     "whatsapp.schema.config.token.description",
+                ),
+            ),
+            (
+                "default_locale",
+                false,
+                schema_str(
+                    "whatsapp.schema.config.default_locale.title",
+                    "whatsapp.schema.config.default_locale.description",
                 ),
             ),
         ],

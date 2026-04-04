@@ -248,7 +248,7 @@ mod tests {
         i18n_keys: I18N_KEYS,
         world_id: WORLD_ID,
         provider_id: PROVIDER_ID,
-        schema_hash: "12fc34242be5488838d7989630baa19d0fbdff69ec3706d8e3b50bb25d2fe45f",
+        schema_hash: "31837e4b20141730d62652092825e5ad641048cdbab052c0697990074ee7d5c3",
         qa_default_keys: ["phone_number_id", "public_base_url"],
         mode_type: bindings::exports::greentic::component::qa::Mode,
         component_type: Component,

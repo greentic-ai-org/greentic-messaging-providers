@@ -1,3 +1,5 @@
+#![cfg(feature = "runner-smoke")]
+
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};

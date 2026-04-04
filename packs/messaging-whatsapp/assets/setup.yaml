@@ -6,31 +6,56 @@ questions:
     title: Phone number ID
     kind: string
     required: true
+    help: "WhatsApp Business phone number ID from Meta Developer Portal"
+    placeholder: "1234567890"
+    group: Connection
+    docs_url: "https://developers.facebook.com/apps"
   - name: public_base_url
     title: Public base URL
     kind: string
     required: true
-    help: "Example: https://xxxx.trycloudflare.com"
+    help: "Public-facing URL for webhook callbacks"
+    placeholder: "https://xxxx.trycloudflare.com"
+    group: Connection
     validate:
       regex: "^https://"
   - name: business_account_id
     title: Business account ID
     kind: string
-    required: false
+    required: true
+    help: "WhatsApp Business Account ID from Meta Developer Portal"
+    placeholder: "1234567890"
+    group: Connection
+    docs_url: "https://developers.facebook.com/apps"
   - name: api_base_url
     title: API base URL
     kind: string
     required: true
     help: "WhatsApp Cloud API base URL (default: https://graph.facebook.com)"
+    placeholder: "https://graph.facebook.com"
+    group: Connection
     validate:
       regex: "^https?://"
   - name: api_version
     title: API version
     kind: string
     required: true
-    help: "WhatsApp Cloud API version (e.g. v17.0)"
-  - name: token
+    help: "WhatsApp Cloud API version"
+    placeholder: "v17.0"
+    group: Connection
+  - name: whatsapp_token
     title: WhatsApp access token
     kind: string
-    required: false
+    required: true
     secret: true
+    help: "Permanent access token from Meta Developer Portal"
+    group: Authentication
+    docs_url: "https://developers.facebook.com/apps"
+  - name: whatsapp_verify_token
+    title: WhatsApp verify token
+    kind: string
+    required: true
+    secret: true
+    help: "Custom token for webhook verification (you choose this value)"
+    placeholder: "my-verify-token"
+    group: Authentication

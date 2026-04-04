@@ -12,11 +12,15 @@ fi
 
 mkdir -p "${DEST_DIR}" "${DEST_DIR}/config" "${DEST_DIR}/i18n" "${DEST_DIR}/js" "${DEST_DIR}/skins"
 
+# Import SPA build artifacts (JS/CSS bundles, config, i18n, js)
 rsync -a --delete "${SRC_DIR}/assets/" "${DEST_DIR}/assets/"
 rsync -a --delete "${SRC_DIR}/config/" "${DEST_DIR}/config/"
 rsync -a --delete "${SRC_DIR}/i18n/" "${DEST_DIR}/i18n/"
 rsync -a --delete "${SRC_DIR}/js/" "${DEST_DIR}/js/"
-rsync -a --delete "${SRC_DIR}/skins/" "${DEST_DIR}/skins/"
+
+# Import skins from SPA without --delete to preserve pack-specific
+# customizations (e.g. _template/fullpage/page.css, _template/skin.json).
+rsync -a "${SRC_DIR}/skins/" "${DEST_DIR}/skins/"
 
 js_bundle="$(basename "$(find "${DEST_DIR}/assets" -maxdepth 1 -type f -name 'index-*.js' | sort | head -n 1)")"
 css_bundle="$(basename "$(find "${DEST_DIR}/assets" -maxdepth 1 -type f -name 'index-*.css' | sort | head -n 1)")"
@@ -26,82 +30,8 @@ if [ -z "${js_bundle}" ] || [ -z "${css_bundle}" ]; then
   exit 1
 fi
 
-cat > "${DEST_DIR}/runtime-bootstrap.js" <<'EOF'
-(function () {
-  function resolveTenant() {
-    const match = window.location.pathname.match(/\/v1\/web\/webchat\/([^\/?#]+)/i);
-    if (match && match[1]) {
-      return decodeURIComponent(match[1]);
-    }
-    const queryTenant = new URLSearchParams(window.location.search).get('tenant');
-    if (queryTenant) {
-      return queryTenant;
-    }
-    return document.documentElement?.dataset?.tenant || 'default';
-  }
-
-  function resolveGuiBase(tenant) {
-    return `/v1/web/webchat/${encodeURIComponent(tenant)}/`;
-  }
-
-  function backendBase(tenant) {
-    return `${window.location.origin}/v1/messaging/webchat/${encodeURIComponent(tenant)}`;
-  }
-
-  const tenant = resolveTenant();
-  const guiBase = resolveGuiBase(tenant);
-
-  document.documentElement.dataset.tenant = tenant;
-  window.__TENANT__ = tenant;
-  window.__BASE_PATH__ = guiBase;
-  window.APP_CONFIG_BASE = './config';
-  window.__WEBCHAT_GUI_BASE__ = guiBase;
-  window.__WEBCHAT_BACKEND_BASE__ = backendBase(tenant);
-
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = function (input, init) {
-    const requestUrl = typeof input === 'string' ? input : input.url;
-    const url = new URL(requestUrl, window.location.href);
-
-    if (/\/config\/tenants\/[^/]+\.json$/i.test(url.pathname)) {
-      const tenantId = decodeURIComponent(url.pathname.split('/').pop().replace(/\.json$/i, ''));
-      const payload = {
-        tenant_id: tenantId,
-        legacy_skin: '_template',
-        branding: {
-          company_name: tenantId
-        },
-        webchat: {
-          directline: {
-            token_url: `${window.location.origin}/v1/messaging/webchat/${encodeURIComponent(tenantId)}/token`,
-            domain: `${window.location.origin}/v1/messaging/webchat/${encodeURIComponent(tenantId)}/v3/directline`
-          },
-          locale: 'en-US'
-        },
-        auth: {
-          providers: [
-            {
-              id: `${tenantId}-demo`,
-              label: 'Demo Login',
-              type: 'dummy',
-              enabled: true
-            }
-          ]
-        }
-      };
-      return Promise.resolve(
-        new Response(JSON.stringify(payload), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      );
-    }
-
-    return originalFetch(input, init);
-  };
-})();
-EOF
-
+# Generate index.html with correct bundle filenames.
+# runtime-bootstrap.js is maintained in-repo and NOT overwritten here.
 cat > "${DEST_DIR}/index.html" <<EOF
 <!doctype html>
 <html lang="en">

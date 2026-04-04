@@ -6,35 +6,48 @@ questions:
     title: From address
     kind: string
     required: true
-    help: "Sender email address (e.g. bot@yourdomain.com)"
+    help: "Sender email address"
+    placeholder: "bot@yourdomain.com"
+    group: Connection
   - name: graph_tenant_id
     title: Graph tenant ID
     kind: string
     required: true
     secret: true
     help: "Azure AD tenant ID (Directory ID)"
+    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    group: Authentication
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/Overview"
   - name: ms_graph_client_id
     title: Graph client ID
     kind: string
     required: true
     secret: true
     help: "Azure AD app registration client/application ID"
+    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    group: Authentication
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
   - name: ms_graph_refresh_token
     title: Graph refresh token
     kind: string
-    required: false
+    required: true
     secret: true
     help: "OAuth refresh token (delegated permissions, /me/sendMail)"
+    group: Authentication
   - name: ms_graph_client_secret
     title: Graph client secret
     kind: string
-    required: false
+    required: true
     secret: true
-    help: "App client secret (for client_credentials grant, optional if using refresh token)"
+    help: "App client secret from Azure → Certificates & secrets"
+    group: Authentication
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
   - name: public_base_url
     title: Public base URL
     kind: string
     required: false
     help: "Public URL for webhook callbacks (optional for email)"
+    placeholder: "https://xxxx.trycloudflare.com"
+    group: Connection
     validate:
       regex: "^https://"

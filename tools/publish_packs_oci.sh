@@ -14,7 +14,7 @@ if [ -z "${OCI_NAMESPACE}" ] && [ -n "${GITHUB_REPOSITORY_OWNER:-}" ]; then
 fi
 OCI_NAMESPACE="${OCI_NAMESPACE:-greenticai/greentic-messaging-providers}"
 OCI_ORG="${OCI_ORG:-${OCI_NAMESPACE%%/*}}"
-OCI_REPO="${OCI_REPO:-greentic-packs}"
+OCI_REPO="${OCI_REPO:-packs}"
 PACK_VERSION="${PACK_VERSION:-}"
 if [ -z "${PACK_VERSION}" ]; then
   command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
@@ -371,17 +371,30 @@ import sys
 path = Path(sys.argv[1])
 version = sys.argv[2]
 lines = path.read_text().splitlines()
-updated = False
-out = []
+
+# Detect current root version so we can replace all matching occurrences.
+old_version = None
 for line in lines:
     stripped = line.lstrip()
     indent = len(line) - len(stripped)
     if indent == 0 and stripped.startswith("version:"):
-        prefix = line.split("version:")[0] + "version: "
-        out.append(f"{prefix}{version}")
-        updated = True
-    else:
-        out.append(line.replace("__PACK_VERSION__", version))
+        old_version = stripped.split(":", 1)[1].strip().strip("'\"")
+        break
+
+out = []
+updated = False
+for line in lines:
+    stripped = line.lstrip()
+    # Replace all version: fields that match the old pack version.
+    if stripped.startswith("version:"):
+        current = stripped.split(":", 1)[1].strip().strip("'\"")
+        if current == old_version or current == version:
+            prefix = line.split("version:")[0] + "version: "
+            out.append(f"{prefix}{version}")
+            updated = True
+            continue
+    out.append(line.replace("__PACK_VERSION__", version))
+
 if not updated:
     out.append(f"version: {version}")
 path.write_text("\n".join(out) + "\n")
@@ -443,11 +456,11 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
   pack_out="${ROOT_DIR}/${pack_out_rel}"
   secrets_out="${dir}/.secret_requirements.json"
 
+  update_pack_yaml_version "${dir}"
   generate_pack_manifest "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset_entry "${dir}"
   ensure_pack_readme "${dir}"
-  update_pack_yaml_version "${dir}"
   (cd "${dir}" && "${PACKC_BIN}" config)
 
   components=()
@@ -549,10 +562,8 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
         # Fallback to TARGET_COMPONENTS cache
         cp "${manifest_src}" "${manifest_dest}"
       fi
-      # Stamp version, world, and profiles on provider/ingress component manifests
-      case "${comp_id}" in
-        messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-          python3 - "${manifest_dest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
+      # Stamp version, world, and profiles on component manifests
+      python3 - "${manifest_dest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
 from pathlib import Path
 import json
 import sys
@@ -580,10 +591,40 @@ if manifest_path.exists():
 
     manifest_path.write_text(json.dumps(data, indent=2) + "\n")
 PY
-          ;;
-      esac
     fi
   done
+
+  # Stamp version on all component.manifest.json files inside the pack components directory.
+  while IFS= read -r comp_id; do
+    [ -z "${comp_id}" ] && continue
+    local_manifest="${dir}/components/${comp_id}/component.manifest.json"
+    [ -f "${local_manifest}" ] || continue
+    python3 - "${local_manifest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
+from pathlib import Path
+import json
+import sys
+import yaml
+
+manifest_path = Path(sys.argv[1])
+version = sys.argv[2]
+pack_yaml_path = Path(sys.argv[3])
+comp_id = sys.argv[4]
+
+if manifest_path.exists():
+    data = json.loads(manifest_path.read_text())
+    data["version"] = version
+    if pack_yaml_path.exists():
+        pack_data = yaml.safe_load(pack_yaml_path.read_text())
+        for comp in pack_data.get("components", []):
+            if comp.get("id") == comp_id:
+                if "world" in comp:
+                    data["world"] = comp["world"]
+                if "profiles" in comp:
+                    data["profiles"] = comp["profiles"]
+                break
+    manifest_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+  done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
 
   if [ ! -f "${dir}/pack.yaml" ]; then
     echo "Missing pack.yaml in ${dir}; greentic-pack requires pack.yaml inputs" >&2
@@ -634,8 +675,8 @@ PY
 
   python3 "${ROOT_DIR}/tools/validate_pack_fixtures.py"
 
-  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/${pack_name}:${PACK_VERSION}"
-  latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/${pack_name}:latest"
+  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:${PACK_VERSION}"
+  latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:latest"
   # Compute local content digest (used for dry-run and lockfile regardless of push).
   digest="$(python3 - <<'PY' "${pack_out}"
 import hashlib, sys

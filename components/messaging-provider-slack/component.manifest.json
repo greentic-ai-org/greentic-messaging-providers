@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-slack",
   "name": "messaging-provider-slack",
-  "version": "0.4.38",
+  "version": "0.4.43",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core Slack messaging provider (chat.postMessage).",
   "profiles": {

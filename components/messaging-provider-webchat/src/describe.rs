@@ -1,11 +1,136 @@
 use provider_common::component_v0_6::{
-    DescribePayload, QaSpec, SchemaIr, canonical_cbor_bytes, schema_hash,
+    DescribePayload, I18nText, QaQuestionSpec, QaSpec, SchemaIr, SkipCondition, SkipExpression,
+    canonical_cbor_bytes, schema_hash,
 };
-use provider_common::helpers::{op, schema_bool_ir, schema_obj, schema_str, schema_str_fmt};
+use provider_common::helpers::{
+    op, schema_bool_ir, schema_obj, schema_secret, schema_str, schema_str_fmt,
+};
 use serde_json::{Value, json};
 
 use crate::{PROVIDER_ID, WORLD_ID};
 
+/// Helper: skip question when oauth_enabled != true
+fn skip_unless_oauth() -> Option<SkipExpression> {
+    Some(SkipExpression::Condition(SkipCondition {
+        field: "oauth_enabled".to_string(),
+        not_equals: Some(json!(true)),
+        equals: None,
+        is_empty: false,
+        is_not_empty: false,
+    }))
+}
+
+/// Helper: skip question when a specific provider toggle is not true
+fn skip_unless_provider(field: &str) -> Option<SkipExpression> {
+    Some(SkipExpression::Or(vec![
+        // Skip if oauth not enabled
+        SkipExpression::Condition(SkipCondition {
+            field: "oauth_enabled".to_string(),
+            not_equals: Some(json!(true)),
+            equals: None,
+            is_empty: false,
+            is_not_empty: false,
+        }),
+        // Skip if this provider not enabled
+        SkipExpression::Condition(SkipCondition {
+            field: field.to_string(),
+            not_equals: Some(json!(true)),
+            equals: None,
+            is_empty: false,
+            is_not_empty: false,
+        }),
+    ]))
+}
+
+fn i18n(key: &str) -> I18nText {
+    I18nText {
+        key: key.to_string(),
+    }
+}
+
+fn oauth_question(
+    id: &str,
+    label_key: &str,
+    help_key: &str,
+    required: bool,
+    skip_if: Option<SkipExpression>,
+) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: id.to_string(),
+        label: i18n(label_key),
+        help: Some(i18n(help_key)),
+        error: None,
+        kind: provider_common::component_v0_6::QuestionKind::Text,
+        required,
+        default: None,
+        skip_if,
+    }
+}
+
+fn oauth_secret_question(
+    id: &str,
+    label_key: &str,
+    help_key: &str,
+    skip_if: Option<SkipExpression>,
+) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: id.to_string(),
+        label: i18n(label_key),
+        help: Some(i18n(help_key)),
+        error: None,
+        kind: provider_common::component_v0_6::QuestionKind::Text,
+        required: false,
+        default: None,
+        skip_if,
+    }
+}
+
+fn oauth_bool_question(
+    id: &str,
+    label_key: &str,
+    help_key: &str,
+    skip_if: Option<SkipExpression>,
+) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: id.to_string(),
+        label: i18n(label_key),
+        help: Some(i18n(help_key)),
+        error: None,
+        kind: provider_common::component_v0_6::QuestionKind::Bool,
+        required: false,
+        default: Some(json!(false)),
+        skip_if,
+    }
+}
+
+// Base setup questions (non-OAuth)
+pub(crate) const BASE_SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
+    ("enabled", "webchat.qa.setup.enabled", true),
+    ("public_base_url", "webchat.qa.setup.public_base_url", true),
+    ("mode", "webchat.qa.setup.mode", true),
+    ("route", "webchat.qa.setup.route", false),
+    (
+        "tenant_channel_id",
+        "webchat.qa.setup.tenant_channel_id",
+        false,
+    ),
+    ("base_url", "webchat.qa.setup.base_url", false),
+];
+
+pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url"];
+
+/// Alias for dispatch_qa_ops_with_i18n in lib.rs (uses base questions only;
+/// OAuth questions are appended dynamically in build_qa_spec).
+pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = BASE_SETUP_QUESTIONS;
+
+/// All i18n keys — derived from I18N_PAIRS at runtime.
+#[allow(dead_code)]
+pub(crate) fn i18n_keys_vec() -> Vec<String> {
+    I18N_PAIRS.iter().map(|(k, _)| (*k).to_string()).collect()
+}
+
+/// Static i18n keys for dispatch_qa_ops_with_i18n (must be &[&str]).
+/// Includes both base keys and OAuth keys referenced by QA questions.
 pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.op.run.title",
     "webchat.op.run.description",
@@ -45,6 +170,20 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.schema.config.tenant_channel_id.description",
     "webchat.schema.config.base_url.title",
     "webchat.schema.config.base_url.description",
+    "webchat.schema.config.jwt_signing_key.title",
+    "webchat.schema.config.jwt_signing_key.description",
+    "webchat.schema.config.oauth_google_client_id.title",
+    "webchat.schema.config.oauth_google_client_id.description",
+    "webchat.schema.config.oauth_google_client_secret.title",
+    "webchat.schema.config.oauth_google_client_secret.description",
+    "webchat.schema.config.oauth_microsoft_client_id.title",
+    "webchat.schema.config.oauth_microsoft_client_id.description",
+    "webchat.schema.config.oauth_microsoft_client_secret.title",
+    "webchat.schema.config.oauth_microsoft_client_secret.description",
+    "webchat.schema.config.oauth_github_client_id.title",
+    "webchat.schema.config.oauth_github_client_id.description",
+    "webchat.schema.config.oauth_github_client_secret.title",
+    "webchat.schema.config.oauth_github_client_secret.description",
     "webchat.qa.default.title",
     "webchat.qa.setup.title",
     "webchat.qa.upgrade.title",
@@ -55,22 +194,155 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.qa.setup.route",
     "webchat.qa.setup.tenant_channel_id",
     "webchat.qa.setup.base_url",
+    // OAuth QA keys
+    "webchat.qa.oauth.enabled",
+    "webchat.qa.oauth.enabled.help",
+    "webchat.qa.oauth.google.enable",
+    "webchat.qa.oauth.google.enable.help",
+    "webchat.qa.oauth.google.client_id",
+    "webchat.qa.oauth.google.client_id.help",
+    "webchat.qa.oauth.google.client_secret",
+    "webchat.qa.oauth.google.client_secret.help",
+    "webchat.qa.oauth.microsoft.enable",
+    "webchat.qa.oauth.microsoft.enable.help",
+    "webchat.qa.oauth.microsoft.client_id",
+    "webchat.qa.oauth.microsoft.client_id.help",
+    "webchat.qa.oauth.microsoft.client_secret",
+    "webchat.qa.oauth.microsoft.client_secret.help",
+    "webchat.qa.oauth.github.enable",
+    "webchat.qa.oauth.github.enable.help",
+    "webchat.qa.oauth.github.client_id",
+    "webchat.qa.oauth.github.client_id.help",
+    "webchat.qa.oauth.github.client_secret",
+    "webchat.qa.oauth.github.client_secret.help",
+    "webchat.qa.oauth.custom.enable",
+    "webchat.qa.oauth.custom.enable.help",
+    "webchat.qa.oauth.custom.label",
+    "webchat.qa.oauth.custom.label.help",
+    "webchat.qa.oauth.custom.auth_url",
+    "webchat.qa.oauth.custom.auth_url.help",
+    "webchat.qa.oauth.custom.token_url",
+    "webchat.qa.oauth.custom.token_url.help",
+    "webchat.qa.oauth.custom.client_id",
+    "webchat.qa.oauth.custom.client_id.help",
+    "webchat.qa.oauth.custom.scopes",
+    "webchat.qa.oauth.custom.scopes.help",
 ];
 
-pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
-    ("enabled", "webchat.qa.setup.enabled", true),
-    ("public_base_url", "webchat.qa.setup.public_base_url", true),
-    ("mode", "webchat.qa.setup.mode", true),
-    ("route", "webchat.qa.setup.route", false),
-    (
-        "tenant_channel_id",
-        "webchat.qa.setup.tenant_channel_id",
-        false,
-    ),
-    ("base_url", "webchat.qa.setup.base_url", false),
-];
-
-pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url"];
+/// Build OAuth-specific questions with per-provider guided flow.
+fn oauth_questions() -> Vec<QaQuestionSpec> {
+    vec![
+        // Gate: enable OAuth?
+        oauth_bool_question(
+            "oauth_enabled",
+            "webchat.qa.oauth.enabled",
+            "webchat.qa.oauth.enabled.help",
+            None,
+        ),
+        // ── Google ──
+        oauth_bool_question(
+            "oauth_enable_google",
+            "webchat.qa.oauth.google.enable",
+            "webchat.qa.oauth.google.enable.help",
+            skip_unless_oauth(),
+        ),
+        oauth_question(
+            "oauth_google_client_id",
+            "webchat.qa.oauth.google.client_id",
+            "webchat.qa.oauth.google.client_id.help",
+            false,
+            skip_unless_provider("oauth_enable_google"),
+        ),
+        oauth_secret_question(
+            "oauth_google_client_secret",
+            "webchat.qa.oauth.google.client_secret",
+            "webchat.qa.oauth.google.client_secret.help",
+            skip_unless_provider("oauth_enable_google"),
+        ),
+        // ── Microsoft ──
+        oauth_bool_question(
+            "oauth_enable_microsoft",
+            "webchat.qa.oauth.microsoft.enable",
+            "webchat.qa.oauth.microsoft.enable.help",
+            skip_unless_oauth(),
+        ),
+        oauth_question(
+            "oauth_microsoft_client_id",
+            "webchat.qa.oauth.microsoft.client_id",
+            "webchat.qa.oauth.microsoft.client_id.help",
+            false,
+            skip_unless_provider("oauth_enable_microsoft"),
+        ),
+        oauth_secret_question(
+            "oauth_microsoft_client_secret",
+            "webchat.qa.oauth.microsoft.client_secret",
+            "webchat.qa.oauth.microsoft.client_secret.help",
+            skip_unless_provider("oauth_enable_microsoft"),
+        ),
+        // ── GitHub ──
+        oauth_bool_question(
+            "oauth_enable_github",
+            "webchat.qa.oauth.github.enable",
+            "webchat.qa.oauth.github.enable.help",
+            skip_unless_oauth(),
+        ),
+        oauth_question(
+            "oauth_github_client_id",
+            "webchat.qa.oauth.github.client_id",
+            "webchat.qa.oauth.github.client_id.help",
+            false,
+            skip_unless_provider("oauth_enable_github"),
+        ),
+        oauth_secret_question(
+            "oauth_github_client_secret",
+            "webchat.qa.oauth.github.client_secret",
+            "webchat.qa.oauth.github.client_secret.help",
+            skip_unless_provider("oauth_enable_github"),
+        ),
+        // ── Custom OIDC ──
+        oauth_bool_question(
+            "oauth_enable_custom",
+            "webchat.qa.oauth.custom.enable",
+            "webchat.qa.oauth.custom.enable.help",
+            skip_unless_oauth(),
+        ),
+        oauth_question(
+            "oauth_custom_label",
+            "webchat.qa.oauth.custom.label",
+            "webchat.qa.oauth.custom.label.help",
+            false,
+            skip_unless_provider("oauth_enable_custom"),
+        ),
+        oauth_question(
+            "oauth_custom_auth_url",
+            "webchat.qa.oauth.custom.auth_url",
+            "webchat.qa.oauth.custom.auth_url.help",
+            false,
+            skip_unless_provider("oauth_enable_custom"),
+        ),
+        oauth_question(
+            "oauth_custom_token_url",
+            "webchat.qa.oauth.custom.token_url",
+            "webchat.qa.oauth.custom.token_url.help",
+            false,
+            skip_unless_provider("oauth_enable_custom"),
+        ),
+        oauth_question(
+            "oauth_custom_client_id",
+            "webchat.qa.oauth.custom.client_id",
+            "webchat.qa.oauth.custom.client_id.help",
+            false,
+            skip_unless_provider("oauth_enable_custom"),
+        ),
+        oauth_question(
+            "oauth_custom_scopes",
+            "webchat.qa.oauth.custom.scopes",
+            "webchat.qa.oauth.custom.scopes.help",
+            false,
+            skip_unless_provider("oauth_enable_custom"),
+        ),
+    ]
+}
 
 pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("webchat.op.run.title", "Run"),
@@ -178,6 +450,179 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("webchat.qa.setup.route", "Endpoint route"),
     ("webchat.qa.setup.tenant_channel_id", "Tenant channel ID"),
     ("webchat.qa.setup.base_url", "Base URL"),
+    // OAuth gate
+    ("webchat.qa.oauth.enabled", "Enable OAuth login"),
+    (
+        "webchat.qa.oauth.enabled.help",
+        "Require users to sign in before accessing the chat",
+    ),
+    // Google
+    ("webchat.qa.oauth.google.enable", "Enable Google login"),
+    (
+        "webchat.qa.oauth.google.enable.help",
+        "Allow users to sign in with their Google account",
+    ),
+    ("webchat.qa.oauth.google.client_id", "Google Client ID"),
+    (
+        "webchat.qa.oauth.google.client_id.help",
+        "1. Go to https://console.cloud.google.com/apis/credentials\n2. Create OAuth 2.0 Client ID (Web application)\n3. Add your WebChat URL as Authorized redirect URI\n4. Copy the Client ID here",
+    ),
+    (
+        "webchat.qa.oauth.google.client_secret",
+        "Google Client Secret",
+    ),
+    (
+        "webchat.qa.oauth.google.client_secret.help",
+        "Copy the Client Secret from Google Cloud Console",
+    ),
+    // Microsoft
+    (
+        "webchat.qa.oauth.microsoft.enable",
+        "Enable Microsoft login",
+    ),
+    (
+        "webchat.qa.oauth.microsoft.enable.help",
+        "Allow users to sign in with their Microsoft account",
+    ),
+    (
+        "webchat.qa.oauth.microsoft.client_id",
+        "Microsoft Client ID",
+    ),
+    (
+        "webchat.qa.oauth.microsoft.client_id.help",
+        "1. Go to https://portal.azure.com → App registrations\n2. Create new registration (Web, Single-page application)\n3. Add your WebChat URL as Redirect URI\n4. Copy the Application (client) ID here",
+    ),
+    (
+        "webchat.qa.oauth.microsoft.client_secret",
+        "Microsoft Client Secret",
+    ),
+    (
+        "webchat.qa.oauth.microsoft.client_secret.help",
+        "Copy from Azure App Registration → Certificates & secrets",
+    ),
+    // GitHub
+    ("webchat.qa.oauth.github.enable", "Enable GitHub login"),
+    (
+        "webchat.qa.oauth.github.enable.help",
+        "Allow users to sign in with their GitHub account",
+    ),
+    ("webchat.qa.oauth.github.client_id", "GitHub Client ID"),
+    (
+        "webchat.qa.oauth.github.client_id.help",
+        "1. Go to https://github.com/settings/developers\n2. Create a new OAuth App\n3. Set Homepage URL and Callback URL to your WebChat URL\n4. Copy the Client ID here",
+    ),
+    (
+        "webchat.qa.oauth.github.client_secret",
+        "GitHub Client Secret",
+    ),
+    (
+        "webchat.qa.oauth.github.client_secret.help",
+        "Copy from GitHub OAuth App → Generate a new client secret",
+    ),
+    // Custom OIDC
+    (
+        "webchat.qa.oauth.custom.enable",
+        "Enable custom OIDC provider",
+    ),
+    (
+        "webchat.qa.oauth.custom.enable.help",
+        "Add a custom OpenID Connect provider (Okta, Auth0, Keycloak, etc.)",
+    ),
+    ("webchat.qa.oauth.custom.label", "Provider display name"),
+    (
+        "webchat.qa.oauth.custom.label.help",
+        "Name shown on the login button (e.g. 'Company SSO')",
+    ),
+    ("webchat.qa.oauth.custom.auth_url", "Authorization URL"),
+    (
+        "webchat.qa.oauth.custom.auth_url.help",
+        "OIDC authorization endpoint (e.g. https://your-idp.com/authorize)",
+    ),
+    ("webchat.qa.oauth.custom.token_url", "Token URL"),
+    (
+        "webchat.qa.oauth.custom.token_url.help",
+        "OIDC token endpoint (e.g. https://your-idp.com/oauth/token)",
+    ),
+    ("webchat.qa.oauth.custom.client_id", "Client ID"),
+    (
+        "webchat.qa.oauth.custom.client_id.help",
+        "OAuth client ID from your identity provider",
+    ),
+    ("webchat.qa.oauth.custom.scopes", "Scopes"),
+    (
+        "webchat.qa.oauth.custom.scopes.help",
+        "Space-separated scopes (default: openid profile email)",
+    ),
+    // Config schema
+    ("webchat.schema.config.oauth_enabled.title", "OAuth enabled"),
+    (
+        "webchat.schema.config.oauth_enabled.description",
+        "Require OAuth authentication",
+    ),
+    (
+        "webchat.schema.config.oauth_providers.title",
+        "OAuth providers",
+    ),
+    (
+        "webchat.schema.config.oauth_providers.description",
+        "JSON array of configured OAuth providers",
+    ),
+    (
+        "webchat.schema.config.jwt_signing_key.title",
+        "JWT signing key",
+    ),
+    (
+        "webchat.schema.config.jwt_signing_key.description",
+        "Secret key used for Direct Line JWT token signing and verification",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_id.title",
+        "Google OAuth client ID",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_id.description",
+        "Client ID from Google Cloud Console for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_secret.title",
+        "Google OAuth client secret",
+    ),
+    (
+        "webchat.schema.config.oauth_google_client_secret.description",
+        "Client secret from Google Cloud Console for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_id.title",
+        "Microsoft OAuth client ID",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_id.description",
+        "Client ID from Azure App Registration for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_secret.title",
+        "Microsoft OAuth client secret",
+    ),
+    (
+        "webchat.schema.config.oauth_microsoft_client_secret.description",
+        "Client secret from Azure App Registration for OAuth sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_id.title",
+        "GitHub OAuth client ID",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_id.description",
+        "Client ID from GitHub OAuth App for sign-in",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_secret.title",
+        "GitHub OAuth client secret",
+    ),
+    (
+        "webchat.schema.config.oauth_github_client_secret.description",
+        "Client secret from GitHub OAuth App for sign-in",
+    ),
 ];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
@@ -238,7 +683,20 @@ pub(crate) fn build_qa_spec(
         Mode::Upgrade => "upgrade",
         Mode::Remove => "remove",
     };
-    provider_common::helpers::qa_spec_for_mode(mode_str, "webchat", SETUP_QUESTIONS, DEFAULT_KEYS)
+
+    let mut spec = provider_common::helpers::qa_spec_for_mode(
+        mode_str,
+        "webchat",
+        BASE_SETUP_QUESTIONS,
+        DEFAULT_KEYS,
+    );
+
+    // Append OAuth guided questions for setup and upgrade modes
+    if mode_str == "setup" || mode_str == "upgrade" {
+        spec.questions.extend(oauth_questions());
+    }
+
+    spec
 }
 
 fn input_schema() -> SchemaIr {
@@ -336,6 +794,78 @@ fn config_schema() -> SchemaIr {
                     "webchat.schema.config.base_url.title",
                     "webchat.schema.config.base_url.description",
                     "uri",
+                ),
+            ),
+            (
+                "oauth_enabled",
+                false,
+                schema_bool_ir(
+                    "webchat.schema.config.oauth_enabled.title",
+                    "webchat.schema.config.oauth_enabled.description",
+                ),
+            ),
+            (
+                "oauth_providers",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_providers.title",
+                    "webchat.schema.config.oauth_providers.description",
+                ),
+            ),
+            (
+                "jwt_signing_key",
+                false,
+                schema_secret(
+                    "webchat.schema.config.jwt_signing_key.title",
+                    "webchat.schema.config.jwt_signing_key.description",
+                ),
+            ),
+            (
+                "oauth_google_client_id",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_google_client_id.title",
+                    "webchat.schema.config.oauth_google_client_id.description",
+                ),
+            ),
+            (
+                "oauth_google_client_secret",
+                false,
+                schema_secret(
+                    "webchat.schema.config.oauth_google_client_secret.title",
+                    "webchat.schema.config.oauth_google_client_secret.description",
+                ),
+            ),
+            (
+                "oauth_microsoft_client_id",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_microsoft_client_id.title",
+                    "webchat.schema.config.oauth_microsoft_client_id.description",
+                ),
+            ),
+            (
+                "oauth_microsoft_client_secret",
+                false,
+                schema_secret(
+                    "webchat.schema.config.oauth_microsoft_client_secret.title",
+                    "webchat.schema.config.oauth_microsoft_client_secret.description",
+                ),
+            ),
+            (
+                "oauth_github_client_id",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_github_client_id.title",
+                    "webchat.schema.config.oauth_github_client_id.description",
+                ),
+            ),
+            (
+                "oauth_github_client_secret",
+                false,
+                schema_secret(
+                    "webchat.schema.config.oauth_github_client_secret.title",
+                    "webchat.schema.config.oauth_github_client_secret.description",
                 ),
             ),
         ],

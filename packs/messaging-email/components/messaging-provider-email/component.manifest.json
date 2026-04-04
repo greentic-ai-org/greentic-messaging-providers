@@ -1,20 +1,28 @@
 {
   "id": "messaging-provider-email",
-  "version": "0.4.40",
-  "supports": [
-    "messaging"
-  ],
+  "name": "messaging-provider-email",
+  "version": "0.4.60",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
+  "description": "Provider-core SMTP email sender (simulated).",
   "profiles": {
     "default": "default",
     "supported": [
       "default"
     ]
   },
-  "capabilities": {
-    "wasi": {},
-    "host": {}
+  "config_schema": {
+    "provider_config": {
+      "format": "json",
+      "path": "schemas/messaging/email/public.config.schema.json"
+    }
   },
+  "secret_requirements": [
+    {
+      "name": "EMAIL_PASSWORD",
+      "scope": "tenant",
+      "description": "SMTP password secret key"
+    }
+  ],
   "operations": [
     {
       "name": "qa-spec",
@@ -89,6 +97,8 @@
       }
     }
   ],
-  "resources": {},
-  "dev_flows": {}
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
 }

@@ -1,20 +1,28 @@
 {
   "id": "messaging-provider-dummy",
-  "version": "0.4.40",
-  "supports": [
-    "messaging"
-  ],
+  "name": "messaging-provider-dummy",
+  "version": "0.4.60",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
+  "description": "Deterministic provider-core messaging provider for CI fixtures.",
   "profiles": {
     "default": "default",
     "supported": [
       "default"
     ]
   },
-  "capabilities": {
-    "wasi": {},
-    "host": {}
+  "config_schema": {
+    "provider_config": {
+      "format": "json",
+      "path": "schemas/messaging/dummy/public.config.schema.json"
+    }
   },
+  "secret_requirements": [
+    {
+      "name": "DUMMY_API_TOKEN",
+      "scope": "tenant",
+      "description": "Dummy provider token (redacted in describe/config metadata)."
+    }
+  ],
   "operations": [
     {
       "name": "qa-spec",
@@ -89,6 +97,8 @@
       }
     }
   ],
-  "resources": {},
-  "dev_flows": {}
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
 }

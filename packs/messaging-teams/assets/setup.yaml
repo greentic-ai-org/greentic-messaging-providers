@@ -7,22 +7,35 @@ questions:
     kind: string
     required: true
     help: "Microsoft Bot App ID from Azure Bot Service registration"
+    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    group: Authentication
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
   - name: ms_bot_app_password
     title: Bot App Password
     kind: string
     required: true
     secret: true
-    help: "Client secret from Azure Bot Service"
+    help: "Client secret from Azure Bot Service → Certificates & secrets"
+    group: Authentication
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
   - name: public_base_url
     title: Public base URL
     kind: string
     required: true
-    help: "Example: https://xxxx.ngrok-free.app"
+    help: "Public-facing URL for Bot Framework messaging endpoint"
+    placeholder: "https://xxxx.ngrok-free.app"
+    group: Connection
+    validate:
+      regex: "^https://"
   - name: team_id
     title: Team ID
     kind: string
     required: false
+    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    group: Defaults
   - name: channel_id
     title: Channel ID
     kind: string
     required: false
+    placeholder: "19:xxxxx@thread.tacv2"
+    group: Defaults

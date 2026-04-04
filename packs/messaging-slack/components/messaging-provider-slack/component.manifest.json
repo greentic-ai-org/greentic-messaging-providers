@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-slack",
-  "version": "0.4.40",
+  "version": "0.4.60",
   "supports": [
     "messaging"
   ],

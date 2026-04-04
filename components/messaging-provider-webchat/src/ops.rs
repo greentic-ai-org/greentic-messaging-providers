@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::{
-    HttpInV1, HttpOutV1, ProviderPayloadV1, SendPayloadInV1,
+    Header, HttpInV1, HttpOutV1, ProviderPayloadV1, SendPayloadInV1,
 };
 use greentic_types::{Actor, ChannelMessageEnvelope, EnvId, MessageMetadata, TenantCtx, TenantId};
 use provider_common::helpers::{
@@ -16,7 +16,7 @@ use crate::PROVIDER_TYPE;
 use crate::config::load_config;
 use crate::directline::jwt::DirectLineContext;
 use crate::directline::state::{StoredActivity, conversation_key};
-use crate::directline::store::StateStore as _;
+use crate::directline::store::{SecretStore as _, StateStore as _};
 use crate::directline::{ConfigAwareSecretStore, HostStateStore, handle_directline_request};
 
 pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
@@ -130,6 +130,31 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
             Err(err) => return http_out_error(400, &format!("invalid http input: {err}")),
         },
     };
+    // Serve OAuth configuration for the frontend SPA.
+    if request.path.ends_with("/auth/config") && request.method.eq_ignore_ascii_case("GET") {
+        return handle_auth_config(&request);
+    }
+
+    // Translate shorthand /token path to the canonical DirectLine token endpoint.
+    // The operator routes /v1/messaging/webchat/{tenant}/token through generic ingress,
+    // so the provider component must recognize and forward it.
+    if request.path.ends_with("/token") && !request.path.contains("/v3/directline") {
+        let token_request = HttpInV1 {
+            method: "POST".to_string(),
+            path: "/v3/directline/tokens/generate".to_string(),
+            query: request.query.clone(),
+            headers: request.headers.clone(),
+            body_b64: request.body_b64.clone(),
+            route_hint: request.route_hint.clone(),
+            binding_id: request.binding_id.clone(),
+            config: request.config.clone(),
+        };
+        let mut state_driver = HostStateStore;
+        let secrets_driver = ConfigAwareSecretStore::new(request.config.clone());
+        let out = handle_directline_request(&token_request, &mut state_driver, &secrets_driver);
+        return http_out_v1_bytes(&out);
+    }
+
     // Extract Direct Line sub-path from operator-prefixed or direct paths.
     // Operator forwards full URI like /messaging/ingress/webchat/default/_/v3/directline/...
     if let Some(offset) = request.path.find("/v3/directline") {
@@ -169,6 +194,10 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                 .strip_prefix("/v3/directline/conversations/")
                 .and_then(|rest| rest.split('/').next())
                 .map(|s| s.to_string());
+            // Extract env and tenant from response headers (set by handle_post_activities)
+            // This ensures we use the same context that was validated from the JWT
+            let (env_id, tenant_id) = extract_context_from_response_headers(&out.headers)
+                .unwrap_or_else(|| ("default".to_string(), "default".to_string()));
             let has_content = !text.is_empty() || action_value.is_some();
             if has_content {
                 // For Action.Submit, derive a text label from the action data.
@@ -185,8 +214,23 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                 } else {
                     text
                 };
-                let mut envelope =
-                    build_webchat_envelope(effective_text, user, conv_id.clone(), None);
+                let mut envelope = build_webchat_envelope_with_ctx(
+                    effective_text,
+                    user,
+                    conv_id.clone(),
+                    None,
+                    &env_id,
+                    &tenant_id,
+                );
+                // Forward locale from the activity so the runner can resolve
+                // i18n translations in card responses.
+                if let Some(locale) = body.get("locale").and_then(Value::as_str)
+                    && !locale.is_empty()
+                {
+                    envelope
+                        .metadata
+                        .insert("locale".to_string(), locale.to_string());
+                }
                 // Forward ALL Action.Submit data fields to metadata so the
                 // operator can handle MCP actions, token saves, card routing, etc.
                 if let Some(val) = action_value
@@ -274,6 +318,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     // Pass through adaptive_card from envelope metadata (set by app flow for AC output).
     let adaptive_card = encode_message.metadata.get("adaptive_card").cloned();
     let tenant = encode_message.metadata.get("tenant").cloned();
+    let env = encode_message.metadata.get("env").cloned();
     let mut payload_body = json!({
         "text": text,
         "route": route_value.clone(),
@@ -281,6 +326,12 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     });
     if let Some(ac) = &adaptive_card {
         payload_body["adaptive_card"] = Value::String(ac.clone());
+    }
+    if let Some(ref tenant) = tenant {
+        payload_body["tenant"] = Value::String(tenant.clone());
+    }
+    if let Some(ref env) = env {
+        payload_body["env"] = Value::String(env.clone());
     }
     let body_bytes = serde_json::to_vec(&payload_body).unwrap_or_else(|_| b"{}".to_vec());
     let mut metadata = BTreeMap::new();
@@ -304,7 +355,7 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
             return send_payload_error(&format!("invalid send_payload input: {err}"), false);
         }
     };
-    if send_in.provider_type != PROVIDER_TYPE {
+    if !send_in.provider_type.starts_with("messaging.webchat") {
         return send_payload_error("provider type mismatch", false);
     }
     let payload_bytes = match general_purpose::STANDARD.decode(&send_in.payload.body_b64) {
@@ -339,11 +390,13 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
     // If session_id is present, try to append the bot response as a Direct Line
     // activity so that GET /activities polling returns it to the frontend.
     if let Some(session_id) = value_as_trimmed_string(payload.get("session_id")) {
+        let env = value_as_trimmed_string(payload.get("env"));
         let tenant = value_as_trimmed_string(payload.get("tenant"));
         let _ = append_bot_activity_to_conversation(
             &session_id,
             &text,
             adaptive_card_json.as_deref(),
+            env.as_deref(),
             tenant.as_deref(),
         );
     }
@@ -363,16 +416,17 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
 }
 
 /// Append a bot-originated activity to the Direct Line conversation state.
-/// Uses default context (env=default, tenant=default, team=_) matching the demo setup.
+/// Uses provided env/tenant context from envelope metadata, falling back to "default".
 /// Best-effort: silently ignores errors (conversation may not exist).
 fn append_bot_activity_to_conversation(
     conversation_id: &str,
     text: &str,
     adaptive_card_json: Option<&str>,
+    env: Option<&str>,
     tenant: Option<&str>,
 ) -> Result<(), String> {
     let ctx = DirectLineContext {
-        env: "default".into(),
+        env: env.unwrap_or("default").to_string(),
         tenant: tenant.unwrap_or("default").to_string(),
         team: None,
     };
@@ -390,7 +444,7 @@ fn append_bot_activity_to_conversation(
     let watermark = conversation.bump_watermark();
     let mut raw = json!({
         "type": "message",
-        "from": {"id": "bot", "name": "Bot"},
+        "from": {"id": "bot", "name": "Bot", "role": "bot"},
     });
     if !text.is_empty() {
         raw["text"] = Value::String(text.to_string());
@@ -422,6 +476,65 @@ fn append_bot_activity_to_conversation(
     let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
     store.write(&conv_key, &updated)?;
     Ok(())
+}
+
+/// Extract env and tenant from X-Greentic-Env and X-Greentic-Tenant response headers.
+/// These headers are set by handle_post_activities after JWT validation.
+fn extract_context_from_response_headers(headers: &[Header]) -> Option<(String, String)> {
+    let env = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Env"))
+        .map(|h| h.value.clone())?;
+    let tenant = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Tenant"))
+        .map(|h| h.value.clone())?;
+    Some((env, tenant))
+}
+
+/// Build envelope with explicit env/tenant context (used by Direct Line ingest).
+fn build_webchat_envelope_with_ctx(
+    text: String,
+    user_id: Option<String>,
+    session_id: Option<String>,
+    tenant_channel_id: Option<String>,
+    env_id: &str,
+    tenant_id: &str,
+) -> ChannelMessageEnvelope {
+    let env =
+        EnvId::try_from(env_id).unwrap_or_else(|_| EnvId::try_from("default").expect("env id"));
+    let tenant = TenantId::try_from(tenant_id)
+        .unwrap_or_else(|_| TenantId::try_from("default").expect("tenant id"));
+    let mut metadata = MessageMetadata::new();
+    metadata.insert("universal".to_string(), "true".to_string());
+    metadata.insert("env".to_string(), env_id.to_string());
+    metadata.insert("tenant".to_string(), tenant_id.to_string());
+    if let Some(channel) = &tenant_channel_id {
+        metadata.insert("tenant_channel_id".to_string(), channel.clone());
+    }
+    let channel = session_id
+        .clone()
+        .or_else(|| tenant_channel_id.clone())
+        .unwrap_or_else(|| "webchat".to_string());
+    if let Some(sid) = &session_id {
+        metadata.insert("route".to_string(), sid.clone());
+    }
+    ChannelMessageEnvelope {
+        id: format!("webchat-{channel}"),
+        tenant: TenantCtx::new(env.clone(), tenant.clone()),
+        channel: channel.clone(),
+        session_id: channel,
+        reply_scope: None,
+        from: user_id.map(|id| Actor {
+            id,
+            kind: Some("user".into()),
+        }),
+        to: Vec::new(),
+        correlation_id: None,
+        text: Some(text),
+        attachments: Vec::new(),
+        metadata,
+    }
 }
 
 fn build_webchat_envelope(
@@ -460,6 +573,110 @@ fn build_webchat_envelope(
         attachments: Vec::new(),
         metadata,
     }
+}
+
+/// Return OAuth configuration as JSON for the frontend SPA.
+/// Reads oauth_* fields from secrets store (host interface).
+/// Never exposes client_secret — only public-safe fields are returned.
+fn handle_auth_config(request: &HttpInV1) -> Vec<u8> {
+    let secrets = ConfigAwareSecretStore::new(request.config.clone());
+    let read_secret = |key: &str| -> Option<String> {
+        secrets
+            .get(key)
+            .ok()
+            .flatten()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+
+    let enabled = read_secret("oauth_enabled")
+        .map(|v| v == "true")
+        .unwrap_or(false);
+
+    let body = if enabled {
+        // Try pre-composed oauth_providers first, then build from individual fields
+        let providers = if let Some(providers_json) = read_secret("oauth_providers") {
+            serde_json::from_str(&providers_json).unwrap_or(json!([]))
+        } else {
+            let mut list = Vec::new();
+            if read_secret("oauth_enable_google").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_google_client_id")
+            {
+                let mut p = json!({
+                    "id": "google", "label": "Google",
+                    "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+                    "token_url": "https://oauth2.googleapis.com/token",
+                    "client_id": client_id, "scopes": "openid profile email"
+                });
+                if let Some(secret) = read_secret("oauth_google_client_secret") {
+                    p["client_secret"] = Value::String(secret);
+                }
+                list.push(p);
+            }
+            if read_secret("oauth_enable_microsoft").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_microsoft_client_id")
+            {
+                let mut p = json!({
+                    "id": "microsoft", "label": "Microsoft",
+                    "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+                    "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+                    "client_id": client_id, "scopes": "openid profile email"
+                });
+                if let Some(secret) = read_secret("oauth_microsoft_client_secret") {
+                    p["client_secret"] = Value::String(secret);
+                }
+                list.push(p);
+            }
+            if read_secret("oauth_enable_github").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_github_client_id")
+            {
+                let mut p = json!({
+                    "id": "github", "label": "GitHub",
+                    "auth_url": "https://github.com/login/oauth/authorize",
+                    "token_url": "https://github.com/login/oauth/access_token",
+                    "client_id": client_id, "scopes": "read:user user:email"
+                });
+                if let Some(secret) = read_secret("oauth_github_client_secret") {
+                    p["client_secret"] = Value::String(secret);
+                }
+                list.push(p);
+            }
+            if read_secret("oauth_enable_custom").as_deref() == Some("true")
+                && let Some(client_id) = read_secret("oauth_custom_client_id")
+            {
+                let label = read_secret("oauth_custom_label").unwrap_or_else(|| "SSO".to_string());
+                let auth_url = read_secret("oauth_custom_auth_url").unwrap_or_default();
+                let token_url = read_secret("oauth_custom_token_url").unwrap_or_default();
+                let scopes = read_secret("oauth_custom_scopes")
+                    .unwrap_or_else(|| "openid profile email".to_string());
+                list.push(json!({
+                    "id": "custom", "label": label,
+                    "auth_url": auth_url, "token_url": token_url,
+                    "client_id": client_id, "scopes": scopes
+                }));
+            }
+            Value::Array(list)
+        };
+        json!({
+            "enabled": true,
+            "providers": providers,
+        })
+    } else {
+        json!({ "enabled": false })
+    };
+
+    let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
+    let out = HttpOutV1 {
+        status: 200,
+        headers: vec![Header {
+            name: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+        }],
+        body_b64: general_purpose::STANDARD.encode(&body_bytes),
+        events: Vec::new(),
+    };
+    http_out_v1_bytes(&out)
 }
 
 fn extract_text(value: &Value) -> String {

@@ -546,6 +546,15 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
 
     let mut envelope = build_team_envelope(text.clone(), user, team_id.clone(), channel_id.clone());
 
+    // Forward locale from Bot Framework activity for i18n card translation.
+    if let Some(locale) = body_val.get("locale").and_then(Value::as_str)
+        && !locale.is_empty()
+    {
+        envelope
+            .metadata
+            .insert("locale".to_string(), locale.to_string());
+    }
+
     // Store critical fields for downstream replies
     if let Some(ref url) = service_url {
         envelope.metadata.insert("serviceUrl".into(), url.clone());

@@ -285,6 +285,9 @@ def main() -> int:
         include_capabilities_cache(manifest, pack_dir, components_dir)
     if args.version:
         manifest["version"] = args.version
+        for comp_src in manifest.get("component_sources") or []:
+            if isinstance(comp_src, dict):
+                comp_src["version"] = args.version
 
     write_manifest(manifest_path, manifest)
     if args.secrets_out:
