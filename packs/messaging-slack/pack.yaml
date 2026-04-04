@@ -1,4 +1,5 @@
 pack_id: messaging-slack
+display_name: Slack
 version: 0.4.59
 kind: application
 publisher: Greentic
