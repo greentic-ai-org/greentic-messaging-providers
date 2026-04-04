@@ -135,6 +135,26 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         return handle_auth_config(&request);
     }
 
+    // Translate shorthand /token path to the canonical DirectLine token endpoint.
+    // The operator routes /v1/messaging/webchat/{tenant}/token through generic ingress,
+    // so the provider component must recognize and forward it.
+    if request.path.ends_with("/token") && !request.path.contains("/v3/directline") {
+        let token_request = HttpInV1 {
+            method: "POST".to_string(),
+            path: "/v3/directline/tokens/generate".to_string(),
+            query: request.query.clone(),
+            headers: request.headers.clone(),
+            body_b64: request.body_b64.clone(),
+            route_hint: request.route_hint.clone(),
+            binding_id: request.binding_id.clone(),
+            config: request.config.clone(),
+        };
+        let mut state_driver = HostStateStore;
+        let secrets_driver = ConfigAwareSecretStore::new(request.config.clone());
+        let out = handle_directline_request(&token_request, &mut state_driver, &secrets_driver);
+        return http_out_v1_bytes(&out);
+    }
+
     // Extract Direct Line sub-path from operator-prefixed or direct paths.
     // Operator forwards full URI like /messaging/ingress/webchat/default/_/v3/directline/...
     if let Some(offset) = request.path.find("/v3/directline") {
