@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(done)",
+      "Bash(jq:*)",
+      "Bash(bash -n /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/tools/publish_packs_oci.sh)",
+      "Bash(bash -n /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/tools/sync_packs.sh)",
+      "Bash(python3 -m py_compile tools/generate_pack_metadata.py)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(git push:*)",
+      "Bash(grep:*)",
+      "Bash(ping -c 2 github.com)",
+      "Bash(curl -s --max-time 5 https://github.com -o /dev/null -w \"%{http_code}\")",
+      "Bash(grep -r '\"\"0.4.40\"\"' packs/messaging-slack/)",
+      "Bash(bash -n tools/publish_packs_oci.sh)",
+      "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(cargo test:*)",
+      "Bash(./tools/regenerate_registry_fixtures.sh 2>&1)",
+      "Bash(find /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers -type f -name *i18n* -o -name *locale* -o -name *translation*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh run:*)",
+      "Bash(find /Users/bimapangestu/Desktop/Works/personal/greentic/webchat-gui-demo/webchat-demo.gtbundle/ -name *.gtpack -o -name skin* -o -name webchat*)",
+      "Bash(cargo build:*)"
+    ]
+  }
+}

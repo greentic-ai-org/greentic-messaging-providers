@@ -1,13 +1,13 @@
 {
   "name": "messaging-webchat-gui",
-  "version": "0.4.57",
+  "version": "0.4.58",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Hosted WebChat messaging pack with Direct Line backend and packaged GUI.",
   "component_sources": [
     {
       "id": "ai.greentic.component-provision",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -29,7 +29,7 @@
     },
     {
       "id": "ai.greentic.component-qa",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -51,7 +51,7 @@
     },
     {
       "id": "ai.greentic.component-templates",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -73,7 +73,29 @@
     },
     {
       "id": "messaging-provider-webchat-gui",
-      "version": "0.4.57",
+      "version": "0.4.58",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-provider-webchat-gui/component.wasm"
+    },
+    {
+      "id": "messaging-provider-webchat-gui",
+      "version": "0.4.58",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -108,7 +130,7 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "inline": {
         "offers": [
           {
@@ -123,7 +145,7 @@
             "setup": {
               "qa_ref": "components/messaging-provider-webchat-gui"
             },
-            "version": "0.4.57"
+            "version": "0.4.58"
           }
         ],
         "schema_version": 1
@@ -131,7 +153,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "inline": {
         "validators": [
           {
@@ -144,7 +166,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "inline": {
         "providers": [
           {
@@ -172,7 +194,7 @@
     },
     "greentic.static-routes.v1": {
       "kind": "greentic.static-routes.v1",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "inline": {
         "routes": [
           {
@@ -192,7 +214,7 @@
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "inline": {
         "capabilities": {
           "content_types": [
@@ -207,7 +229,7 @@
     },
     "messaging.provider_routes.v1": {
       "kind": "messaging.provider_routes.v1",
-      "version": "0.4.57",
+      "version": "0.4.58",
       "inline": {
         "backend_base_path": "/v1/messaging/webchat/{tenant}",
         "provider_type": "messaging.webchat-gui",

@@ -1,46 +1,11 @@
 {
   "packs": [
     {
-      "name": "messaging-slack",
-      "file": "dist/packs/messaging-slack.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/messaging-slack:0.4.40",
-      "digest": "sha256:5f71db4a116db57219cc42c66213aeb146a447836381d06205a6e8da601df78a",
-      "built_at": "2026-03-22T23:20:18Z"
-    },
-    {
-      "name": "messaging-teams",
-      "file": "dist/packs/messaging-teams.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/messaging-teams:0.4.40",
-      "digest": "sha256:bf584fcbd905daec93c52ddab06f7288735f2418e25e4d0b6fe9d2cdf4d048fd",
-      "built_at": "2026-03-22T23:20:18Z"
-    },
-    {
-      "name": "messaging-telegram",
-      "file": "dist/packs/messaging-telegram.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/messaging-telegram:0.4.40",
-      "digest": "sha256:7a990033ed0ec0ac7b6b0eebd0ae365c4e6c87e89094d0dad5101edd5ad2da9e",
-      "built_at": "2026-03-22T23:20:18Z"
-    },
-    {
-      "name": "messaging-webchat",
-      "file": "dist/packs/messaging-webchat.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/messaging-webchat:0.4.40",
-      "digest": "sha256:526d504af0540ce5904f7831ea0769e626d3b932d2e2cf9f953b0f2bdd40b147",
-      "built_at": "2026-03-22T23:20:18Z"
-    },
-    {
-      "name": "messaging-webex",
-      "file": "dist/packs/messaging-webex.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/messaging-webex:0.4.40",
-      "digest": "sha256:a5da3c453f5ce8449ede0fac926cba42f8f8766ae4dabbb85796882acfbdd3f9",
-      "built_at": "2026-03-22T23:20:18Z"
-    },
-    {
-      "name": "messaging-whatsapp",
-      "file": "dist/packs/messaging-whatsapp.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/messaging-whatsapp:0.4.40",
-      "digest": "sha256:f4c7429e787c1274f3c46f2c7c85065ad85c8f4fba2c34e19fa9d5887eac909a",
-      "built_at": "2026-03-22T23:20:18Z"
+      "name": "messaging-webchat-gui",
+      "file": "dist/packs/messaging-webchat-gui.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:0.4.57",
+      "digest": "sha256:93d1a32ebd4d1ffdca5c1c6fc2d7bac0f8abc6e289f8268d4c72f5e967a40c1e",
+      "built_at": "2026-04-04T04:34:13Z"
     }
   ]
 }
