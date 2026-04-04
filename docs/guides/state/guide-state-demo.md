@@ -67,13 +67,13 @@ cd tools/build-capability-pack && cargo build && cd ../..
 
 # Build state-redis gtpack
 ./tools/build-capability-pack/target/debug/build-capability-pack \
-  greentic-messaging-providers/packs/state-redis \
-  demo-bundle/providers/messaging/state-redis.gtpack
+  greentic-state/packs/state-redis \
+  demo-bundle/providers/state/state-redis.gtpack
 
 # (Optional) Build state-memory gtpack
 ./tools/build-capability-pack/target/debug/build-capability-pack \
-  greentic-messaging-providers/packs/state-memory \
-  demo-bundle/providers/messaging/state-memory.gtpack
+  greentic-state/packs/state-memory \
+  demo-bundle/providers/state/state-memory.gtpack
 ```
 
 ### Step 4: Create Install Record
@@ -258,8 +258,8 @@ The generic `build-capability-pack` tool reads `pack.yaml` and builds any capabi
 build-capability-pack <pack-source-dir> <output-gtpack-path>
 
 # Examples
-build-capability-pack packs/state-redis demo-bundle/providers/messaging/state-redis.gtpack
-build-capability-pack packs/state-memory demo-bundle/providers/messaging/state-memory.gtpack
+build-capability-pack packs/state-redis demo-bundle/providers/state/state-redis.gtpack
+build-capability-pack packs/state-memory demo-bundle/providers/state/state-memory.gtpack
 build-capability-pack packs/telemetry-otlp demo-bundle/providers/messaging/telemetry-otlp.gtpack
 ```
 

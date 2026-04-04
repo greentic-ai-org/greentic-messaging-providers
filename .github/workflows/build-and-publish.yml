@@ -126,8 +126,6 @@ jobs:
           - messaging-provider-whatsapp
           - messaging-provider-webchat
           - messaging-provider-webchat-gui
-          - state-provider-memory
-          - state-provider-redis
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -311,8 +309,6 @@ jobs:
           - messaging-webchat-gui
           - messaging-webex
           - messaging-whatsapp
-          - state-memory
-          - state-redis
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -478,8 +474,6 @@ jobs:
           - messaging-webchat-gui
           - messaging-webex
           - messaging-whatsapp
-          - state-memory
-          - state-redis
     steps:
       - name: Checkout
         uses: actions/checkout@v4

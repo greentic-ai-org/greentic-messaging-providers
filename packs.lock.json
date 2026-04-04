@@ -62,20 +62,6 @@
       "ref": "ghcr.io/greenticai/greentic-packs/messaging-whatsapp:0.4.40",
       "digest": "sha256:01648686aef41bf3528caa5c313877fd204cc6f612802941552713d17c141629",
       "built_at": "2026-03-20T16:50:05Z"
-    },
-    {
-      "name": "state-memory",
-      "file": "dist/packs/state-memory.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/state-memory:0.4.40",
-      "digest": "sha256:6f9f5dbb1bc39770c78a0ff98ae313aae77467888fcb34a38a302db4538a6de6",
-      "built_at": "2026-03-20T16:50:05Z"
-    },
-    {
-      "name": "state-redis",
-      "file": "dist/packs/state-redis.gtpack",
-      "ref": "ghcr.io/greenticai/greentic-packs/state-redis:0.4.40",
-      "digest": "sha256:cc3bbe88d2cb1568b28b3a59b40c806424be9c10513d7bf34b672d19300767dd",
-      "built_at": "2026-03-20T16:50:05Z"
     }
   ]
 }
