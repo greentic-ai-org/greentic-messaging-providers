@@ -152,21 +152,6 @@ components:
       random: false
       clocks: false
     host: {}
-  wasm: components/messaging-provider-webchat/component.wasm
-- id: messaging-provider-webchat
-  version: 0.4.58
-  world: root:component/root
-  supports:
-  - messaging
-  profiles:
-    default: default
-    supported:
-    - default
-  capabilities:
-    wasi:
-      random: false
-      clocks: false
-    host: {}
   wasm: components/messaging-provider-webchat.wasm
 - id: sync_subscriptions___summary
   version: 0.4.58
