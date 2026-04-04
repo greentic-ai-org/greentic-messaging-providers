@@ -1139,147 +1139,6 @@ fn pick_sender(person_email: &Option<String>, person_id: &Option<String>) -> Opt
     None
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use greentic_types::messaging::universal_dto::{ProviderPayloadV1, SendPayloadInV1};
-    use greentic_types::{Attachment, EnvId, TenantCtx, TenantId};
-    use std::collections::BTreeMap;
-
-    fn envelope() -> ChannelMessageEnvelope {
-        ChannelMessageEnvelope {
-            id: "msg-1".to_string(),
-            tenant: TenantCtx::new(
-                EnvId::try_from("default").expect("env"),
-                TenantId::try_from("default").expect("tenant"),
-            ),
-            channel: "webex".to_string(),
-            session_id: "session-1".to_string(),
-            reply_scope: None,
-            from: None,
-            to: vec![Destination {
-                id: "person@example.com".to_string(),
-                kind: Some("email".to_string()),
-            }],
-            correlation_id: None,
-            text: Some("hello".to_string()),
-            attachments: Vec::new(),
-            metadata: MessageMetadata::new(),
-        }
-    }
-
-    fn with_config(mut value: Value) -> Vec<u8> {
-        let obj = value.as_object_mut().expect("object");
-        obj.insert(
-            "public_base_url".to_string(),
-            Value::String("https://example.com".to_string()),
-        );
-        obj.insert("bot_token".to_string(), Value::String("token".to_string()));
-        serde_json::to_vec(&value).expect("bytes")
-    }
-
-    fn parse_json(bytes: Vec<u8>) -> Value {
-        serde_json::from_slice(&bytes).expect("json")
-    }
-
-    fn result_message(value: &Value) -> Option<&str> {
-        value
-            .get("error")
-            .and_then(Value::as_str)
-            .or_else(|| value.get("message").and_then(Value::as_str))
-    }
-
-    #[test]
-    fn handle_send_rejects_attachments_and_missing_destination() {
-        let mut with_attachment = serde_json::to_value(envelope()).expect("value");
-        with_attachment.as_object_mut().expect("object").insert(
-            "attachments".to_string(),
-            serde_json::to_value(vec![Attachment {
-                mime_type: "image/png".to_string(),
-                url: "https://example.com/image.png".to_string(),
-                name: None,
-                size_bytes: None,
-            }])
-            .expect("attachments"),
-        );
-        let body = parse_json(handle_send(&with_config(with_attachment)));
-        assert_eq!(
-            body.get("error").and_then(Value::as_str),
-            Some("attachments not supported")
-        );
-
-        let mut no_destination = serde_json::to_value(envelope()).expect("value");
-        no_destination
-            .as_object_mut()
-            .expect("object")
-            .insert("to".to_string(), Value::Array(Vec::new()));
-        let body = parse_json(handle_send(&with_config(no_destination)));
-        assert_eq!(
-            body.get("error").and_then(Value::as_str),
-            Some("destination required")
-        );
-    }
-
-    #[test]
-    fn handle_reply_requires_text_and_thread_id() {
-        let body = parse_json(handle_reply(&with_config(json!({
-            "reply_to_id": "thread-1"
-        }))));
-        assert_eq!(
-            body.get("error").and_then(Value::as_str),
-            Some("text required")
-        );
-
-        let body = parse_json(handle_reply(&with_config(json!({
-            "text": "hello"
-        }))));
-        assert_eq!(
-            body.get("error").and_then(Value::as_str),
-            Some("reply_to_id or thread_id required")
-        );
-    }
-
-    #[test]
-    fn send_payload_rejects_provider_mismatch_and_attachments() {
-        let mismatch = SendPayloadInV1 {
-            provider_type: "other".to_string(),
-            tenant_id: None,
-            auth_user: None,
-            payload: ProviderPayloadV1 {
-                content_type: "application/json".to_string(),
-                body_b64: STANDARD.encode(b"{}"),
-                metadata: BTreeMap::new(),
-            },
-        };
-        let body = parse_json(send_payload(
-            &serde_json::to_vec(&mismatch).expect("payload bytes"),
-        ));
-        assert_eq!(result_message(&body), Some("provider type mismatch"));
-
-        let mut envelope = envelope();
-        envelope.attachments.push(Attachment {
-            mime_type: "image/png".to_string(),
-            url: "https://example.com/image.png".to_string(),
-            name: None,
-            size_bytes: None,
-        });
-        let attachments = SendPayloadInV1 {
-            provider_type: PROVIDER_TYPE.to_string(),
-            tenant_id: None,
-            auth_user: None,
-            payload: ProviderPayloadV1 {
-                content_type: "application/json".to_string(),
-                body_b64: STANDARD.encode(serde_json::to_vec(&envelope).expect("envelope bytes")),
-                metadata: BTreeMap::new(),
-            },
-        };
-        let body = parse_json(send_payload(
-            &serde_json::to_vec(&attachments).expect("payload bytes"),
-        ));
-        assert_eq!(result_message(&body), Some("attachments not supported"));
-    }
-}
-
 /// Handle `setup_webhook` op — manages Webex webhook registrations.
 ///
 /// Creates or updates two webhooks for messages and attachment actions.
@@ -1533,4 +1392,145 @@ fn update_webhook(
         "webhook_id": webhook_id,
         "http_status": resp.status,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::messaging::universal_dto::{ProviderPayloadV1, SendPayloadInV1};
+    use greentic_types::{Attachment, EnvId, TenantCtx, TenantId};
+    use std::collections::BTreeMap;
+
+    fn envelope() -> ChannelMessageEnvelope {
+        ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("default").expect("env"),
+                TenantId::try_from("default").expect("tenant"),
+            ),
+            channel: "webex".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: vec![Destination {
+                id: "person@example.com".to_string(),
+                kind: Some("email".to_string()),
+            }],
+            correlation_id: None,
+            text: Some("hello".to_string()),
+            attachments: Vec::new(),
+            metadata: MessageMetadata::new(),
+        }
+    }
+
+    fn with_config(mut value: Value) -> Vec<u8> {
+        let obj = value.as_object_mut().expect("object");
+        obj.insert(
+            "public_base_url".to_string(),
+            Value::String("https://example.com".to_string()),
+        );
+        obj.insert("bot_token".to_string(), Value::String("token".to_string()));
+        serde_json::to_vec(&value).expect("bytes")
+    }
+
+    fn parse_json(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json")
+    }
+
+    fn result_message(value: &Value) -> Option<&str> {
+        value
+            .get("error")
+            .and_then(Value::as_str)
+            .or_else(|| value.get("message").and_then(Value::as_str))
+    }
+
+    #[test]
+    fn handle_send_rejects_attachments_and_missing_destination() {
+        let mut with_attachment = serde_json::to_value(envelope()).expect("value");
+        with_attachment.as_object_mut().expect("object").insert(
+            "attachments".to_string(),
+            serde_json::to_value(vec![Attachment {
+                mime_type: "image/png".to_string(),
+                url: "https://example.com/image.png".to_string(),
+                name: None,
+                size_bytes: None,
+            }])
+            .expect("attachments"),
+        );
+        let body = parse_json(handle_send(&with_config(with_attachment)));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("attachments not supported")
+        );
+
+        let mut no_destination = serde_json::to_value(envelope()).expect("value");
+        no_destination
+            .as_object_mut()
+            .expect("object")
+            .insert("to".to_string(), Value::Array(Vec::new()));
+        let body = parse_json(handle_send(&with_config(no_destination)));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("destination required")
+        );
+    }
+
+    #[test]
+    fn handle_reply_requires_text_and_thread_id() {
+        let body = parse_json(handle_reply(&with_config(json!({
+            "reply_to_id": "thread-1"
+        }))));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("text required")
+        );
+
+        let body = parse_json(handle_reply(&with_config(json!({
+            "text": "hello"
+        }))));
+        assert_eq!(
+            body.get("error").and_then(Value::as_str),
+            Some("reply_to_id or thread_id required")
+        );
+    }
+
+    #[test]
+    fn send_payload_rejects_provider_mismatch_and_attachments() {
+        let mismatch = SendPayloadInV1 {
+            provider_type: "other".to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: STANDARD.encode(b"{}"),
+                metadata: BTreeMap::new(),
+            },
+        };
+        let body = parse_json(send_payload(
+            &serde_json::to_vec(&mismatch).expect("payload bytes"),
+        ));
+        assert_eq!(result_message(&body), Some("provider type mismatch"));
+
+        let mut envelope = envelope();
+        envelope.attachments.push(Attachment {
+            mime_type: "image/png".to_string(),
+            url: "https://example.com/image.png".to_string(),
+            name: None,
+            size_bytes: None,
+        });
+        let attachments = SendPayloadInV1 {
+            provider_type: PROVIDER_TYPE.to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: STANDARD.encode(serde_json::to_vec(&envelope).expect("envelope bytes")),
+                metadata: BTreeMap::new(),
+            },
+        };
+        let body = parse_json(send_payload(
+            &serde_json::to_vec(&attachments).expect("payload bytes"),
+        ));
+        assert_eq!(result_message(&body), Some("attachments not supported"));
+    }
 }
