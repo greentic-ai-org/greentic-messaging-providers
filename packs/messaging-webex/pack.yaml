@@ -1,10 +1,10 @@
 pack_id: messaging-webex
-version: 0.4.58
+version: 0.4.59
 kind: application
 publisher: Greentic
 components:
 - id: ai.greentic.component-templates
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -19,7 +19,7 @@ components:
     host: {}
   wasm: components/templates/templates.wasm
 - id: ai.greentic.component-templates
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -34,7 +34,7 @@ components:
     host: {}
   wasm: components/ai.greentic.component-templates.wasm
 - id: diagnostics___room_check
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -49,7 +49,7 @@ components:
     host: {}
   wasm: components/diagnostics___room_check.wasm
 - id: diagnostics___summary
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -64,7 +64,7 @@ components:
     host: {}
   wasm: components/diagnostics___summary.wasm
 - id: diagnostics___token_check
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -79,7 +79,7 @@ components:
     host: {}
   wasm: components/diagnostics___token_check.wasm
 - id: diagnostics___webhook_check
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -94,7 +94,7 @@ components:
     host: {}
   wasm: components/diagnostics___webhook_check.wasm
 - id: diagnostics__room_check
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -109,7 +109,7 @@ components:
     host: {}
   wasm: components/diagnostics__room_check.wasm
 - id: diagnostics__summary
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -124,7 +124,7 @@ components:
     host: {}
   wasm: components/diagnostics__summary.wasm
 - id: diagnostics__token_check
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -139,7 +139,7 @@ components:
     host: {}
   wasm: components/diagnostics__token_check.wasm
 - id: diagnostics__webhook_check
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -154,7 +154,7 @@ components:
     host: {}
   wasm: components/diagnostics__webhook_check.wasm
 - id: messaging-provider-webex
-  version: 0.4.58
+  version: 0.4.59
   world: greentic:component/component-v0-v6-v0@0.6.1
   supports:
   - messaging
@@ -169,7 +169,7 @@ components:
     host: {}
   wasm: components/messaging-provider-webex.wasm
 - id: messaging-provider-webex
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -184,7 +184,7 @@ components:
     host: {}
   wasm: components/messaging-provider-webex/component.wasm
 - id: sync_subscriptions___summary
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -199,7 +199,7 @@ components:
     host: {}
   wasm: components/sync_subscriptions___summary.wasm
 - id: sync_subscriptions___sync_subscriptions__summary
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -214,7 +214,7 @@ components:
     host: {}
   wasm: components/sync_subscriptions___sync_subscriptions__summary.wasm
 - id: templates
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -229,7 +229,7 @@ components:
     host: {}
   wasm: components/templates.wasm
 - id: verify_webhooks___steps
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -244,7 +244,7 @@ components:
     host: {}
   wasm: components/verify_webhooks___steps.wasm
 - id: verify_webhooks___summary
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -259,7 +259,7 @@ components:
     host: {}
   wasm: components/verify_webhooks___summary.wasm
 - id: verify_webhooks__steps
-  version: 0.4.58
+  version: 0.4.59
   world: root:component/root
   supports:
   - messaging
@@ -285,7 +285,7 @@ assets:
 extensions:
   greentic.ext.capabilities.v1:
     kind: greentic.ext.capabilities.v1
-    version: 0.4.58
+    version: 0.4.59
     inline:
       offers:
       - cap_id: greentic.cap.messaging.provider.v1
@@ -297,11 +297,11 @@ extensions:
         requires_setup: true
         setup:
           qa_ref: components/messaging-provider-webex
-        version: 0.4.58
+        version: 0.4.59
       schema_version: 1
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
-    version: 0.4.58
+    version: 0.4.59
     inline:
       validators:
       - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
@@ -309,7 +309,7 @@ extensions:
         world: greentic:pack-validate/pack-validator@0.1.0
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.58
+    version: 0.4.59
     inline:
       providers:
       - provider_type: messaging.webex.bot
