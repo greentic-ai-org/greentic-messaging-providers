@@ -1,5 +1,6 @@
 use provider_common::component_v0_6::{
-    DescribePayload, QaSpec, RedactionRule, SchemaIr, schema_hash,
+    DescribePayload, DescribeProfiles, DescribeSecretRequirement, QaSpec, RedactionRule, SchemaIr,
+    schema_hash,
 };
 use provider_common::helpers::{
     i18n_bundle_from_pairs, op, schema_bool_ir, schema_obj, schema_secret, schema_str,
@@ -129,6 +130,27 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
             },
         ],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: None,
+        profiles: Some(DescribeProfiles {
+            default: Some("default".into()),
+            supported: vec!["default".into()],
+        }),
+        secret_requirements: vec![
+            DescribeSecretRequirement {
+                key: "SLACK_BOT_TOKEN".into(),
+                required: true,
+                description: Some("Slack bot token used for chat.postMessage calls.".into()),
+                scope: Some("tenant".into()),
+            },
+            DescribeSecretRequirement {
+                key: "SLACK_SIGNING_SECRET".into(),
+                required: false,
+                description: Some(
+                    "Slack signing secret (optional for future webhook validation).".into(),
+                ),
+                scope: Some("tenant".into()),
+            },
+        ],
     }
 }
 

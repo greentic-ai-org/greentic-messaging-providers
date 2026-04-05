@@ -1,5 +1,6 @@
 use provider_common::component_v0_6::{
-    DescribePayload, QaSpec, RedactionRule, SchemaIr, schema_hash,
+    DescribePayload, DescribeProfiles, DescribeSecretRequirement, QaSpec, RedactionRule, SchemaIr,
+    schema_hash,
 };
 use provider_common::helpers::{
     i18n_bundle_from_pairs, op, schema_bool_ir, schema_obj, schema_secret, schema_str,
@@ -151,6 +152,17 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
             strategy: "replace".to_string(),
         }],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: None,
+        profiles: Some(DescribeProfiles {
+            default: Some("default".into()),
+            supported: vec!["default".into()],
+        }),
+        secret_requirements: vec![DescribeSecretRequirement {
+            key: "EMAIL_PASSWORD".into(),
+            required: true,
+            description: Some("SMTP password secret key".into()),
+            scope: Some("tenant".into()),
+        }],
     }
 }
 

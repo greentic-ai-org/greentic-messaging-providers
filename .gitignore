@@ -9,6 +9,9 @@ components/provision/provision.wasm
 # OS
 .DS_Store
 
+# Generated component manifests (auto-generated from WASM describe() during build)
+components/*/component.manifest.json
+
 # CI workflow artifacts (codex-security-fix, dependency-review, codex-semver-fix)
 all-dependabot-alerts.json
 all-code-scanning-alerts.json

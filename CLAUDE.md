@@ -81,7 +81,7 @@ Each `components/messaging-provider-*` follows this pattern:
 - `src/describe.rs` — Metadata, QA specs, i18n keys/pairs, config schema (`I18N_KEYS`, `I18N_PAIRS`, `SETUP_QUESTIONS`, `config_schema()`)
 - `src/ops.rs` — Operations: send, ingest_http, render_plan, encode, send_payload
 - `src/config.rs` — Config parsing, validation, secret loading
-- `component.manifest.json` — Version and metadata (must match workspace version)
+- `component.manifest.json` — Auto-generated from WASM `describe()` export during build (gitignored, not hand-maintained)
 - `Cargo.toml` — `[lib] crate-type = ["cdylib"]`
 
 ### Key Crates
@@ -95,9 +95,10 @@ Each `components/messaging-provider-*` follows this pattern:
 ## Version Management
 
 The workspace version in root `Cargo.toml` must stay in sync with:
-- All `component.manifest.json` files (57 files across `components/` and `packs/`)
 - All `pack.yaml` files (12 files in `packs/`)
 - All `pack.manifest.json` files (12 files in `packs/`)
+
+Note: `component.manifest.json` files are now auto-generated from WASM `describe()` during build and gitignored. No manual sync needed.
 
 Run `./tools/sync_packs.sh` to synchronize versions from `Cargo.toml` to all manifests and pack files.
 

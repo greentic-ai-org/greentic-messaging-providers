@@ -6,8 +6,10 @@ use bindings::greentic::secrets_store::secrets_store;
 use bindings::greentic::telemetry::logger_api;
 use provider_common::ProviderError;
 use provider_common::component_v0_6::{
-    DescribePayload, I18nText, OperationDescriptor, QaQuestionSpec, QaSpec, RedactionRule,
-    SchemaField, SchemaIr, canonical_cbor_bytes, decode_cbor, schema_hash,
+    DescribeCapabilities, DescribeHostCapabilities, DescribeHttpCapabilities, DescribePayload,
+    DescribeSecretRequirement, DescribeSecretsCapabilities, I18nText, OperationDescriptor,
+    QaQuestionSpec, QaSpec, RedactionRule, SchemaField, SchemaIr, canonical_cbor_bytes,
+    decode_cbor, schema_hash,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -292,6 +294,24 @@ fn build_describe_payload() -> DescribePayload {
             strategy: "replace".to_string(),
         }],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: Some(DescribeCapabilities {
+            host: DescribeHostCapabilities {
+                http: Some(DescribeHttpCapabilities {
+                    client: true,
+                    ..Default::default()
+                }),
+                secrets: Some(DescribeSecretsCapabilities { required: vec![] }),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        profiles: None,
+        secret_requirements: vec![DescribeSecretRequirement {
+            key: "TELEGRAM_BOT_TOKEN".into(),
+            required: true,
+            description: Some("Telegram bot token used for sendMessage requests.".into()),
+            scope: Some("tenant".into()),
+        }],
     }
 }
 

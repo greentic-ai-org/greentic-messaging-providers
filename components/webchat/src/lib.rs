@@ -258,6 +258,9 @@ fn build_describe_payload() -> DescribePayload {
         config_schema: config_schema.clone(),
         redactions: vec![],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: None,
+        profiles: None,
+        secret_requirements: vec![],
     }
 }
 

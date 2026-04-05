@@ -1,5 +1,8 @@
 use crate::{PROVIDER_ID, WORLD_ID};
-use provider_common::component_v0_6::{DescribePayload, RedactionRule, SchemaIr, schema_hash};
+use provider_common::component_v0_6::{
+    DescribePayload, DescribeProfiles, DescribeSecretRequirement, RedactionRule, SchemaIr,
+    schema_hash,
+};
 use provider_common::helpers::{
     QaQuestionDef, i18n_bundle_from_pairs, op, schema_bool_ir, schema_obj, schema_secret,
     schema_str, schema_str_fmt,
@@ -117,6 +120,17 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
             strategy: "replace".to_string(),
         }],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: None,
+        profiles: Some(DescribeProfiles {
+            default: Some("default".into()),
+            supported: vec!["default".into()],
+        }),
+        secret_requirements: vec![DescribeSecretRequirement {
+            key: "WEBEX_BOT_TOKEN".into(),
+            required: true,
+            description: Some("Webex bot access token used for Messages API calls.".into()),
+            scope: Some("tenant".into()),
+        }],
     }
 }
 

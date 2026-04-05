@@ -1,6 +1,7 @@
 use crate::{PROVIDER_ID, WORLD_ID};
 use provider_common::component_v0_6::{
-    DescribePayload, QaSpec, RedactionRule, SchemaIr, schema_hash,
+    DescribePayload, DescribeProfiles, DescribeSecretRequirement, QaSpec, RedactionRule, SchemaIr,
+    schema_hash,
 };
 use provider_common::helpers::{
     op, schema_bool_ir, schema_obj, schema_secret, schema_str, schema_str_fmt,
@@ -130,6 +131,17 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
             strategy: "replace".to_string(),
         }],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: None,
+        profiles: Some(DescribeProfiles {
+            default: Some("default".into()),
+            supported: vec!["default".into()],
+        }),
+        secret_requirements: vec![DescribeSecretRequirement {
+            key: "WHATSAPP_TOKEN".into(),
+            required: true,
+            description: Some("WhatsApp Cloud API access token.".into()),
+            scope: Some("tenant".into()),
+        }],
     }
 }
 

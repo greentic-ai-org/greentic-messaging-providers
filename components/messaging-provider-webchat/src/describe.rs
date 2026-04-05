@@ -1,6 +1,7 @@
 use provider_common::component_v0_6::{
-    DescribePayload, I18nText, QaQuestionSpec, QaSpec, SchemaIr, SkipCondition, SkipExpression,
-    canonical_cbor_bytes, schema_hash,
+    DescribeCapabilities, DescribeHostCapabilities, DescribePayload, DescribeProfiles,
+    DescribeStateCapabilities, I18nText, QaQuestionSpec, QaSpec, SchemaIr, SkipCondition,
+    SkipExpression, canonical_cbor_bytes, schema_hash,
 };
 use provider_common::helpers::{
     op, schema_bool_ir, schema_obj, schema_secret, schema_str, schema_str_fmt,
@@ -670,6 +671,21 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
         config_schema: config_schema.clone(),
         redactions: Vec::new(),
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: Some(DescribeCapabilities {
+            host: DescribeHostCapabilities {
+                state: Some(DescribeStateCapabilities {
+                    read: true,
+                    write: true,
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        profiles: Some(DescribeProfiles {
+            default: Some("default".into()),
+            supported: vec!["default".into()],
+        }),
+        secret_requirements: vec![],
     }
 }
 

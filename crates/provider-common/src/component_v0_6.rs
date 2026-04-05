@@ -25,6 +25,116 @@ pub struct DescribePayload {
     pub config_schema: SchemaIr,
     pub redactions: Vec<RedactionRule>,
     pub schema_hash: String,
+
+    // -- Fields below replace component.manifest.json --
+    /// Structured capability contract (WASI + host).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<DescribeCapabilities>,
+
+    /// Profile metadata (default + supported list).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<DescribeProfiles>,
+
+    /// Secret requirements declared by the component.
+    #[serde(default)]
+    pub secret_requirements: Vec<DescribeSecretRequirement>,
+}
+
+/// Capability contract matching greentic-types ComponentCapabilities.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeCapabilities {
+    #[serde(default)]
+    pub wasi: DescribeWasiCapabilities,
+    #[serde(default)]
+    pub host: DescribeHostCapabilities,
+}
+
+/// WASI capability declarations.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeWasiCapabilities {
+    #[serde(default)]
+    pub random: bool,
+    #[serde(default)]
+    pub clocks: bool,
+}
+
+/// Host capability declarations.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeHostCapabilities {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<DescribeStateCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secrets: Option<DescribeSecretsCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub messaging: Option<DescribeMessagingCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub events: Option<DescribeEventsCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http: Option<DescribeHttpCapabilities>,
+}
+
+/// State access requirements.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeStateCapabilities {
+    #[serde(default)]
+    pub read: bool,
+    #[serde(default)]
+    pub write: bool,
+}
+
+/// Secrets access requirements.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeSecretsCapabilities {
+    #[serde(default)]
+    pub required: Vec<DescribeSecretRequirement>,
+}
+
+/// Messaging capability declarations.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeMessagingCapabilities {
+    #[serde(default)]
+    pub inbound: bool,
+    #[serde(default)]
+    pub outbound: bool,
+}
+
+/// Events capability declarations.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeEventsCapabilities {
+    #[serde(default)]
+    pub inbound: bool,
+    #[serde(default)]
+    pub outbound: bool,
+}
+
+/// HTTP capability declarations.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeHttpCapabilities {
+    #[serde(default)]
+    pub client: bool,
+    #[serde(default)]
+    pub server: bool,
+}
+
+/// Profile metadata.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeProfiles {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    #[serde(default)]
+    pub supported: Vec<String>,
+}
+
+/// Secret requirement entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DescribeSecretRequirement {
+    pub key: String,
+    #[serde(default = "default_true")]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -295,5 +405,112 @@ mod tests {
             "Title"
         );
         assert_eq!(default_en_message_for_key(""), "Message");
+    }
+
+    #[test]
+    fn describe_payload_cbor_round_trip_with_new_fields() {
+        let payload = DescribePayload {
+            provider: "test-provider".into(),
+            world: "test-world".into(),
+            operations: vec![OperationDescriptor {
+                name: "run".into(),
+                title: I18nText {
+                    key: "op.run.title".into(),
+                },
+                description: I18nText {
+                    key: "op.run.description".into(),
+                },
+            }],
+            input_schema: SchemaIr::Bool {
+                title: I18nText {
+                    key: "input.title".into(),
+                },
+                description: I18nText {
+                    key: "input.description".into(),
+                },
+            },
+            output_schema: SchemaIr::Bool {
+                title: I18nText {
+                    key: "output.title".into(),
+                },
+                description: I18nText {
+                    key: "output.description".into(),
+                },
+            },
+            config_schema: SchemaIr::Bool {
+                title: I18nText {
+                    key: "config.title".into(),
+                },
+                description: I18nText {
+                    key: "config.description".into(),
+                },
+            },
+            redactions: vec![],
+            schema_hash: "dummy-hash".into(),
+            capabilities: Some(DescribeCapabilities {
+                host: DescribeHostCapabilities {
+                    http: Some(DescribeHttpCapabilities {
+                        client: true,
+                        server: false,
+                    }),
+                    secrets: Some(DescribeSecretsCapabilities {
+                        required: vec![DescribeSecretRequirement {
+                            key: "API_KEY".into(),
+                            scope: Some("tenant".into()),
+                            description: Some("API key".into()),
+                            required: true,
+                        }],
+                    }),
+                    state: Some(DescribeStateCapabilities {
+                        read: true,
+                        write: true,
+                    }),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
+            profiles: Some(DescribeProfiles {
+                default: Some("default".into()),
+                supported: vec!["default".into(), "advanced".into()],
+            }),
+            secret_requirements: vec![DescribeSecretRequirement {
+                key: "API_KEY".into(),
+                scope: Some("tenant".into()),
+                description: Some("API key".into()),
+                required: true,
+            }],
+        };
+
+        let cbor_bytes = to_canonical_cbor(&payload);
+        assert!(!cbor_bytes.is_empty(), "CBOR should not be empty");
+
+        let decoded: DescribePayload =
+            decode_cbor(&cbor_bytes).expect("should decode CBOR round-trip");
+
+        assert_eq!(decoded.provider, "test-provider");
+        assert_eq!(decoded.world, "test-world");
+        assert_eq!(decoded.operations.len(), 1);
+        assert_eq!(decoded.operations[0].name, "run");
+
+        let capabilities = decoded.capabilities.as_ref().expect("capabilities present");
+        let host = &capabilities.host;
+        assert_eq!(host.http.as_ref().unwrap().client, true);
+        assert_eq!(host.http.as_ref().unwrap().server, false);
+        assert_eq!(host.secrets.as_ref().unwrap().required.len(), 1);
+        assert_eq!(host.secrets.as_ref().unwrap().required[0].key, "API_KEY");
+        assert_eq!(host.state.as_ref().unwrap().read, true);
+        assert_eq!(host.state.as_ref().unwrap().write, true);
+
+        assert_eq!(decoded.secret_requirements.len(), 1);
+        assert_eq!(decoded.secret_requirements[0].key, "API_KEY");
+        assert_eq!(
+            decoded.secret_requirements[0].scope.as_deref(),
+            Some("tenant")
+        );
+
+        let profiles = decoded.profiles.as_ref().expect("profiles present");
+        assert_eq!(profiles.default.as_deref(), Some("default"));
+        assert_eq!(profiles.supported.len(), 2);
+        assert_eq!(profiles.supported, vec!["default", "advanced"]);
     }
 }

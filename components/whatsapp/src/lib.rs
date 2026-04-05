@@ -6,8 +6,10 @@ use bindings::greentic::secrets_store::secrets_store;
 use bindings::greentic::telemetry::logger_api;
 use provider_common::ProviderError;
 use provider_common::component_v0_6::{
-    DescribePayload, I18nText, OperationDescriptor, QaQuestionSpec, QaSpec, RedactionRule,
-    SchemaField, SchemaIr, canonical_cbor_bytes, decode_cbor, schema_hash,
+    DescribeCapabilities, DescribeHostCapabilities, DescribeHttpCapabilities, DescribePayload,
+    DescribeSecretRequirement, DescribeSecretsCapabilities, I18nText, OperationDescriptor,
+    QaQuestionSpec, QaSpec, RedactionRule, SchemaField, SchemaIr, canonical_cbor_bytes,
+    decode_cbor, schema_hash,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -280,6 +282,40 @@ fn build_describe_payload() -> DescribePayload {
             strategy: "replace".to_string(),
         }],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: Some(DescribeCapabilities {
+            host: DescribeHostCapabilities {
+                http: Some(DescribeHttpCapabilities {
+                    client: true,
+                    ..Default::default()
+                }),
+                secrets: Some(DescribeSecretsCapabilities { required: vec![] }),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        profiles: None,
+        secret_requirements: vec![
+            DescribeSecretRequirement {
+                key: "WHATSAPP_TOKEN".into(),
+                required: true,
+                description: Some("Access token used for WhatsApp Graph API calls.".into()),
+                scope: Some("tenant".into()),
+            },
+            DescribeSecretRequirement {
+                key: "WHATSAPP_PHONE_NUMBER_ID".into(),
+                required: true,
+                description: Some("Phone number ID associated with the WhatsApp sender.".into()),
+                scope: Some("tenant".into()),
+            },
+            DescribeSecretRequirement {
+                key: "WHATSAPP_VERIFY_TOKEN".into(),
+                required: false,
+                description: Some(
+                    "Verify token used for webhook validation (if configured).".into(),
+                ),
+                scope: Some("tenant".into()),
+            },
+        ],
     }
 }
 

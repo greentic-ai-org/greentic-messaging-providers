@@ -1,6 +1,6 @@
 use provider_common::component_v0_6::{
-    DescribePayload, OperationDescriptor, RedactionRule, SchemaIr, canonical_cbor_bytes,
-    decode_cbor, schema_hash,
+    DescribePayload, DescribeProfiles, DescribeSecretRequirement, OperationDescriptor,
+    RedactionRule, SchemaIr, canonical_cbor_bytes, decode_cbor, schema_hash,
 };
 use provider_common::helpers::{existing_config_from_answers, i18n, string_or_default};
 use provider_common::qa_helpers::ApplyAnswersResult;
@@ -301,6 +301,19 @@ fn build_describe_payload() -> DescribePayload {
             strategy: "replace".to_string(),
         }],
         schema_hash: hash,
+        capabilities: None,
+        profiles: Some(DescribeProfiles {
+            default: Some("default".into()),
+            supported: vec!["default".into()],
+        }),
+        secret_requirements: vec![DescribeSecretRequirement {
+            key: "DUMMY_API_TOKEN".into(),
+            required: true,
+            description: Some(
+                "Dummy provider token (redacted in describe/config metadata).".into(),
+            ),
+            scope: Some("tenant".into()),
+        }],
     }
 }
 

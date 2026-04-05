@@ -6,8 +6,10 @@ use bindings::greentic::secrets_store::secrets_store;
 use bindings::greentic::telemetry::logger_api;
 use provider_common::ProviderError;
 use provider_common::component_v0_6::{
-    DescribePayload, I18nText, OperationDescriptor, QaQuestionSpec, QaSpec, RedactionRule,
-    SchemaField, SchemaIr, canonical_cbor_bytes, decode_cbor, schema_hash,
+    DescribeCapabilities, DescribeHostCapabilities, DescribeHttpCapabilities, DescribePayload,
+    DescribeSecretRequirement, DescribeSecretsCapabilities, I18nText, OperationDescriptor,
+    QaQuestionSpec, QaSpec, RedactionRule, SchemaField, SchemaIr, canonical_cbor_bytes,
+    decode_cbor, schema_hash,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -326,6 +328,38 @@ fn build_describe_payload() -> DescribePayload {
             },
         ],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
+        capabilities: Some(DescribeCapabilities {
+            host: DescribeHostCapabilities {
+                http: Some(DescribeHttpCapabilities {
+                    client: true,
+                    ..Default::default()
+                }),
+                secrets: Some(DescribeSecretsCapabilities { required: vec![] }),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        profiles: None,
+        secret_requirements: vec![
+            DescribeSecretRequirement {
+                key: "MS_GRAPH_TENANT_ID".into(),
+                required: true,
+                description: Some("Tenant ID for Microsoft Graph access.".into()),
+                scope: Some("tenant".into()),
+            },
+            DescribeSecretRequirement {
+                key: "MS_GRAPH_CLIENT_ID".into(),
+                required: true,
+                description: Some("Client ID for Microsoft Graph access.".into()),
+                scope: Some("tenant".into()),
+            },
+            DescribeSecretRequirement {
+                key: "MS_GRAPH_CLIENT_SECRET".into(),
+                required: true,
+                description: Some("Client secret used to obtain Graph access tokens.".into()),
+                scope: Some("tenant".into()),
+            },
+        ],
     }
 }
 
