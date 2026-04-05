@@ -959,7 +959,11 @@ mod tests {
 
     #[test]
     fn verifies_signature() {
-        let secret = "test-secret";
+        let secret = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
         let ts = "1531420618";
         let body = "token=OneLongToken&team_id=T1&api_app_id=A1&event=hello";
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
@@ -979,6 +983,6 @@ mod tests {
         );
         headers.insert("X-Slack-Signature".into(), serde_json::Value::String(sig));
 
-        verify_signature(&headers, body, secret).expect("signature should verify");
+        verify_signature(&headers, body, &secret).expect("signature should verify");
     }
 }
