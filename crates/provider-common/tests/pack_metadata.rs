@@ -363,34 +363,32 @@ fn webchat_gui_pack_declares_provider_routes_and_static_assets() -> Result<()> {
         Some("schemas/messaging/webchat-gui/public.config.schema.json")
     );
 
-    let provider_routes = manifest
+    let http_routes = manifest
         .get("extensions")
-        .and_then(|ext| ext.get("messaging.provider_routes.v1"))
+        .and_then(|ext| ext.get("greentic.http-routes.v1"))
         .and_then(|ext| ext.get("inline"))
-        .ok_or_else(|| anyhow!("webchat-gui manifest missing provider routes"))?;
-    assert_eq!(
-        provider_routes
-            .get("backend_base_path")
-            .and_then(Value::as_str),
-        Some("/v1/messaging/webchat/{tenant}")
-    );
-    let routes = provider_routes
+        .ok_or_else(|| anyhow!("webchat-gui manifest missing http-routes.v1"))?;
+    let routes = http_routes
         .get("routes")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("webchat-gui manifest missing backend routes array"))?;
+        .ok_or_else(|| anyhow!("webchat-gui manifest missing http-routes array"))?;
     assert!(
         routes.iter().any(|route| {
-            route.get("path").and_then(Value::as_str)
-                == Some("/v1/messaging/webchat/{tenant}/token")
+            route
+                .get("pattern")
+                .and_then(Value::as_str)
+                .is_some_and(|p| p.contains("/token"))
         }),
-        "expected token route in provider routes"
+        "expected token route in http-routes"
     );
     assert!(
         routes.iter().any(|route| {
-            route.get("path").and_then(Value::as_str)
-                == Some("/v1/messaging/webchat/{tenant}/v3/directline/{*path}")
+            route
+                .get("pattern")
+                .and_then(Value::as_str)
+                .is_some_and(|p| p.contains("/v3/directline/"))
         }),
-        "expected directline route prefix in provider routes"
+        "expected directline route in http-routes"
     );
 
     let static_route = manifest

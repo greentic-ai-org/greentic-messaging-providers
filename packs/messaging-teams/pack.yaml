@@ -319,7 +319,12 @@ components:
       clocks: false
     host: {}
   wasm: components/verify_webhooks__verify.wasm
-dependencies: []
+dependencies:
+- alias: state-memory
+  pack_id: state-memory
+  version_req: '>=0.1.0'
+  required_capabilities:
+  - greentic:state/state-store
 flows: []
 assets:
 - path: secret-requirements.json
