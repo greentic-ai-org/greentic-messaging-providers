@@ -370,6 +370,7 @@ extensions:
         - send
         - reply
         - ingest_http
+        - setup_webhook
         - qa-spec
         - apply-answers
         - i18n-keys
