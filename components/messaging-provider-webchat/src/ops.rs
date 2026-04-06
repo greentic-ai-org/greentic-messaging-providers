@@ -305,11 +305,20 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         Ok(value) => value,
         Err(err) => return encode_error(&err),
     };
+    let has_adaptive_card = encode_message.metadata.contains_key("adaptive_card");
     let text = encode_message
         .text
         .clone()
         .filter(|t| !t.trim().is_empty())
-        .unwrap_or_else(|| "webchat universal payload".to_string());
+        .unwrap_or_else(|| {
+            if has_adaptive_card {
+                // Don't emit fallback text when an adaptive card is present —
+                // it renders natively and the text bubble is redundant.
+                String::new()
+            } else {
+                "webchat universal payload".to_string()
+            }
+        });
     let metadata_route = encode_message.metadata.get("route").cloned();
     let route = metadata_route
         .clone()
