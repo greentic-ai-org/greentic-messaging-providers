@@ -294,6 +294,58 @@ console.log('[runtime-bootstrap] loaded');
       return true;
     }
 
+    // Process tokens: decode id_token, save user info, update UI
+    function handleTokens(tokens) {
+      if (tokens.error) {
+        throw new Error(tokens.error_description || tokens.error);
+      }
+      var userInfo = {};
+      if (tokens.id_token) {
+        try {
+          var parts = tokens.id_token.split('.');
+          var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          userInfo = {
+            name: payload.name || '',
+            email: payload.email || '',
+            picture: payload.picture || ''
+          };
+        } catch (_) {}
+      }
+      console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
+      saveOAuthSession(tokens.id_token || tokens.access_token || 'authenticated', 'oauth-code');
+      try {
+        if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
+        if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
+        if (userInfo.picture) sessionStorage.setItem(oauthStorageKey('user_picture'), userInfo.picture);
+        sessionStorage.removeItem(oauthStorageKey('code_verifier'));
+        sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
+        sessionStorage.removeItem(oauthStorageKey('state'));
+      } catch (_) {}
+      removeOAuthOverlay();
+      injectLogoutButton();
+    }
+
+    // Direct PKCE token exchange with OAuth provider (no client_secret needed)
+    function directTokenExchange() {
+      if (!storedProvider.token_url) {
+        throw new Error('no token_url');
+      }
+      console.log('[oauth] trying direct PKCE token exchange with', storedProvider.token_url);
+      var body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: redirectUri || window.location.href.split('?')[0],
+        client_id: storedProvider.client_id,
+        code_verifier: codeVerifier || ''
+      });
+      return fetch(storedProvider.token_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      }).then(function (resp) { return resp.json(); });
+    }
+
+    // Try server proxy first, fall back to direct PKCE exchange
     var proxyUrl = backendBase(tenant) + '/oauth/token-exchange';
     console.log('[oauth] exchanging code via proxy');
 
@@ -301,50 +353,29 @@ console.log('[runtime-bootstrap] loaded');
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        provider_id: storedProvider.id,
         token_url: storedProvider.token_url,
         code: code,
         redirect_uri: redirectUri || window.location.href.split('?')[0],
         client_id: storedProvider.client_id,
-        client_secret: storedProvider.client_secret || '',
         code_verifier: codeVerifier || ''
       })
     })
-      .then(function (resp) { return resp.json(); })
-      .then(function (tokens) {
-        if (tokens.error) {
-          throw new Error(tokens.error_description || tokens.error);
-        }
-        // Decode id_token JWT payload (base64url) to get user info
-        var userInfo = {};
-        if (tokens.id_token) {
-          try {
-            var parts = tokens.id_token.split('.');
-            var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-            userInfo = {
-              name: payload.name || '',
-              email: payload.email || '',
-              picture: payload.picture || ''
-            };
-          } catch (_) {}
-        }
-        console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
-        saveOAuthSession(tokens.id_token || tokens.access_token || 'authenticated', 'oauth-code');
-        try {
-          if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
-          if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
-          if (userInfo.picture) sessionStorage.setItem(oauthStorageKey('user_picture'), userInfo.picture);
-          sessionStorage.removeItem(oauthStorageKey('code_verifier'));
-          sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
-          sessionStorage.removeItem(oauthStorageKey('state'));
-        } catch (_) {}
-        removeOAuthOverlay();
-        injectLogoutButton();
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('proxy returned ' + resp.status);
+        return resp.json();
       })
-      .catch(function (err) {
-        console.warn('[oauth] token exchange failed, saving basic session:', err.message);
-        saveOAuthSession('authenticated', 'oauth-code');
-        removeOAuthOverlay();
-        injectLogoutButton();
+      .then(handleTokens)
+      .catch(function (proxyErr) {
+        console.warn('[oauth] proxy failed:', proxyErr.message, '— trying direct PKCE exchange');
+        directTokenExchange()
+          .then(handleTokens)
+          .catch(function (directErr) {
+            console.warn('[oauth] direct exchange also failed:', directErr.message);
+            saveOAuthSession('authenticated', 'oauth-code');
+            removeOAuthOverlay();
+            injectLogoutButton();
+          });
       });
 
     return true;
@@ -699,7 +730,7 @@ console.log('[runtime-bootstrap] loaded');
         // Normalize provider field names and filter disabled providers
         if (authConfig.providers) {
           authConfig.providers = authConfig.providers
-            .filter(function (p) { return p.enabled; })
+            .filter(function (p) { return p.enabled !== false; })
             .map(function (p) {
               return {
                 id: p.id,
@@ -931,6 +962,71 @@ console.log('[runtime-bootstrap] loaded');
       var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
         (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
       themeBtn.textContent = isDark ? '☀️' : '🌙';
+      // Override WebChat SDK inline styles that use !important (can't beat with CSS alone)
+      function applyDarkModeInlineOverrides(dark) {
+        // Send box input
+        var inputs = document.querySelectorAll('.webchat__send-box-text-box__input');
+        for (var i = 0; i < inputs.length; i++) {
+          inputs[i].style.setProperty('color', dark ? '#f3f4f6' : '', 'important');
+          inputs[i].style.setProperty('background-color', dark ? 'transparent' : '', 'important');
+        }
+        // Send box container and all children with inline backgrounds
+        var sendBoxes = document.querySelectorAll('.webchat__send-box, .webchat__send-box *');
+        for (var j = 0; j < sendBoxes.length; j++) {
+          var el = sendBoxes[j];
+          if (el.tagName === 'BUTTON' || el.tagName === 'SVG' || el.tagName === 'PATH') continue;
+          var bg = el.style.backgroundColor || el.style.background;
+          if (dark && bg) {
+            el.style.setProperty('background-color', 'transparent', 'important');
+            el.style.setProperty('background', 'transparent', 'important');
+          } else if (!dark && el.dataset.darkOverride) {
+            el.style.removeProperty('background-color');
+            el.style.removeProperty('background');
+          }
+          if (dark) el.dataset.darkOverride = '1';
+          else delete el.dataset.darkOverride;
+        }
+        // Send box wrapper itself
+        var sendBoxRoot = document.querySelectorAll('.webchat__send-box');
+        for (var k = 0; k < sendBoxRoot.length; k++) {
+          sendBoxRoot[k].style.setProperty('background', dark ? '#111827' : '', 'important');
+          sendBoxRoot[k].style.setProperty('border-top-color', dark ? '#374151' : '', 'important');
+        }
+        // Bot bubble backgrounds (Adaptive Card containers with inline white bg)
+        var bubbles = document.querySelectorAll('.webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content');
+        for (var b = 0; b < bubbles.length; b++) {
+          bubbles[b].style.setProperty('background', dark ? '#1f2937' : '', 'important');
+          // Clear white backgrounds on all child divs
+          var children = bubbles[b].querySelectorAll('div[style]');
+          for (var c = 0; c < children.length; c++) {
+            var cs = children[c].style;
+            if (cs.backgroundColor === 'rgb(255, 255, 255)' || cs.backgroundColor === '#ffffff' || cs.backgroundColor === 'white') {
+              cs.setProperty('background-color', 'transparent', 'important');
+            }
+          }
+        }
+        // Transcript background
+        var transcripts = document.querySelectorAll('.webchat__basic-transcript');
+        for (var t = 0; t < transcripts.length; t++) {
+          transcripts[t].style.setProperty('background-color', dark ? '#111827' : '', 'important');
+        }
+      }
+
+      // Watch for WebChat SDK injecting elements with inline styles
+      if (typeof MutationObserver !== 'undefined') {
+        var darkObserverTimer = null;
+        new MutationObserver(function () {
+          // Debounce to avoid thrashing
+          if (darkObserverTimer) return;
+          darkObserverTimer = setTimeout(function () {
+            darkObserverTimer = null;
+            var themeDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+              (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            if (themeDark) applyDarkModeInlineOverrides(true);
+          }, 50);
+        }).observe(document.body, { childList: true, subtree: true });
+      }
+
       themeBtn.onclick = function () {
         var html = document.documentElement;
         var current = html.getAttribute('data-theme');
@@ -938,6 +1034,7 @@ console.log('[runtime-bootstrap] loaded');
         html.setAttribute('data-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
         try { sessionStorage.setItem('greentic-theme', next); } catch (_) {}
+        applyDarkModeInlineOverrides(next === 'dark');
       };
       // Restore saved theme
       try {
@@ -945,6 +1042,7 @@ console.log('[runtime-bootstrap] loaded');
         if (saved) {
           document.documentElement.setAttribute('data-theme', saved);
           themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
+          applyDarkModeInlineOverrides(saved === 'dark');
         }
       } catch (_) {}
 
