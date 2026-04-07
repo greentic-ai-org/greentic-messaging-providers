@@ -109,6 +109,17 @@ console.log('[runtime-bootstrap] loaded');
   var guiBase = resolveGuiBase(tenant);
   console.log('[runtime-bootstrap] tenant:', tenant, 'env:', env, 'locale:', selectedLocale || '(default)');
 
+  // Detect OAuth completion redirect (?oauth_done=true)
+  var oauthDone = new URLSearchParams(window.location.search).get('oauth_done') === 'true';
+  if (oauthDone) {
+    // Clean URL
+    var cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+    // Set initial message so webchat auto-sends it on connect
+    window.__INITIAL_MESSAGE__ = 'oauth_login_success';
+    console.log('[runtime-bootstrap] OAuth done, will auto-send oauth_login_success');
+  }
+
   document.documentElement.dataset.tenant = tenant;
   window.__TENANT__ = tenant;
   window.__BASE_PATH__ = guiBase;
@@ -795,6 +806,35 @@ console.log('[runtime-bootstrap] loaded');
     var url = new URL(requestUrl, window.location.href);
     console.log('[bootstrap] fetch:', url.pathname);
 
+    // Intercept Direct Line /conversations POST to persist conversation across page reloads.
+    if (/\/v3\/directline\/conversations\/?$/i.test(url.pathname) && init && init.method === 'POST') {
+      var savedConv = null;
+      try { savedConv = localStorage.getItem('greentic_dl_conversation'); } catch (_) {}
+      if (savedConv) {
+        try {
+          var conv = JSON.parse(savedConv);
+          if (conv.conversationId && conv.timestamp && (Date.now() - conv.timestamp) < 1800000) {
+            console.log('[bootstrap] reusing saved conversation:', conv.conversationId);
+            return Promise.resolve(new Response(JSON.stringify(conv), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            }));
+          }
+        } catch (_) {}
+      }
+      return originalFetch(input, init).then(function (response) {
+        var cloned = response.clone();
+        cloned.json().then(function (data) {
+          if (data.conversationId) {
+            data.timestamp = Date.now();
+            try { localStorage.setItem('greentic_dl_conversation', JSON.stringify(data)); } catch (_) {}
+            console.log('[bootstrap] saved conversation:', data.conversationId);
+          }
+        }).catch(function () {});
+        return response;
+      });
+    }
+
     if (/\/config\/tenants\/[^/]+\.json$/i.test(url.pathname)) {
       return originalFetch(input, init).then(async function (response) {
         var tenantId = decodeURIComponent(url.pathname.split('/').pop().replace(/\.json$/i, ''));
@@ -911,8 +951,8 @@ console.log('[runtime-bootstrap] loaded');
           if (!filtered['en']) filtered['en'] = 'English';
           callback(filtered);
         } else {
-          // Manifest not available → show all supported locales
-          callback(SUPPORTED_LOCALES);
+          // Manifest not available → show only English (no card translations found)
+          callback({ en: 'English' });
         }
       });
   }
