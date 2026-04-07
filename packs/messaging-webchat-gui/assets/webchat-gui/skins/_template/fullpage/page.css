@@ -625,9 +625,17 @@ button[data-action="logout"]:hover,
   :root:not([data-theme="light"]) .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content {
     background: #1f2937 !important;
     border-color: #374151 !important;
+    color: #f3f4f6 !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
   }
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock {
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-adaptiveCard,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-container {
+    background-color: transparent !important;
+  }
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock *,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factTitle,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factValue {
     color: #f3f4f6 !important;
   }
   :root:not([data-theme="light"]) .webchat__send-box {
@@ -635,6 +643,7 @@ button[data-action="logout"]:hover,
     border-top-color: #374151 !important;
   }
   :root:not([data-theme="light"]) .webchat__send-box-text-box__input {
+    background: transparent !important;
     color: #f3f4f6 !important;
   }
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-input,
@@ -661,9 +670,17 @@ button[data-action="logout"]:hover,
 [data-theme="dark"] .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content {
   background: #1f2937 !important;
   border-color: #374151 !important;
+  color: #f3f4f6 !important;
   box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
 }
-[data-theme="dark"] .webchat__bubble__content .ac-textBlock {
+[data-theme="dark"] .webchat__bubble__content .ac-adaptiveCard,
+[data-theme="dark"] .webchat__bubble__content .ac-container {
+  background-color: transparent !important;
+}
+[data-theme="dark"] .webchat__bubble__content .ac-textBlock,
+[data-theme="dark"] .webchat__bubble__content .ac-textBlock *,
+[data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factTitle,
+[data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factValue {
   color: #f3f4f6 !important;
 }
 [data-theme="dark"] .webchat__send-box {
@@ -671,6 +688,7 @@ button[data-action="logout"]:hover,
   border-top-color: #374151 !important;
 }
 [data-theme="dark"] .webchat__send-box-text-box__input {
+  background: transparent !important;
   color: #f3f4f6 !important;
 }
 [data-theme="dark"] .webchat__bubble__content .ac-input,
@@ -684,6 +702,95 @@ button[data-action="logout"]:hover,
 }
 [data-theme="dark"] .webchat__bubble__content .ac-separator {
   border-color: #374151 !important;
+}
+
+/* ── Welcome overlay ───────────────────────────────────── */
+
+.welcome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  pointer-events: none;
+  z-index: 1;
+  font-family: var(--font);
+}
+
+.welcome__card {
+  pointer-events: auto;
+  text-align: center;
+  max-width: 400px;
+}
+
+.welcome__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--brand-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+
+.welcome__heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.welcome__text {
+  margin: 0 0 1.5rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.welcome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.welcome__btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1fae5;
+  border-radius: 20px;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.welcome__btn:hover {
+  background: #d1fae5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .welcome__btn {
+    background: #1f2937;
+    border-color: #374151;
+    color: #34d399;
+  }
+  :root:not([data-theme="light"]) .welcome__btn:hover {
+    background: #374151;
+  }
+}
+[data-theme="dark"] .welcome__btn {
+  background: #1f2937;
+  border-color: #374151;
+  color: #34d399;
+}
+[data-theme="dark"] .welcome__btn:hover {
+  background: #374151;
 }
 
 /* ── RTL support ────────────────────────────────────────── */
