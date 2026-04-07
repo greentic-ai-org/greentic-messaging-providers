@@ -187,10 +187,9 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         if request.method.eq_ignore_ascii_case("POST")
             && dl_path.contains("/activities")
             && out.status == 201
-            && let Ok(body_bytes) = general_purpose::STANDARD.decode(&request.body_b64)
-            && let Ok(body) = serde_json::from_slice::<Value>(&body_bytes)
         {
-            let text = extract_text(&body);
+            let body = decode_body_json(&request.body_b64).unwrap_or(Value::Null);
+            let text = extract_activity_text(&body);
             let action_value = body.get("value"); // Action.Submit data from AC buttons
             let user = body
                 .get("from")
@@ -205,54 +204,53 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
             // This ensures we use the same context that was validated from the JWT
             let (env_id, tenant_id) = extract_context_from_response_headers(&out.headers)
                 .unwrap_or_else(|| ("default".to_string(), "default".to_string()));
-            let has_content = !text.is_empty() || action_value.is_some();
-            if has_content {
-                // For Action.Submit, derive a text label from the action data.
-                let effective_text = if text.is_empty() {
-                    action_value
-                        .and_then(|v| {
-                            v.get("step")
-                                .or(v.get("routeToCardId"))
-                                .or(v.get("toCardId"))
-                        })
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("action")
-                        .to_string()
-                } else {
-                    text
-                };
-                let mut envelope = build_webchat_envelope_with_ctx(
-                    effective_text,
-                    user,
-                    conv_id.clone(),
-                    None,
-                    &env_id,
-                    &tenant_id,
-                );
-                // Forward locale from the activity so the runner can resolve
-                // i18n translations in card responses.
-                if let Some(locale) = body.get("locale").and_then(Value::as_str)
-                    && !locale.is_empty()
-                {
-                    envelope
-                        .metadata
-                        .insert("locale".to_string(), locale.to_string());
-                }
-                // Forward ALL Action.Submit data fields to metadata so the
-                // operator can handle MCP actions, token saves, card routing, etc.
-                if let Some(val) = action_value
-                    && let Some(obj) = val.as_object()
-                {
-                    for (k, v) in obj {
-                        let s = match v {
-                            Value::String(s) => s.clone(),
-                            _ => v.to_string(),
-                        };
-                        envelope.metadata.insert(k.clone(), s);
-                    }
-                }
-                out.events.push(envelope);
+            // For Action.Submit, derive a text label from the action data.
+            let effective_text = if text.is_empty() {
+                action_value
+                    .and_then(|v| {
+                        v.get("step")
+                            .or(v.get("routeToCardId"))
+                            .or(v.get("toCardId"))
+                            .or(v.get("mcp_wizard"))
+                            .or(v.get("mcp_operation"))
+                    })
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("message")
+                    .to_string()
+            } else {
+                text
+            };
+            let mut envelope = build_webchat_envelope_with_ctx(
+                effective_text,
+                user,
+                conv_id.clone(),
+                None,
+                &env_id,
+                &tenant_id,
+            );
+            // Forward locale from the activity so the runner can resolve
+            // i18n translations in card responses.
+            if let Some(locale) = body.get("locale").and_then(Value::as_str)
+                && !locale.is_empty()
+            {
+                envelope
+                    .metadata
+                    .insert("locale".to_string(), locale.to_string());
             }
+            // Forward ALL Action.Submit data fields to metadata so the
+            // operator can handle MCP actions, token saves, card routing, etc.
+            if let Some(val) = action_value
+                && let Some(obj) = val.as_object()
+            {
+                for (k, v) in obj {
+                    let s = match v {
+                        Value::String(s) => s.clone(),
+                        _ => v.to_string(),
+                    };
+                    envelope.metadata.insert(k.clone(), s);
+                }
+            }
+            out.events.push(envelope);
         }
 
         return http_out_v1_bytes(&out);
@@ -823,6 +821,31 @@ fn extract_text(value: &Value) -> String {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string()
+}
+
+fn extract_activity_text(value: &Value) -> String {
+    let direct = extract_text(value);
+    if !direct.is_empty() {
+        return direct;
+    }
+    value
+        .get("activity")
+        .and_then(|activity| activity.get("text").or_else(|| activity.get("message")))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn decode_body_json(body_b64: &str) -> Option<Value> {
+    if body_b64.trim().is_empty() {
+        return None;
+    }
+    let decoded = general_purpose::STANDARD
+        .decode(body_b64)
+        .or_else(|_| general_purpose::URL_SAFE.decode(body_b64))
+        .or_else(|_| general_purpose::URL_SAFE_NO_PAD.decode(body_b64))
+        .ok()?;
+    serde_json::from_slice::<Value>(&decoded).ok()
 }
 
 fn user_from_value(value: &Value) -> Option<String> {
