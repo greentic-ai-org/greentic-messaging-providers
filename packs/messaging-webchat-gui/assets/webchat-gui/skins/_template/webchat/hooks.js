@@ -1,8 +1,13 @@
+// Store reference for dispatching messages from quick buttons
+var __webchatStore = null;
+
 export function createStoreMiddleware() {
   var welcomeShown = false;
   var hasUserMessage = false;
 
-  return () => next => action => {
+  return (store) => {
+    __webchatStore = store;
+    return next => action => {
     // Track user messages to hide welcome
     if (action.type === 'WEB_CHAT/SEND_MESSAGE' || action.type === 'WEB_CHAT/SEND_EVENT') {
       hasUserMessage = true;
@@ -30,7 +35,7 @@ export function createStoreMiddleware() {
     }
 
     return result;
-  };
+  };};
 }
 
 function showWelcome() {
@@ -53,15 +58,13 @@ function showWelcome() {
           '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>',
         '</svg>',
       '</div>',
-      '<h2 class="welcome__heading">Hi there! 👋</h2>',
+      '<h2 class="welcome__heading">Welcome! 👋</h2>',
       '<p class="welcome__text">',
-        'I\'m your AI assistant. I can help you with onboarding, answer questions about your setup, ',
-        'and guide you through common tasks.',
+        'How can I help you today?',
       '</p>',
       '<div class="welcome__actions">',
         '<button class="welcome__btn" onclick="sendQuickMessage(this)">🚀 Get started</button>',
         '<button class="welcome__btn" onclick="sendQuickMessage(this)">❓ What can you do?</button>',
-        '<button class="welcome__btn" onclick="sendQuickMessage(this)">📖 Show me a demo</button>',
       '</div>',
     '</div>'
   ].join('');
@@ -81,25 +84,11 @@ function hideWelcome() {
   }
 }
 
-// Global function for quick message buttons
+// Global function for quick message buttons — dispatch via WebChat store
 window.sendQuickMessage = function (btn) {
   var text = btn.textContent.replace(/^[^\w\s]+\s*/, '').trim();
-  var sendBox = document.querySelector('[data-id="webchat-sendbox-input"]') ||
-    document.querySelector('input[placeholder]') ||
-    document.querySelector('textarea');
-  if (sendBox) {
-    var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype, 'value'
-    ).set || Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype, 'value'
-    ).set;
-    nativeInputValueSetter.call(sendBox, text);
-    sendBox.dispatchEvent(new Event('input', { bubbles: true }));
-    setTimeout(function () {
-      var sendBtn = document.querySelector('[title="Send"]') ||
-        document.querySelector('button[type="submit"]');
-      if (sendBtn) sendBtn.click();
-    }, 100);
+  if (__webchatStore && text) {
+    __webchatStore.dispatch({ type: 'WEB_CHAT/SEND_MESSAGE', payload: { text: text } });
   }
   hideWelcome();
 };
