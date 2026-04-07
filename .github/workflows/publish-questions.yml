@@ -13,6 +13,10 @@ permissions:
   contents: read
   packages: write
 
+env:
+  OCI_REGISTRY: ghcr.io
+  OCI_NAMESPACE: ${{ github.repository_owner }}/greentic-messaging-providers
+
 jobs:
   publish-questions:
     runs-on: ubuntu-latest
