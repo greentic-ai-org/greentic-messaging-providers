@@ -43,45 +43,25 @@ function showWelcome() {
 
   var welcome = document.createElement('div');
   welcome.id = 'greentic-welcome';
-  welcome.style.cssText = [
-    'position:absolute;inset:0;display:flex;flex-direction:column;',
-    'align-items:center;justify-content:center;padding:2rem;',
-    'pointer-events:none;z-index:1;',
-    'font-family:Poppins,system-ui,sans-serif;'
-  ].join('');
+  welcome.className = 'welcome';
 
   welcome.innerHTML = [
-    '<div style="pointer-events:auto;text-align:center;max-width:400px;">',
-      '<div style="width:64px;height:64px;border-radius:50%;background:#ecfdf5;',
-        'display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;">',
+    '<div class="welcome__card">',
+      '<div class="welcome__icon">',
         '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" ',
           'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
           '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>',
         '</svg>',
       '</div>',
-      '<h2 style="margin:0 0 0.5rem;font-size:1.25rem;font-weight:600;color:#1f2937;">',
-        'Hi there! 👋',
-      '</h2>',
-      '<p style="margin:0 0 1.5rem;font-size:0.875rem;color:#6b7280;line-height:1.6;">',
+      '<h2 class="welcome__heading">Hi there! 👋</h2>',
+      '<p class="welcome__text">',
         'I\'m your AI assistant. I can help you with onboarding, answer questions about your setup, ',
         'and guide you through common tasks.',
       '</p>',
-      '<div style="display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:center;">',
-        '<button onclick="sendQuickMessage(this)" style="padding:0.5rem 1rem;border:1px solid #d1fae5;',
-          'border-radius:20px;background:#ecfdf5;color:#059669;font-size:0.8125rem;font-weight:500;',
-          'cursor:pointer;font-family:inherit;transition:all .15s;"',
-          'onmouseover="this.style.background=\'#d1fae5\'" onmouseout="this.style.background=\'#ecfdf5\'"',
-          '>🚀 Get started</button>',
-        '<button onclick="sendQuickMessage(this)" style="padding:0.5rem 1rem;border:1px solid #d1fae5;',
-          'border-radius:20px;background:#ecfdf5;color:#059669;font-size:0.8125rem;font-weight:500;',
-          'cursor:pointer;font-family:inherit;transition:all .15s;"',
-          'onmouseover="this.style.background=\'#d1fae5\'" onmouseout="this.style.background=\'#ecfdf5\'"',
-          '>❓ What can you do?</button>',
-        '<button onclick="sendQuickMessage(this)" style="padding:0.5rem 1rem;border:1px solid #d1fae5;',
-          'border-radius:20px;background:#ecfdf5;color:#059669;font-size:0.8125rem;font-weight:500;',
-          'cursor:pointer;font-family:inherit;transition:all .15s;"',
-          'onmouseover="this.style.background=\'#d1fae5\'" onmouseout="this.style.background=\'#ecfdf5\'"',
-          '>📖 Show me a demo</button>',
+      '<div class="welcome__actions">',
+        '<button class="welcome__btn" onclick="sendQuickMessage(this)">🚀 Get started</button>',
+        '<button class="welcome__btn" onclick="sendQuickMessage(this)">❓ What can you do?</button>',
+        '<button class="welcome__btn" onclick="sendQuickMessage(this)">📖 Show me a demo</button>',
       '</div>',
     '</div>'
   ].join('');
