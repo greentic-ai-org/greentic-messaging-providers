@@ -15,8 +15,9 @@
 
   function getOAuthSession() {
     try {
-      var handle = sessionStorage.getItem(oauthStorageKey('token_handle'));
-      var flowId = sessionStorage.getItem(oauthStorageKey('flow_id'));
+      // Check localStorage first (set by server-side callback), then sessionStorage
+      var handle = localStorage.getItem(oauthStorageKey('token_handle')) || sessionStorage.getItem(oauthStorageKey('token_handle'));
+      var flowId = localStorage.getItem(oauthStorageKey('flow_id')) || sessionStorage.getItem(oauthStorageKey('flow_id'));
       if (handle && flowId) {
         return { token_handle: handle, flow_id: flowId };
       }
@@ -496,6 +497,17 @@
         if (session) {
           console.log('[oauth] existing session found');
           injectLogoutButton();
+          // If this is a fresh login (just redirected back), auto-send success
+          // message to the flow so it routes to the next step.
+          var justLoggedIn = sessionStorage.getItem(oauthStorageKey('just_logged_in'));
+          if (justLoggedIn === 'true') {
+            sessionStorage.removeItem(oauthStorageKey('just_logged_in'));
+            console.log('[oauth] fresh login detected, sending success message to flow');
+            // Wait for webchat to initialize, then send auto-message
+            setTimeout(function () {
+              sendOAuthSuccessToFlow();
+            }, 2000);
+          }
           return;
         }
 
@@ -510,7 +522,226 @@
       });
   }
 
+  /**
+   * Handle hash-based OAuth success redirect from server-side callback.
+   * URL format: /v1/web/webchat/demo/#oauth_success=true&access_token=...&state=...
+   * This handles the case where the OAuth callback was processed server-side
+   * (e.g., by greentic-start) and the user is redirected back with the token
+   * in the URL hash fragment.
+   */
+  function handleHashOAuthCallback() {
+    var hash = window.location.hash;
+    if (!hash || !hash.includes('oauth_success=true')) {
+      if (hash && hash.includes('oauth_error=')) {
+        var errorParams = new URLSearchParams(hash.substring(1));
+        var error = errorParams.get('oauth_error') || 'unknown error';
+        window.location.hash = '';
+        showAuthError('Authentication failed: ' + error);
+        return true;
+      }
+      return false;
+    }
+
+    var params = new URLSearchParams(hash.substring(1));
+    var accessToken = params.get('access_token') || '';
+    var state = params.get('state') || '';
+
+    // Clean hash from URL
+    window.location.hash = '';
+    window.history.replaceState({}, '', window.location.pathname + window.location.search);
+
+    if (accessToken) {
+      console.log('[oauth] server-side callback success, saving token');
+      saveOAuthSession(accessToken, 'oauth-code');
+      try {
+        sessionStorage.setItem(oauthStorageKey('user_name'), 'GitHub User');
+        sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: 'github', type: 'oauth' }));
+      } catch (_) {}
+      removeOAuthOverlay();
+      injectLogoutButton();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Open OAuth login in a popup window. The callback page posts the token
+   * back via postMessage, then we save it and notify the flow.
+   */
+  function openOAuthPopup(oauthUrl) {
+    var w = 500, h = 600;
+    var left = (screen.width - w) / 2;
+    var top = (screen.height - h) / 2;
+    var popup = window.open(oauthUrl, 'greentic_oauth', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top);
+
+    // Listen for postMessage from callback page
+    function onMessage(event) {
+      if (!event.data || event.data.type !== 'greentic_oauth_callback') return;
+      window.removeEventListener('message', onMessage);
+      if (event.data.status === 'success' && event.data.access_token) {
+        console.log('[oauth] popup callback success');
+        saveOAuthSession(event.data.access_token, 'oauth-code');
+        try {
+          sessionStorage.setItem(oauthStorageKey('user_name'), 'GitHub User');
+          sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: 'github', type: 'oauth' }));
+        } catch (_) {}
+        removeOAuthOverlay();
+        injectLogoutButton();
+        // Dispatch custom event so webchat can send "oauth_login_success" to flow
+        window.dispatchEvent(new CustomEvent('greentic_oauth_success', {
+          detail: { access_token: event.data.access_token }
+        }));
+      } else {
+        console.error('[oauth] popup callback error:', event.data.error);
+        showAuthError('Authentication failed: ' + (event.data.error || 'unknown'));
+      }
+    }
+    window.addEventListener('message', onMessage);
+
+    // Fallback: poll popup closed (user closed manually)
+    var pollTimer = setInterval(function () {
+      if (popup && popup.closed) {
+        clearInterval(pollTimer);
+        window.removeEventListener('message', onMessage);
+      }
+    }, 1000);
+  }
+
+  /**
+   * Send oauth_login_success by waiting for webchat to POST an activity
+   * (any user message), then inject our message into the same conversation.
+   * Uses fetch interception to capture the conversation URL.
+   */
+  var _oauthOrigFetch = window.fetch;
+  var _oauthConvUrl = null;
+  var _oauthToken = null;
+  var _oauthNeedsSend = false;
+
+  function sendOAuthSuccessToFlow() {
+    _oauthNeedsSend = true;
+    console.log('[oauth] will send oauth_login_success on next conversation activity');
+    // Also try to find conversation from existing fetch traffic
+    // Poll for 10 seconds waiting for webchat to establish conversation
+    var attempts = 0;
+    var poll = setInterval(function () {
+      attempts++;
+      if (_oauthConvUrl && _oauthToken) {
+        clearInterval(poll);
+        doSendOAuthSuccess();
+      }
+      if (attempts > 20) {
+        clearInterval(poll);
+        console.warn('[oauth] timed out waiting for conversation');
+      }
+    }, 500);
+  }
+
+  function doSendOAuthSuccess() {
+    if (!_oauthConvUrl) return;
+    console.log('[oauth] sending oauth_login_success to', _oauthConvUrl);
+    _oauthOrigFetch(_oauthConvUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + _oauthToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: 'message',
+        from: { id: 'oauth_user' },
+        text: 'oauth_login_success'
+      })
+    }).then(function () {
+      console.log('[oauth] oauth_login_success sent!');
+      _oauthNeedsSend = false;
+    }).catch(function (err) {
+      console.warn('[oauth] send failed:', err);
+    });
+  }
+
+  // Intercept fetch to capture conversation URL from webchat SDK activity posts
+  var _prevFetch = window.fetch;
+  window.fetch = function (url, opts) {
+    var urlStr = typeof url === 'string' ? url : (url && url.url) || '';
+    // Capture conversation activities URL and auth token
+    if (/\/v3\/directline\/conversations\/[^/]+\/activities/i.test(urlStr)) {
+      _oauthConvUrl = urlStr;
+      if (opts && opts.headers) {
+        var auth = opts.headers['Authorization'] || opts.headers['authorization'];
+        if (auth) _oauthToken = auth.replace('Bearer ', '');
+      }
+      // If we need to send and this is a GET (polling), send now
+      if (_oauthNeedsSend && opts && (!opts.method || opts.method === 'GET')) {
+        doSendOAuthSuccess();
+      }
+    }
+    return _prevFetch.apply(this, arguments);
+  };
+
+  // Expose for webchat card action interception
+  window.__GREENTIC_OPEN_OAUTH_POPUP__ = openOAuthPopup;
+
+  /**
+   * Watch for "Login with OAuth" buttons rendered in Adaptive Cards.
+   * Hijack their click to open a popup instead of submitting to the flow.
+   */
+  // Global click interceptor at document level (capture phase).
+  // Fires BEFORE any WebChat SDK handler, so we can intercept OAuth clicks.
+  document.addEventListener('click', function (e) {
+    var target = e.target.closest('button, a, [role="button"]');
+    if (!target) return;
+    var text = (target.textContent || '').trim();
+    var href = target.getAttribute('href') || '';
+    var isOAuth = (text === 'Login with OAuth')
+      || href.includes('github.com/login/oauth');
+    if (!isOAuth) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    console.log('[oauth] intercepted OAuth click, opening popup');
+
+    // If the button already has a resolved GitHub URL, use it directly
+    if (href && href.includes('github.com/login/oauth')) {
+      openOAuthPopup(href);
+      return;
+    }
+
+    // Otherwise fetch from server
+    var baseUrl = window.location.href.split('#')[0].split('?')[0].replace(/\/v1\/web\/.*/, '');
+    fetch(baseUrl + '/oauth/authorize')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.authorize_url) {
+          openOAuthPopup(data.authorize_url);
+        }
+      })
+      .catch(function (err) {
+        console.warn('[oauth] failed to get authorize URL:', err);
+      });
+  }, true);
+
+  // Check for just_logged_in flag BEFORE auth gate (auth gate may be disabled)
+  var justLoggedInEarly = false;
+  try {
+    justLoggedInEarly = localStorage.getItem(oauthStorageKey('just_logged_in')) === 'true'
+      || sessionStorage.getItem(oauthStorageKey('just_logged_in')) === 'true';
+  } catch (_) {}
+  if (justLoggedInEarly) {
+    console.log('[oauth] fresh login detected (early check), will send success message');
+    try {
+      localStorage.removeItem(oauthStorageKey('just_logged_in'));
+      sessionStorage.removeItem(oauthStorageKey('just_logged_in'));
+    } catch (_) {}
+    // Wait for webchat to fully initialize then send success message
+    setTimeout(function () {
+      sendOAuthSuccessToFlow();
+    }, 3000);
+  }
+
   // Run OAuth check immediately
-  checkOAuthGate();
+  // First check for hash-based callback (server-side OAuth flow)
+  if (!handleHashOAuthCallback()) {
+    checkOAuthGate();
+  }
 
 })();
