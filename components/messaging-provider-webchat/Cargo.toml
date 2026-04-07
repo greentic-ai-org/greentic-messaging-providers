@@ -30,6 +30,7 @@ path = "wit/messaging-provider-webchat"
 world = "component-v0-v6-v0"
 
 [package.metadata.component.target.dependencies]
+"greentic:http" = { path = "wit/messaging-provider-webchat/deps/http" }
 "greentic:state" = { path = "wit/messaging-provider-webchat/deps/state" }
 "greentic:interfaces-types" = { path = "wit/messaging-provider-webchat/deps/interfaces-types" }
 "greentic:secrets-store" = { path = "wit/messaging-provider-webchat/deps/secrets-store" }

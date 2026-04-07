@@ -95,6 +95,58 @@
       return true;
     }
 
+    // Process tokens: decode id_token, save user info, update UI
+    function handleTokens(tokens) {
+      if (tokens.error) {
+        throw new Error(tokens.error_description || tokens.error);
+      }
+      var userInfo = {};
+      if (tokens.id_token) {
+        try {
+          var parts = tokens.id_token.split('.');
+          var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          userInfo = {
+            name: payload.name || '',
+            email: payload.email || '',
+            picture: payload.picture || ''
+          };
+        } catch (_) {}
+      }
+      console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
+      saveOAuthSession(tokens.id_token || tokens.access_token || 'authenticated', 'oauth-code');
+      try {
+        if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
+        if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
+        if (userInfo.picture) sessionStorage.setItem(oauthStorageKey('user_picture'), userInfo.picture);
+        sessionStorage.removeItem(oauthStorageKey('code_verifier'));
+        sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
+        sessionStorage.removeItem(oauthStorageKey('state'));
+      } catch (_) {}
+      removeOAuthOverlay();
+      injectLogoutButton();
+    }
+
+    // Direct PKCE token exchange with OAuth provider (no client_secret needed)
+    function directTokenExchange() {
+      if (!storedProvider.token_url) {
+        throw new Error('no token_url');
+      }
+      console.log('[oauth] trying direct PKCE token exchange with', storedProvider.token_url);
+      var body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: redirectUri || window.location.href.split('?')[0],
+        client_id: storedProvider.client_id,
+        code_verifier: codeVerifier || ''
+      });
+      return fetch(storedProvider.token_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      }).then(function (resp) { return resp.json(); });
+    }
+
+    // Try server proxy first, fall back to direct PKCE exchange
     var proxyUrl = backendBase(tenant) + '/oauth/token-exchange';
     console.log('[oauth] exchanging code via proxy');
 
@@ -102,50 +154,29 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        provider_id: storedProvider.id,
         token_url: storedProvider.token_url,
         code: code,
         redirect_uri: redirectUri || window.location.href.split('?')[0],
         client_id: storedProvider.client_id,
-        client_secret: storedProvider.client_secret || '',
         code_verifier: codeVerifier || ''
       })
     })
-      .then(function (resp) { return resp.json(); })
-      .then(function (tokens) {
-        if (tokens.error) {
-          throw new Error(tokens.error_description || tokens.error);
-        }
-        // Decode id_token JWT payload (base64url) to get user info
-        var userInfo = {};
-        if (tokens.id_token) {
-          try {
-            var parts = tokens.id_token.split('.');
-            var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-            userInfo = {
-              name: payload.name || '',
-              email: payload.email || '',
-              picture: payload.picture || ''
-            };
-          } catch (_) {}
-        }
-        console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
-        saveOAuthSession(tokens.id_token || tokens.access_token || 'authenticated', 'oauth-code');
-        try {
-          if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
-          if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
-          if (userInfo.picture) sessionStorage.setItem(oauthStorageKey('user_picture'), userInfo.picture);
-          sessionStorage.removeItem(oauthStorageKey('code_verifier'));
-          sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
-          sessionStorage.removeItem(oauthStorageKey('state'));
-        } catch (_) {}
-        removeOAuthOverlay();
-        injectLogoutButton();
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('proxy returned ' + resp.status);
+        return resp.json();
       })
-      .catch(function (err) {
-        console.warn('[oauth] token exchange failed, saving basic session:', err.message);
-        saveOAuthSession('authenticated', 'oauth-code');
-        removeOAuthOverlay();
-        injectLogoutButton();
+      .then(handleTokens)
+      .catch(function (proxyErr) {
+        console.warn('[oauth] proxy failed:', proxyErr.message, '— trying direct PKCE exchange');
+        directTokenExchange()
+          .then(handleTokens)
+          .catch(function (directErr) {
+            console.warn('[oauth] direct exchange also failed:', directErr.message);
+            saveOAuthSession('authenticated', 'oauth-code');
+            removeOAuthOverlay();
+            injectLogoutButton();
+          });
       });
 
     return true;

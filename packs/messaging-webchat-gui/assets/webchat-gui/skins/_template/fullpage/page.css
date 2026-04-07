@@ -629,11 +629,15 @@ button[data-action="logout"]:hover,
     box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
   }
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-adaptiveCard,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-container {
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-container,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-columnSet,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-column,
+  :root:not([data-theme="light"]) .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content > div {
     background-color: transparent !important;
   }
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock *,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock p,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factTitle,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factValue {
     color: #f3f4f6 !important;
@@ -674,11 +678,15 @@ button[data-action="logout"]:hover,
   box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
 }
 [data-theme="dark"] .webchat__bubble__content .ac-adaptiveCard,
-[data-theme="dark"] .webchat__bubble__content .ac-container {
+[data-theme="dark"] .webchat__bubble__content .ac-container,
+[data-theme="dark"] .webchat__bubble__content .ac-columnSet,
+[data-theme="dark"] .webchat__bubble__content .ac-column,
+[data-theme="dark"] .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content > div {
   background-color: transparent !important;
 }
 [data-theme="dark"] .webchat__bubble__content .ac-textBlock,
 [data-theme="dark"] .webchat__bubble__content .ac-textBlock *,
+[data-theme="dark"] .webchat__bubble__content .ac-textBlock p,
 [data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factTitle,
 [data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factValue {
   color: #f3f4f6 !important;
