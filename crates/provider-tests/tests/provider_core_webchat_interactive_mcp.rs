@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -82,6 +82,7 @@ fn parse_http_body_json(stdout: &str) -> Result<Value> {
         .with_context(|| format!("failed to parse body JSON from line: {line}"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn demo_ingress_args(
     bundle: &Path,
     provider: &str,
@@ -170,10 +171,7 @@ fn seed_demo_mcp_catalog(bundle: &Path, provider: &str) -> Result<()> {
     let output = run_gtc(&args, bundle)?;
     let body = parse_http_body_json(&output)?;
     if body.get("ok").and_then(Value::as_bool) != Some(true) {
-        return Err(anyhow::anyhow!(
-            "failed to seed mcp catalog: {}",
-            body
-        ));
+        return Err(anyhow::anyhow!("failed to seed mcp catalog: {}", body));
     }
     Ok(())
 }
