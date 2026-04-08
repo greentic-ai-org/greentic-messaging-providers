@@ -10,7 +10,9 @@ use greentic_interfaces_wasmtime::host_helpers::v1::{
 use greentic_types::provider::PROVIDER_EXTENSION_ID;
 use provider_common::component_v0_6::{DescribePayload, canonical_cbor_bytes, decode_cbor};
 use serde_json::{Value, json};
-use wasmtime::component::{Component, ComponentExportIndex, HasSelf, Linker, ResourceTable, TypedFunc};
+use wasmtime::component::{
+    Component, ComponentExportIndex, HasSelf, Linker, ResourceTable, TypedFunc,
+};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
