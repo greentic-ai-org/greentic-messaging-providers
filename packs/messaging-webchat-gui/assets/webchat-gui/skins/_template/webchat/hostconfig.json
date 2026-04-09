@@ -41,7 +41,7 @@
     "actionsOrientation": "horizontal",
     "actionAlignment": "stretch",
     "buttonSpacing": 8,
-    "maxActions": 5,
+    "maxActions": 10,
     "showCard": {
       "actionMode": "inline"
     }
