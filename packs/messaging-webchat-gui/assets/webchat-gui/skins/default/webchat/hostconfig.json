@@ -6,6 +6,9 @@
     "medium": 16,
     "large": 20
   },
+  "actions": {
+    "maxActions": 10
+  },
   "containerStyles": {
     "default": {
       "foregroundColors": {
