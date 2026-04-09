@@ -131,19 +131,24 @@ pub fn verify_token(secret: &[u8], token: &str) -> Result<TokenClaims, JwtError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
+
+    fn test_secret() -> [u8; 16] {
+        Uuid::new_v4().into_bytes()
+    }
 
     #[test]
     fn token_round_trip() {
-        let secret = b"super-secure-key";
+        let secret = test_secret();
         let ctx = DirectLineContext {
             env: "default".into(),
             tenant: "default".into(),
             team: Some("team-a".into()),
         };
-        let (token, exp) = issue_token(secret, ctx.clone(), "user-123", None).unwrap();
+        let (token, exp) = issue_token(&secret, ctx.clone(), "user-123", None).unwrap();
         assert!(token.split('.').count() == 3);
         assert!(exp > Utc::now().timestamp());
-        let claims = verify_token(secret, &token).unwrap();
+        let claims = verify_token(&secret, &token).unwrap();
         assert_eq!(claims.sub, "user-123");
         assert_eq!(claims.ctx, ctx);
         assert!(claims.conv.is_none());
@@ -151,15 +156,15 @@ mod tests {
 
     #[test]
     fn token_with_conv_claim() {
-        let secret = b"_another-secret-key_";
+        let secret = test_secret();
         let ctx = DirectLineContext {
             env: "prod".into(),
             tenant: "tenant-a".into(),
             team: None,
         };
         let (token, _) =
-            issue_token(secret, ctx.clone(), "user-x", Some("conv-99".into())).unwrap();
-        let claims = verify_token(secret, &token).unwrap();
+            issue_token(&secret, ctx.clone(), "user-x", Some("conv-99".into())).unwrap();
+        let claims = verify_token(&secret, &token).unwrap();
         assert_eq!(claims.conv.as_deref(), Some("conv-99"));
         assert_eq!(claims.ctx, ctx);
     }
