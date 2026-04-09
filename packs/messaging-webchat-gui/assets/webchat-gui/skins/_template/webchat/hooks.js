@@ -2,18 +2,9 @@
 var __webchatStore = null;
 
 export function createStoreMiddleware() {
-  var welcomeShown = false;
-  var hasUserMessage = false;
-
   return (store) => {
     __webchatStore = store;
     return next => action => {
-    // Track user messages to hide welcome
-    if (action.type === 'WEB_CHAT/SEND_MESSAGE' || action.type === 'WEB_CHAT/SEND_EVENT') {
-      hasUserMessage = true;
-      hideWelcome();
-    }
-
     const result = next(action);
 
     // Auto-scroll on bot messages
@@ -21,77 +12,14 @@ export function createStoreMiddleware() {
       action.type === 'DIRECT_LINE/INCOMING_ACTIVITY' &&
       action.payload?.activity?.from?.role === 'bot'
     ) {
-      hasUserMessage = true;
-      hideWelcome();
       setTimeout(() => {
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       }, 200);
     }
 
-    // Show welcome on first connect if no messages yet
-    if (action.type === 'DIRECT_LINE/CONNECT_FULFILLED' && !welcomeShown && !hasUserMessage) {
-      welcomeShown = true;
-      setTimeout(showWelcome, 300);
-    }
-
     return result;
   };};
 }
-
-function showWelcome() {
-  var webchat = document.getElementById('webchat');
-  if (!webchat) return;
-
-  // Check if messages already exist
-  var existing = webchat.querySelector('[class*="activity"]');
-  if (existing) return;
-
-  var welcome = document.createElement('div');
-  welcome.id = 'greentic-welcome';
-  welcome.className = 'welcome';
-
-  welcome.innerHTML = [
-    '<div class="welcome__card">',
-      '<div class="welcome__icon">',
-        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" ',
-          'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
-          '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>',
-        '</svg>',
-      '</div>',
-      '<h2 class="welcome__heading">Welcome! 👋</h2>',
-      '<p class="welcome__text">',
-        'How can I help you today?',
-      '</p>',
-      '<div class="welcome__actions">',
-        '<button class="welcome__btn" onclick="sendQuickMessage(this)">🚀 Get started</button>',
-        '<button class="welcome__btn" onclick="sendQuickMessage(this)">❓ What can you do?</button>',
-      '</div>',
-    '</div>'
-  ].join('');
-
-  // Insert before webchat content
-  var surface = webchat.querySelector('[role="main"]') || webchat.firstElementChild || webchat;
-  surface.style.position = 'relative';
-  surface.appendChild(welcome);
-}
-
-function hideWelcome() {
-  var el = document.getElementById('greentic-welcome');
-  if (el) {
-    el.style.opacity = '0';
-    el.style.transition = 'opacity 0.3s ease';
-    setTimeout(function () { el.remove(); }, 300);
-  }
-}
-
-// Global function for quick message buttons — dispatch via WebChat store
-window.sendQuickMessage = function (btn) {
-  var text = btn.textContent.replace(/^[^\w\s]+\s*/, '').trim();
-  if (__webchatStore && text) {
-    __webchatStore.dispatch({ type: 'WEB_CHAT/SEND_MESSAGE', payload: { text: text } });
-  }
-  hideWelcome();
-};
 
 export function onBeforeRender(context) {
   console.info('[hooks] rendering tenant', context.skin.tenant);

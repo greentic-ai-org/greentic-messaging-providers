@@ -1,7 +1,7 @@
 // Greentic WebChat Locale Picker Module
 (function () {
   var rt = window.__GTC_RUNTIME__ || {};
-  var tenant = rt.tenant || 'demo';
+  var tenant = rt.tenant || 'default';
   var selectedLocale = rt.selectedLocale || '';
   var originalFetch = rt.originalFetch || window.fetch.bind(window);
   var uiT = rt.uiT || function(k, fb) { return fb || k; };

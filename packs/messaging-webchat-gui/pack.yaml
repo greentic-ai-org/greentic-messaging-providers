@@ -1,5 +1,5 @@
 pack_id: messaging-webchat-gui
-version: 0.4.69
+version: 0.4.70
 kind: application
 publisher: Greentic
 display_name: WebChat GUI
@@ -50,7 +50,7 @@ components:
     host: {}
   wasm: components/templates/templates.wasm
 - id: messaging-provider-webchat-gui
-  version: 0.4.69
+  version: 0.4.70
   world: root:component/root
   supports:
   - messaging
@@ -65,7 +65,7 @@ components:
     host: {}
   wasm: components/messaging-provider-webchat-gui.wasm
 - id: messaging-provider-webchat-gui
-  version: 0.4.69
+  version: 0.4.70
   world: root:component/root
   supports:
   - messaging
@@ -80,7 +80,7 @@ components:
     host: {}
   wasm: components/messaging-provider-webchat-gui/component.wasm
 - id: messaging_provider_webchat_gui
-  version: 0.4.69
+  version: 0.4.70
   world: root:component/root
   supports:
   - messaging
@@ -112,7 +112,7 @@ assets:
 extensions:
   greentic.ext.capabilities.v1:
     kind: greentic.ext.capabilities.v1
-    version: 0.4.69
+    version: 0.4.70
     inline:
       offers:
       - cap_id: greentic.cap.messaging.provider.v1
@@ -124,11 +124,35 @@ extensions:
         requires_setup: true
         setup:
           qa_ref: components/messaging-provider-webchat-gui
-        version: 0.4.69
+        version: 0.4.70
+      schema_version: 1
+  greentic.http-routes.v1:
+    kind: greentic.http-routes.v1
+    version: 0.4.70
+    inline:
+      routes:
+      - domain: messaging
+        id: webchat-gui-auth-config
+        methods:
+        - GET
+        pattern: /v1/messaging/webchat/{tenant}/auth/config
+        provider_op: ingest_http
+      - domain: messaging
+        id: webchat-gui-token
+        methods:
+        - GET
+        - POST
+        pattern: /v1/messaging/webchat/{tenant}/token
+        provider_op: ingest_http
+      - domain: messaging
+        id: webchat-gui-directline
+        methods: []
+        pattern: /v1/messaging/webchat/{tenant}/v3/directline/{path*}
+        provider_op: ingest_http
       schema_version: 1
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
-    version: 0.4.69
+    version: 0.4.70
     inline:
       validators:
       - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
@@ -136,7 +160,7 @@ extensions:
         world: greentic:pack-validate/pack-validator@0.1.0
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.69
+    version: 0.4.70
     inline:
       providers:
       - provider_type: messaging.webchat-gui
@@ -156,7 +180,7 @@ extensions:
           world: greentic:provider/schema-core@1.0.0
   greentic.static-routes.v1:
     kind: greentic.static-routes.v1
-    version: 0.4.69
+    version: 0.4.70
     inline:
       routes:
       - id: webchat-gui
@@ -170,7 +194,7 @@ extensions:
       version: 1
   messaging.provider_ingress.v1:
     kind: messaging.provider_ingress.v1
-    version: 0.4.69
+    version: 0.4.70
     inline:
       capabilities:
         content_types:
@@ -179,27 +203,3 @@ extensions:
       component_ref: messaging-provider-webchat-gui
       export: ingest-http
       world: greentic:provider/schema-core@1.0.0
-  greentic.http-routes.v1:
-    kind: greentic.http-routes.v1
-    version: 0.4.69
-    inline:
-      schema_version: 1
-      routes:
-      - id: webchat-gui-auth-config
-        pattern: /v1/messaging/webchat/{tenant}/auth/config
-        methods:
-        - GET
-        provider_op: ingest_http
-        domain: messaging
-      - id: webchat-gui-token
-        pattern: /v1/messaging/webchat/{tenant}/token
-        methods:
-        - GET
-        - POST
-        provider_op: ingest_http
-        domain: messaging
-      - id: webchat-gui-directline
-        pattern: /v1/messaging/webchat/{tenant}/v3/directline/{path*}
-        methods: []
-        provider_op: ingest_http
-        domain: messaging

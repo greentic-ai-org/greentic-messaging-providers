@@ -859,12 +859,8 @@ console.log('[runtime-bootstrap] loaded');
         // Ensure directline config is set
         payload.webchat = payload.webchat || {};
         payload.webchat.directline = payload.webchat.directline || {};
-        if (!payload.webchat.directline.token_url) {
-          payload.webchat.directline.token_url = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/token';
-        }
-        if (!payload.webchat.directline.domain) {
-          payload.webchat.directline.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/v3/directline';
-        }
+        payload.webchat.directline.token_url = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/token';
+        payload.webchat.directline.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/v3/directline';
         payload.webchat.locale = locale;
         console.log('[bootstrap] tenant config patched:', tenantId, 'auth providers:', (payload.auth && payload.auth.providers || []).length);
         return new Response(JSON.stringify(payload), {
@@ -887,20 +883,16 @@ console.log('[runtime-bootstrap] loaded');
           }
         }
         if (!skinData) {
-          var fbUrl = url.pathname.replace(/skins\/[^/]+\//, 'skins/_template/');
-          console.log('[bootstrap] skin not found, falling back to _template:', fbUrl);
+          var fbUrl = url.pathname.replace(/skins\/[^/]+\//, 'skins/default/');
+          console.log('[bootstrap] skin not found, falling back to default:', fbUrl);
           var fbResp = await originalFetch(fbUrl);
           if (!fbResp.ok) return fbResp;
           skinData = await fbResp.json();
         }
         skinData.directLine = skinData.directLine || {};
         var ctxParams = 'env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
-        if (!skinData.directLine.tokenUrl) {
-          skinData.directLine.tokenUrl = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant) + '/token?' + ctxParams;
-        }
-        if (!skinData.directLine.domain) {
-          skinData.directLine.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant) + '/v3/directline';
-        }
+        skinData.directLine.tokenUrl = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant) + '/token?' + ctxParams;
+        skinData.directLine.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant) + '/v3/directline';
         if (selectedLocale) {
           skinData.webchat = skinData.webchat || {};
           skinData.webchat.locale = selectedLocale;

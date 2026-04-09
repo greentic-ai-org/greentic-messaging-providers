@@ -8,7 +8,7 @@
  * Usage:
  *   <script>
  *     window.greenticChatConfig = {
- *       tenant: 'demo',                    // required — determines skin.json
+ *       tenant: 'default',                  // required — determines skin.json
  *       baseUrl: 'https://your-domain.com', // optional — auto-detected from script src
  *
  *       // All below are optional — defaults from skin.json
@@ -73,7 +73,7 @@
   'use strict';
 
   var config = window.greenticChatConfig || {};
-  var tenant = config.tenant || 'demo';
+  var tenant = config.tenant || 'default';
   var baseUrl = (config.baseUrl || '').replace(/\/+$/, '');
 
   // Auto-detect baseUrl from script src if not provided

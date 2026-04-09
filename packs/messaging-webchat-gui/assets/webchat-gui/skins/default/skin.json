@@ -7,9 +7,7 @@
     "logo": "/skins/default/assets/logo.svg",
     "primary": "#0F62FE"
   },
-  "directLine": {
-    "tokenUrl": "http://localhost:8080/v1/messaging/webchat/default/v3/directline/tokens/generate"
-  },
+  "directLine": {},
   "webchat": {
     "styleOptions": "/skins/default/webchat/styleOptions.json",
     "adaptiveCardsHostConfig": "/skins/default/webchat/hostconfig.json",
