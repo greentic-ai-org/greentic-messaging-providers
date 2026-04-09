@@ -182,6 +182,40 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         let secrets_driver = ConfigAwareSecretStore::new(request.config.clone());
         let mut out = handle_directline_request(&dl_request, &mut state_driver, &secrets_driver);
 
+        // Emit ChannelMessageEnvelope for POST /conversations so the operator can
+        // auto-start the default flow when a new conversation is created.
+        // The welcome experience is driven entirely by the flow — the JS-side
+        // welcome overlay has been removed in favour of this server-side trigger.
+        if request.method.eq_ignore_ascii_case("POST")
+            && dl_path == "/v3/directline/conversations"
+            && out.status == 201
+        {
+            let (env_id, tenant_id) = extract_context_from_response_headers(&out.headers)
+                .unwrap_or_else(|| ("default".to_string(), "default".to_string()));
+            let user_id = out
+                .headers
+                .iter()
+                .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-User"))
+                .map(|h| h.value.clone());
+            let conv_id = out
+                .headers
+                .iter()
+                .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-ConversationId"))
+                .map(|h| h.value.clone());
+            let mut envelope = build_webchat_envelope_with_ctx(
+                String::new(),
+                user_id,
+                conv_id,
+                None,
+                &env_id,
+                &tenant_id,
+            );
+            envelope
+                .metadata
+                .insert("autoStart".to_string(), "true".to_string());
+            out.events.push(envelope);
+        }
+
         // Emit ChannelMessageEnvelope for POST /activities so the operator can
         // forward user messages to the flow engine.
         if request.method.eq_ignore_ascii_case("POST")

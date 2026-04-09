@@ -115,7 +115,11 @@ pub fn verify_token(secret: &[u8], token: &str) -> Result<TokenClaims, JwtError>
     }
     let claims: TokenClaims = decode_segment(payload)?;
     let now = Utc::now().timestamp();
-    if now < claims.nbf {
+    // Allow a small clock-skew leeway (30 seconds) to avoid NotYetValid
+    // errors when the token is created and validated on systems with
+    // slightly different clocks (e.g. WSL2 + external device via tunnel).
+    let leeway = 30;
+    if now + leeway < claims.nbf {
         return Err(JwtError::NotYetValid);
     }
     if now >= claims.exp {

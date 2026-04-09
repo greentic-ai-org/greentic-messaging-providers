@@ -2,7 +2,7 @@
 // Handles: session, login/error screens, OAuth flow, logout
 (function () {
   var rt = window.__GTC_RUNTIME__ || {};
-  var tenant = rt.tenant || 'demo';
+  var tenant = rt.tenant || 'default';
   var backendBase = rt.backendBase || function(t) { return '/v1/messaging/webchat/' + t; };
   var originalFetch = rt.originalFetch || window.fetch.bind(window);
   var uiT = rt.uiT || function(k, fb) { return fb || k; };
@@ -608,74 +608,28 @@
   }
 
   /**
-   * Send oauth_login_success by waiting for webchat to POST an activity
-   * (any user message), then inject our message into the same conversation.
-   * Uses fetch interception to capture the conversation URL.
+   * Send oauth_login_success via the webchat Redux store.
+   * Polls for __webchatStore to be available (set by hooks.js), then dispatches.
    */
-  var _oauthOrigFetch = window.fetch;
-  var _oauthConvUrl = null;
-  var _oauthToken = null;
-  var _oauthNeedsSend = false;
-
   function sendOAuthSuccessToFlow() {
-    _oauthNeedsSend = true;
-    console.log('[oauth] will send oauth_login_success on next conversation activity');
-    // Also try to find conversation from existing fetch traffic
-    // Poll for 10 seconds waiting for webchat to establish conversation
+    console.log('[oauth] waiting for webchat store to send oauth_login_success...');
     var attempts = 0;
     var poll = setInterval(function () {
       attempts++;
-      if (_oauthConvUrl && _oauthToken) {
+      if (window.__webchatStore) {
         clearInterval(poll);
-        doSendOAuthSuccess();
+        console.log('[oauth] sending oauth_login_success via store dispatch');
+        window.__webchatStore.dispatch({
+          type: 'WEB_CHAT/SEND_MESSAGE',
+          payload: { text: 'oauth_login_success' }
+        });
       }
-      if (attempts > 20) {
+      if (attempts > 30) {
         clearInterval(poll);
-        console.warn('[oauth] timed out waiting for conversation');
+        console.warn('[oauth] timed out waiting for webchat store');
       }
     }, 500);
   }
-
-  function doSendOAuthSuccess() {
-    if (!_oauthConvUrl) return;
-    console.log('[oauth] sending oauth_login_success to', _oauthConvUrl);
-    _oauthOrigFetch(_oauthConvUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + _oauthToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        type: 'message',
-        from: { id: 'oauth_user' },
-        text: 'oauth_login_success'
-      })
-    }).then(function () {
-      console.log('[oauth] oauth_login_success sent!');
-      _oauthNeedsSend = false;
-    }).catch(function (err) {
-      console.warn('[oauth] send failed:', err);
-    });
-  }
-
-  // Intercept fetch to capture conversation URL from webchat SDK activity posts
-  var _prevFetch = window.fetch;
-  window.fetch = function (url, opts) {
-    var urlStr = typeof url === 'string' ? url : (url && url.url) || '';
-    // Capture conversation activities URL and auth token
-    if (/\/v3\/directline\/conversations\/[^/]+\/activities/i.test(urlStr)) {
-      _oauthConvUrl = urlStr;
-      if (opts && opts.headers) {
-        var auth = opts.headers['Authorization'] || opts.headers['authorization'];
-        if (auth) _oauthToken = auth.replace('Bearer ', '');
-      }
-      // If we need to send and this is a GET (polling), send now
-      if (_oauthNeedsSend && opts && (!opts.method || opts.method === 'GET')) {
-        doSendOAuthSuccess();
-      }
-    }
-    return _prevFetch.apply(this, arguments);
-  };
 
   // Expose for webchat card action interception
   window.__GREENTIC_OPEN_OAUTH_POPUP__ = openOAuthPopup;

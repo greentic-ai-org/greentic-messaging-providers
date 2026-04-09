@@ -166,7 +166,26 @@ where
         }
     };
 
-    respond_json(
+    // Include context in headers so ingest_http can extract env/tenant for autoStart envelope
+    let mut headers = json_headers();
+    headers.push(Header {
+        name: "X-Greentic-Env".to_string(),
+        value: ctx.env.clone(),
+    });
+    headers.push(Header {
+        name: "X-Greentic-Tenant".to_string(),
+        value: ctx.tenant.clone(),
+    });
+    headers.push(Header {
+        name: "X-Greentic-User".to_string(),
+        value: claims.sub.clone(),
+    });
+    headers.push(Header {
+        name: "X-Greentic-ConversationId".to_string(),
+        value: conversation_id.clone(),
+    });
+
+    respond_json_with_headers(
         201,
         json!({
             "conversationId": conversation_id,
@@ -174,6 +193,7 @@ where
             "expires_in": TTL_SECONDS,
             "streamUrl": Value::Null,
         }),
+        headers,
     )
 }
 
