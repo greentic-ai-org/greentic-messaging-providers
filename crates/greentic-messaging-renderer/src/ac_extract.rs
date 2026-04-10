@@ -2,9 +2,21 @@
 //!
 //! Walks an AC v1.x body recursively and extracts text, title, actions, and images
 //! into a `PlannerCard` suitable for the render planner.
+//!
+//! Recursion is bounded by [`MAX_AC_DEPTH`] to prevent stack exhaustion from
+//! adversarial Adaptive Cards with deeply nested containers. Elements beyond
+//! the limit are silently dropped (no panic, no hang).
 
 use crate::planner::{PlannerAction, PlannerCard};
 use serde_json::Value;
+
+/// Maximum depth the Adaptive Card walker will recurse into nested containers
+/// (`Container`, `ColumnSet`, `ActionSet`, ...).
+///
+/// Chosen to comfortably cover legitimate Adaptive Cards (most authored cards
+/// are <10 levels deep) while bounding stack usage in `wasm32-wasip2` provider
+/// components where the default stack is small.
+pub const MAX_AC_DEPTH: usize = 32;
 
 /// Extract a `PlannerCard` from an Adaptive Card JSON value.
 pub fn extract_planner_card(ac: &Value) -> PlannerCard {
@@ -17,7 +29,14 @@ pub fn extract_planner_card(ac: &Value) -> PlannerCard {
     let mut images: Vec<String> = Vec::new();
 
     if let Some(body) = body {
-        extract_body_elements(body, &mut title, &mut text_parts, &mut actions, &mut images);
+        extract_body_elements(
+            body,
+            &mut title,
+            &mut text_parts,
+            &mut actions,
+            &mut images,
+            0,
+        );
     }
 
     if let Some(ac_actions) = ac_actions {
@@ -44,7 +63,14 @@ fn extract_body_elements(
     text_parts: &mut Vec<String>,
     actions: &mut Vec<PlannerAction>,
     images: &mut Vec<String>,
+    depth: usize,
 ) {
+    // Silently drop content past the depth limit to prevent stack exhaustion
+    // on adversarial cards. Legitimate cards never come close to this.
+    if depth > MAX_AC_DEPTH {
+        return;
+    }
+
     for element in elements {
         let element_type = element
             .get("type")
@@ -107,14 +133,21 @@ fn extract_body_elements(
             }
             "Container" => {
                 if let Some(items) = element.get("items").and_then(Value::as_array) {
-                    extract_body_elements(items, title, text_parts, actions, images);
+                    extract_body_elements(items, title, text_parts, actions, images, depth + 1);
                 }
             }
             "ColumnSet" => {
                 if let Some(columns) = element.get("columns").and_then(Value::as_array) {
                     for col in columns {
                         if let Some(items) = col.get("items").and_then(Value::as_array) {
-                            extract_body_elements(items, title, text_parts, actions, images);
+                            extract_body_elements(
+                                items,
+                                title,
+                                text_parts,
+                                actions,
+                                images,
+                                depth + 1,
+                            );
                         }
                     }
                 }
@@ -375,5 +408,50 @@ mod tests {
         });
         let card = extract_planner_card(&ac);
         assert_eq!(card.text, Some("Real text".to_string()));
+    }
+
+    /// Builds an AC body containing a single Container chain nested `depth`
+    /// levels deep, with a TextBlock at the innermost layer.
+    fn deeply_nested_card(depth: usize, leaf_text: &str) -> Value {
+        let mut current = json!({"type": "TextBlock", "text": leaf_text});
+        for _ in 0..depth {
+            current = json!({
+                "type": "Container",
+                "items": [current]
+            });
+        }
+        json!({
+            "type": "AdaptiveCard",
+            "version": "1.6",
+            "body": [current]
+        })
+    }
+
+    #[test]
+    fn deeply_nested_containers_do_not_panic() {
+        // 100 levels — well past MAX_AC_DEPTH (32). Must not panic or hang.
+        let ac = deeply_nested_card(100, "leaf");
+        let card = extract_planner_card(&ac);
+        // Walker stopped at MAX_AC_DEPTH so the inner leaf is unreachable.
+        assert!(card.text.is_none());
+        assert!(card.title.is_none());
+        assert!(card.actions.is_empty());
+        assert!(card.images.is_empty());
+    }
+
+    #[test]
+    fn nesting_within_depth_limit_still_extracts() {
+        // A card nested exactly at the limit should still extract its leaf.
+        let ac = deeply_nested_card(MAX_AC_DEPTH, "still here");
+        let card = extract_planner_card(&ac);
+        assert_eq!(card.text, Some("still here".to_string()));
+    }
+
+    #[test]
+    fn nesting_one_past_limit_drops_leaf() {
+        // One level deeper than the limit: leaf must be silently dropped.
+        let ac = deeply_nested_card(MAX_AC_DEPTH + 1, "dropped");
+        let card = extract_planner_card(&ac);
+        assert!(card.text.is_none());
     }
 }

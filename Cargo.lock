@@ -3246,6 +3246,7 @@ version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "greentic-messaging-renderer",
  "greentic-types",
  "provider-common",
  "serde",
@@ -3260,6 +3261,7 @@ name = "messaging-provider-slack"
 version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
+ "greentic-messaging-renderer",
  "greentic-types",
  "provider-common",
  "serde",
@@ -3273,6 +3275,7 @@ version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "greentic-messaging-renderer",
  "greentic-types",
  "provider-common",
  "serde",
@@ -3286,6 +3289,7 @@ name = "messaging-provider-telegram"
 version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
+ "greentic-messaging-renderer",
  "greentic-types",
  "provider-common",
  "serde",
@@ -3299,6 +3303,7 @@ version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "greentic-messaging-renderer",
  "greentic-types",
  "hmac",
  "provider-common",
@@ -3317,6 +3322,7 @@ version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "greentic-messaging-renderer",
  "greentic-types",
  "hmac",
  "provider-common",
@@ -3334,6 +3340,7 @@ name = "messaging-provider-webex"
 version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
+ "greentic-messaging-renderer",
  "greentic-types",
  "provider-common",
  "serde",
@@ -3346,6 +3353,7 @@ name = "messaging-provider-whatsapp"
 version = "0.4.70"
 dependencies = [
  "base64 0.22.1",
+ "greentic-messaging-renderer",
  "greentic-types",
  "provider-common",
  "serde",

@@ -14,6 +14,7 @@ mod bindings {
     });
 }
 
+mod ac_converter;
 mod config;
 mod describe;
 mod ops;

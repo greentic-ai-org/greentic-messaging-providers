@@ -2,6 +2,7 @@
 //!
 //! This module provides the WASM component interface for the email provider.
 //! Implementation details are split across submodules:
+//! - `ac_converter`: Adaptive Card → styled HTML email + `AdaptiveCardConverter` impl
 //! - `config`: Configuration parsing and validation
 //! - `auth`: OAuth/Graph API authentication
 //! - `describe`: Provider description and QA specs
@@ -22,6 +23,7 @@ mod bindings {
     });
 }
 
+mod ac_converter;
 pub(crate) mod auth;
 mod config;
 mod describe;

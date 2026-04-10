@@ -18,6 +18,7 @@ base64.workspace = true
 chrono.workspace = true
 urlencoding.workspace = true
 provider-common.workspace = true
+greentic-messaging-renderer.workspace = true
 
 [package.metadata.component]
 package = "greentic:messaging-provider-email-core"
