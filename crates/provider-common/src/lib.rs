@@ -1,3 +1,4 @@
+pub mod ac_converter;
 pub mod component_v0_6;
 pub mod helpers;
 pub mod http_compat;
@@ -5,6 +6,8 @@ pub mod lifecycle_keys;
 pub mod qa_helpers;
 pub mod qa_invoke_bridge;
 pub mod test_macros;
+
+pub use ac_converter::AdaptiveCardConverter;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -18,7 +18,7 @@ pub(crate) mod config;
 #[path = "../../messaging-provider-webchat/src/describe.rs"]
 mod describe;
 pub(crate) mod directline;
-#[path = "../../messaging-provider-webchat/src/ops.rs"]
+#[path = "../../messaging-provider-webchat/src/ops/mod.rs"]
 mod ops;
 
 pub(crate) const PROVIDER_ID: &str = "messaging-provider-webchat-gui";
