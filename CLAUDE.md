@@ -79,10 +79,24 @@ All providers export the `component-v0-v6-v0` world (`greentic:component@0.6.1`)
 Each `components/messaging-provider-*` follows this pattern:
 - `src/lib.rs` — Component struct, trait impls, config types (`ProviderConfig`, `ProviderConfigOut`)
 - `src/describe.rs` — Metadata, QA specs, i18n keys/pairs, config schema (`I18N_KEYS`, `I18N_PAIRS`, `SETUP_QUESTIONS`, `config_schema()`)
-- `src/ops.rs` — Operations: send, ingest_http, render_plan, encode, send_payload
+- `src/ops/` — Operations split per egress step (all files under 500 lines):
+  - `ops/mod.rs` — public surface / re-exports
+  - `ops/render.rs` — `render_plan` (step 1, calls `capabilities_for(name)`)
+  - `ops/encode.rs` — `encode_op` (step 2)
+  - `ops/send.rs` + `ops/send_payload.rs` — `handle_send` / `send_payload` (step 3)
+  - `ops/ingest.rs` — `ingest_http` webhook handler
+  - `ops/webhook.rs` — `setup_webhook` (providers that support it)
+  - Provider-specific sub-modules as needed: Slack `blockkit/`, Telegram `ac_to_html.rs`/`ac_inputs.rs`/`ac_helpers.rs`, WebChat `oauth.rs`/`envelope.rs`, etc.
+- `src/ac_converter.rs` — (WhatsApp, Email) Adaptive Card → provider-native converter + `AdaptiveCardConverter` trait impl
 - `src/config.rs` — Config parsing, validation, secret loading
 - `component.manifest.json` — Version and metadata (must match workspace version)
 - `Cargo.toml` — `[lib] crate-type = ["cdylib"]`
+
+**Capability matrix source of truth:** `crates/greentic-messaging-renderer/src/capabilities.rs` — every provider's `render_plan` calls `greentic_messaging_renderer::capabilities_for(name)` instead of hardcoding `PlannerCapabilities` literals. Adding a new provider requires only registering its capabilities there.
+
+**Adaptive Card converter contract:** `crates/provider-common/src/ac_converter.rs` defines the `AdaptiveCardConverter` trait. Provider-specific converters (Slack `SlackBlockKitConverter`, Telegram `TelegramHtmlConverter`, WhatsApp `WhatsAppConverter`, Email `EmailHtmlConverter`) implement it for uniform testing and future migration of call sites.
+
+**AC extractor security:** `crates/greentic-messaging-renderer/src/ac_extract.rs` enforces `MAX_AC_DEPTH = 32` on recursive card walking to prevent stack overflow from pathologically nested cards.
 
 ### Key Crates
 
