@@ -638,6 +638,7 @@ button[data-action="logout"]:hover,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock *,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock p,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textRun,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factTitle,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factValue {
     color: #f3f4f6 !important;
@@ -687,6 +688,7 @@ button[data-action="logout"]:hover,
 [data-theme="dark"] .webchat__bubble__content .ac-textBlock,
 [data-theme="dark"] .webchat__bubble__content .ac-textBlock *,
 [data-theme="dark"] .webchat__bubble__content .ac-textBlock p,
+[data-theme="dark"] .webchat__bubble__content .ac-textRun,
 [data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factTitle,
 [data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factValue {
   color: #f3f4f6 !important;
