@@ -1054,7 +1054,7 @@ console.log('[runtime-bootstrap] loaded');
             darkObserverTimer = null;
             var themeDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
               (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            if (themeDark) applyDarkModeInlineOverrides(true);
+            applyDarkModeInlineOverrides(themeDark);
           }, 50);
         }).observe(document.body, { childList: true, subtree: true });
       }
