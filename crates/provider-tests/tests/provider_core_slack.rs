@@ -151,6 +151,8 @@ impl bindings::greentic::secrets_store::secrets_store::Host for HostState {
             Ok(None)
         }
     }
+
+    fn put(&mut self, _key: String, _value: Vec<u8>) {}
 }
 
 impl bindings::greentic::interfaces_types::types::Host for HostState {}
