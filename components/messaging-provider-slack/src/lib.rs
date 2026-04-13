@@ -319,7 +319,7 @@ mod tests {
         let describe = build_describe_payload();
         assert_eq!(
             describe.schema_hash,
-            "6fc6eaabb95b38df484165458b921e0580d9ec98af88a12ea2805faa2344c476"
+            "ecb2497fe6d0c6c9151b326f4f975b91f1c3508422edb7a7b7f4ce5a64f6ee57"
         );
     }
 
