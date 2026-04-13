@@ -27,6 +27,8 @@ pub(crate) const PROVIDER_TYPE: &str = "messaging.slack.api";
 pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
 pub(crate) const DEFAULT_API_BASE: &str = "https://slack.com/api";
 pub(crate) const DEFAULT_BOT_TOKEN_KEY: &str = "SLACK_BOT_TOKEN";
+pub(crate) const DEFAULT_CONFIG_TOKEN_KEY: &str = "SLACK_CONFIGURATION_TOKEN";
+pub(crate) const DEFAULT_CONFIG_REFRESH_TOKEN_KEY: &str = "SLACK_CONFIGURATION_REFRESH_TOKEN";
 
 use config::{ProviderConfigOut, default_config_out, validate_config_out};
 use describe::{
