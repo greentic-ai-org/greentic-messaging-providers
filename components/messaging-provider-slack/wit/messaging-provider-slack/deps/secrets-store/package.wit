@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-package greentic:secrets-store@1.0.0;
+package greentic:secrets-store@1.1.0;
 
-/// Read-only secrets interface exposed by Greentic hosts.
+/// Read-write secrets interface exposed by Greentic hosts.
 interface secrets-store {
   /// Canonical error payload for secret lookups.
   enum secrets-error {
@@ -18,6 +18,9 @@ interface secrets-store {
 
   /// Reads a secret value; returns `none` when the key is missing.
   get: func(key: string) -> result<option<list<u8>>, secrets-error>;
+
+  /// Writes a secret value for the provided key.
+  put: func(key: string, value: list<u8>);
 }
 
 world store {
