@@ -7,7 +7,6 @@
     "enabled",
     "tenant_id",
     "client_id",
-    "public_base_url",
     "graph_base_url",
     "auth_base_url",
     "token_scope"
