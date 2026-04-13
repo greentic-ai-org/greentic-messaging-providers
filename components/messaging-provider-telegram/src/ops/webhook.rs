@@ -1,8 +1,8 @@
 //! `setup_webhook` op for the Telegram provider.
 //!
-//! Calls the Telegram Bot API `setWebhook` endpoint with the provider's
-//! configured `public_base_url` plus an optional `webhook_path` (defaults to
-//! `/messaging/telegram`). Accepts config either as top-level fields or under a
+//! Calls the Telegram Bot API `setWebhook` endpoint with the standard greentic
+//! ingress URL: `{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}`.
+//! Accepts config either as top-level fields or under a
 //! nested `"config"` object, and falls back to the secrets store for the bot
 //! token when no explicit value is supplied.
 
@@ -20,11 +20,14 @@ use crate::bindings::greentic::http::http_client as client;
 ///   "bot_token": "123:ABC",
 ///   "public_base_url": "https://example.ngrok-free.app",
 ///   "api_base_url": "https://api.telegram.org",   // optional
-///   "webhook_path": "/messaging/telegram"          // optional, default
+///   "provider_id": "messaging-telegram",           // optional, default
+///   "tenant": "default",                           // optional, default
+///   "team": "default"                              // optional, default
 /// }
 /// ```
 ///
-/// Calls: POST {api_base}/bot{token}/setWebhook { "url": "{public_base_url}{webhook_path}" }
+/// Calls: POST {api_base}/bot{token}/setWebhook
+///   { "url": "{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}" }
 pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
     let parsed: Value = match serde_json::from_slice(input_json) {
         Ok(val) => val,
@@ -95,12 +98,26 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         })
         .unwrap_or(DEFAULT_API_BASE);
 
-    let webhook_path = parsed
-        .get("webhook_path")
+    let provider_id = parsed
+        .get("provider_id")
         .and_then(Value::as_str)
-        .unwrap_or("/messaging/telegram");
+        .unwrap_or("messaging-telegram");
+    let tenant = parsed
+        .get("tenant")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
+    let team = parsed
+        .get("team")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
 
-    let webhook_url = format!("{}{}", public_base_url.trim_end_matches('/'), webhook_path);
+    let webhook_url = format!(
+        "{}/v1/messaging/ingress/{}/{}/{}",
+        public_base_url.trim_end_matches('/'),
+        provider_id,
+        tenant,
+        team,
+    );
 
     // Call setWebhook
     let url = format!("{api_base}/bot{bot_token}/setWebhook");

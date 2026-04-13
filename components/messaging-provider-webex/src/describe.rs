@@ -20,6 +20,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.op.encode.description",
     "webex.op.send_payload.title",
     "webex.op.send_payload.description",
+    "webex.op.setup_webhook.title",
+    "webex.op.setup_webhook.description",
     "webex.schema.input.title",
     "webex.schema.input.description",
     "webex.schema.input.message.title",
@@ -108,6 +110,11 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 "webex.op.send_payload.title",
                 "webex.op.send_payload.description",
             ),
+            op(
+                "setup_webhook",
+                "webex.op.setup_webhook.title",
+                "webex.op.setup_webhook.description",
+            ),
         ],
         input_schema: input_schema.clone(),
         output_schema: output_schema.clone(),
@@ -159,6 +166,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "webex.op.send_payload.description",
         "Send encoded payload to Webex API",
+    ),
+    ("webex.op.setup_webhook.title", "Setup Webhook"),
+    (
+        "webex.op.setup_webhook.description",
+        "Register webhooks with Webex API",
     ),
     ("webex.schema.input.title", "Webex input"),
     (
