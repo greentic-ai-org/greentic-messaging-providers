@@ -29,6 +29,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Light-mode send box fix (ensure input text is visible) ── */
+.webchat__send-box-text-box__input {
+  color: var(--text, #1f2937) !important;
+}
+
 /* ── SPA overrides ──────────────────────────────────────── */
 
 .fullpage-status { display: none !important; }
