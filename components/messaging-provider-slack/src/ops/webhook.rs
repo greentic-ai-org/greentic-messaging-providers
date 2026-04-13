@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::{get_secret_string, put_secret_string};
-use crate::{DEFAULT_CONFIG_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY};
+use crate::{DEFAULT_CONFIG_REFRESH_TOKEN_KEY, DEFAULT_CONFIG_TOKEN_KEY};
 
 /// Rotate an expired Slack configuration token using the refresh token.
 ///
@@ -302,10 +302,7 @@ fn export_manifest(app_id: &str, config_token: &str) -> ExportResult {
 /// Attempt to refresh the configuration token and persist the new tokens.
 ///
 /// Returns the new config token on success, or a serialized error response.
-fn try_refresh_token(
-    config_token: &str,
-    refresh_token: Option<&str>,
-) -> Result<String, Vec<u8>> {
+fn try_refresh_token(config_token: &str, refresh_token: Option<&str>) -> Result<String, Vec<u8>> {
     let refresh_token = refresh_token.ok_or_else(|| {
         json_bytes(&json!({
             "ok": false,
