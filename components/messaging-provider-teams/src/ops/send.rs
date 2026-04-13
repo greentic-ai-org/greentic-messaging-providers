@@ -50,16 +50,18 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         return json_bytes(&json!({"ok": false, "error": "attachments not supported"}));
     }
 
+    // Adaptive Card payloads may have no text — allow empty text when _ac_json is present.
+    let has_ac = parsed.get("_ac_json").is_some();
     let text = envelope
         .text
         .as_ref()
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    let text = match text {
-        Some(value) => value,
-        None => return json_bytes(&json!({"ok": false, "error": "text required"})),
-    };
+        .map(ToOwned::to_owned)
+        .unwrap_or_default();
+    if text.is_empty() && !has_ac {
+        return json_bytes(&json!({"ok": false, "error": "text required"}));
+    }
 
     // Get service URL from metadata or config
     let service_url = parsed
