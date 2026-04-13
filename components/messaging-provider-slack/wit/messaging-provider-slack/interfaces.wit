@@ -3,7 +3,7 @@
 package greentic:component@0.6.1;
 
 use greentic:http/http-client@1.1.0 as http-client;
-use greentic:secrets-store/secrets-store@1.0.0;
+use greentic:secrets-store/secrets-store@1.1.0;
 
 interface descriptor {
   describe: func() -> list<u8>;
