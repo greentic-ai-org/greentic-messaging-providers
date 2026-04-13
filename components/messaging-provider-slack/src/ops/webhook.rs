@@ -10,6 +10,76 @@ use serde_json::{Value, json};
 
 use crate::bindings::greentic::http::http_client as client;
 
+/// Rotate an expired Slack configuration token using the refresh token.
+///
+/// Calls `tooling.tokens.rotate` with form-urlencoded body. Returns
+/// `(new_config_token, new_refresh_token)` on success.
+fn rotate_config_token(
+    config_token: &str,
+    refresh_token: &str,
+) -> Result<(String, String), String> {
+    let body = format!(
+        "configuration_token={}&refresh_token={}",
+        urlencoding(config_token),
+        urlencoding(refresh_token),
+    );
+    let resp = client::send(
+        &client::Request {
+            method: "POST".to_string(),
+            url: "https://slack.com/api/tooling.tokens.rotate".to_string(),
+            headers: vec![(
+                "Content-Type".to_string(),
+                "application/x-www-form-urlencoded".to_string(),
+            )],
+            body: Some(body.into_bytes()),
+        },
+        None,
+        None,
+    );
+    let resp_body: Value = match resp {
+        Ok(r) => serde_json::from_slice(&r.body.unwrap_or_default()).unwrap_or(Value::Null),
+        Err(e) => return Err(format!("token rotate request failed: {}", e.message)),
+    };
+    if resp_body.get("ok").and_then(Value::as_bool) != Some(true) {
+        let err = resp_body
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        return Err(format!("token rotate failed: {err}"));
+    }
+    let new_token = resp_body
+        .get("token")
+        .and_then(Value::as_str)
+        .ok_or("rotate response missing token field")?
+        .to_string();
+    let new_refresh = resp_body
+        .get("refresh_token")
+        .and_then(Value::as_str)
+        .ok_or("rotate response missing refresh_token field")?
+        .to_string();
+    Ok((new_token, new_refresh))
+}
+
+/// Minimal percent-encoding for form-urlencoded values.
+fn urlencoding(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for b in input.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => {
+                out.push('%');
+                out.push(char::from(HEX[(b >> 4) as usize]));
+                out.push(char::from(HEX[(b & 0x0F) as usize]));
+            }
+        }
+    }
+    out
+}
+
+const HEX: [u8; 16] = *b"0123456789ABCDEF";
+
 /// Handle `setup_webhook` op — updates Slack app manifest with webhook URLs.
 ///
 /// Input JSON:
@@ -197,5 +267,18 @@ fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
     if let Some(obj) = interactivity.as_object_mut() {
         obj.insert("request_url".to_string(), json!(webhook_url));
         obj.insert("is_enabled".to_string(), json!(true));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn urlencoding_encodes_special_chars() {
+        assert_eq!(urlencoding("hello world"), "hello%20world");
+        assert_eq!(urlencoding("xoxe.xoxp-123"), "xoxe.xoxp-123");
+        assert_eq!(urlencoding("a=b&c=d"), "a%3Db%26c%3Dd");
+        assert_eq!(urlencoding("token+value"), "token%2Bvalue");
     }
 }
