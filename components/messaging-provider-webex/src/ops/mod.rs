@@ -75,19 +75,24 @@ pub(super) fn build_webex_body(
 ) -> serde_json::Map<String, Value> {
     let mut map = serde_json::Map::new();
     if let Some(card) = card_payload {
-        // Webex supports AC up to v1.3 — cap the version.
+        // Webex supports AC up to v1.3 — cap the version and strip
+        // unsupported top-level properties that cause 400 errors.
         let mut card = card.clone();
         if let Some(obj) = card.as_object_mut() {
             let ver = obj.get("version").and_then(Value::as_str).unwrap_or("1.0");
             if ver != "1.0" && ver != "1.1" && ver != "1.2" && ver != "1.3" {
                 obj.insert("version".into(), Value::String("1.3".to_string()));
             }
+            obj.remove("speak");
+            obj.remove("$schema");
         }
         let attachment = serde_json::json!({
             "contentType": "application/vnd.microsoft.card.adaptive",
             "content": card,
         });
         map.insert("attachments".into(), Value::Array(vec![attachment]));
+        // Webex requires `text` as fallback when sending attachments.
+        map.insert("text".into(), Value::String(markdown.to_string()));
     } else if let Some(text_val) = text_value {
         map.insert("text".into(), Value::String(text_val.clone()));
     }

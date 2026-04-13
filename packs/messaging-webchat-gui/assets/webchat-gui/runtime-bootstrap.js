@@ -999,8 +999,8 @@ console.log('[runtime-bootstrap] loaded');
         // Send box input
         var inputs = document.querySelectorAll('.webchat__send-box-text-box__input');
         for (var i = 0; i < inputs.length; i++) {
-          inputs[i].style.setProperty('color', dark ? '#f3f4f6' : '', 'important');
-          inputs[i].style.setProperty('background-color', dark ? 'transparent' : '', 'important');
+          inputs[i].style.setProperty('color', 'black', 'important');
+          if (!dark) delete inputs[i].dataset.darkOverride;
         }
         // Send box container and all children with inline backgrounds
         var sendBoxes = document.querySelectorAll('.webchat__send-box, .webchat__send-box *');
@@ -1054,7 +1054,7 @@ console.log('[runtime-bootstrap] loaded');
             darkObserverTimer = null;
             var themeDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
               (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            if (themeDark) applyDarkModeInlineOverrides(true);
+            applyDarkModeInlineOverrides(themeDark);
           }, 50);
         }).observe(document.body, { childList: true, subtree: true });
       }
