@@ -60,6 +60,9 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "slack.schema.config.slack_app_id.description",
     "slack.schema.config.slack_configuration_token.title",
     "slack.schema.config.slack_configuration_token.description",
+    "slack.qa.setup.slack_configuration_refresh_token",
+    "slack.schema.config.slack_configuration_refresh_token.title",
+    "slack.schema.config.slack_configuration_refresh_token.description",
 ];
 
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
@@ -72,6 +75,11 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
     (
         "slack_configuration_token",
         "slack.qa.setup.slack_configuration_token",
+        true,
+    ),
+    (
+        "slack_configuration_refresh_token",
+        "slack.qa.setup.slack_configuration_refresh_token",
         true,
     ),
 ];
@@ -125,6 +133,10 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
             },
             RedactionRule {
                 path: "$.slack_configuration_token".to_string(),
+                strategy: "replace".to_string(),
+            },
+            RedactionRule {
+                path: "$.slack_configuration_refresh_token".to_string(),
                 strategy: "replace".to_string(),
             },
         ],
@@ -257,6 +269,18 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "slack.schema.config.slack_configuration_token.description",
         "Short-lived configuration token from api.slack.com/apps settings. Used to update your app manifest automatically.",
     ),
+    (
+        "slack.qa.setup.slack_configuration_refresh_token",
+        "Configuration refresh token",
+    ),
+    (
+        "slack.schema.config.slack_configuration_refresh_token.title",
+        "Configuration refresh token",
+    ),
+    (
+        "slack.schema.config.slack_configuration_refresh_token.description",
+        "Refresh token for rotating expired configuration tokens. Generated alongside the configuration token at api.slack.com/apps settings.",
+    ),
 ];
 
 pub(crate) fn i18n_bundle(locale: String) -> Vec<u8> {
@@ -366,6 +390,14 @@ fn config_schema() -> SchemaIr {
                 schema_secret(
                     "slack.schema.config.slack_configuration_token.title",
                     "slack.schema.config.slack_configuration_token.description",
+                ),
+            ),
+            (
+                "slack_configuration_refresh_token",
+                false,
+                schema_secret(
+                    "slack.schema.config.slack_configuration_refresh_token.title",
+                    "slack.schema.config.slack_configuration_refresh_token.description",
                 ),
             ),
         ],
