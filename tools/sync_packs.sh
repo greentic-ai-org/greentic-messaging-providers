@@ -432,6 +432,12 @@ for dir in "${PACKS_DIR}"/*; do
     [ -z "${comp}" ] && continue
     wasm_rel="${wasm_path:-components/${comp}.wasm}"
     wasm_file="$(basename "${wasm_rel}")"
+    # When wasm_rel uses a subdirectory path like components/<id>/component.wasm,
+    # the basename is just "component.wasm" which collides across all packs.
+    # Resolve to the component-specific artifact name instead.
+    if [ "${wasm_file}" = "component.wasm" ]; then
+      wasm_file="${comp}.wasm"
+    fi
     is_templates_component=0
     if [ "${comp}" = "templates" ] || [ "${comp}" = "ai.greentic.component-templates" ] || [ "${wasm_file}" = "templates.wasm" ]; then
       is_templates_component=1
