@@ -6,7 +6,6 @@
   "required": [
     "enabled",
     "phone_number_id",
-    "public_base_url",
     "api_base_url",
     "api_version"
   ],
