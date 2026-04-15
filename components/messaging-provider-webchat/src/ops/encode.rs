@@ -2,7 +2,7 @@
 //!
 //! Serializes a `ChannelMessageEnvelope`-derived `EncodeMessage` into a
 //! `ProviderPayloadV1` whose body is a JSON blob understood by the webchat
-//! send/persist path. Passes through adaptive card, tenant, and env metadata.
+//! send/persist path. Passes through adaptive card, tenant, env, and team metadata.
 
 use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::ProviderPayloadV1;
@@ -38,6 +38,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     let adaptive_card = encode_message.metadata.get("adaptive_card").cloned();
     let tenant = encode_message.metadata.get("tenant").cloned();
     let env = encode_message.metadata.get("env").cloned();
+    let team = encode_message.metadata.get("team").cloned();
     let mut payload_body = json!({
         "text": text,
         "route": route_value.clone(),
@@ -52,12 +53,18 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     if let Some(ref env) = env {
         payload_body["env"] = Value::String(env.clone());
     }
+    if let Some(ref team) = team {
+        payload_body["team"] = Value::String(team.clone());
+    }
     let body_bytes = serde_json::to_vec(&payload_body).unwrap_or_else(|_| b"{}".to_vec());
     let mut metadata = BTreeMap::new();
     metadata.insert("route".to_string(), Value::String(route_value.clone()));
     metadata.insert("method".to_string(), Value::String("POST".to_string()));
     if let Some(tenant) = tenant {
         metadata.insert("tenant".to_string(), Value::String(tenant));
+    }
+    if let Some(team) = team {
+        metadata.insert("team".to_string(), Value::String(team));
     }
     let payload = ProviderPayloadV1 {
         content_type: "application/json".to_string(),
