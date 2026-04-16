@@ -10,21 +10,13 @@ use provider_common::helpers::{decode_encode_message, encode_error, json_bytes};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
-fn extensions_from_metadata(raw: Option<&String>) -> Option<Value> {
-    raw.and_then(|value| serde_json::from_str::<Value>(value).ok())
-}
-
 pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     let encode_message = match decode_encode_message(input_json) {
         Ok(value) => value,
         Err(err) => return encode_error(&err),
     };
-    let extensions = extensions_from_metadata(encode_message.metadata.get("extensions"));
     let has_adaptive_card = encode_message.metadata.contains_key("adaptive_card")
-        || extensions
-            .as_ref()
-            .and_then(Value::as_object)
-            .is_some_and(|items| items.contains_key("adaptive_card"));
+        || encode_message.extensions.contains_key("adaptive_card");
     let text = encode_message
         .text
         .clone()
@@ -61,8 +53,9 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     if let Some(ref env) = env {
         payload_body["env"] = Value::String(env.clone());
     }
-    if let Some(extensions) = extensions {
-        payload_body["extensions"] = extensions;
+    if !encode_message.extensions.is_empty() {
+        payload_body["extensions"] =
+            serde_json::to_value(&encode_message.extensions).unwrap_or(Value::Null);
     }
     let body_bytes = serde_json::to_vec(&payload_body).unwrap_or_else(|_| b"{}".to_vec());
     let mut metadata = BTreeMap::new();

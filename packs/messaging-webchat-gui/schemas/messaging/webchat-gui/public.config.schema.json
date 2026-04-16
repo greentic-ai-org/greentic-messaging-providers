@@ -3,7 +3,7 @@
   "title": "WebChat GUI Public Config",
   "type": "object",
   "additionalProperties": false,
-  "required": [],
+  "required": ["public_base_url"],
   "properties": {
     "enabled": {
       "type": "boolean",

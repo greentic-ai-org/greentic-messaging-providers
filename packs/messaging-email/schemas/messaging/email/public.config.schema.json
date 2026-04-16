@@ -5,6 +5,7 @@
   "additionalProperties": false,
   "required": [
     "enabled",
+    "public_base_url",
     "host",
     "port",
     "username",

@@ -275,5 +275,6 @@ fn build_synthetic_envelope(
         text,
         attachments: Vec::new(),
         metadata,
+        extensions: Default::default(),
     })
 }

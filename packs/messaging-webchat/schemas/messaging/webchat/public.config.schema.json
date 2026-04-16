@@ -5,6 +5,7 @@
   "additionalProperties": false,
   "required": [
     "enabled",
+    "public_base_url",
     "mode"
   ],
   "properties": {

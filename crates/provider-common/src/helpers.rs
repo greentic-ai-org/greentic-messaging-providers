@@ -309,18 +309,24 @@ pub struct RenderPlanConfig<'a> {
 
 /// Resolve an Adaptive Card from a `ChannelMessageEnvelope`.
 ///
-/// Reads the legacy `metadata["adaptive_card"]` JSON string and returns the
-/// parsed `Value` if present.
+/// Checks `extensions["adaptive_card"]` first (typed `Value`), then falls
+/// back to `metadata["adaptive_card"]` (legacy JSON string). Returns the
+/// parsed `Value` if found. This dual-read approach is backward-compatible
+/// with upstream writers that haven't migrated to extensions yet.
 pub fn resolve_adaptive_card(envelope: &ChannelMessageEnvelope) -> Option<Value> {
+    if let Some(ac) = envelope.extensions.get("adaptive_card") {
+        return Some(ac.clone());
+    }
     envelope
         .metadata
         .get("adaptive_card")
         .and_then(|s| serde_json::from_str::<Value>(s).ok())
 }
 
-/// Returns true if the envelope carries an Adaptive Card in metadata.
+/// Returns true if the envelope carries an Adaptive Card (in extensions or metadata).
 pub fn has_adaptive_card(envelope: &ChannelMessageEnvelope) -> bool {
-    envelope.metadata.contains_key("adaptive_card")
+    envelope.extensions.contains_key("adaptive_card")
+        || envelope.metadata.contains_key("adaptive_card")
 }
 
 /// Extract a downsampled text summary from an Adaptive Card JSON string.
