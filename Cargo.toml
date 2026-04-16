@@ -68,3 +68,9 @@ predicates = "3"
 wasmtime = { version = "43", features = ["component-model", "cache"] }
 wasmtime-wasi = "43"
 jsonschema = { version = "0.45", default-features = false }
+
+# === TEMPORARY: TASK-082 Bug 3 cross-submodule development ===
+# Points greentic-types to the local worktree so greentic-types changes
+# are picked up before they're published to crates.io. Revert before merge.
+[patch.crates-io]
+greentic-types = { path = "../greentic-types" }
