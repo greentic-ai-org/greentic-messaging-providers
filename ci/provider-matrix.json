@@ -22,9 +22,7 @@
     "messaging-provider-webex",
     "messaging-provider-whatsapp",
     "messaging-provider-webchat",
-    "messaging-provider-webchat-gui",
-    "state-provider-memory",
-    "state-provider-redis"
+    "messaging-provider-webchat-gui"
   ],
   "all_packs": [
     "messaging-dummy",
@@ -35,9 +33,7 @@
     "messaging-webchat",
     "messaging-webchat-gui",
     "messaging-webex",
-    "messaging-whatsapp",
-    "state-memory",
-    "state-redis"
+    "messaging-whatsapp"
   ],
   "shared_paths": [
     ".github/workflows/",
@@ -68,11 +64,7 @@
     "components/questions/",
     "components/secrets-probe/",
     "components/templates/",
-    "components/state-provider-memory/",
-    "components/state-provider-redis/",
     "packs/messaging-provider-bundle/",
-    "packs/state-memory/",
-    "packs/state-redis/",
     "crates/component_questions/",
     "crates/greentic-messaging-cardkit/",
     "crates/greentic-messaging-packgen/",
