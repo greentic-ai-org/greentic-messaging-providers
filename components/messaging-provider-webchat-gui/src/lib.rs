@@ -18,7 +18,7 @@ pub(crate) mod config;
 #[path = "../../messaging-provider-webchat/src/describe.rs"]
 mod describe;
 pub(crate) mod directline;
-#[path = "../../messaging-provider-webchat/src/ops.rs"]
+#[path = "../../messaging-provider-webchat/src/ops/mod.rs"]
 mod ops;
 
 pub(crate) const PROVIDER_ID: &str = "messaging-provider-webchat-gui";
@@ -72,7 +72,7 @@ impl bindings::exports::greentic::component::qa::Guest for Component {
 
 impl bindings::exports::greentic::component::component_i18n::Guest for Component {
     fn i18n_keys() -> Vec<String> {
-        I18N_KEYS.iter().map(|k| (*k).to_string()).collect()
+        describe::i18n_keys_vec()
     }
 
     fn i18n_bundle(locale: String) -> Vec<u8> {
@@ -205,6 +205,12 @@ fn apply_answers_impl(
         merged.tenant_channel_id = optional_string_from(&answers, "tenant_channel_id")
             .or(merged.tenant_channel_id.clone());
         merged.base_url = optional_string_from(&answers, "base_url").or(merged.base_url.clone());
+        merged.oauth_enabled = answers
+            .get("oauth_enabled")
+            .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
+            .or(merged.oauth_enabled);
+        merged.oauth_providers =
+            compose_oauth_providers(&answers).or(merged.oauth_providers.clone());
     }
 
     if mode == Mode::Upgrade {
@@ -229,6 +235,19 @@ fn apply_answers_impl(
         }
         if has("base_url") {
             merged.base_url = optional_string_from(&answers, "base_url");
+        }
+        if has("oauth_enabled") {
+            merged.oauth_enabled = answers
+                .get("oauth_enabled")
+                .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")));
+        }
+        if has("oauth_enable_google")
+            || has("oauth_enable_microsoft")
+            || has("oauth_enable_github")
+            || has("oauth_enable_custom")
+            || has("oauth_providers")
+        {
+            merged.oauth_providers = compose_oauth_providers(&answers);
         }
     }
 
@@ -275,4 +294,97 @@ fn optional_string_from(answers: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn is_truthy(answers: &Value, key: &str) -> bool {
+    answers
+        .get(key)
+        .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
+        .unwrap_or(false)
+}
+
+/// Compose `oauth_providers` JSON array from individual per-provider answers.
+/// Falls back to raw `oauth_providers` field if present (for direct JSON input).
+fn compose_oauth_providers(answers: &Value) -> Option<String> {
+    let mut providers: Vec<Value> = Vec::new();
+
+    // Google (well-known URLs)
+    if is_truthy(answers, "oauth_enable_google")
+        && let Some(client_id) = optional_string_from(answers, "oauth_google_client_id")
+    {
+        let mut p = json!({
+            "id": "google", "label": "Google",
+            "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+            "token_url": "https://oauth2.googleapis.com/token",
+            "client_id": client_id, "scopes": "openid profile email"
+        });
+        if let Some(s) = optional_string_from(answers, "oauth_google_client_secret") {
+            p["client_secret"] = Value::String(s);
+        }
+        providers.push(p);
+    }
+
+    // Microsoft (well-known URLs)
+    if is_truthy(answers, "oauth_enable_microsoft")
+        && let Some(client_id) = optional_string_from(answers, "oauth_microsoft_client_id")
+    {
+        let mut p = json!({
+            "id": "microsoft", "label": "Microsoft",
+            "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+            "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            "client_id": client_id, "scopes": "openid profile email"
+        });
+        if let Some(s) = optional_string_from(answers, "oauth_microsoft_client_secret") {
+            p["client_secret"] = Value::String(s);
+        }
+        providers.push(p);
+    }
+
+    // GitHub (well-known URLs)
+    if is_truthy(answers, "oauth_enable_github")
+        && let Some(client_id) = optional_string_from(answers, "oauth_github_client_id")
+    {
+        let mut p = json!({
+            "id": "github", "label": "GitHub",
+            "auth_url": "https://github.com/login/oauth/authorize",
+            "token_url": "https://github.com/login/oauth/access_token",
+            "client_id": client_id, "scopes": "read:user user:email"
+        });
+        if let Some(s) = optional_string_from(answers, "oauth_github_client_secret") {
+            p["client_secret"] = Value::String(s);
+        }
+        providers.push(p);
+    }
+
+    // Custom OIDC (user-provided URLs)
+    if is_truthy(answers, "oauth_enable_custom")
+        && let Some(client_id) = optional_string_from(answers, "oauth_custom_client_id")
+    {
+        let label = optional_string_from(answers, "oauth_custom_label")
+            .unwrap_or_else(|| "SSO".to_string());
+        let auth_url = optional_string_from(answers, "oauth_custom_auth_url").unwrap_or_default();
+        let token_url = optional_string_from(answers, "oauth_custom_token_url").unwrap_or_default();
+        let scopes = optional_string_from(answers, "oauth_custom_scopes")
+            .unwrap_or_else(|| "openid profile email".to_string());
+        providers.push(json!({
+            "id": "custom",
+            "label": label,
+            "auth_url": auth_url,
+            "token_url": token_url,
+            "client_id": client_id,
+            "scopes": scopes
+        }));
+    }
+
+    // If per-provider fields produced results, use them
+    if !providers.is_empty() {
+        return Some(Value::Array(providers).to_string());
+    }
+
+    // Fallback: raw oauth_providers field (JSON string or array)
+    answers.get("oauth_providers").and_then(|val| match val {
+        Value::String(s) if !s.trim().is_empty() => Some(s.clone()),
+        Value::Array(_) => Some(val.to_string()),
+        _ => None,
+    })
 }

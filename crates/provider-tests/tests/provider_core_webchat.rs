@@ -10,7 +10,9 @@ use greentic_interfaces_wasmtime::host_helpers::v1::{
 use greentic_types::provider::PROVIDER_EXTENSION_ID;
 use provider_common::component_v0_6::{DescribePayload, canonical_cbor_bytes, decode_cbor};
 use serde_json::{Value, json};
-use wasmtime::component::{Component, ComponentExportIndex, Linker, ResourceTable, TypedFunc};
+use wasmtime::component::{
+    Component, ComponentExportIndex, HasSelf, Linker, ResourceTable, TypedFunc,
+};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
@@ -129,6 +131,24 @@ impl secrets_store::SecretsStoreHostV1_1 for HostState {
     }
 }
 
+impl bindings::greentic::http::http_client::Host for HostState {
+    fn send(
+        &mut self,
+        _req: bindings::greentic::http::http_client::Request,
+        _options: Option<bindings::greentic::http::http_client::RequestOptions>,
+        _ctx: Option<bindings::greentic::interfaces_types::types::TenantCtx>,
+    ) -> Result<
+        bindings::greentic::http::http_client::Response,
+        bindings::greentic::http::http_client::HostError,
+    > {
+        Ok(bindings::greentic::http::http_client::Response {
+            status: 200,
+            headers: vec![],
+            body: Some(b"{}".to_vec()),
+        })
+    }
+}
+
 impl state_store::StateStoreHost for HostState {
     fn read(
         &mut self,
@@ -169,6 +189,11 @@ fn add_wasi_to_linker(linker: &mut Linker<HostState>) {
 }
 
 fn add_greentic_hosts(linker: &mut Linker<HostState>) {
+    bindings::greentic::http::http_client::add_to_linker::<HostState, HasSelf<HostState>>(
+        linker,
+        |state: &mut HostState| state,
+    )
+    .expect("link http-client");
     add_all_v1_to_linker(
         linker,
         HostFns {

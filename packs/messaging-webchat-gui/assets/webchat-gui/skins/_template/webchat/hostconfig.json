@@ -1,17 +1,55 @@
 {
-  "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  "fontFamily": "Poppins, 'Segoe UI', system-ui, -apple-system, sans-serif",
+  "fontSizes": {
+    "small": 12,
+    "default": 14,
+    "medium": 16,
+    "large": 20,
+    "extraLarge": 24
+  },
   "spacing": {
     "small": 6,
     "default": 12,
     "medium": 16,
-    "large": 20
+    "large": 20,
+    "extraLarge": 28
+  },
+  "separator": {
+    "lineThickness": 1,
+    "lineColor": "#e5e7eb"
   },
   "containerStyles": {
     "default": {
+      "backgroundColor": "#ffffff",
       "foregroundColors": {
-        "default": { "default": "#161616", "subtle": "#525252" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" }
+        "default": { "default": "#1f2937", "subtle": "#6b7280" },
+        "accent": { "default": "#059669", "subtle": "#10b981" },
+        "attention": { "default": "#ef4444", "subtle": "#fca5a5" },
+        "good": { "default": "#22c55e", "subtle": "#86efac" },
+        "warning": { "default": "#f59e0b", "subtle": "#fcd34d" }
+      }
+    },
+    "emphasis": {
+      "backgroundColor": "#f8fafb",
+      "foregroundColors": {
+        "default": { "default": "#1f2937", "subtle": "#6b7280" },
+        "accent": { "default": "#059669", "subtle": "#10b981" }
       }
     }
+  },
+  "actions": {
+    "actionsOrientation": "horizontal",
+    "actionAlignment": "stretch",
+    "buttonSpacing": 8,
+    "maxActions": 10,
+    "showCard": {
+      "actionMode": "inline"
+    }
+  },
+  "adaptiveCard": {
+    "allowCustomStyle": true
+  },
+  "imageSet": {
+    "imageSize": "medium"
   }
 }

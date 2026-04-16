@@ -1,6 +1,6 @@
 {
   "id": "messaging-ingress-telegram",
-  "version": "0.4.40",
+  "version": "0.4.76",
   "supports": [
     "messaging"
   ],
@@ -13,7 +13,12 @@
   },
   "capabilities": {
     "wasi": {},
-    "host": {}
+    "host": {
+      "state": {
+        "read": true,
+        "write": true
+      }
+    }
   },
   "operations": [],
   "resources": {},

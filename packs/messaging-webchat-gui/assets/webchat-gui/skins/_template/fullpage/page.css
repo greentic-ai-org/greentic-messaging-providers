@@ -1,67 +1,820 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+/* ── Greentic WebChat · Clean Minimal Theme ─────────────── */
+
 :root {
   color-scheme: light;
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  line-height: 1.5;
-  --brand-primary: #0f62fe;
-  --brand-surface: #f4f4f4;
+  --font: 'Poppins', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --brand: #059669;
+  --brand-light: #ecfdf5;
+  --brand-dark: #064e3b;
+  --surface: #ffffff;
+  --bg: #f8fafb;
+  --border: #e5e7eb;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+  --radius: 12px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
 }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  margin: 0;
-  background: var(--brand-surface);
-  color: #161616;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-.hero {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
-  padding: 3rem;
-  background: #ffffff;
-  box-shadow: 0 20px 50px rgba(15, 98, 254, 0.15);
+/* ── Light-mode send box fix (ensure input text is visible) ── */
+.webchat__send-box-text-box__input {
+  color: var(--text, #1f2937) !important;
 }
 
-.hero__logo {
-  display: block;
-  margin-bottom: 1rem;
-}
+/* ── SPA overrides ──────────────────────────────────────── */
 
-.hero__tagline {
-  font-size: 1.125rem;
-  max-width: 420px;
-}
+.fullpage-status { display: none !important; }
 
-.hero__actions {
+.fullpage-shell {
   display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.hero__action {
-  text-decoration: none;
-  color: var(--brand-primary);
+.fullpage-shell-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+/* ── Topbar ─────────────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 1.25rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.topbar__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--brand-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.topbar__logo {
+  width: 20px;
+  height: 20px;
+}
+
+.topbar__title {
+  font-size: 0.9375rem;
   font-weight: 600;
+  color: var(--text);
+  line-height: 1;
 }
 
-.hero__media img {
-  width: 100%;
-  border-radius: 1rem;
-  object-fit: cover;
+.topbar__status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: -0.25rem;
 }
+
+.topbar__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+}
+
+.topbar__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+/* ── Control dividers ───────────────────────────────────── */
+
+.topbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* ── Theme toggle ───────────────────────────────────────── */
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.theme-toggle:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* ── Locale picker ──────────────────────────────────────── */
+
+.locale-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.locale-picker svg { flex-shrink: 0; }
+
+.locale-picker__select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.375rem 1.75rem 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  font-family: var(--font);
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E")
+    no-repeat right 0.625rem center;
+  cursor: pointer;
+  color: var(--text);
+  max-width: 160px;
+  transition: border-color 0.15s;
+}
+
+.locale-picker__select:hover { border-color: var(--brand); }
+.locale-picker__select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(5,150,105,0.12);
+}
+
+.locale-picker__select option {
+  color: var(--text);
+  background: var(--surface);
+}
+
+/* ── Logout button ──────────────────────────────────────── */
+
+.logout-btn,
+button[data-action="logout"],
+#greentic-logout-btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-family: var(--font);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.logout-btn:hover,
+button[data-action="logout"]:hover,
+#greentic-logout-btn:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* ── Chat panel ─────────────────────────────────────────── */
 
 .chat-panel {
-  padding: 2rem 3rem 4rem;
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
 }
 
 .chat-panel__surface {
-  margin-top: 1rem;
-  border-radius: 1rem;
-  border: 1px solid #e0e0e0;
-  background: #ffffff;
-  min-height: 540px;
-  box-shadow: inset 0 0 0 1px rgba(15, 98, 254, 0.1);
+  flex: 1 1 0%;
+  min-height: 0;
+  background: var(--surface);
+  margin: 0;
 }
 
 #webchat > * {
   height: 100%;
+}
+
+/* ── Adaptive Card · shadcn/ui style ───────────────────── */
+
+/* Card typography */
+[class*="webchat__bubble__content"] .ac-textBlock {
+  font-family: var(--font) !important;
+}
+
+/* FactSet — table style */
+.ac-factSet {
+  display: table !important;
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-family: var(--font) !important;
+  font-size: 0.8125rem !important;
+}
+
+.ac-fact {
+  display: table-row !important;
+}
+
+.ac-fact .ac-factTitle {
+  display: table-cell !important;
+  font-weight: 600 !important;
+  color: var(--text) !important;
+  padding: 0.375rem 1rem 0.375rem 0 !important;
+  vertical-align: top !important;
+  border-bottom: 1px solid var(--border) !important;
+  min-width: 6rem !important;
+}
+
+.ac-fact .ac-factValue {
+  display: table-cell !important;
+  color: var(--text-muted) !important;
+  padding: 0.375rem 0 !important;
+  vertical-align: top !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.ac-fact:last-child .ac-factTitle,
+.ac-fact:last-child .ac-factValue {
+  border-bottom: none !important;
+}
+
+/* Action buttons — shadcn outline variant */
+.ac-pushButton {
+  font-family: var(--font) !important;
+  font-weight: 500 !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.25rem !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--border) !important;
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  padding: 0.5rem 0.875rem !important;
+  cursor: pointer !important;
+  transition: background 0.15s, border-color 0.15s !important;
+}
+
+.ac-pushButton div,
+.ac-pushButton span,
+.ac-pushButton p {
+  color: inherit !important;
+}
+
+.ac-pushButton:hover {
+  background-color: var(--bg) !important;
+  border-color: var(--text-muted) !important;
+}
+
+/* Action set — flex-wrap so buttons don't overflow */
+.ac-actionSet {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.375rem !important;
+}
+
+/* ── Footer ─────────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1.5rem;
+  font-size: 0.75rem;
+  color: var(--text-light);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.footer__copy {
+  white-space: nowrap;
+}
+
+.footer__links {
+  display: flex;
+  gap: 1rem;
+}
+
+.footer__links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.footer__links a:hover {
+  color: var(--brand);
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+@media (min-width: 769px) {
+  .chat-panel {
+    padding: 1rem 1.5rem 1.5rem;
+  }
+
+  .chat-panel__surface {
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    height: 56px;
+    padding: 0 0.75rem;
+  }
+
+  .topbar__avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .topbar__logo {
+    width: 18px;
+    height: 18px;
+  }
+
+  .topbar__title {
+    font-size: 0.875rem;
+  }
+
+  .locale-picker__select {
+    max-width: 100px;
+    font-size: 0.75rem;
+  }
+
+  .chat-panel {
+    padding: 0;
+  }
+
+  .chat-panel__surface {
+    border-radius: 0;
+  }
+
+  .footer {
+    flex-direction: column;
+    gap: 0.25rem;
+    text-align: center;
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+/* ── Dark mode ──────────────────────────────────────────── */
+/* Auto dark mode (system preference) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #111827;
+    --bg: #0a0f1a;
+    --border: #374151;
+    --text: #f3f4f6;
+    --text-muted: #9ca3af;
+    --text-light: #6b7280;
+    --brand-light: rgba(5,150,105,0.25);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+
+    /* Tailwind/shadcn theme overrides for React app */
+    --background: 222 47% 7%;
+    --foreground: 220 14% 96%;
+    --card: 224 30% 16%;
+    --card-foreground: 220 14% 96%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 218 11% 65%;
+    --accent: 166 70% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 217 19% 27%;
+    --input: 217 19% 27%;
+    --ring: 217 91% 60%;
+  }
+}
+
+/* Manual dark mode (toggle) */
+[data-theme="dark"] {
+  --surface: #111827;
+  --bg: #0a0f1a;
+  --border: #374151;
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-light: #6b7280;
+  --brand-light: rgba(5,150,105,0.25);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+
+  /* Tailwind/shadcn theme overrides for React app */
+  --background: 222 47% 7%;
+  --foreground: 220 14% 96%;
+  --card: 224 30% 16%;
+  --card-foreground: 220 14% 96%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 220 14% 96%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 218 11% 65%;
+  --accent: 166 70% 45%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 217 19% 27%;
+  --input: 217 19% 27%;
+  --ring: 217 91% 60%;
+}
+
+/* Dark overrides for controls */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .locale-picker__select,
+  :root:not([data-theme="light"]) .theme-toggle {
+    border-color: #4b5563;
+    background-color: #1f2937;
+    color: #f3f4f6;
+  }
+  :root:not([data-theme="light"]) #greentic-logout-btn {
+    border-color: #4b5563;
+    color: #d1d5db;
+  }
+  :root:not([data-theme="light"]) .topbar__avatar {
+    background: rgba(5,150,105,0.3);
+  }
+  :root:not([data-theme="light"]) .topbar__logo {
+    filter: brightness(1.5);
+  }
+}
+[data-theme="dark"] .locale-picker__select,
+[data-theme="dark"] .theme-toggle {
+  border-color: #4b5563;
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+[data-theme="dark"] #greentic-logout-btn {
+  border-color: #4b5563;
+  color: #d1d5db;
+}
+[data-theme="dark"] .topbar__avatar {
+  background: rgba(5,150,105,0.3);
+}
+[data-theme="dark"] .topbar__logo {
+  filter: brightness(1.5);
+}
+
+/* Dark card button overrides */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ac-fact .ac-factTitle {
+    color: #f3f4f6 !important;
+    border-bottom-color: #374151 !important;
+  }
+  :root:not([data-theme="light"]) .ac-fact .ac-factValue {
+    color: #9ca3af !important;
+    border-bottom-color: #374151 !important;
+  }
+  :root:not([data-theme="light"]) .ac-pushButton {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+    color: #f3f4f6 !important;
+  }
+  :root:not([data-theme="light"]) .ac-pushButton div,
+  :root:not([data-theme="light"]) .ac-pushButton span,
+  :root:not([data-theme="light"]) .ac-pushButton p {
+    color: #f3f4f6 !important;
+  }
+  :root:not([data-theme="light"]) .ac-pushButton:hover {
+    background-color: #374151 !important;
+    border-color: #6b7280 !important;
+  }
+}
+[data-theme="dark"] .ac-fact .ac-factTitle {
+  color: #f3f4f6 !important;
+  border-bottom-color: #374151 !important;
+}
+[data-theme="dark"] .ac-fact .ac-factValue {
+  color: #9ca3af !important;
+  border-bottom-color: #374151 !important;
+}
+[data-theme="dark"] .ac-pushButton {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f3f4f6 !important;
+}
+[data-theme="dark"] .ac-pushButton div,
+[data-theme="dark"] .ac-pushButton span,
+[data-theme="dark"] .ac-pushButton p {
+  color: #f3f4f6 !important;
+}
+[data-theme="dark"] .ac-pushButton:hover {
+  background-color: #374151 !important;
+  border-color: #6b7280 !important;
+}
+
+/* ── Error card layout polish ──────────────────────────── */
+
+/* Card container — rounding + shadow */
+.widget-card-wrapper {
+  border-radius: var(--radius, 1rem) !important;
+  overflow: hidden;
+}
+
+/* CardHeader — more generous top/bottom padding */
+.widget-card-wrapper > div:first-child {
+  padding: 2rem 1.5rem 1rem !important;
+}
+
+/* Alert box — comfortable internal spacing */
+.widget-card-wrapper [role="alert"] {
+  padding: 1.25rem 1rem 1.25rem 1rem !important;
+  border-radius: 0.75rem !important;
+  text-align: left;
+}
+
+/* Alert icon — proper position, don't overlap text */
+.widget-card-wrapper [role="alert"] > svg {
+  top: 1.4rem !important;
+  left: 1rem !important;
+}
+
+/* Alert text — clear the icon + white for readability */
+.widget-card-wrapper [role="alert"] > svg ~ * {
+  padding-left: 2.25rem !important;
+  color: #f3f4f6 !important;
+}
+
+/* Alert title */
+.widget-card-wrapper [role="alert"] > svg + div {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+/* Alert description */
+.widget-card-wrapper [role="alert"] > svg ~ * + * {
+  margin-top: 0.375rem !important;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+/* CardContent (button + footer) — center + generous padding */
+.widget-card-wrapper > div:last-child {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  padding: 1rem 1.5rem 2rem !important;
+  gap: 0.75rem !important;
+}
+
+/* Try-again button — proper tap target */
+.widget-card-wrapper button {
+  min-height: 2.5rem;
+  padding: 0.5rem 1.5rem !important;
+  border-radius: 0.5rem !important;
+  font-family: var(--font, inherit);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ── Error card dark-mode polish ────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .widget-card-wrapper {
+    background: hsl(224, 30%, 16%);
+    border: 1px solid hsl(217, 19%, 27%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
+  }
+  :root:not([data-theme="light"]) .webchat__basic-transcript {
+    background-color: #111827 !important;
+  }
+  :root:not([data-theme="light"]) .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content {
+    background: #1f2937 !important;
+    border-color: #374151 !important;
+    color: #f3f4f6 !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
+  }
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-adaptiveCard,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-container,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-columnSet,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-column,
+  :root:not([data-theme="light"]) .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content > div {
+    background-color: transparent !important;
+  }
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock *,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock p,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textRun,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factTitle,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factValue {
+    color: #f3f4f6 !important;
+  }
+  :root:not([data-theme="light"]) .webchat__send-box {
+    background: #111827 !important;
+    border-top-color: #374151 !important;
+  }
+  :root:not([data-theme="light"]) .webchat__send-box-text-box__input {
+    background: transparent !important;
+    color: #f3f4f6 !important;
+  }
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textInput,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input-container input,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input-container textarea,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input-container select {
+    background: #1f2937 !important;
+    border-color: #4b5563 !important;
+    color: #f3f4f6 !important;
+  }
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-separator {
+    border-color: #374151 !important;
+  }
+}
+[data-theme="dark"] .widget-card-wrapper {
+  background: #111827;
+  border: 1px solid #374151;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
+}
+[data-theme="dark"] .webchat__basic-transcript {
+  background-color: #111827 !important;
+}
+[data-theme="dark"] .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content {
+  background: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f3f4f6 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
+}
+[data-theme="dark"] .webchat__bubble__content .ac-adaptiveCard,
+[data-theme="dark"] .webchat__bubble__content .ac-container,
+[data-theme="dark"] .webchat__bubble__content .ac-columnSet,
+[data-theme="dark"] .webchat__bubble__content .ac-column,
+[data-theme="dark"] .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content > div {
+  background-color: transparent !important;
+}
+[data-theme="dark"] .webchat__bubble__content .ac-textBlock,
+[data-theme="dark"] .webchat__bubble__content .ac-textBlock *,
+[data-theme="dark"] .webchat__bubble__content .ac-textBlock p,
+[data-theme="dark"] .webchat__bubble__content .ac-textRun,
+[data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factTitle,
+[data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factValue {
+  color: #f3f4f6 !important;
+}
+[data-theme="dark"] .webchat__send-box {
+  background: #111827 !important;
+  border-top-color: #374151 !important;
+}
+[data-theme="dark"] .webchat__send-box-text-box__input {
+  background: transparent !important;
+  color: #f3f4f6 !important;
+}
+[data-theme="dark"] .webchat__bubble__content .ac-input,
+[data-theme="dark"] .webchat__bubble__content .ac-textInput,
+[data-theme="dark"] .webchat__bubble__content .ac-input-container input,
+[data-theme="dark"] .webchat__bubble__content .ac-input-container textarea,
+[data-theme="dark"] .webchat__bubble__content .ac-input-container select {
+  background: #1f2937 !important;
+  border-color: #4b5563 !important;
+  color: #f3f4f6 !important;
+}
+[data-theme="dark"] .webchat__bubble__content .ac-separator {
+  border-color: #374151 !important;
+}
+
+/* ── Welcome overlay ───────────────────────────────────── */
+
+.welcome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  pointer-events: none;
+  z-index: 1;
+  font-family: var(--font);
+}
+
+.welcome__card {
+  pointer-events: auto;
+  text-align: center;
+  max-width: 400px;
+}
+
+.welcome__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--brand-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+
+.welcome__heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.welcome__text {
+  margin: 0 0 1.5rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.welcome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.welcome__btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1fae5;
+  border-radius: 20px;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.welcome__btn:hover {
+  background: #d1fae5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .welcome__btn {
+    background: #1f2937;
+    border-color: #374151;
+    color: #34d399;
+  }
+  :root:not([data-theme="light"]) .welcome__btn:hover {
+    background: #374151;
+  }
+}
+[data-theme="dark"] .welcome__btn {
+  background: #1f2937;
+  border-color: #374151;
+  color: #34d399;
+}
+[data-theme="dark"] .welcome__btn:hover {
+  background: #374151;
+}
+
+/* ── RTL support ────────────────────────────────────────── */
+
+[dir="rtl"] .topbar__left { flex-direction: row-reverse; }
+[dir="rtl"] .topbar__info { text-align: right; }
+[dir="rtl"] .topbar__status { flex-direction: row-reverse; }
+[dir="rtl"] .locale-picker__select {
+  background-position: left 0.625rem center;
+  padding-left: 1.75rem;
+  padding-right: 0.625rem;
 }

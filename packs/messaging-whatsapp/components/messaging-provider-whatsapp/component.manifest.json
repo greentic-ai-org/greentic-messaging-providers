@@ -1,28 +1,20 @@
 {
   "id": "messaging-provider-whatsapp",
-  "name": "messaging-provider-whatsapp",
-  "version": "0.4.40",
-  "world": "greentic:component/component-v0-v6-v0@0.6.1",
-  "description": "Provider-core WhatsApp Cloud messaging provider.",
+  "version": "0.4.76",
+  "supports": [
+    "messaging"
+  ],
+  "world": "root:component/root",
   "profiles": {
     "default": "default",
     "supported": [
       "default"
     ]
   },
-  "config_schema": {
-    "provider_config": {
-      "format": "json",
-      "path": "schemas/messaging/whatsapp/public.config.schema.json"
-    }
+  "capabilities": {
+    "wasi": {},
+    "host": {}
   },
-  "secret_requirements": [
-    {
-      "name": "WHATSAPP_TOKEN",
-      "scope": "tenant",
-      "description": "WhatsApp Cloud API access token."
-    }
-  ],
   "operations": [
     {
       "name": "qa-spec",
@@ -97,8 +89,6 @@
       }
     }
   ],
-  "capabilities": {
-    "wasi": {},
-    "host": {}
-  }
+  "resources": {},
+  "dev_flows": {}
 }

@@ -17,6 +17,7 @@ urlencoding.workspace = true
 base64.workspace = true
 chrono.workspace = true
 provider-common.workspace = true
+greentic-messaging-renderer.workspace = true
 
 [package.metadata.component]
 package = "greentic:messaging-provider-teams-core"

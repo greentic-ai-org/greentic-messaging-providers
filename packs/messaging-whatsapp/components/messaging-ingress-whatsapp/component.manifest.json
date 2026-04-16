@@ -1,24 +1,26 @@
 {
   "id": "messaging-ingress-whatsapp",
-  "name": "messaging-ingress-whatsapp",
-  "version": "0.4.40",
-  "world": "greentic:messaging-ingress-whatsapp/messaging-ingress-whatsapp@0.0.1",
-  "description": "Ingress-only WhatsApp component for webhook validation and normalization.",
+  "version": "0.4.76",
+  "supports": [
+    "messaging"
+  ],
+  "world": "root:component/root",
   "profiles": {
     "default": "default",
     "supported": [
       "default"
     ]
   },
-  "secret_requirements": [
-    {
-      "name": "WHATSAPP_VERIFY_TOKEN",
-      "scope": "tenant",
-      "description": "Verify token used for WhatsApp webhook validation (if configured)."
-    }
-  ],
   "capabilities": {
     "wasi": {},
-    "host": {}
-  }
+    "host": {
+      "state": {
+        "read": true,
+        "write": true
+      }
+    }
+  },
+  "operations": [],
+  "resources": {},
+  "dev_flows": {}
 }

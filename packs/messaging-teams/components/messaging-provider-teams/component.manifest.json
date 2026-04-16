@@ -1,43 +1,20 @@
 {
   "id": "messaging-provider-teams",
-  "name": "messaging-provider-teams",
-  "version": "0.4.40",
-  "world": "greentic:component/component-v0-v6-v0@0.6.1",
-  "description": "Provider-core Microsoft Teams messaging provider (Graph send).",
+  "version": "0.4.76",
+  "supports": [
+    "messaging"
+  ],
+  "world": "root:component/root",
   "profiles": {
     "default": "default",
     "supported": [
       "default"
     ]
   },
-  "config_schema": {
-    "provider_config": {
-      "format": "json",
-      "path": "schemas/messaging/teams/public.config.schema.json"
-    }
+  "capabilities": {
+    "wasi": {},
+    "host": {}
   },
-  "secret_requirements": [
-    {
-      "name": "MS_GRAPH_TENANT_ID",
-      "scope": "tenant",
-      "description": "Azure AD / Entra ID tenant (directory) ID."
-    },
-    {
-      "name": "MS_GRAPH_CLIENT_ID",
-      "scope": "tenant",
-      "description": "Application (client) ID from Azure app registration."
-    },
-    {
-      "name": "MS_GRAPH_CLIENT_SECRET",
-      "scope": "tenant",
-      "description": "Client secret used for client_credentials or refresh flows."
-    },
-    {
-      "name": "MS_GRAPH_REFRESH_TOKEN",
-      "scope": "tenant",
-      "description": "Refresh token used when auth_mode selects refresh_token grant."
-    }
-  ],
   "operations": [
     {
       "name": "qa-spec",
@@ -112,8 +89,6 @@
       }
     }
   ],
-  "capabilities": {
-    "wasi": {},
-    "host": {}
-  }
+  "resources": {},
+  "dev_flows": {}
 }

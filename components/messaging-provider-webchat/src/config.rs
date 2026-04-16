@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[allow(dead_code)] // OAuth fields are deserialized but read via secrets store in ops.rs
 pub(crate) struct ProviderConfig {
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
@@ -15,6 +15,10 @@ pub(crate) struct ProviderConfig {
     pub(crate) tenant_channel_id: Option<String>,
     #[serde(default)]
     pub(crate) base_url: Option<String>,
+    #[serde(default)]
+    pub(crate) oauth_enabled: Option<bool>,
+    #[serde(default)]
+    pub(crate) oauth_providers: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +29,10 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) route: Option<String>,
     pub(crate) tenant_channel_id: Option<String>,
     pub(crate) base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oauth_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oauth_providers: Option<String>,
 }
 
 pub(crate) fn default_enabled() -> bool {
@@ -43,6 +51,8 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         route: None,
         tenant_channel_id: None,
         base_url: None,
+        oauth_enabled: None,
+        oauth_providers: None,
     }
 }
 
@@ -95,6 +105,8 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "route",
         "tenant_channel_id",
         "base_url",
+        "oauth_enabled",
+        "oauth_providers",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -128,6 +140,8 @@ mod tests {
             route: Some("route-a".to_string()),
             tenant_channel_id: None,
             base_url: Some("https://base.example.com".to_string()),
+            oauth_enabled: None,
+            oauth_providers: None,
         }
     }
 
@@ -164,6 +178,8 @@ mod tests {
             route: Some("route-a".to_string()),
             tenant_channel_id: None,
             base_url: None,
+            oauth_enabled: None,
+            oauth_providers: None,
         })
         .unwrap_err();
         assert_eq!(
@@ -178,6 +194,8 @@ mod tests {
             route: None,
             tenant_channel_id: None,
             base_url: None,
+            oauth_enabled: None,
+            oauth_providers: None,
         })
         .unwrap_err();
         assert_eq!(

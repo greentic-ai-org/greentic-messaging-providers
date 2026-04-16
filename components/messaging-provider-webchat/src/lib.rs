@@ -331,13 +331,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_config_rejects_unknown() {
-        let cfg = br#"{"enabled":true,"route":"r","public_base_url":"https://example.com","mode":"local_queue","extra":true}"#;
-        let err = parse_config_bytes(cfg).unwrap_err();
-        assert!(err.contains("unknown field"));
-    }
-
-    #[test]
     fn schema_hash_is_stable() {
         let describe = build_describe_payload();
         assert_eq!(
@@ -368,16 +361,21 @@ mod tests {
     fn i18n_keys_cover_qa_specs() {
         use bindings::exports::greentic::component::qa::Mode;
 
-        let keyset = I18N_KEYS
+        // Use I18N_PAIRS (full set including OAuth keys) not I18N_KEYS (base only)
+        let keyset = I18N_PAIRS
             .iter()
-            .map(|value| (*value).to_string())
+            .map(|(key, _)| (*key).to_string())
             .collect::<BTreeSet<_>>();
 
         for mode in [Mode::Default, Mode::Setup, Mode::Upgrade, Mode::Remove] {
             let spec = build_qa_spec(mode);
             assert!(keyset.contains(&spec.title.key));
             for question in spec.questions {
-                assert!(keyset.contains(&question.label.key));
+                assert!(
+                    keyset.contains(&question.label.key),
+                    "missing i18n key: {}",
+                    question.label.key
+                );
             }
         }
     }

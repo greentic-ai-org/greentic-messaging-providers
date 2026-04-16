@@ -1,14 +1,14 @@
 {
   "name": "messaging-whatsapp",
-  "version": "0.4.40",
+  "version": "0.4.76",
   "kind": "application",
   "publisher": "Greentic",
   "description": "WhatsApp messaging provider \u2014 Cloud API with webhook ingress",
   "component_sources": [
     {
-      "id": "messaging-provider-whatsapp",
-      "version": "0.4.40",
-      "world": "greentic:component/component-v0-v6-v0@0.6.1",
+      "id": "ai.greentic.component-templates",
+      "version": "0.4.76",
+      "world": "root:component/root",
       "supports": [
         "messaging"
       ],
@@ -23,18 +23,234 @@
           "random": false,
           "clocks": false
         },
-        "host": {
-          "secrets-store": true,
-          "http-client": true
-        }
+        "host": {}
       },
-      "wasm": "components/messaging-provider-whatsapp/component.wasm",
-      "manifest": "components/messaging-provider-whatsapp/component.manifest.json"
+      "wasm": "components/templates/templates.wasm"
+    },
+    {
+      "id": "ai.greentic.component-templates",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/ai.greentic.component-templates.wasm"
+    },
+    {
+      "id": "diagnostics___optional_send",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___optional_send.wasm"
+    },
+    {
+      "id": "diagnostics___preflight",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___preflight.wasm"
+    },
+    {
+      "id": "diagnostics___summary",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___summary.wasm"
+    },
+    {
+      "id": "diagnostics___token_check",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics___token_check.wasm"
+    },
+    {
+      "id": "diagnostics__optional_send",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__optional_send.wasm"
+    },
+    {
+      "id": "diagnostics__preflight",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__preflight.wasm"
+    },
+    {
+      "id": "diagnostics__summary",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__summary.wasm"
+    },
+    {
+      "id": "diagnostics__token_check",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/diagnostics__token_check.wasm"
+    },
+    {
+      "id": "ingress_default___ingress_default__summary",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/ingress_default___ingress_default__summary.wasm"
     },
     {
       "id": "messaging-ingress-whatsapp",
-      "version": "0.4.40",
-      "world": "greentic:messaging-ingress-whatsapp/messaging-ingress-whatsapp@0.0.1",
+      "version": "0.4.76",
+      "world": "root:component/root",
       "supports": [
         "messaging"
       ],
@@ -49,19 +265,217 @@
           "random": false,
           "clocks": false
         },
-        "host": {
-          "secrets-store": true,
-          "state-store": true,
-          "http-client": true
-        }
+        "host": {}
       },
-      "wasm": "components/messaging-ingress-whatsapp/component.wasm",
-      "manifest": "components/messaging-ingress-whatsapp/component.manifest.json"
+      "wasm": "components/messaging-ingress-whatsapp/component.wasm"
+    },
+    {
+      "id": "messaging-ingress-whatsapp",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-ingress-whatsapp.wasm"
+    },
+    {
+      "id": "messaging-provider-whatsapp",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-provider-whatsapp/component.wasm"
+    },
+    {
+      "id": "messaging-provider-whatsapp",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-provider-whatsapp.wasm"
+    },
+    {
+      "id": "sync_subscriptions___summary",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/sync_subscriptions___summary.wasm"
+    },
+    {
+      "id": "sync_subscriptions___sync_subscriptions__summary",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/sync_subscriptions___sync_subscriptions__summary.wasm"
+    },
+    {
+      "id": "templates",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/templates.wasm"
+    },
+    {
+      "id": "verify_webhooks___steps",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/verify_webhooks___steps.wasm"
+    },
+    {
+      "id": "verify_webhooks___summary",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/verify_webhooks___summary.wasm"
+    },
+    {
+      "id": "verify_webhooks__steps",
+      "version": "0.4.76",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/verify_webhooks__steps.wasm"
     }
   ],
   "components": [
+    "ai.greentic.component-templates",
+    "ai.greentic.component-templates",
+    "messaging-ingress-whatsapp",
+    "messaging-ingress-whatsapp",
     "messaging-provider-whatsapp",
-    "messaging-ingress-whatsapp"
+    "messaging-provider-whatsapp",
+    "templates"
   ],
   "config_schema": {
     "provider_config": {
@@ -72,30 +486,30 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.40",
+      "version": "0.4.76",
       "inline": {
-        "schema_version": 1,
         "offers": [
           {
-            "offer_id": "messaging-whatsapp-v1",
             "cap_id": "greentic.cap.messaging.provider.v1",
-            "version": "0.4.40",
+            "offer_id": "messaging-whatsapp-v1",
+            "priority": 100,
             "provider": {
               "component_ref": "messaging-provider-whatsapp",
               "op": "messaging.configure"
             },
-            "priority": 100,
             "requires_setup": true,
             "setup": {
               "qa_ref": "components/messaging-provider-whatsapp"
-            }
+            },
+            "version": "0.4.76"
           }
-        ]
+        ],
+        "schema_version": 1
       }
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.40",
+      "version": "0.4.76",
       "inline": {
         "validators": [
           {
@@ -108,7 +522,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.40",
+      "version": "0.4.76",
       "inline": {
         "providers": [
           {
@@ -136,7 +550,7 @@
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.4.40",
+      "version": "0.4.76",
       "inline": {
         "capabilities": {
           "content_types": [
@@ -166,14 +580,31 @@
   },
   "secret_requirements": [
     {
-      "name": "WHATSAPP_TOKEN",
-      "scope": "tenant",
-      "description": "WhatsApp Cloud API access token."
-    },
-    {
       "name": "WHATSAPP_VERIFY_TOKEN",
       "scope": "tenant",
       "description": "Verify token used for WhatsApp webhook validation (if configured)."
+    },
+    {
+      "name": "WHATSAPP_TOKEN",
+      "scope": "tenant",
+      "description": "WhatsApp Cloud API access token."
+    }
+  ],
+  "capabilities_cache": [
+    {
+      "component": "ai.greentic.component-templates",
+      "version": "v1",
+      "path": "components/ai.greentic.component-templates-capabilities_v1.json"
+    },
+    {
+      "component": "ai.greentic.component-templates",
+      "version": "v1",
+      "path": "components/ai.greentic.component-templates-capabilities_v1.json"
+    },
+    {
+      "component": "templates",
+      "version": "v1",
+      "path": "components/templates-capabilities_v1.json"
     }
   ]
 }

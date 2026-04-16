@@ -101,13 +101,13 @@ cd ../..
 ```bash
 # Redis (persistent state)
 ./tools/build-capability-pack/target/debug/build-capability-pack \
-  greentic-messaging-providers/packs/state-redis \
-  demo-bundle/providers/messaging/state-redis.gtpack
+  greentic-state/packs/state-redis \
+  demo-bundle/providers/state/state-redis.gtpack
 
 # Memory (ephemeral fallback)
 ./tools/build-capability-pack/target/debug/build-capability-pack \
-  greentic-messaging-providers/packs/state-memory \
-  demo-bundle/providers/messaging/state-memory.gtpack
+  greentic-state/packs/state-memory \
+  demo-bundle/providers/state/state-memory.gtpack
 ```
 
 ### 2.4 Create Install Records

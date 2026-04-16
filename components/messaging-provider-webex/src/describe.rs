@@ -20,6 +20,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.op.encode.description",
     "webex.op.send_payload.title",
     "webex.op.send_payload.description",
+    "webex.op.setup_webhook.title",
+    "webex.op.setup_webhook.description",
     "webex.schema.input.title",
     "webex.schema.input.description",
     "webex.schema.input.message.title",
@@ -44,6 +46,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.schema.config.api_base_url.description",
     "webex.schema.config.bot_token.title",
     "webex.schema.config.bot_token.description",
+    "webex.schema.config.default_locale.title",
+    "webex.schema.config.default_locale.description",
     "webex.qa.default.title",
     "webex.qa.setup.title",
     "webex.qa.upgrade.title",
@@ -106,6 +110,11 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 "webex.op.send_payload.title",
                 "webex.op.send_payload.description",
             ),
+            op(
+                "setup_webhook",
+                "webex.op.setup_webhook.title",
+                "webex.op.setup_webhook.description",
+            ),
         ],
         input_schema: input_schema.clone(),
         output_schema: output_schema.clone(),
@@ -157,6 +166,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "webex.op.send_payload.description",
         "Send encoded payload to Webex API",
+    ),
+    ("webex.op.setup_webhook.title", "Setup Webhook"),
+    (
+        "webex.op.setup_webhook.description",
+        "Register webhooks with Webex API",
     ),
     ("webex.schema.input.title", "Webex input"),
     (
@@ -223,6 +237,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "webex.schema.config.bot_token.description",
         "Bot token for Webex API calls",
+    ),
+    ("webex.schema.config.default_locale.title", "Default locale"),
+    (
+        "webex.schema.config.default_locale.description",
+        "Default locale for message localization",
     ),
     ("webex.qa.default.title", "Default"),
     ("webex.qa.setup.title", "Setup"),
@@ -338,6 +357,14 @@ pub(crate) fn config_schema() -> SchemaIr {
                 schema_secret(
                     "webex.schema.config.bot_token.title",
                     "webex.schema.config.bot_token.description",
+                ),
+            ),
+            (
+                "default_locale",
+                false,
+                schema_str(
+                    "webex.schema.config.default_locale.title",
+                    "webex.schema.config.default_locale.description",
                 ),
             ),
         ],

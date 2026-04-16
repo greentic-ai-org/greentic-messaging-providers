@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
-GREENTIC_PACK_VERSION="${GREENTIC_PACK_VERSION:-0.4.111}"
+GREENTIC_PACK_VERSION="${GREENTIC_PACK_VERSION:-0.4.123}"
 installed_pack_version=""
 if command -v greentic-pack >/dev/null 2>&1; then
   installed_pack_version="$(greentic-pack --version | awk '{print $2}')"

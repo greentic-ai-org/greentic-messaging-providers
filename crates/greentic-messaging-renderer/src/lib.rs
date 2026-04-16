@@ -4,6 +4,7 @@
 //! Adaptive Cards to text based on channel capabilities.
 
 pub mod ac_extract;
+pub mod capabilities;
 pub mod context;
 pub mod errors;
 pub mod mode;
@@ -12,6 +13,7 @@ pub mod planner;
 pub mod renderer;
 
 pub use ac_extract::extract_planner_card;
+pub use capabilities::capabilities_for;
 pub use context::RenderContext;
 pub use errors::RendererError;
 pub use mode::RendererMode;

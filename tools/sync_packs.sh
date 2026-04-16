@@ -88,17 +88,30 @@ import sys
 path = Path(sys.argv[1])
 version = sys.argv[2]
 lines = path.read_text().splitlines()
-updated = False
-out = []
+
+# Detect current root version so we can replace all matching occurrences.
+old_version = None
 for line in lines:
     stripped = line.lstrip()
     indent = len(line) - len(stripped)
     if indent == 0 and stripped.startswith("version:"):
-        prefix = line.split("version:")[0] + "version: "
-        out.append(f"{prefix}{version}")
-        updated = True
-    else:
-        out.append(line.replace("__PACK_VERSION__", version))
+        old_version = stripped.split(":", 1)[1].strip().strip("'\"")
+        break
+
+out = []
+updated = False
+for line in lines:
+    stripped = line.lstrip()
+    # Replace all version: fields that match the old pack version.
+    if stripped.startswith("version:"):
+        current = stripped.split(":", 1)[1].strip().strip("'\"")
+        if current == old_version or current == version:
+            prefix = line.split("version:")[0] + "version: "
+            out.append(f"{prefix}{version}")
+            updated = True
+            continue
+    out.append(line.replace("__PACK_VERSION__", version))
+
 if not updated:
     out.append(f"version: {version}")
 path.write_text("\n".join(out) + "\n")
@@ -419,6 +432,12 @@ for dir in "${PACKS_DIR}"/*; do
     [ -z "${comp}" ] && continue
     wasm_rel="${wasm_path:-components/${comp}.wasm}"
     wasm_file="$(basename "${wasm_rel}")"
+    # When wasm_rel uses a subdirectory path like components/<id>/component.wasm,
+    # the basename is just "component.wasm" which collides across all packs.
+    # Resolve to the component-specific artifact name instead.
+    if [ "${wasm_file}" = "component.wasm" ]; then
+      wasm_file="${comp}.wasm"
+    fi
     is_templates_component=0
     if [ "${comp}" = "templates" ] || [ "${comp}" = "ai.greentic.component-templates" ] || [ "${wasm_file}" = "templates.wasm" ]; then
       is_templates_component=1
@@ -478,21 +497,13 @@ for dir in "${PACKS_DIR}"/*; do
         # Fallback to TARGET_COMPONENTS cache
         cp "${manifest_src}" "${manifest_dest}"
       fi
-      case "${comp}" in
-        messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-          stamp_manifest_version "${manifest_dest}" "${dir}/pack.yaml" "${comp}"
-          ;;
-      esac
+      stamp_manifest_version "${manifest_dest}" "${dir}/pack.yaml" "${comp}"
     fi
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then {id: ., wasm: ("components/" + . + ".wasm")} else {id: .id, wasm: (.wasm // ("components/" + .id + ".wasm")), manifest: (.manifest // ""), oci: (.oci // {})} end | [.id, .wasm, (.oci.image // ""), (.oci.digest // ""), (.oci.artifact // ""), (.manifest // ""), (.oci.manifest // "")] | @tsv' "${dir}/pack.manifest.json")
 
   while IFS= read -r comp; do
     [ -z "${comp}" ] && continue
-    case "${comp}" in
-      messaging-provider-*|messaging-ingress-*|state-provider-*|secrets-probe)
-        stamp_manifest_version "${dir}/components/${comp}/component.manifest.json" "${dir}/pack.yaml" "${comp}"
-        ;;
-    esac
+    stamp_manifest_version "${dir}/components/${comp}/component.manifest.json" "${dir}/pack.yaml" "${comp}"
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
 
   while IFS= read -r schema; do

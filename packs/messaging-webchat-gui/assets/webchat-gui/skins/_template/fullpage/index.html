@@ -1,18 +1,21 @@
-<section class="hero">
-  <div class="hero__inner">
-    <img class="hero__logo" src="/skins/_template/assets/logo.svg" alt="Template logo" width="160" height="40" />
-    <p class="hero__tagline">This is a starter shell showing how your full page experience can look.</p>
-    <div class="hero__actions">
-      <a class="hero__action" href="../">Back to template list</a>
-      <a class="hero__action" href="../skins/_template/skin.json" target="_blank" rel="noopener">View skin.json</a>
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="topbar__avatar">
+      <img class="topbar__logo" src="/skins/_template/assets/logo.svg" alt="Logo" />
     </div>
+    <span class="topbar__title">AI Assistant</span>
+    <span class="topbar__status"><span class="topbar__status-dot"></span> Online</span>
   </div>
-  <div class="hero__media">
-    <img src="/skins/_template/assets/hero.jpg" alt="Template hero" />
-  </div>
-</section>
+  <div id="locale-picker-mount" class="topbar__controls"></div>
+</header>
 <section class="chat-panel">
-  <h2>Need help?</h2>
-  <p>Our assistant is available below.</p>
   <div id="webchat" class="chat-panel__surface" aria-live="polite"></div>
 </section>
+<footer class="footer">
+  <span class="footer__copy">&copy; 2026 Greentic. All rights reserved.</span>
+  <nav class="footer__links">
+    <a href="https://docs.greentic.ai" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/greenticai" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://greentic.ai" target="_blank" rel="noopener">Website</a>
+  </nav>
+</footer>
