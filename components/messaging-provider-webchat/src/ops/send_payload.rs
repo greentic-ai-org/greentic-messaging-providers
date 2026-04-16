@@ -119,6 +119,38 @@ fn append_bot_activity_to_conversation(
         serde_json::from_slice(&conv_bytes).map_err(|e| e.to_string())?;
 
     let watermark = conversation.bump_watermark();
+    let raw = build_bot_activity_raw(text, adaptive_card_json, extensions);
+
+    let activity = StoredActivity {
+        id: format!("bot-{watermark}"),
+        type_: "message".to_string(),
+        text: if text.is_empty() {
+            None
+        } else {
+            Some(text.to_string())
+        },
+        from: Some("bot".to_string()),
+        timestamp: chrono::Utc::now().timestamp_millis(),
+        watermark,
+        raw,
+    };
+    conversation.activities.push(activity);
+
+    let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
+    store.write(&conv_key, &updated)?;
+    Ok(())
+}
+
+/// Build the raw DirectLine activity JSON for a bot message, merging any
+/// `extensions` fields (attachments, channelData, entities, etc.) back into
+/// their DirectLine-native camelCase form.
+///
+/// Pure function — no state I/O — suitable for unit testing the merge logic.
+fn build_bot_activity_raw(
+    text: &str,
+    adaptive_card_json: Option<&str>,
+    extensions: Option<&Value>,
+) -> Value {
     let mut raw = json!({
         "type": "message",
         "from": {"id": "bot", "name": "Bot", "role": "bot"},
@@ -171,23 +203,153 @@ fn append_bot_activity_to_conversation(
     if !attachments.is_empty() {
         raw["attachments"] = Value::Array(attachments);
     }
+    raw
+}
 
-    let activity = StoredActivity {
-        id: format!("bot-{watermark}"),
-        type_: "message".to_string(),
-        text: if text.is_empty() {
-            None
-        } else {
-            Some(text.to_string())
-        },
-        from: Some("bot".to_string()),
-        timestamp: chrono::Utc::now().timestamp_millis(),
-        watermark,
-        raw,
-    };
-    conversation.activities.push(activity);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-    let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
-    store.write(&conv_key, &updated)?;
-    Ok(())
+    #[test]
+    fn build_bot_activity_raw_plain_text_only() {
+        let raw = build_bot_activity_raw("hello", None, None);
+        assert_eq!(raw["type"], "message");
+        assert_eq!(raw["text"], "hello");
+        assert_eq!(raw["from"]["id"], "bot");
+        assert!(raw.get("attachments").is_none());
+    }
+
+    #[test]
+    fn build_bot_activity_raw_adaptive_card_via_legacy_metadata() {
+        // Upstream still writes metadata["adaptive_card"] as JSON string.
+        let ac_json = r#"{"type":"AdaptiveCard","body":[{"type":"TextBlock","text":"hi"}]}"#;
+        let raw = build_bot_activity_raw("hi", Some(ac_json), None);
+
+        let attachments = raw["attachments"].as_array().expect("attachments array");
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(
+            attachments[0]["contentType"],
+            "application/vnd.microsoft.card.adaptive"
+        );
+        assert_eq!(attachments[0]["content"]["type"], "AdaptiveCard");
+    }
+
+    #[test]
+    fn build_bot_activity_raw_adaptive_card_via_extensions() {
+        // New path: RAG component writes extensions["adaptive_card"] as typed Value.
+        let extensions = json!({
+            "adaptive_card": {"type": "AdaptiveCard", "body": [{"type": "TextBlock", "text": "hi"}]},
+        });
+        let raw = build_bot_activity_raw("hi", None, Some(&extensions));
+
+        let attachments = raw["attachments"].as_array().expect("attachments array");
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(
+            attachments[0]["contentType"],
+            "application/vnd.microsoft.card.adaptive"
+        );
+        assert_eq!(attachments[0]["content"]["type"], "AdaptiveCard");
+    }
+
+    #[test]
+    fn build_bot_activity_raw_merges_ac_from_metadata_and_native_attachments_from_extensions() {
+        // Legacy AC in metadata + provider-native attachments in extensions.
+        let ac_json = r#"{"type":"AdaptiveCard","body":[]}"#;
+        let extensions = json!({
+            "attachments": [
+                {"contentType": "application/vnd.microsoft.card.hero", "content": {"title": "Hero"}}
+            ]
+        });
+        let raw = build_bot_activity_raw("", Some(ac_json), Some(&extensions));
+
+        let attachments = raw["attachments"].as_array().expect("attachments array");
+        assert_eq!(attachments.len(), 2, "AC + hero card expected");
+        assert_eq!(
+            attachments[0]["contentType"],
+            "application/vnd.microsoft.card.adaptive"
+        );
+        assert_eq!(
+            attachments[1]["contentType"],
+            "application/vnd.microsoft.card.hero"
+        );
+    }
+
+    #[test]
+    fn build_bot_activity_raw_materializes_all_directline_fields() {
+        // Full scenario: RAG component emits AC + citations (via channelData.rag) +
+        // all DirectLine Bot Framework fields, expecting them preserved verbatim.
+        let extensions = json!({
+            "adaptive_card": {"type": "AdaptiveCard", "body": []},
+            "channel_data": {"rag": {"citations": [{"id": "c1"}]}, "feature": "x"},
+            "entities": [{"type": "mention", "text": "@bot"}],
+            "input_hint": "acceptingInput",
+            "speak": "hello there",
+            "suggested_actions": {"actions": [{"type": "imBack", "title": "Yes", "value": "yes"}]},
+            "name": "event/custom",
+        });
+
+        let raw = build_bot_activity_raw("Based on your docs...", None, Some(&extensions));
+
+        // Text preserved.
+        assert_eq!(raw["text"], "Based on your docs...");
+        // AC wrapped as attachment.
+        let atts = raw["attachments"].as_array().unwrap();
+        assert_eq!(
+            atts[0]["contentType"],
+            "application/vnd.microsoft.card.adaptive"
+        );
+        // Snake_case extensions keys → DirectLine camelCase.
+        assert_eq!(
+            raw["channelData"],
+            json!({"rag": {"citations": [{"id": "c1"}]}, "feature": "x"})
+        );
+        assert_eq!(raw["entities"][0]["type"], "mention");
+        assert_eq!(raw["inputHint"], "acceptingInput");
+        assert_eq!(raw["speak"], "hello there");
+        assert_eq!(raw["suggestedActions"]["actions"][0]["value"], "yes");
+        assert_eq!(raw["name"], "event/custom");
+    }
+
+    #[test]
+    fn build_bot_activity_raw_rag_citations_round_trip() {
+        // Regression test for TASK-082 Bug 3 — RAG component emits citations
+        // via extensions["channel_data"]["rag"], they must survive into the
+        // DirectLine activity's channelData field exactly as emitted.
+        let extensions = json!({
+            "adaptive_card": {"type": "AdaptiveCard", "body": []},
+            "channel_data": {
+                "rag": {
+                    "citations": [
+                        {"id": "c1", "source": "docs/x.md", "snippet": "..."},
+                        {"id": "c2", "source": "docs/y.md", "snippet": "..."}
+                    ]
+                }
+            }
+        });
+
+        let raw = build_bot_activity_raw("answer", None, Some(&extensions));
+
+        let citations = raw
+            .pointer("/channelData/rag/citations")
+            .and_then(|v| v.as_array())
+            .expect("citations preserved under channelData.rag");
+        assert_eq!(citations.len(), 2);
+        assert_eq!(citations[0]["id"], "c1");
+        assert_eq!(citations[0]["source"], "docs/x.md");
+        assert_eq!(citations[1]["id"], "c2");
+    }
+
+    #[test]
+    fn build_bot_activity_raw_skips_null_extension_fields() {
+        let extensions = json!({
+            "channel_data": null,
+            "entities": null,
+            "speak": "keep me",
+        });
+        let raw = build_bot_activity_raw("x", None, Some(&extensions));
+        assert!(raw.get("channelData").is_none());
+        assert!(raw.get("entities").is_none());
+        assert_eq!(raw["speak"], "keep me");
+    }
 }

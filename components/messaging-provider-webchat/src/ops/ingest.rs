@@ -299,3 +299,99 @@ fn collect_directline_extensions(body: &Value) -> BTreeMap<String, Value> {
     }
     ext
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn collect_directline_extensions_preserves_all_known_fields() {
+        let body = json!({
+            "type": "message",
+            "text": "hi",
+            "from": {"id": "user-1"},
+            "attachments": [{
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {"type": "AdaptiveCard", "body": []},
+            }],
+            "channelData": {"webchat": {"feature": "x"}, "rag": {"citations": [{"id": "c1"}]}},
+            "entities": [{"type": "mention", "text": "@bot"}],
+            "name": "event/custom",
+            "inputHint": "acceptingInput",
+            "speak": "hello there",
+            "suggestedActions": {"actions": [{"type": "imBack", "title": "Yes", "value": "yes"}]},
+        });
+
+        let ext = collect_directline_extensions(&body);
+
+        assert_eq!(
+            ext.get("attachments"),
+            Some(&json!([{
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {"type": "AdaptiveCard", "body": []},
+            }]))
+        );
+        assert_eq!(
+            ext.get("channel_data"),
+            Some(&json!({"webchat": {"feature": "x"}, "rag": {"citations": [{"id": "c1"}]}}))
+        );
+        assert_eq!(
+            ext.get("entities"),
+            Some(&json!([{"type": "mention", "text": "@bot"}]))
+        );
+        assert_eq!(ext.get("name"), Some(&json!("event/custom")));
+        assert_eq!(ext.get("input_hint"), Some(&json!("acceptingInput")));
+        assert_eq!(ext.get("speak"), Some(&json!("hello there")));
+        assert_eq!(
+            ext.get("suggested_actions"),
+            Some(&json!({"actions": [{"type": "imBack", "title": "Yes", "value": "yes"}]}))
+        );
+    }
+
+    #[test]
+    fn collect_directline_extensions_omits_missing_fields() {
+        let body = json!({"type": "message", "text": "hi"});
+        let ext = collect_directline_extensions(&body);
+        assert!(ext.is_empty());
+    }
+
+    #[test]
+    fn collect_directline_extensions_omits_null_fields() {
+        let body = json!({
+            "type": "message",
+            "attachments": null,
+            "channelData": null,
+        });
+        let ext = collect_directline_extensions(&body);
+        assert!(ext.is_empty());
+    }
+
+    #[test]
+    fn collect_directline_extensions_preserves_rag_citations_via_channel_data() {
+        // Scenario from RAG component: citations smuggled in channelData.rag
+        // (replacement for GTRC_RAG_BEGIN/END sentinel workaround).
+        let body = json!({
+            "type": "message",
+            "text": "Based on your docs...",
+            "from": {"id": "bot"},
+            "channelData": {
+                "rag": {
+                    "citations": [
+                        {"id": "c1", "source": "docs/x.md", "snippet": "..."},
+                        {"id": "c2", "source": "docs/y.md", "snippet": "..."}
+                    ]
+                }
+            }
+        });
+
+        let ext = collect_directline_extensions(&body);
+        let channel_data = ext.get("channel_data").expect("channel_data forwarded");
+        let citations = channel_data
+            .pointer("/rag/citations")
+            .and_then(|v| v.as_array())
+            .expect("citations preserved inside channel_data");
+        assert_eq!(citations.len(), 2);
+        assert_eq!(citations[0]["id"], "c1");
+    }
+}
