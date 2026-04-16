@@ -86,7 +86,6 @@ pub(super) fn build_team_envelope(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
-        extensions: Default::default(),
     }
 }
 

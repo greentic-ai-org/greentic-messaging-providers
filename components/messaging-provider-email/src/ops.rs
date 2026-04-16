@@ -411,7 +411,6 @@ fn build_channel_envelope(parsed: &Value, cfg: &ProviderConfig) -> ChannelMessag
         text: body_text,
         attachments: Vec::new(),
         metadata,
-        extensions: Default::default(),
     }
 }
 

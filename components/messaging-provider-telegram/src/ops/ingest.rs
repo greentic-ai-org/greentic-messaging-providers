@@ -230,7 +230,6 @@ fn build_telegram_envelope_with_locale(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
-        extensions: Default::default(),
     }
 }
 

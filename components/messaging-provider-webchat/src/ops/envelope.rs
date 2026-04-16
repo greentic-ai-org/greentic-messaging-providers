@@ -38,6 +38,11 @@ pub(super) fn build_webchat_envelope_with_ctx(
     if let Some(sid) = &session_id {
         metadata.insert("route".to_string(), sid.clone());
     }
+    if !extensions.is_empty()
+        && let Ok(encoded_extensions) = serde_json::to_string(&extensions)
+    {
+        metadata.insert("extensions".to_string(), encoded_extensions);
+    }
     ChannelMessageEnvelope {
         id: format!("webchat-{channel}"),
         tenant: TenantCtx::new(env.clone(), tenant.clone()),
@@ -53,7 +58,6 @@ pub(super) fn build_webchat_envelope_with_ctx(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
-        extensions,
     }
 }
 
@@ -92,6 +96,5 @@ pub(super) fn build_webchat_envelope(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
-        extensions: Default::default(),
     }
 }
