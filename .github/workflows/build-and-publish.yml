@@ -49,26 +49,26 @@ jobs:
           set -euo pipefail
 
           full_result() {
-            python3 - <<'PY'
-            import json
-            from pathlib import Path
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
 
-            matrix = json.loads(Path("ci/provider-matrix.json").read_text())
-            manifests = sorted({
-                manifest
-                for provider in matrix["providers"].values()
-                for manifest in provider["manifests"]
-            })
-            print(json.dumps({
-                "build_all": True,
-                "reason": "manual or tag run",
-                "changed_files": [],
-                "affected_providers": sorted(matrix["providers"].keys()),
-                "affected_components": matrix["all_components"],
-                "affected_packs": matrix["all_packs"],
-                "affected_manifests": manifests,
-            }))
-            PY
+          matrix = json.loads(Path("ci/provider-matrix.json").read_text())
+          manifests = sorted({
+              manifest
+              for provider in matrix["providers"].values()
+              for manifest in provider["manifests"]
+          })
+          print(json.dumps({
+              "build_all": True,
+              "reason": "manual or tag run",
+              "changed_files": [],
+              "affected_providers": sorted(matrix["providers"].keys()),
+              "affected_components": matrix["all_components"],
+              "affected_packs": matrix["all_packs"],
+              "affected_manifests": manifests,
+          }))
+          PY
           }
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] || [[ "${GITHUB_REF}" == refs/tags/* ]]; then
