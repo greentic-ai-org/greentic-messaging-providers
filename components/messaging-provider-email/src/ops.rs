@@ -198,18 +198,19 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         Err(err) => return encode_error(&err),
     };
 
-    // If the message carries an Adaptive Card, convert to styled HTML email.
-    let ac_html = encode_message
-        .metadata
-        .get("adaptive_card")
-        .and_then(|ac_raw| crate::ac_converter::ac_to_email_html(ac_raw));
+    // If the message carries an Adaptive Card (extensions or legacy metadata),
+    // convert to styled HTML email.
+    let ac_raw_str = provider_common::helpers::resolve_adaptive_card(&encode_message)
+        .map(|v| serde_json::to_string(&v).unwrap_or_default());
+    let ac_html = ac_raw_str
+        .as_deref()
+        .and_then(crate::ac_converter::ac_to_email_html);
 
     let (text, is_html) = if let Some(html) = ac_html {
         (html, true)
     } else {
-        let fallback = encode_message
-            .metadata
-            .get("adaptive_card")
+        let fallback = ac_raw_str
+            .as_deref()
             .and_then(|ac_raw| {
                 let caps = greentic_messaging_renderer::capabilities_for("email")
                     .expect("email capabilities must be registered");
@@ -221,28 +222,25 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     };
 
     // Extract AC title for subject line if available.
-    let ac_title = encode_message
-        .metadata
-        .get("adaptive_card")
-        .and_then(|ac_raw| {
-            let ac: Value = serde_json::from_str(ac_raw).ok()?;
-            ac.get("body")
-                .and_then(Value::as_array)?
-                .iter()
-                .find(|el| {
-                    el.get("type").and_then(Value::as_str) == Some("TextBlock")
-                        && (el
-                            .get("weight")
+    let ac_title = ac_raw_str.as_deref().and_then(|ac_raw| {
+        let ac: Value = serde_json::from_str(ac_raw).ok()?;
+        ac.get("body")
+            .and_then(Value::as_array)?
+            .iter()
+            .find(|el| {
+                el.get("type").and_then(Value::as_str) == Some("TextBlock")
+                    && (el
+                        .get("weight")
+                        .and_then(Value::as_str)
+                        .is_some_and(|w| w.eq_ignore_ascii_case("bolder"))
+                        || el
+                            .get("style")
                             .and_then(Value::as_str)
-                            .is_some_and(|w| w.eq_ignore_ascii_case("bolder"))
-                            || el
-                                .get("style")
-                                .and_then(Value::as_str)
-                                .is_some_and(|s| s.eq_ignore_ascii_case("heading")))
-                })
-                .and_then(|el| el.get("text").and_then(Value::as_str))
-                .map(|s| s.to_string())
-        });
+                            .is_some_and(|s| s.eq_ignore_ascii_case("heading")))
+            })
+            .and_then(|el| el.get("text").and_then(Value::as_str))
+            .map(|s| s.to_string())
+    });
 
     // Extract destination email from envelope.to[0].id (preferred) or metadata
     let to = encode_message

@@ -65,10 +65,7 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
-    let card_payload = envelope
-        .metadata
-        .get("adaptive_card")
-        .and_then(|value| serde_json::from_str::<Value>(value).ok());
+    let card_payload = provider_common::helpers::resolve_adaptive_card(&envelope);
     let card_summary = card_payload.as_ref().and_then(summarize_card_text);
     if card_payload.is_none() && text.is_none() {
         eprintln!(
