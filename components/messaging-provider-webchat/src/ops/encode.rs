@@ -15,7 +15,8 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         Ok(value) => value,
         Err(err) => return encode_error(&err),
     };
-    let has_adaptive_card = encode_message.metadata.contains_key("adaptive_card");
+    let has_adaptive_card = encode_message.metadata.contains_key("adaptive_card")
+        || encode_message.extensions.contains_key("adaptive_card");
     let text = encode_message
         .text
         .clone()
@@ -55,6 +56,10 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     }
     if let Some(ref team) = team {
         payload_body["team"] = Value::String(team.clone());
+    }
+    if !encode_message.extensions.is_empty() {
+        payload_body["extensions"] =
+            serde_json::to_value(&encode_message.extensions).unwrap_or(Value::Null);
     }
     let body_bytes = serde_json::to_vec(&payload_body).unwrap_or_else(|_| b"{}".to_vec());
     let mut metadata = BTreeMap::new();

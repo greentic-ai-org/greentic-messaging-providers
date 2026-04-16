@@ -94,11 +94,8 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         .as_deref()
         .unwrap_or_else(|| detect_destination_kind(&dest_id));
 
-    // Check for AC card in metadata — send as native Webex attachment.
-    let card_payload = envelope
-        .metadata
-        .get("adaptive_card")
-        .and_then(|ac_raw| serde_json::from_str::<Value>(ac_raw).ok());
+    // Check for AC card in extensions or legacy metadata.
+    let card_payload = provider_common::helpers::resolve_adaptive_card(&envelope);
     let markdown_value = card_payload
         .as_ref()
         .and_then(summarize_card_text)
