@@ -32,9 +32,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     // If the message carries an Adaptive Card, convert to Slack Block Kit.
     let ac_raw_str = provider_common::helpers::resolve_adaptive_card(&encode_message)
         .map(|v| serde_json::to_string(&v).unwrap_or_default());
-    let ac_result = ac_raw_str
-        .as_deref()
-        .and_then(|ac_raw| ac_to_slack_blocks(ac_raw));
+    let ac_result = ac_raw_str.as_deref().and_then(ac_to_slack_blocks);
 
     let text = if ac_result.is_some() {
         // Blocks present — text is the plain-text fallback for notifications.
