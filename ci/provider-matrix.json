@@ -22,9 +22,7 @@
     "messaging-provider-webex",
     "messaging-provider-whatsapp",
     "messaging-provider-webchat",
-    "messaging-provider-webchat-gui",
-    "state-provider-memory",
-    "state-provider-redis"
+    "messaging-provider-webchat-gui"
   ],
   "all_packs": [
     "messaging-dummy",
@@ -35,9 +33,7 @@
     "messaging-webchat",
     "messaging-webchat-gui",
     "messaging-webex",
-    "messaging-whatsapp",
-    "state-memory",
-    "state-redis"
+    "messaging-whatsapp"
   ],
   "shared_paths": [
     ".github/workflows/",

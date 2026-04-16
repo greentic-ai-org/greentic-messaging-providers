@@ -54,6 +54,15 @@ jobs:
           from pathlib import Path
 
           matrix = json.loads(Path("ci/provider-matrix.json").read_text())
+          components = list(dict.fromkeys(
+              component
+              for provider in matrix["providers"].values()
+              for component in provider["components"]
+          ))
+          packs = list(dict.fromkeys(
+              provider["pack"]
+              for provider in matrix["providers"].values()
+          ))
           manifests = sorted({
               manifest
               for provider in matrix["providers"].values()
@@ -64,8 +73,8 @@ jobs:
               "reason": "manual or tag run",
               "changed_files": [],
               "affected_providers": sorted(matrix["providers"].keys()),
-              "affected_components": matrix["all_components"],
-              "affected_packs": matrix["all_packs"],
+              "affected_components": components,
+              "affected_packs": packs,
               "affected_manifests": manifests,
           }))
           PY
