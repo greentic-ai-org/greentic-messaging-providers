@@ -67,6 +67,7 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
     if let Some(session_id) = value_as_trimmed_string(payload.get("session_id")) {
         let env = value_as_trimmed_string(payload.get("env"));
         let tenant = value_as_trimmed_string(payload.get("tenant"));
+        let team = value_as_trimmed_string(payload.get("team"));
         let _ = append_bot_activity_to_conversation(
             &session_id,
             &text,
@@ -74,6 +75,7 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
             extensions.as_ref(),
             env.as_deref(),
             tenant.as_deref(),
+            team.as_deref(),
         );
     }
 
@@ -101,11 +103,12 @@ fn append_bot_activity_to_conversation(
     extensions: Option<&Value>,
     env: Option<&str>,
     tenant: Option<&str>,
+    team: Option<&str>,
 ) -> Result<(), String> {
     let ctx = DirectLineContext {
         env: env.unwrap_or("default").to_string(),
         tenant: tenant.unwrap_or("default").to_string(),
-        team: None,
+        team: team.map(str::to_string),
     };
     let conv_key = conversation_key(&ctx, conversation_id);
     let mut store = HostStateStore;
@@ -351,5 +354,17 @@ mod tests {
         assert!(raw.get("channelData").is_none());
         assert!(raw.get("entities").is_none());
         assert_eq!(raw["speak"], "keep me");
+    }
+
+    #[test]
+    fn append_context_uses_team_from_payload() {
+        assert_eq!(
+            value_as_trimmed_string(json!({"team": "default"}).get("team")).as_deref(),
+            Some("default")
+        );
+        assert_eq!(
+            value_as_trimmed_string(json!({"team": "  "}).get("team")),
+            None
+        );
     }
 }
