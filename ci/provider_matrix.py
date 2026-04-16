@@ -53,13 +53,23 @@ def resolve_provider(args: argparse.Namespace) -> int:
 
 
 def build_all_result(matrix: dict, changed_files: list[str], reason: str) -> dict:
+    affected_components = list(
+        dict.fromkeys(
+            component
+            for provider in matrix["providers"].values()
+            for component in provider["components"]
+        )
+    )
+    affected_packs = list(
+        dict.fromkeys(provider["pack"] for provider in matrix["providers"].values())
+    )
     return {
         "build_all": True,
         "reason": reason,
         "changed_files": changed_files,
         "affected_providers": sorted(matrix["providers"].keys()),
-        "affected_components": matrix["all_components"],
-        "affected_packs": matrix["all_packs"],
+        "affected_components": affected_components,
+        "affected_packs": affected_packs,
         "affected_manifests": sorted(
             {
                 manifest
