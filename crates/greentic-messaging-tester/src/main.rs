@@ -8,7 +8,7 @@ use std::{
     fs,
     fs::File,
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process,
     sync::Arc,
 };
@@ -714,21 +714,54 @@ async fn handle_webchat_gui_asset(
 }
 
 fn serve_webchat_asset(state: &WebchatState, tenant: &str, asset_path: &str) -> Response {
-    let relative = if asset_path.is_empty() {
-        "index.html".to_string()
-    } else {
-        asset_path.to_string()
+    let relative = match sanitize_webchat_asset_path(asset_path) {
+        Some(path) => path,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "invalid webchat asset path".to_string(),
+            )
+                .into_response();
+        }
     };
-    let full_path = state.asset_root.join(&relative);
+    let full_path = state.asset_root.join(relative);
     let chosen = if full_path.is_file() {
         full_path
     } else {
         state.asset_root.join("index.html")
     };
 
-    match fs::read(&chosen) {
+    let canonical_root = match state.asset_root.canonicalize() {
+        Ok(path) => path,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("asset root unavailable: {err}"),
+            )
+                .into_response();
+        }
+    };
+    let canonical_chosen = match chosen.canonicalize() {
+        Ok(path) => path,
+        Err(err) => {
+            return (
+                StatusCode::NOT_FOUND,
+                format!("asset not found: {} ({err})", chosen.display()),
+            )
+                .into_response();
+        }
+    };
+    if !canonical_chosen.starts_with(&canonical_root) {
+        return (
+            StatusCode::BAD_REQUEST,
+            "invalid webchat asset path".to_string(),
+        )
+            .into_response();
+    }
+
+    match fs::read(&canonical_chosen) {
         Ok(bytes) => {
-            let mime = content_type_for_path(&chosen);
+            let mime = content_type_for_path(&canonical_chosen);
             let mut response = Response::new(Body::from(bytes));
             *response.status_mut() = StatusCode::OK;
             response
@@ -743,10 +776,35 @@ fn serve_webchat_asset(state: &WebchatState, tenant: &str, asset_path: &str) -> 
         }
         Err(err) => (
             StatusCode::NOT_FOUND,
-            format!("asset not found: {} ({err})", chosen.display()),
+            format!("asset not found: {} ({err})", canonical_chosen.display()),
         )
             .into_response(),
     }
+}
+
+fn sanitize_webchat_asset_path(asset_path: &str) -> Option<PathBuf> {
+    let requested = if asset_path.is_empty() {
+        Path::new("index.html")
+    } else {
+        Path::new(asset_path)
+    };
+    if requested.is_absolute() {
+        return None;
+    }
+
+    let mut sanitized = PathBuf::new();
+    for component in requested.components() {
+        match component {
+            Component::Normal(segment) => sanitized.push(segment),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+
+    if sanitized.as_os_str().is_empty() {
+        sanitized.push("index.html");
+    }
+    Some(sanitized)
 }
 
 async fn handle_webchat_backend_token(
