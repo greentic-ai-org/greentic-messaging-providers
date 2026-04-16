@@ -12,6 +12,7 @@ use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 use provider_common::helpers::json_bytes;
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 use crate::directline::{ConfigAwareSecretStore, HostStateStore, handle_directline_request};
 
@@ -178,6 +179,7 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             None,
             &env_id,
             &tenant_id,
+            BTreeMap::new(),
         );
         envelope
             .metadata
@@ -223,6 +225,7 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
         } else {
             text
         };
+        let extensions = collect_directline_extensions(&body);
         let mut envelope = build_webchat_envelope_with_ctx(
             effective_text,
             user,
@@ -230,6 +233,7 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             None,
             &env_id,
             &tenant_id,
+            extensions,
         );
         // Forward locale from the activity so the runner can resolve
         // i18n translations in card responses.
@@ -271,4 +275,27 @@ fn extract_context_from_response_headers(headers: &[Header]) -> Option<(String, 
         .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Tenant"))
         .map(|h| h.value.clone())?;
     Some((env, tenant))
+}
+
+/// Collect DirectLine-native fields from an activity body into a typed
+/// extensions map. Only fields that are present (and non-null) are inserted.
+fn collect_directline_extensions(body: &Value) -> BTreeMap<String, Value> {
+    let mut ext = BTreeMap::new();
+    let passthroughs: &[(&str, &str)] = &[
+        ("attachments", "attachments"),
+        ("channelData", "channel_data"),
+        ("entities", "entities"),
+        ("name", "name"),
+        ("inputHint", "input_hint"),
+        ("speak", "speak"),
+        ("suggestedActions", "suggested_actions"),
+    ];
+    for (src_key, ext_key) in passthroughs {
+        if let Some(value) = body.get(*src_key)
+            && !value.is_null()
+        {
+            ext.insert(ext_key.to_string(), value.clone());
+        }
+    }
+    ext
 }

@@ -57,8 +57,9 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
         .get("adaptive_card")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    if text.is_empty() && adaptive_card_json.is_none() {
-        return Err("text or adaptive_card required".into());
+    let extensions = payload.get("extensions").cloned();
+    if text.is_empty() && adaptive_card_json.is_none() && extensions.is_none() {
+        return Err("text, adaptive_card, or extensions required".into());
     }
 
     // If session_id is present, try to append the bot response as a Direct Line
@@ -70,6 +71,7 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
             &session_id,
             &text,
             adaptive_card_json.as_deref(),
+            extensions.as_ref(),
             env.as_deref(),
             tenant.as_deref(),
         );
@@ -96,6 +98,7 @@ fn append_bot_activity_to_conversation(
     conversation_id: &str,
     text: &str,
     adaptive_card_json: Option<&str>,
+    extensions: Option<&Value>,
     env: Option<&str>,
     tenant: Option<&str>,
 ) -> Result<(), String> {
@@ -109,7 +112,7 @@ fn append_bot_activity_to_conversation(
 
     let conv_bytes = match store.read(&conv_key) {
         Ok(Some(bytes)) => bytes,
-        _ => return Ok(()), // conversation not found, skip silently
+        _ => return Ok(()),
     };
 
     let mut conversation: crate::directline::state::ConversationState =
@@ -123,15 +126,52 @@ fn append_bot_activity_to_conversation(
     if !text.is_empty() {
         raw["text"] = Value::String(text.to_string());
     }
-    // Include Adaptive Card as a Direct Line attachment if present.
+
+    let mut attachments: Vec<Value> = Vec::new();
     if let Some(ac_json) = adaptive_card_json
         && let Ok(ac_value) = serde_json::from_str::<Value>(ac_json)
     {
-        raw["attachments"] = json!([{
+        attachments.push(json!({
             "contentType": "application/vnd.microsoft.card.adaptive",
             "content": ac_value,
-        }]);
+        }));
     }
+
+    if let Some(ext) = extensions
+        && let Some(ext_obj) = ext.as_object()
+    {
+        if let Some(Value::Array(ext_atts)) = ext_obj.get("attachments") {
+            attachments.extend(ext_atts.clone());
+        }
+        if adaptive_card_json.is_none()
+            && let Some(ac) = ext_obj.get("adaptive_card")
+        {
+            attachments.push(json!({
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": ac.clone(),
+            }));
+        }
+        let passthroughs: &[(&str, &str)] = &[
+            ("channel_data", "channelData"),
+            ("entities", "entities"),
+            ("name", "name"),
+            ("input_hint", "inputHint"),
+            ("speak", "speak"),
+            ("suggested_actions", "suggestedActions"),
+        ];
+        for (src, dst) in passthroughs {
+            if let Some(v) = ext_obj.get(*src)
+                && !v.is_null()
+            {
+                raw[*dst] = v.clone();
+            }
+        }
+    }
+
+    if !attachments.is_empty() {
+        raw["attachments"] = Value::Array(attachments);
+    }
+
     let activity = StoredActivity {
         id: format!("bot-{watermark}"),
         type_: "message".to_string(),
