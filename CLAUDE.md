@@ -39,6 +39,12 @@ cargo clippy --workspace --all-targets
 # Regenerate registry test fixtures after schema changes
 ./tools/regenerate_registry_fixtures.sh
 
+# Fast-path publish a single provider (targeted fmt + clippy + test
+# locally, then dispatch publish-provider.yml and wait for it)
+./scripts/publish_provider.sh webchat-gui
+./scripts/publish_provider.sh webex --skip-local-check
+./scripts/publish_provider.sh telegram --dry-run
+
 # Build .gtpack bundles (dry-run)
 ./tools/build_packs.sh
 ```
