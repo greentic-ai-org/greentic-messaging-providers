@@ -12,6 +12,11 @@ on:
         required: false
         default: true
         type: boolean
+      publish_latest:
+        description: Also re-tag the published pack as `:latest` (not just the version tag)
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: publish-provider-${{ github.ref }}-${{ inputs.provider }}
@@ -223,7 +228,7 @@ jobs:
         env:
           PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
           PACK_VERSION: ${{ env.PUBLISH_VERSION }}
-          PUBLISH_LATEST: "0"
+          PUBLISH_LATEST: ${{ inputs.publish_latest && '1' || '0' }}
           TEMPLATES_IMAGE: ghcr.io/greenticai/components/templates:latest
         run: ./tools/publish_packs_oci.sh
 
@@ -242,5 +247,6 @@ jobs:
             echo "- components: ${{ needs.resolve-provider.outputs.components_csv }}"
             echo "- pack: \`${{ needs.resolve-provider.outputs.pack }}\`"
             echo "- dry_run: \`${{ inputs.dry_run }}\`"
+            echo "- publish_latest: \`${{ inputs.publish_latest }}\`"
             echo "- templates source: \`ghcr.io/greenticai/components/templates:latest\`"
           } >> "${GITHUB_STEP_SUMMARY}"
