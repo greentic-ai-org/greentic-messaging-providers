@@ -682,6 +682,18 @@ jobs:
           RUST_BACKTRACE: "1"
         run: ./ci/steps/12_cargo_test.sh
 
+      - name: Upload CI-generated registry fixtures on failure
+        # `assert_fixture_stable` drops diverging bytes next to the committed
+        # fixtures as `*.cbor.ci-generated` when it trips. Capturing them as
+        # an artifact lets us compare local vs CI-produced describe output
+        # without round-tripping another debug commit.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registry-fixtures-ci-generated
+          path: tests/fixtures/registry/**/*.cbor.ci-generated
+          if-no-files-found: ignore
+
   publish:
     runs-on: ubuntu-latest
     needs: [detect-changes, fmt, clippy, check-op-schemas, build-packs, cargo-test]
