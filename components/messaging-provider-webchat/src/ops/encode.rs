@@ -10,6 +10,8 @@ use provider_common::helpers::{decode_encode_message, encode_error, json_bytes};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
+use super::helpers::envelope_attachments_to_directline;
+
 pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     let encode_message = match decode_encode_message(input_json) {
         Ok(value) => value,
@@ -61,6 +63,14 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         payload_body["extensions"] =
             serde_json::to_value(&encode_message.extensions).unwrap_or(Value::Null);
     }
+    // Forward the envelope's top-level `attachments` field, converted to the
+    // DirectLine shape. These are distinct from `extensions["attachments"]` —
+    // upstream components may populate either (the typed envelope field is the
+    // canonical path; extensions is the escape hatch for provider-native shapes).
+    if !encode_message.attachments.is_empty() {
+        payload_body["attachments"] =
+            envelope_attachments_to_directline(&encode_message.attachments);
+    }
     let body_bytes = serde_json::to_vec(&payload_body).unwrap_or_else(|_| b"{}".to_vec());
     let mut metadata = BTreeMap::new();
     metadata.insert("route".to_string(), Value::String(route_value.clone()));
@@ -77,4 +87,67 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         metadata,
     };
     json_bytes(&json!({"ok": true, "payload": payload}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn envelope_with_attachments(attachments: Value) -> Value {
+        json!({
+            "message": {
+                "id": "msg-1",
+                "tenant": {
+                    "env": "demo",
+                    "tenant": "demo",
+                    "tenant_id": "demo",
+                    "attempt": 0
+                },
+                "channel": "webchat",
+                "session_id": "conv-1",
+                "text": "see image",
+                "attachments": attachments,
+                "metadata": {}
+            }
+        })
+    }
+
+    fn decode_payload_body(response: &[u8]) -> Value {
+        let resp: Value = serde_json::from_slice(response).unwrap();
+        assert_eq!(resp["ok"], true, "encode_op should succeed: {resp:?}");
+        let body_b64 = resp["payload"]["body_b64"].as_str().unwrap();
+        let body_bytes = general_purpose::STANDARD.decode(body_b64).unwrap();
+        serde_json::from_slice(&body_bytes).unwrap()
+    }
+
+    #[test]
+    fn encode_op_forwards_envelope_attachments_in_directline_shape() {
+        let envelope = envelope_with_attachments(json!([
+            {
+                "mime_type": "image/png",
+                "url": "https://cdn.example.com/diagram.png",
+                "name": "diagram.png"
+            }
+        ]));
+        let input = serde_json::to_vec(&envelope).unwrap();
+        let body = decode_payload_body(&encode_op(&input));
+
+        let attachments = body["attachments"].as_array().expect("attachments array");
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0]["contentType"], "image/png");
+        assert_eq!(
+            attachments[0]["contentUrl"],
+            "https://cdn.example.com/diagram.png"
+        );
+        assert_eq!(attachments[0]["name"], "diagram.png");
+    }
+
+    #[test]
+    fn encode_op_omits_attachments_field_when_envelope_has_none() {
+        let envelope = envelope_with_attachments(json!([]));
+        let input = serde_json::to_vec(&envelope).unwrap();
+        let body = decode_payload_body(&encode_op(&input));
+        assert!(body.get("attachments").is_none());
+    }
 }

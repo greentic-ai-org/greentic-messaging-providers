@@ -5,7 +5,8 @@
 //! dependencies — safe to use from any ops submodule.
 
 use base64::{Engine as _, engine::general_purpose};
-use serde_json::Value;
+use greentic_types::messaging::Attachment;
+use serde_json::{Map, Value};
 
 pub(super) fn extract_text(value: &Value) -> String {
     value
@@ -74,4 +75,89 @@ pub(super) fn non_empty_string(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
+}
+
+/// Convert a `ChannelMessageEnvelope::Attachment` into a DirectLine-shaped JSON
+/// attachment object (`{contentType, contentUrl, name?}`).
+///
+/// Envelope attachments carry the platform's generic shape; DirectLine clients
+/// (WebChat SDK, Bot Framework) expect camelCase keys and `contentUrl` rather
+/// than `url`. Inline content (e.g. Adaptive Cards) is delivered through the
+/// separate `extensions` / `metadata.adaptive_card` paths, not this helper.
+pub(crate) fn attachment_to_directline(attachment: &Attachment) -> Value {
+    let mut map = Map::new();
+    map.insert(
+        "contentType".to_string(),
+        Value::String(attachment.mime_type.clone()),
+    );
+    map.insert(
+        "contentUrl".to_string(),
+        Value::String(attachment.url.clone()),
+    );
+    if let Some(name) = &attachment.name {
+        map.insert("name".to_string(), Value::String(name.clone()));
+    }
+    Value::Object(map)
+}
+
+/// Convert a slice of envelope attachments into a JSON array ready to embed in
+/// payload bodies or DirectLine activities.
+pub(crate) fn envelope_attachments_to_directline(attachments: &[Attachment]) -> Value {
+    Value::Array(attachments.iter().map(attachment_to_directline).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_attachment() -> Attachment {
+        Attachment {
+            mime_type: "image/png".to_string(),
+            url: "https://cdn.example.com/img.png".to_string(),
+            name: Some("diagram.png".to_string()),
+            size_bytes: Some(1024),
+        }
+    }
+
+    #[test]
+    fn attachment_to_directline_maps_known_fields() {
+        let directline = attachment_to_directline(&sample_attachment());
+        assert_eq!(directline["contentType"], "image/png");
+        assert_eq!(directline["contentUrl"], "https://cdn.example.com/img.png");
+        assert_eq!(directline["name"], "diagram.png");
+        // size_bytes is not a DirectLine attachment field — intentionally dropped.
+        assert!(directline.get("sizeBytes").is_none());
+        assert!(directline.get("size_bytes").is_none());
+    }
+
+    #[test]
+    fn attachment_to_directline_omits_missing_name() {
+        let mut att = sample_attachment();
+        att.name = None;
+        let directline = attachment_to_directline(&att);
+        assert!(directline.get("name").is_none());
+    }
+
+    #[test]
+    fn envelope_attachments_to_directline_preserves_order() {
+        let attachments = vec![
+            Attachment {
+                mime_type: "image/png".to_string(),
+                url: "https://e/1".to_string(),
+                name: None,
+                size_bytes: None,
+            },
+            Attachment {
+                mime_type: "application/pdf".to_string(),
+                url: "https://e/2".to_string(),
+                name: Some("doc.pdf".to_string()),
+                size_bytes: None,
+            },
+        ];
+        let arr = envelope_attachments_to_directline(&attachments);
+        let items = arr.as_array().expect("array");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["contentType"], "image/png");
+        assert_eq!(items[1]["name"], "doc.pdf");
+    }
 }
