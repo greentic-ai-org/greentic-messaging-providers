@@ -22,19 +22,21 @@ cd "${ROOT_DIR}"
 PROVIDER="${1:-}"
 SKIP_LOCAL_CHECK=0
 DRY_RUN=false
+PUBLISH_LATEST=false
 
 shift 2>/dev/null || true
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-local-check) SKIP_LOCAL_CHECK=1 ;;
     --dry-run) DRY_RUN=true ;;
+    --publish-latest) PUBLISH_LATEST=true ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
 
 if [ -z "${PROVIDER}" ]; then
-  echo "Usage: $0 <provider> [--skip-local-check] [--dry-run]" >&2
+  echo "Usage: $0 <provider> [--skip-local-check] [--dry-run] [--publish-latest]" >&2
   echo "Providers:" >&2
   python3 -c "
 import json
@@ -87,11 +89,12 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 echo
 echo "-- dispatching publish-provider.yml --"
-echo "  ref=${BRANCH} provider=${PROVIDER} dry_run=${DRY_RUN}"
+echo "  ref=${BRANCH} provider=${PROVIDER} dry_run=${DRY_RUN} publish_latest=${PUBLISH_LATEST}"
 gh workflow run publish-provider.yml \
   --ref "${BRANCH}" \
   -f "provider=${PROVIDER}" \
-  -f "dry_run=${DRY_RUN}"
+  -f "dry_run=${DRY_RUN}" \
+  -f "publish_latest=${PUBLISH_LATEST}"
 
 # Poll for the run that was just created — `gh workflow run` doesn't print
 # a run ID, so we grab the latest queued run for this workflow on this
