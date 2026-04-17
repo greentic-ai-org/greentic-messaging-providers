@@ -44,10 +44,6 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         }
     };
 
-    if !envelope.attachments.is_empty() {
-        return json_bytes(&json!({"ok": false, "error": "attachments not supported"}));
-    }
-
     let body = envelope
         .text
         .as_ref()
@@ -56,7 +52,10 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         .map(ToOwned::to_owned);
     let body = match body {
         Some(value) => value,
-        None => return json_bytes(&json!({"ok": false, "error": "text required"})),
+        None if envelope.attachments.is_empty() => {
+            return json_bytes(&json!({"ok": false, "error": "text or attachments required"}));
+        }
+        None => String::new(),
     };
 
     let destination = envelope.to.first().cloned().or_else(|| {
@@ -269,6 +268,29 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
             .unwrap()
             .insert("body_type".into(), json!("HTML"));
     }
+    // Forward envelope.attachments as reference attachments for Graph
+    // /sendMail. URL-based because the generic greentic Attachment carries a
+    // URL; inlining bytes would require fetching in a WASI context which the
+    // provider doesn't currently do.
+    if !encode_message.attachments.is_empty() {
+        let atts: Vec<Value> = encode_message
+            .attachments
+            .iter()
+            .map(|a| {
+                let mut entry = serde_json::Map::new();
+                entry.insert("mime_type".to_string(), Value::String(a.mime_type.clone()));
+                entry.insert("url".to_string(), Value::String(a.url.clone()));
+                if let Some(name) = &a.name {
+                    entry.insert("name".to_string(), Value::String(name.clone()));
+                }
+                Value::Object(entry)
+            })
+            .collect();
+        payload_body
+            .as_object_mut()
+            .unwrap()
+            .insert("attachments".into(), Value::Array(atts));
+    }
     let body_bytes = serde_json::to_vec(&payload_body).unwrap_or_else(|_| b"{}".to_vec());
     let mut metadata = BTreeMap::new();
     metadata.insert("to".to_string(), Value::String(to));
@@ -343,14 +365,47 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
         .get("body_type")
         .and_then(Value::as_str)
         .unwrap_or("Text");
+    let mut message_obj = serde_json::Map::new();
+    message_obj.insert("subject".to_string(), Value::String(subject.clone()));
+    message_obj.insert(
+        "body".to_string(),
+        json!({"contentType": content_type, "content": body}),
+    );
+    message_obj.insert(
+        "toRecipients".to_string(),
+        json!([{"emailAddress": {"address": to}}]),
+    );
+    // Convert envelope attachments to Graph referenceAttachment. URL-based
+    // because the generic greentic `Attachment` shape only carries a URL;
+    // fileAttachment (contentBytes) would need the provider to fetch and
+    // encode, which it doesn't do today.
+    if let Some(atts_array) = payload.get("attachments").and_then(Value::as_array)
+        && !atts_array.is_empty()
+    {
+        let graph_atts: Vec<Value> = atts_array
+            .iter()
+            .filter_map(|a| {
+                let url = a.get("url").and_then(Value::as_str)?;
+                let name = a
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("attachment")
+                    .to_string();
+                Some(json!({
+                    "@odata.type": "#microsoft.graph.referenceAttachment",
+                    "name": name,
+                    "sourceUrl": url,
+                    "providerType": "other",
+                    "permission": "view"
+                }))
+            })
+            .collect();
+        if !graph_atts.is_empty() {
+            message_obj.insert("attachments".to_string(), Value::Array(graph_atts));
+        }
+    }
     let mail_body = json!({
-        "message": {
-            "subject": subject,
-            "body": { "contentType": content_type, "content": body },
-            "toRecipients": [
-                { "emailAddress": { "address": to } }
-            ]
-        },
+        "message": Value::Object(message_obj),
         "saveToSentItems": false
     });
     // Use /me/sendMail for delegated tokens (refresh_token grant),
