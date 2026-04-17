@@ -58,8 +58,13 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
     let extensions = payload.get("extensions").cloned();
-    if text.is_empty() && adaptive_card_json.is_none() && extensions.is_none() {
-        return Err("text, adaptive_card, or extensions required".into());
+    let envelope_attachments = payload.get("attachments").filter(|v| v.is_array()).cloned();
+    if text.is_empty()
+        && adaptive_card_json.is_none()
+        && extensions.is_none()
+        && envelope_attachments.is_none()
+    {
+        return Err("text, adaptive_card, attachments, or extensions required".into());
     }
 
     // If session_id is present, try to append the bot response as a Direct Line
@@ -73,6 +78,7 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
             &text,
             adaptive_card_json.as_deref(),
             extensions.as_ref(),
+            envelope_attachments.as_ref(),
             env.as_deref(),
             tenant.as_deref(),
             team.as_deref(),
@@ -96,11 +102,13 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
 /// Append a bot-originated activity to the Direct Line conversation state.
 /// Uses provided env/tenant context from envelope metadata, falling back to "default".
 /// Best-effort: silently ignores errors (conversation may not exist).
+#[allow(clippy::too_many_arguments)]
 fn append_bot_activity_to_conversation(
     conversation_id: &str,
     text: &str,
     adaptive_card_json: Option<&str>,
     extensions: Option<&Value>,
+    envelope_attachments: Option<&Value>,
     env: Option<&str>,
     tenant: Option<&str>,
     team: Option<&str>,
@@ -122,7 +130,7 @@ fn append_bot_activity_to_conversation(
         serde_json::from_slice(&conv_bytes).map_err(|e| e.to_string())?;
 
     let watermark = conversation.bump_watermark();
-    let raw = build_bot_activity_raw(text, adaptive_card_json, extensions);
+    let raw = build_bot_activity_raw(text, adaptive_card_json, extensions, envelope_attachments);
 
     let activity = StoredActivity {
         id: format!("bot-{watermark}"),
@@ -145,14 +153,19 @@ fn append_bot_activity_to_conversation(
 }
 
 /// Build the raw DirectLine activity JSON for a bot message, merging any
-/// `extensions` fields (attachments, channelData, entities, etc.) back into
-/// their DirectLine-native camelCase form.
+/// `extensions` fields (attachments, channelData, entities, etc.) and the
+/// envelope's top-level `attachments` field back into their DirectLine-native
+/// camelCase form.
+///
+/// Merge order for attachments: legacy AC (metadata) → envelope.attachments
+/// (top-level typed field) → extensions.adaptive_card → extensions.attachments.
 ///
 /// Pure function — no state I/O — suitable for unit testing the merge logic.
 fn build_bot_activity_raw(
     text: &str,
     adaptive_card_json: Option<&str>,
     extensions: Option<&Value>,
+    envelope_attachments: Option<&Value>,
 ) -> Value {
     let mut raw = json!({
         "type": "message",
@@ -172,12 +185,13 @@ fn build_bot_activity_raw(
         }));
     }
 
+    if let Some(Value::Array(env_atts)) = envelope_attachments {
+        attachments.extend(env_atts.clone());
+    }
+
     if let Some(ext) = extensions
         && let Some(ext_obj) = ext.as_object()
     {
-        if let Some(Value::Array(ext_atts)) = ext_obj.get("attachments") {
-            attachments.extend(ext_atts.clone());
-        }
         if adaptive_card_json.is_none()
             && let Some(ac) = ext_obj.get("adaptive_card")
         {
@@ -185,6 +199,9 @@ fn build_bot_activity_raw(
                 "contentType": "application/vnd.microsoft.card.adaptive",
                 "content": ac.clone(),
             }));
+        }
+        if let Some(Value::Array(ext_atts)) = ext_obj.get("attachments") {
+            attachments.extend(ext_atts.clone());
         }
         let passthroughs: &[(&str, &str)] = &[
             ("channel_data", "channelData"),
@@ -216,7 +233,7 @@ mod tests {
 
     #[test]
     fn build_bot_activity_raw_plain_text_only() {
-        let raw = build_bot_activity_raw("hello", None, None);
+        let raw = build_bot_activity_raw("hello", None, None, None);
         assert_eq!(raw["type"], "message");
         assert_eq!(raw["text"], "hello");
         assert_eq!(raw["from"]["id"], "bot");
@@ -227,7 +244,7 @@ mod tests {
     fn build_bot_activity_raw_adaptive_card_via_legacy_metadata() {
         // Upstream still writes metadata["adaptive_card"] as JSON string.
         let ac_json = r#"{"type":"AdaptiveCard","body":[{"type":"TextBlock","text":"hi"}]}"#;
-        let raw = build_bot_activity_raw("hi", Some(ac_json), None);
+        let raw = build_bot_activity_raw("hi", Some(ac_json), None, None);
 
         let attachments = raw["attachments"].as_array().expect("attachments array");
         assert_eq!(attachments.len(), 1);
@@ -244,7 +261,7 @@ mod tests {
         let extensions = json!({
             "adaptive_card": {"type": "AdaptiveCard", "body": [{"type": "TextBlock", "text": "hi"}]},
         });
-        let raw = build_bot_activity_raw("hi", None, Some(&extensions));
+        let raw = build_bot_activity_raw("hi", None, Some(&extensions), None);
 
         let attachments = raw["attachments"].as_array().expect("attachments array");
         assert_eq!(attachments.len(), 1);
@@ -264,7 +281,7 @@ mod tests {
                 {"contentType": "application/vnd.microsoft.card.hero", "content": {"title": "Hero"}}
             ]
         });
-        let raw = build_bot_activity_raw("", Some(ac_json), Some(&extensions));
+        let raw = build_bot_activity_raw("", Some(ac_json), Some(&extensions), None);
 
         let attachments = raw["attachments"].as_array().expect("attachments array");
         assert_eq!(attachments.len(), 2, "AC + hero card expected");
@@ -292,7 +309,7 @@ mod tests {
             "name": "event/custom",
         });
 
-        let raw = build_bot_activity_raw("Based on your docs...", None, Some(&extensions));
+        let raw = build_bot_activity_raw("Based on your docs...", None, Some(&extensions), None);
 
         // Text preserved.
         assert_eq!(raw["text"], "Based on your docs...");
@@ -331,7 +348,7 @@ mod tests {
             }
         });
 
-        let raw = build_bot_activity_raw("answer", None, Some(&extensions));
+        let raw = build_bot_activity_raw("answer", None, Some(&extensions), None);
 
         let citations = raw
             .pointer("/channelData/rag/citations")
@@ -350,10 +367,75 @@ mod tests {
             "entities": null,
             "speak": "keep me",
         });
-        let raw = build_bot_activity_raw("x", None, Some(&extensions));
+        let raw = build_bot_activity_raw("x", None, Some(&extensions), None);
         assert!(raw.get("channelData").is_none());
         assert!(raw.get("entities").is_none());
         assert_eq!(raw["speak"], "keep me");
+    }
+
+    #[test]
+    fn build_bot_activity_raw_forwards_envelope_attachments() {
+        // Regression test for TASK-082 Bug 3 follow-up — envelope's top-level
+        // `attachments: Vec<Attachment>` field must reach the DirectLine activity.
+        let envelope_attachments = json!([
+            {
+                "contentType": "image/png",
+                "contentUrl": "https://cdn.example.com/diagram.png",
+                "name": "diagram.png",
+            }
+        ]);
+        let raw = build_bot_activity_raw("see image", None, None, Some(&envelope_attachments));
+
+        let attachments = raw["attachments"].as_array().expect("attachments array");
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0]["contentType"], "image/png");
+        assert_eq!(
+            attachments[0]["contentUrl"],
+            "https://cdn.example.com/diagram.png"
+        );
+    }
+
+    #[test]
+    fn build_bot_activity_raw_merges_envelope_attachments_with_legacy_ac_and_extensions() {
+        // All three sources present — expect legacy AC first, envelope attachments
+        // second, extensions.attachments last. Deterministic order matters for
+        // clients that rely on card-ordering semantics.
+        let ac_json = r#"{"type":"AdaptiveCard","body":[]}"#;
+        let envelope_attachments = json!([
+            {"contentType": "image/png", "contentUrl": "https://e/1.png"}
+        ]);
+        let extensions = json!({
+            "attachments": [
+                {"contentType": "application/vnd.microsoft.card.hero", "content": {"title": "H"}}
+            ]
+        });
+
+        let raw = build_bot_activity_raw(
+            "multi",
+            Some(ac_json),
+            Some(&extensions),
+            Some(&envelope_attachments),
+        );
+
+        let attachments = raw["attachments"].as_array().expect("attachments array");
+        assert_eq!(attachments.len(), 3);
+        assert_eq!(
+            attachments[0]["contentType"],
+            "application/vnd.microsoft.card.adaptive"
+        );
+        assert_eq!(attachments[1]["contentType"], "image/png");
+        assert_eq!(
+            attachments[2]["contentType"],
+            "application/vnd.microsoft.card.hero"
+        );
+    }
+
+    #[test]
+    fn build_bot_activity_raw_ignores_non_array_envelope_attachments() {
+        // Defensive: if upstream emits a malformed non-array value, drop silently.
+        let envelope_attachments = json!({"this": "is not an array"});
+        let raw = build_bot_activity_raw("x", None, None, Some(&envelope_attachments));
+        assert!(raw.get("attachments").is_none());
     }
 
     #[test]
