@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rust workspace producing WASM-based messaging provider components (WASI Preview 2) for the Greentic platform. Each provider integrates with an external messaging service (Slack, Teams, Telegram, Webex, WhatsApp, WebChat, Email) through self-contained WebAssembly components.
 
+## One-time setup (new clones)
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Enables the pre-commit hook that runs `rustfmt` on staged Rust files and `cargo clippy --workspace -- -D warnings`. See `.githooks/README.md`.
+
 - **Edition:** Rust 2024 | **Target:** `wasm32-wasip2` (components) + native (crates)
 - **Workspace version** is defined once in root `Cargo.toml` `[workspace.package]`
 
