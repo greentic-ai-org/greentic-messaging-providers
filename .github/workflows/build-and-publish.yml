@@ -258,10 +258,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install cargo-component
         run: |
@@ -375,10 +372,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install oras
         uses: oras-project/setup-oras@v1
@@ -428,10 +422,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install greentic-pack
         env:
@@ -494,10 +485,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install greentic-flow
         run: |
@@ -521,10 +509,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install greentic-component
         run: |
@@ -548,10 +533,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install greentic-component
         run: |
@@ -579,10 +561,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install greentic-pack
         env:
@@ -671,10 +650,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install cargo-component
         run: |
@@ -737,10 +713,7 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install greentic-pack
         env:
