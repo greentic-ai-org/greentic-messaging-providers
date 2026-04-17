@@ -131,14 +131,10 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install cargo-component
-        run: |
-          cargo binstall cargo-component --version 0.21.1 --force --no-confirm --locked || cargo install cargo-component --version 0.21.1 --force --locked
+        run: cargo binstall cargo-component --version 0.21.1 --force --no-confirm --locked
 
       - name: Build selected component
         run: bash "./tools/build_components/${{ matrix.component }}.sh"
@@ -165,16 +161,13 @@ jobs:
           key: cargo-bin-tools-${{ runner.os }}-v1
 
       - name: Install cargo-binstall
-        run: |
-          if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
-          fi
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Install greentic-pack
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: |
-          cargo binstall greentic-pack --force --no-confirm --locked || cargo install greentic-pack --force --locked
+          cargo binstall greentic-pack --force --no-confirm --locked
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
           greentic-pack --version
 
