@@ -1,7 +1,8 @@
 [package]
 name = "greentic-messaging-planned"
-version = "0.4.27"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 serde = { workspace = true }

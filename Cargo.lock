@@ -734,8 +734,8 @@ version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1a0ecc25daaccde5be74d2103b9d1e4db6c8db6ae2290d3c48842a134b404ba"
 dependencies = [
- "greentic-interfaces-guest",
- "greentic-types",
+ "greentic-interfaces-guest 0.4.113",
+ "greentic-types 0.4.61",
  "qa-spec",
  "serde",
  "serde_cbor",
@@ -1763,7 +1763,7 @@ checksum = "0bf7f043f89559805f8c7cacc432749b2fa0d0a0a9ee46ce47164ed5ba7f126c"
 dependencies = [
  "fnv",
  "hashbrown 0.16.1",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "stable_deref_trait",
 ]
 
@@ -1796,7 +1796,7 @@ dependencies = [
  "camino",
  "directories",
  "greentic-config-types",
- "greentic-types",
+ "greentic-types 0.4.61",
  "once_cell",
  "serde",
  "serde_json",
@@ -1812,7 +1812,7 @@ version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f43754d70f6f86f934deaa1aacdd0e4529b987674da46419adcb70721630f86"
 dependencies = [
- "greentic-types",
+ "greentic-types 0.4.61",
  "serde",
  "serde_json",
  "toml",
@@ -1830,9 +1830,9 @@ dependencies = [
  "clap",
  "dirs-next",
  "greentic-config-types",
- "greentic-interfaces-guest",
+ "greentic-interfaces-guest 0.4.113",
  "greentic-secrets-lib",
- "greentic-types",
+ "greentic-types 0.5.2",
  "oci-distribution",
  "reqwest 0.13.2",
  "rpassword",
@@ -1859,12 +1859,12 @@ dependencies = [
  "greentic-distributor-client",
  "greentic-i18n-translator",
  "greentic-interfaces-host",
- "greentic-interfaces-wasmtime",
+ "greentic-interfaces-wasmtime 0.4.113",
  "greentic-qa-lib",
- "greentic-types",
+ "greentic-types 0.4.61",
  "handlebars",
  "include_dir",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "jsonschema",
  "lazy_static",
  "pathdiff",
@@ -1907,12 +1907,12 @@ dependencies = [
 
 [[package]]
 name = "greentic-interfaces"
-version = "0.4.112"
+version = "0.4.113"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b3e26c26c92d5cf8ad38b562bc64a41f1d01b15504ca259ff6e9ea14da9c2d1"
+checksum = "3337028cef893ae50da5027389850f18bb7d9a6945497858433bd3794931b880"
 dependencies = [
  "anyhow",
- "greentic-types",
+ "greentic-types 0.4.61",
  "semver",
  "thiserror 2.0.18",
  "time",
@@ -1923,16 +1923,46 @@ dependencies = [
 ]
 
 [[package]]
-name = "greentic-interfaces-guest"
-version = "0.4.112"
+name = "greentic-interfaces"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92b4cd55f864894d3296bbcec920a13e20bd875cff2347bf6197a0e8d93d0988"
+checksum = "b2abe5ccec746bbeb0fbb291e0368096752e2ad31d5dbf70053638b12ec43c8d"
 dependencies = [
- "greentic-interfaces",
- "greentic-types",
+ "anyhow",
+ "constant_time_eq",
+ "greentic-types 0.5.2",
+ "semver",
+ "thiserror 2.0.18",
+ "time",
+ "wasmtime",
+ "wit-bindgen 0.57.1",
+ "wit-bindgen-core 0.57.1",
+ "wit-bindgen-rust 0.57.1",
+]
+
+[[package]]
+name = "greentic-interfaces-guest"
+version = "0.4.113"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db0ad9c65e52fcc1c55a1d64a83edbaed4154a5ca8b8169fa133cb5fd4ac7627"
+dependencies = [
+ "greentic-interfaces 0.4.113",
+ "greentic-types 0.4.61",
  "wit-bindgen 0.54.0",
  "wit-bindgen-core 0.54.0",
  "wit-bindgen-rust 0.54.0",
+]
+
+[[package]]
+name = "greentic-interfaces-guest"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6ae2fd6855448749061b052250c54b29ee8388ea6a81087ce07fdbc671e7eb7"
+dependencies = [
+ "greentic-types 0.5.2",
+ "wit-bindgen 0.57.1",
+ "wit-bindgen-core 0.57.1",
+ "wit-bindgen-rust 0.57.1",
 ]
 
 [[package]]
@@ -1941,8 +1971,8 @@ version = "0.4.112"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce6c1ce859f18ccaf874164f71bdd5d2ce2cb1021c705b3194cb56e584b880b"
 dependencies = [
- "greentic-interfaces",
- "greentic-types",
+ "greentic-interfaces 0.4.113",
+ "greentic-types 0.4.61",
  "serde",
  "serde_json",
  "wasmtime",
@@ -1950,13 +1980,29 @@ dependencies = [
 
 [[package]]
 name = "greentic-interfaces-wasmtime"
-version = "0.4.112"
+version = "0.4.113"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da64ddd6204c0eb4c1eaefc9b14252f9b18e62e325705162165a0b1784aaefa9"
+checksum = "19ee840b722537370e98c8f8d36a46b3eb6a09916b2b40df9a0e702947adfe39"
 dependencies = [
  "anyhow",
  "camino",
- "greentic-interfaces",
+ "greentic-interfaces 0.4.113",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "walkdir",
+ "wasmtime",
+]
+
+[[package]]
+name = "greentic-interfaces-wasmtime"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bf6e34b6a1de59ea49fe6ea47a9850e2c8149cf57bf776695d8f9e51c541efc"
+dependencies = [
+ "anyhow",
+ "camino",
+ "greentic-interfaces 0.5.0",
  "proc-macro2",
  "quote",
  "syn",
@@ -1966,7 +2012,7 @@ dependencies = [
 
 [[package]]
 name = "greentic-messaging-cardkit"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1976,12 +2022,12 @@ dependencies = [
 
 [[package]]
 name = "greentic-messaging-packgen"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
- "greentic-interfaces",
- "greentic-types",
+ "greentic-interfaces 0.5.0",
+ "greentic-types 0.5.2",
  "serde",
  "serde_json",
  "serde_yaml_gtc",
@@ -1991,10 +2037,10 @@ dependencies = [
 
 [[package]]
 name = "greentic-messaging-planned"
-version = "0.4.27"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
- "greentic-types",
+ "greentic-types 0.5.2",
  "insta",
  "provider-common",
  "serde",
@@ -2003,9 +2049,9 @@ dependencies = [
 
 [[package]]
 name = "greentic-messaging-renderer"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
- "greentic-types",
+ "greentic-types 0.5.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2013,16 +2059,16 @@ dependencies = [
 
 [[package]]
 name = "greentic-messaging-tester"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
  "axum",
  "base64 0.22.1",
  "clap",
- "greentic-interfaces-wasmtime",
+ "greentic-interfaces-wasmtime 0.5.0",
  "greentic-messaging-planned",
- "greentic-types",
+ "greentic-types 0.5.2",
  "hmac 0.12.1",
  "http",
  "once_cell",
@@ -2053,9 +2099,9 @@ dependencies = [
  "ed25519-dalek",
  "getrandom 0.4.2",
  "greentic-flow",
- "greentic-types",
+ "greentic-types 0.4.61",
  "hex",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "pkcs8",
  "rcgen",
  "rustls-pki-types",
@@ -2129,20 +2175,20 @@ dependencies = [
  "greentic-distributor-client",
  "greentic-flow",
  "greentic-i18n",
- "greentic-interfaces",
+ "greentic-interfaces 0.4.113",
  "greentic-interfaces-host",
- "greentic-interfaces-wasmtime",
+ "greentic-interfaces-wasmtime 0.4.113",
  "greentic-pack-lib",
  "greentic-secrets-lib",
  "greentic-session",
  "greentic-state",
  "greentic-telemetry",
- "greentic-types",
+ "greentic-types 0.4.61",
  "handlebars",
  "hex",
  "hmac 0.13.0",
  "humantime",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "jsonschema",
  "lru",
  "once_cell",
@@ -2195,7 +2241,7 @@ dependencies = [
  "greentic-secrets-api",
  "greentic-secrets-provider-dev",
  "greentic-secrets-spec",
- "greentic-types",
+ "greentic-types 0.4.61",
  "hkdf",
  "lru",
  "once_cell",
@@ -2222,7 +2268,7 @@ dependencies = [
  "greentic-secrets-core",
  "greentic-secrets-provider-dev",
  "greentic-secrets-spec",
- "greentic-types",
+ "greentic-types 0.4.61",
 ]
 
 [[package]]
@@ -2249,7 +2295,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4c368d0bbd228e7a56f4cfde1c513b8309aee3953dc8d672060b0ee1c0aa08f"
 dependencies = [
  "async-trait",
- "greentic-types",
+ "greentic-types 0.4.61",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2262,7 +2308,7 @@ version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba35dafbd59cd3b5200f35547635294a87d4d39983565ee465fc185b87eabc03"
 dependencies = [
- "greentic-types",
+ "greentic-types 0.4.61",
  "hex",
  "parking_lot",
  "serde_json",
@@ -2277,8 +2323,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c535937d640482859b1e03c7f29b01d52b963e7d131e770aa106222b0f59275"
 dependencies = [
  "dashmap",
- "greentic-interfaces",
- "greentic-types",
+ "greentic-interfaces 0.4.113",
+ "greentic-types 0.4.61",
  "parking_lot",
  "redis",
  "serde",
@@ -2313,18 +2359,19 @@ dependencies = [
 
 [[package]]
 name = "greentic-types"
-version = "0.4.60"
+version = "0.4.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60209d0dc547c902b28091ef30c0b96c3bb5d6c43f13e4f4eec9045d2185a830"
+checksum = "8bce3e924f4a97ff3f200dcf8dd46975a64e609d9c38f9deaec330ac7111ec9c"
 dependencies = [
  "anyhow",
  "blake3",
  "chrono",
  "ciborium",
+ "constant_time_eq",
  "fnv",
  "greentic-telemetry",
  "greentic-types-macros",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "opentelemetry-otlp",
  "schemars 1.2.1",
  "semver",
@@ -2332,12 +2379,37 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_with",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
  "time",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "unic-langid",
+]
+
+[[package]]
+name = "greentic-types"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27d3246d833a9d0c3c44694c9381df09df6361754f9590e922bfad0829a6d789"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "chrono",
+ "ciborium",
+ "constant_time_eq",
+ "fnv",
+ "indexmap 2.14.0",
+ "schemars 1.2.1",
+ "semver",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "serde_with",
+ "sha2 0.11.0",
+ "thiserror 2.0.18",
+ "time",
  "unic-langid",
 ]
 
@@ -2364,7 +2436,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2436,6 +2508,15 @@ dependencies = [
  "foldhash 0.2.0",
  "serde",
  "serde_core",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+dependencies = [
+ "foldhash 0.2.0",
 ]
 
 [[package]]
@@ -2820,12 +2901,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.13.1"
+version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45a8a2b9cb3e0b0c1803dbb0758ffac5de2f425b23c28f518faabd9d805342ff"
+checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "serde",
  "serde_core",
 ]
@@ -3187,14 +3268,14 @@ name = "messaging-cardkit"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "greentic-types",
+ "greentic-types 0.5.2",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "messaging-cardkit-bin"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3207,14 +3288,14 @@ dependencies = [
 
 [[package]]
 name = "messaging-core"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "messaging-ingress-slack"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -3225,7 +3306,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-teams"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3235,7 +3316,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-telegram"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3244,7 +3325,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-whatsapp"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3253,10 +3334,10 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-dummy"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
- "greentic-types",
+ "greentic-types 0.5.2",
  "provider-common",
  "serde",
  "serde_json",
@@ -3266,12 +3347,12 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-email"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "provider-common",
  "serde",
  "serde_json",
@@ -3282,11 +3363,11 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-slack"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "provider-common",
  "serde",
  "serde_json",
@@ -3295,12 +3376,12 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-teams"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "provider-common",
  "serde",
  "serde_json",
@@ -3310,11 +3391,11 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-telegram"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "provider-common",
  "serde",
  "serde_json",
@@ -3323,12 +3404,12 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "hmac 0.12.1",
  "provider-common",
  "serde",
@@ -3342,12 +3423,12 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat-gui"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "hmac 0.12.1",
  "provider-common",
  "serde",
@@ -3361,11 +3442,11 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webex"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "provider-common",
  "serde",
  "serde_json",
@@ -3374,11 +3455,11 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-whatsapp"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "greentic-messaging-renderer",
- "greentic-types",
+ "greentic-types 0.5.2",
  "provider-common",
  "serde",
  "serde_json",
@@ -3551,7 +3632,7 @@ checksum = "271638cd5fa9cca89c4c304675ca658efc4e64a66c716b7cfe1afb4b9611dbbc"
 dependencies = [
  "crc32fast",
  "hashbrown 0.16.1",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "memchr",
 ]
 
@@ -3826,7 +3907,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
 dependencies = [
  "fixedbitset",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
 ]
 
 [[package]]
@@ -3987,7 +4068,7 @@ dependencies = [
 
 [[package]]
 name = "provider-common"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3995,7 +4076,7 @@ dependencies = [
  "glob",
  "greentic-messaging-renderer",
  "greentic-runner-desktop",
- "greentic-types",
+ "greentic-types 0.5.2",
  "once_cell",
  "schemars 1.2.1",
  "serde",
@@ -4009,7 +4090,7 @@ dependencies = [
 
 [[package]]
 name = "provider-runtime-config"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4017,12 +4098,12 @@ dependencies = [
 
 [[package]]
 name = "provider-tests"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
- "greentic-interfaces-wasmtime",
- "greentic-types",
+ "greentic-interfaces-wasmtime 0.5.0",
+ "greentic-types 0.5.2",
  "hmac 0.12.1",
  "insta",
  "provider-common",
@@ -4074,13 +4155,13 @@ dependencies = [
 
 [[package]]
 name = "questions"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
  "ciborium",
- "greentic-interfaces",
- "greentic-interfaces-guest",
+ "greentic-interfaces 0.5.0",
+ "greentic-interfaces-guest 0.5.0",
  "insta",
  "jsonschema",
  "regex",
@@ -4092,7 +4173,7 @@ dependencies = [
 
 [[package]]
 name = "questions-cli"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "rpassword",
@@ -4823,7 +4904,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "secrets-probe"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "wit-bindgen 0.54.0",
 ]
@@ -4977,7 +5058,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "schemars 0.9.0",
  "schemars 1.2.1",
  "serde_core",
@@ -5004,7 +5085,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "itoa",
  "ryu",
  "serde",
@@ -5013,12 +5094,12 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml_gtc"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ef09f7c1745863233b6a445e6024977ae6abb7b0ab08c02ef4809e3886f176c"
+checksum = "8622b658226bcf6beb3b81db219b769bf35da3aa3975b07fa5294da14599a72a"
 dependencies = [
  "base64 0.22.1",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "itoa",
  "num-traits",
  "regex",
@@ -5142,7 +5223,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slack"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "hmac 0.12.1",
  "provider-common",
@@ -5264,7 +5345,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "teams"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "provider-common",
  "provider-runtime-config",
@@ -5277,22 +5358,11 @@ dependencies = [
 
 [[package]]
 name = "telegram"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "htmlescape",
  "provider-common",
  "provider-runtime-config",
- "serde",
- "serde_json",
- "wit-bindgen 0.54.0",
-]
-
-[[package]]
-name = "telegram-webhook"
-version = "0.4.83"
-dependencies = [
- "greentic-interfaces",
- "greentic-interfaces-guest",
  "serde",
  "serde_json",
  "wit-bindgen 0.54.0",
@@ -5511,7 +5581,7 @@ version = "0.9.12+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf92845e79fc2e2def6a5d828f0801e29a2f8acc037becc5ab08595c7d5e9863"
 dependencies = [
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "serde_core",
  "serde_spanned",
  "toml_datetime",
@@ -5589,7 +5659,7 @@ checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
 dependencies = [
  "futures-core",
  "futures-util",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "pin-project-lite",
  "slab",
  "sync_wrapper",
@@ -6064,7 +6134,7 @@ dependencies = [
  "anyhow",
  "heck",
  "im-rc",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "log",
  "petgraph",
  "serde",
@@ -6107,13 +6177,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.247.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30b6733b8b91d010a6ac5b0fb237dc46a19650bc4c67db66857e2e787d437204"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.247.0",
+]
+
+[[package]]
 name = "wasm-metadata"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb0e353e6a2fbdc176932bbaab493762eb1255a7900fe0fea1a2f96c296cc909"
 dependencies = [
  "anyhow",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "wasm-encoder 0.244.0",
  "wasmparser 0.244.0",
 ]
@@ -6125,9 +6205,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da55e60097e8b37b475a0fa35c3420dd71d9eb7bd66109978ab55faf56a57efb"
 dependencies = [
  "anyhow",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "wasm-encoder 0.245.1",
  "wasmparser 0.245.1",
+]
+
+[[package]]
+name = "wasm-metadata"
+version = "0.247.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "665fe59e56cc9b419ca6fcca56673e3421d1a5011e3b65caf6b726fd9e041d10"
+dependencies = [
+ "anyhow",
+ "indexmap 2.14.0",
+ "wasm-encoder 0.247.0",
+ "wasmparser 0.247.0",
 ]
 
 [[package]]
@@ -6151,7 +6243,7 @@ checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
 dependencies = [
  "bitflags",
  "hashbrown 0.15.5",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "semver",
 ]
 
@@ -6163,7 +6255,7 @@ checksum = "4f08c9adee0428b7bddf3890fc27e015ac4b761cc608c822667102b8bfd6995e"
 dependencies = [
  "bitflags",
  "hashbrown 0.16.1",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "semver",
  "serde",
 ]
@@ -6176,9 +6268,21 @@ checksum = "71cde4757396defafd25417cfb36aa3161027d06d865b0c24baaae229aac005d"
 dependencies = [
  "bitflags",
  "hashbrown 0.16.1",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "semver",
  "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.247.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e6fb4c2bee46c5ea4d40f8cdb5c131725cd976718ec56f1c8e82fbde5fa2a80"
+dependencies = [
+ "bitflags",
+ "hashbrown 0.17.0",
+ "indexmap 2.14.0",
+ "semver",
 ]
 
 [[package]]
@@ -6258,7 +6362,7 @@ dependencies = [
  "cranelift-entity",
  "gimli",
  "hashbrown 0.16.1",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "log",
  "object",
  "postcard",
@@ -6445,7 +6549,7 @@ dependencies = [
  "anyhow",
  "bitflags",
  "heck",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "wit-parser 0.245.1",
 ]
 
@@ -6583,7 +6687,7 @@ dependencies = [
 
 [[package]]
 name = "webchat"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "provider-common",
  "provider-runtime-config",
@@ -6594,11 +6698,11 @@ dependencies = [
 
 [[package]]
 name = "webchat-directline-core"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "greentic-types",
+ "greentic-types 0.5.2",
  "hmac 0.12.1",
  "provider-common",
  "serde",
@@ -6610,21 +6714,10 @@ dependencies = [
 
 [[package]]
 name = "webex"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "provider-common",
  "provider-runtime-config",
- "serde",
- "serde_json",
- "wit-bindgen 0.54.0",
-]
-
-[[package]]
-name = "webex-webhook"
-version = "0.4.83"
-dependencies = [
- "greentic-interfaces",
- "greentic-interfaces-guest",
  "serde",
  "serde_json",
  "wit-bindgen 0.54.0",
@@ -6659,7 +6752,7 @@ dependencies = [
 
 [[package]]
 name = "whatsapp"
-version = "0.4.83"
+version = "0.5.0"
 dependencies = [
  "provider-common",
  "provider-runtime-config",
@@ -7025,6 +7118,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen"
+version = "0.57.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+dependencies = [
+ "wit-bindgen-rust-macro 0.57.1",
+]
+
+[[package]]
 name = "wit-bindgen-core"
 version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7047,6 +7149,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen-core"
+version = "0.57.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02dee27a2dc20d1008016c742ec9fc6ea498492994ba3750be7454cbc97ff04c"
+dependencies = [
+ "anyhow",
+ "heck",
+ "wit-parser 0.247.0",
+]
+
+[[package]]
 name = "wit-bindgen-rust"
 version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7054,7 +7167,7 @@ checksum = "b7c566e0f4b284dd6561c786d9cb0142da491f46a9fbed79ea69cdad5db17f21"
 dependencies = [
  "anyhow",
  "heck",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "prettyplease",
  "syn",
  "wasm-metadata 0.244.0",
@@ -7070,12 +7183,28 @@ checksum = "e76541e2f37ac1729db85765729daa0f3c2b5975d66699114d107525f6d6c8d5"
 dependencies = [
  "anyhow",
  "heck",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "prettyplease",
  "syn",
  "wasm-metadata 0.245.1",
  "wit-bindgen-core 0.54.0",
  "wit-component 0.245.1",
+]
+
+[[package]]
+name = "wit-bindgen-rust"
+version = "0.57.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5007dae772945b7a5003d69d90a3a4a78929d41f19d004e980c4259a6af4484"
+dependencies = [
+ "anyhow",
+ "heck",
+ "indexmap 2.14.0",
+ "prettyplease",
+ "syn",
+ "wasm-metadata 0.247.0",
+ "wit-bindgen-core 0.57.1",
+ "wit-component 0.247.0",
 ]
 
 [[package]]
@@ -7109,6 +7238,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen-rust-macro"
+version = "0.57.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af9237d678e3513ad24e96fe98beacdc0db6405284ba2a2400418cf0d42caa89"
+dependencies = [
+ "anyhow",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "wit-bindgen-core 0.57.1",
+ "wit-bindgen-rust 0.57.1",
+]
+
+[[package]]
 name = "wit-component"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7116,7 +7260,7 @@ checksum = "9d66ea20e9553b30172b5e831994e35fbde2d165325bec84fc43dbf6f4eb9cb2"
 dependencies = [
  "anyhow",
  "bitflags",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "log",
  "serde",
  "serde_derive",
@@ -7135,7 +7279,7 @@ checksum = "4894f10d2d5cbc17c77e91f86a1e48e191a788da4425293b55c98b44ba3fcac9"
 dependencies = [
  "anyhow",
  "bitflags",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "log",
  "serde",
  "serde_derive",
@@ -7147,6 +7291,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-component"
+version = "0.247.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d567162a6b9843080e5e0053f696623ff694bae8ae017c9ec536d1873bbe3d8"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "indexmap 2.14.0",
+ "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "wasm-encoder 0.247.0",
+ "wasm-metadata 0.247.0",
+ "wasmparser 0.247.0",
+ "wit-parser 0.247.0",
+]
+
+[[package]]
 name = "wit-parser"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7154,7 +7317,7 @@ checksum = "ecc8ac4bc1dc3381b7f59c34f00b67e18f910c2c0f50015669dde7def656a736"
 dependencies = [
  "anyhow",
  "id-arena",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "log",
  "semver",
  "serde",
@@ -7173,7 +7336,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.16.1",
  "id-arena",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "log",
  "semver",
  "serde",
@@ -7181,6 +7344,25 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser 0.245.1",
+]
+
+[[package]]
+name = "wit-parser"
+version = "0.247.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ffe4064318cdf3c08cb99343b44c039fcefe61ccdf58aa9975285f13d74d1fc"
+dependencies = [
+ "anyhow",
+ "hashbrown 0.17.0",
+ "id-arena",
+ "indexmap 2.14.0",
+ "log",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "unicode-xid",
+ "wasmparser 0.247.0",
 ]
 
 [[package]]
@@ -7352,7 +7534,7 @@ dependencies = [
  "flate2",
  "getrandom 0.4.2",
  "hmac 0.12.1",
- "indexmap 2.13.1",
+ "indexmap 2.14.0",
  "lzma-rust2",
  "memchr",
  "pbkdf2",

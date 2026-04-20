@@ -16,12 +16,16 @@ exclude = [
     "components/qa",
     "components/questions",
     "components/templates",
+    # TODO(0.5): Rewrite to new greentic:component@0.6.0 node ABI (describe + CBOR invoke).
+    # These still use the removed 0.4 `component_entrypoint!` macro with JSON invoke/on-start/on-stop.
+    "components/telegram-webhook",
+    "components/webex-webhook",
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.4.83"
+version = "0.5.0"
 license = "MIT"
 
 
@@ -36,10 +40,10 @@ regex = "1"
 hmac = "0.12"
 sha2 = "0.10"
 urlencoding = "2"
-greentic-interfaces-wasmtime = "0.4"
-greentic-types = "0.4"
-greentic-interfaces = "0.4"
-greentic-interfaces-guest = { version = "0.4", default-features = false }
+greentic-interfaces-wasmtime = ">=0.5.0-0, <0.6.0-0"
+greentic-types = ">=0.5.0-0, <0.6.0-0"
+greentic-interfaces = ">=0.5.0-0, <0.6.0-0"
+greentic-interfaces-guest = { version = ">=0.5.0-0, <0.6.0-0", default-features = false }
 greentic-runner-desktop = "0.4"
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
