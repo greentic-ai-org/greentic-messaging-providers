@@ -172,7 +172,7 @@ jobs:
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: |
-          cargo binstall greentic-pack --version 0.4.111 --force --no-confirm --locked
+          cargo binstall greentic-pack --version '^0.4' --force --no-confirm --locked
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
           greentic-pack --version
 
