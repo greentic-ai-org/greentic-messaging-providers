@@ -1,8 +1,0 @@
-{
-  "config": {},
-  "secrets": {
-    "TELEGRAM_BOT_TOKEN": "dummy-token"
-  },
-  "http": "mock",
-  "state": {}
-}
