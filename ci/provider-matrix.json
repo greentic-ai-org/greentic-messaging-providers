@@ -5,10 +5,8 @@
     "slack",
     "teams",
     "telegram",
-    "telegram-webhook",
     "webchat",
     "webex",
-    "webex-webhook",
     "whatsapp",
     "messaging-ingress-slack",
     "messaging-ingress-teams",
@@ -158,19 +156,16 @@
       "pack": "messaging-telegram",
       "components": [
         "telegram",
-        "telegram-webhook",
         "messaging-ingress-telegram",
         "messaging-provider-telegram"
       ],
       "manifests": [
         "components/telegram/Cargo.toml",
-        "components/telegram-webhook/Cargo.toml",
         "components/messaging-ingress-telegram/Cargo.toml",
         "components/messaging-provider-telegram/Cargo.toml"
       ],
       "paths": [
         "components/telegram/",
-        "components/telegram-webhook/",
         "components/messaging-ingress-telegram/",
         "components/messaging-provider-telegram/",
         "packs/messaging-telegram/",
@@ -215,17 +210,14 @@
       "pack": "messaging-webex",
       "components": [
         "webex",
-        "webex-webhook",
         "messaging-provider-webex"
       ],
       "manifests": [
         "components/webex/Cargo.toml",
-        "components/webex-webhook/Cargo.toml",
         "components/messaging-provider-webex/Cargo.toml"
       ],
       "paths": [
         "components/webex/",
-        "components/webex-webhook/",
         "components/messaging-provider-webex/",
         "packs/messaging-webex/",
         "ci/secrets/webex.secrets-pack.yaml",
