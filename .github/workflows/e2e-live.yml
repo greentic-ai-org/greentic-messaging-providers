@@ -59,9 +59,9 @@ jobs:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: |
           set -euo pipefail
-          if ! cargo binstall greentic-pack --force --no-confirm --locked; then
+          if ! cargo binstall greentic-pack --version 0.4.111 --force --no-confirm --locked; then
             echo "binstall failed; falling back to cargo install" >&2
-            cargo install greentic-pack --force --locked
+            cargo install greentic-pack --version 0.4.111 --force --locked
           fi
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
           greentic-pack --version
@@ -79,10 +79,10 @@ jobs:
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: |
-          cargo binstall greentic-flow --force --no-confirm --locked || cargo install greentic-flow --force --locked
-          cargo binstall greentic-runner --force --no-confirm --locked || cargo install greentic-runner --force --locked
-          cargo binstall greentic-component --force --no-confirm --locked || cargo install greentic-component --force --locked
-          cargo binstall greentic-secrets --force --no-confirm --locked || cargo install greentic-secrets --force --locked
+          cargo binstall greentic-flow --version 0.4.70 --force --no-confirm --locked || cargo install greentic-flow --version 0.4.70 --force --locked
+          cargo binstall greentic-runner --version 0.4.76 --force --no-confirm --locked || cargo install greentic-runner --version 0.4.76 --force --locked
+          cargo binstall greentic-component --version 0.4.76 --force --no-confirm --locked || cargo install greentic-component --version 0.4.76 --force --locked
+          cargo binstall greentic-secrets --version 0.4.26 --force --no-confirm --locked || cargo install greentic-secrets --version 0.4.26 --force --locked
 
       - name: "Guard: deny prod environment"
         run: |
