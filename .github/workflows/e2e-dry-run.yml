@@ -52,16 +52,16 @@ jobs:
       - name: Install greentic-pack
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-        run: cargo binstall greentic-pack --version '^0.4' --force --no-confirm --locked || cargo install greentic-pack --version '^0.4' --force --locked
+        run: cargo binstall greentic-pack --version '^0.5' --force --no-confirm --locked || cargo install greentic-pack --version '^0.5' --force --locked
 
       - name: Install greentic-flow
-        run: cargo binstall greentic-flow --version '^0.4' --force --no-confirm --locked || cargo install greentic-flow --version '^0.4' --force --locked
+        run: cargo binstall greentic-flow --version '^0.5' --force --no-confirm --locked || cargo install greentic-flow --version '^0.5' --force --locked
 
       - name: Install greentic-runner
-        run: cargo binstall greentic-runner --version '^0.4' --force --no-confirm --locked || cargo install greentic-runner --version '^0.4' --force --locked
+        run: cargo binstall greentic-runner --version '^0.5' --force --no-confirm --locked || cargo install greentic-runner --version '^0.5' --force --locked
 
       - name: Install greentic-component
-        run: cargo binstall greentic-component --version '^0.4' --force --no-confirm --locked || cargo install greentic-component --version '^0.4' --force --locked
+        run: cargo binstall greentic-component --version '^0.5' --force --no-confirm --locked || cargo install greentic-component --version '^0.5' --force --locked
 
       - name: Install b3sum
         run: cargo binstall b3sum --force --no-confirm --locked || cargo install b3sum --force --locked
