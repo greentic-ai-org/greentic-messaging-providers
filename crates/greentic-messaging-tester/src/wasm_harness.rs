@@ -13,25 +13,16 @@ use greentic_interfaces_wasmtime::host_helpers::v1::{
 use greentic_interfaces_wasmtime::http_client_client_v1_1::greentic::http::http_client as http_client_client_alias;
 use greentic_types::ProviderManifest;
 use provider_common::component_v0_6::{DescribePayload, canonical_cbor_bytes, decode_cbor};
-use serde::Deserialize;
 use wasmtime::{
     Config, Engine, Store,
-    component::{Component, ComponentExportIndex, Instance, Linker, ResourceTable},
+    component::{Component, Instance, Linker, ResourceTable},
 };
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
-
-mod component_node_bindings {
-    wasmtime::component::bindgen!({
-        path: "../../wit/component-node",
-        world: "greentic:component/node@0.6.0",
-    });
-}
 
 use crate::http_mock::{
     self, HttpCall, HttpHistory, HttpMode, HttpRequest, HttpResponseQueue, HttpResponseRecord,
 };
 
-const NODE_WORLD: &str = "greentic:component/node@0.6.0";
 const COMPONENT_DESCRIPTOR_WORLD: &str = "greentic:component/descriptor@0.6.0";
 const COMPONENT_RUNTIME_WORLD: &str = "greentic:component/runtime@0.6.0";
 
@@ -42,7 +33,6 @@ fn component_build_lock() -> &'static Mutex<()> {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum InvokeStrategy {
-    Node,
     SchemaCore,
 }
 
@@ -73,20 +63,6 @@ impl WasmHarness {
         let component = Component::from_file(&engine, &wasm_path)
             .map_err(|err| anyhow!("failed to load provider component: {err}"))?;
         let (manifest, invoke_strategy) = describe_manifest(&engine, &component, &wasm_path)?;
-        Ok(Self {
-            engine,
-            component,
-            manifest,
-            invoke_strategy,
-        })
-    }
-
-    #[cfg(test)]
-    pub fn new_with_path(component_path: &Path) -> Result<Self> {
-        let engine = new_engine();
-        let component = Component::from_file(&engine, component_path)
-            .map_err(|err| anyhow!("failed to load provider component: {err}"))?;
-        let (manifest, invoke_strategy) = describe_manifest(&engine, &component, component_path)?;
         Ok(Self {
             engine,
             component,
@@ -128,7 +104,6 @@ impl WasmHarness {
         options: InvokeOptions<'_>,
     ) -> Result<Vec<u8>> {
         match self.invoke_strategy {
-            InvokeStrategy::Node => self.invoke_node_world(op, input, &options),
             InvokeStrategy::SchemaCore => self.invoke_schema_core(op, input, options),
         }
     }
@@ -136,38 +111,6 @@ impl WasmHarness {
     #[cfg(test)]
     pub(crate) fn invoke_strategy(&self) -> InvokeStrategy {
         self.invoke_strategy
-    }
-
-    fn invoke_node_world(
-        &self,
-        op: &str,
-        input: Vec<u8>,
-        options: &InvokeOptions<'_>,
-    ) -> Result<Vec<u8>> {
-        let input_str = String::from_utf8(input).map_err(|err| anyhow!(err))?;
-        let state = TesterHostState::new_with_shared_state(
-            options.secrets.clone(),
-            options.http_mode,
-            options.history.clone(),
-            options.mock_responses.clone(),
-            options.shared_state_store.clone(),
-        );
-        execute_with_state(&self.engine, &self.component, state, |store, instance| {
-            if !node_world_present(&mut *store, instance) {
-                return Err(anyhow!("missing node world export"));
-            }
-            let invoke_index = node_function_index(&mut *store, instance, "invoke")?;
-            let invoke = instance.get_typed_func::<
-                (component_node_bindings::ExecCtx, String, String),
-                (component_node_bindings::InvokeResult,),
-            >(&mut *store, invoke_index)?;
-            let ctx = build_exec_ctx_v06();
-            let (result,) = invoke.call(&mut *store, (ctx, op.to_string(), input_str.clone()))?;
-            match result {
-                component_node_bindings::InvokeResult::Ok(body) => Ok(body.into_bytes()),
-                component_node_bindings::InvokeResult::Err(err) => Err(anyhow!("{}", err.message)),
-            }
-        })
     }
 
     fn invoke_schema_core(
@@ -206,87 +149,6 @@ impl WasmHarness {
     }
 }
 
-pub struct ComponentHarness {
-    engine: Engine,
-    component: Component,
-    component_path: PathBuf,
-}
-
-impl ComponentHarness {
-    pub fn new(component_path: &Path) -> Result<Self> {
-        let engine = new_engine();
-        let component = Component::from_file(&engine, component_path)
-            .map_err(|err| anyhow!("failed to load component: {err}"))?;
-        Ok(Self {
-            engine,
-            component,
-            component_path: component_path.to_path_buf(),
-        })
-    }
-
-    pub fn invoke(
-        &self,
-        op: &str,
-        input: Vec<u8>,
-        secrets: &HashMap<String, Vec<u8>>,
-        http_mode: HttpMode,
-        history: HttpHistory,
-    ) -> Result<Vec<u8>> {
-        eprintln!(
-            "node world invoke: wasm={} op={}",
-            self.component_path.display(),
-            op
-        );
-        let input_json = String::from_utf8(input).map_err(|err| anyhow!(err))?;
-        let state = TesterHostState::new(secrets.clone(), http_mode, history, None);
-        execute_with_state(&self.engine, &self.component, state, |store, instance| {
-            if !node_world_present(&mut *store, instance) {
-                return Err(anyhow!("missing node world export"));
-            }
-            let invoke_index = node_function_index(&mut *store, instance, "invoke")?;
-            let invoke = instance.get_typed_func::<
-                (component_node_bindings::ExecCtx, String, String),
-                (component_node_bindings::InvokeResult,),
-            >(&mut *store, invoke_index)?;
-            let ctx = build_exec_ctx_v06();
-            let (result,) = invoke.call(&mut *store, (ctx, op.to_string(), input_json.clone()))?;
-            match result {
-                component_node_bindings::InvokeResult::Ok(body) => Ok(body.into_bytes()),
-                component_node_bindings::InvokeResult::Err(err) => Err(anyhow!(err.message)),
-            }
-        })
-    }
-}
-
-fn build_exec_ctx_v06() -> component_node_bindings::ExecCtx {
-    component_node_bindings::ExecCtx {
-        tenant: component_node_bindings::TenantCtx {
-            env: "manual".into(),
-            tenant: "manual".into(),
-            tenant_id: "manual".into(),
-            team: None,
-            team_id: None,
-            user: None,
-            user_id: None,
-            trace_id: None,
-            i18n_id: None,
-            correlation_id: None,
-            attributes: Vec::new(),
-            session_id: None,
-            flow_id: None,
-            node_id: None,
-            provider_id: None,
-            deadline_ms: None,
-            attempt: 0,
-            idempotency_key: None,
-            impersonation: None,
-        },
-        i18n_id: None,
-        flow_id: "manual".into(),
-        node_id: None,
-    }
-}
-
 fn describe_manifest(
     engine: &Engine,
     component: &Component,
@@ -306,20 +168,6 @@ fn describe_manifest(
         return Ok((manifest, InvokeStrategy::SchemaCore));
     }
 
-    let node_result = describe_manifest_from_node(engine, component, component_path);
-    let node_err = node_result.as_ref().err().map(|e| e.to_string());
-    if let Ok(manifest) = node_result {
-        return Ok((manifest, InvokeStrategy::Node));
-    }
-
-    if let Some(manifest_path) = manifest_from_component_path(component_path) {
-        let contents = std::fs::read_to_string(&manifest_path)
-            .with_context(|| format!("failed to read manifest {}", manifest_path.display()))?;
-        let manifest: ProviderManifest =
-            serde_json::from_str(&contents).context("failed to parse manifest file")?;
-        return Ok((manifest, InvokeStrategy::SchemaCore));
-    }
-
     let available_worlds = detect_available_worlds(engine, component).unwrap_or_default();
     let world_desc = if available_worlds.is_empty() {
         "<none>".to_string()
@@ -328,80 +176,10 @@ fn describe_manifest(
     };
 
     Err(anyhow!(
-        "missing invocation exports (available worlds: {}) (node: {}; schema-core: {})",
+        "missing invocation exports (available worlds: {}) (schema-core: {})",
         world_desc,
-        node_err.unwrap_or_else(|| "<missing>".to_string()),
         schema_err.unwrap_or_else(|| "<missing>".to_string()),
     ))
-}
-
-fn describe_manifest_from_node(
-    engine: &Engine,
-    component: &Component,
-    component_path: &Path,
-) -> Result<ProviderManifest> {
-    let history = http_mock::new_history();
-    let state = TesterHostState::new(HashMap::new(), HttpMode::Mock, history, None);
-    eprintln!(
-        "node world describe: wasm={} op=get-manifest",
-        component_path.display()
-    );
-    execute_with_state(engine, component, state, |store, instance| {
-        let get_manifest_index = node_function_index(&mut *store, instance, "get-manifest")?;
-        let get_manifest =
-            instance.get_typed_func::<(), (String,)>(&mut *store, get_manifest_index)?;
-        let (manifest_json,) = get_manifest.call(&mut *store, ())?;
-        let _ = node_function_index(&mut *store, instance, "invoke")?;
-        let manifest = match serde_json::from_str::<ProviderManifest>(&manifest_json) {
-            Ok(manifest) => manifest,
-            Err(parse_err) => fallback_provider_manifest_from_node(&manifest_json, component_path)
-                .map_err(|fallback_err| {
-                    anyhow!(
-                        "failed to parse node manifest: {parse_err}; fallback error: {fallback_err}"
-                    )
-                })?,
-        };
-        Ok(manifest)
-    })
-}
-
-#[derive(Deserialize)]
-struct NodeComponentManifest {
-    #[serde(default)]
-    operations: Vec<NodeComponentOperation>,
-    #[serde(default)]
-    supports: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct NodeComponentOperation {
-    name: String,
-}
-
-fn fallback_provider_manifest_from_node(
-    manifest_json: &str,
-    component_path: &Path,
-) -> Result<ProviderManifest> {
-    let parsed: NodeComponentManifest = serde_json::from_str(manifest_json)
-        .context("failed to decode node component manifest for fallback")?;
-    let ops = parsed
-        .operations
-        .into_iter()
-        .map(|op| op.name)
-        .filter(|name| !name.trim().is_empty())
-        .collect();
-    let provider_type = component_path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .map(|s| s.replace('_', "-"))
-        .unwrap_or_else(|| "node-component".to_string());
-    Ok(ProviderManifest {
-        provider_type,
-        capabilities: parsed.supports,
-        ops,
-        config_schema_ref: None,
-        state_schema_ref: None,
-    })
 }
 
 fn describe_manifest_from_schema(
@@ -589,40 +367,6 @@ fn http_client_host(state: &mut TesterHostState) -> &mut dyn http_client::HttpCl
     state
 }
 
-fn node_world_export(
-    store: &mut Store<TesterHostState>,
-    instance: &Instance,
-) -> Option<ComponentExportIndex> {
-    instance.get_export_index(&mut *store, None, NODE_WORLD)
-}
-
-fn node_world_present(store: &mut Store<TesterHostState>, instance: &Instance) -> bool {
-    node_world_export(store, instance).is_some()
-}
-
-fn node_function_index(
-    store: &mut Store<TesterHostState>,
-    instance: &Instance,
-    name: &str,
-) -> Result<ComponentExportIndex> {
-    let parent = node_world_export(store, instance);
-    if let Some(index) = instance.get_export_index(&mut *store, parent.as_ref(), name) {
-        return Ok(index);
-    }
-    // Some node components export root funcs directly instead of under a
-    // namespaced world instance, and may use fully-qualified export names.
-    let candidates = [
-        name.to_string(),
-        format!("greentic:component/node@0.6.0#{name}"),
-    ];
-    for candidate in candidates {
-        if let Some(index) = instance.get_export_index(&mut *store, None, &candidate) {
-            return Ok(index);
-        }
-    }
-    Err(anyhow!("missing node {name} export"))
-}
-
 pub struct TesterHostState {
     table: ResourceTable,
     wasi_ctx: WasiCtx,
@@ -770,14 +514,6 @@ impl state_store::StateStoreHost for TesterHostState {
     }
 }
 
-impl component_node_bindings::greentic::component::control::Host for TesterHostState {
-    fn should_cancel(&mut self) -> bool {
-        false
-    }
-
-    fn yield_now(&mut self) {}
-}
-
 fn add_wasi_to_linker(linker: &mut Linker<TesterHostState>) {
     wasmtime_wasi::p2::add_to_linker_sync(linker).expect("add wasi");
 }
@@ -886,7 +622,8 @@ fn find_wasm_path(provider: &str) -> Result<PathBuf> {
     Err(anyhow!("no wasm component found for {}", provider))
 }
 
-pub fn find_component_wasm_path(component: &str) -> Result<PathBuf> {
+#[cfg(test)]
+fn find_component_wasm_path(component: &str) -> Result<PathBuf> {
     let root = workspace_root();
     let component_dir = root.join("components").join(component);
     let target_priority = ["wasm32-wasip2", "wasm32-wasip1"];
@@ -938,6 +675,7 @@ fn wasm_name_variants(component: &str) -> Vec<String> {
     names
 }
 
+#[cfg(test)]
 fn best_target_candidate(
     root: &Path,
     component_dir: &Path,
@@ -976,6 +714,7 @@ fn best_target_candidate(
     latest_candidate(&candidates)
 }
 
+#[cfg(test)]
 fn add_candidate_if_exists(candidates: &mut Vec<PathBuf>, path: PathBuf) {
     if path.exists() && !candidates.contains(&path) {
         candidates.push(path);
@@ -1022,9 +761,6 @@ fn detect_available_worlds(engine: &Engine, component: &Component) -> Result<Vec
     let state = TesterHostState::new(HashMap::new(), HttpMode::Mock, history, None);
     execute_with_state(engine, component, state, |store, instance| {
         let mut worlds = Vec::new();
-        if node_world_export(store, instance).is_some() {
-            worlds.push("node");
-        }
         if instance
             .get_export_index(store, None, COMPONENT_RUNTIME_WORLD)
             .is_some()
@@ -1040,57 +776,14 @@ mod tests {
     use super::*;
     use greentic_types::messaging::universal_dto::RenderPlanInV1;
     use greentic_types::{ChannelMessageEnvelope, EnvId, MessageMetadata, TenantCtx, TenantId};
-    use serde_json::{Value, json};
+    use serde_json::Value;
     use std::{collections::BTreeMap, collections::HashMap, path::PathBuf, process::Command};
-
-    #[test]
-    #[ignore = "telegram-webhook excluded pending 0.5 node ABI rewrite"]
-    fn node_world_strategy_detected() {
-        let wasm = ensure_component_built("telegram-webhook");
-        let harness = WasmHarness::new_with_path(&wasm).expect("instantiate node component");
-        assert_eq!(harness.invoke_strategy(), InvokeStrategy::Node);
-    }
 
     #[test]
     fn schema_core_strategy_detected() {
         ensure_component_built("messaging-provider-webchat");
         let harness = WasmHarness::new("webchat").expect("instantiate schema-core component");
         assert_eq!(harness.invoke_strategy(), InvokeStrategy::SchemaCore);
-    }
-
-    #[test]
-    #[ignore = "telegram-webhook excluded pending 0.5 node ABI rewrite"]
-    fn node_world_can_invoke_reconcile_webhook() {
-        let wasm = ensure_component_built("telegram-webhook");
-        let harness = WasmHarness::new_with_path(&wasm).expect("instantiate node component");
-        assert_eq!(harness.invoke_strategy(), InvokeStrategy::Node);
-
-        let input = json!({
-            "public_base_url": "https://example.invalid/webhook",
-            "webhook_path": "",
-            "dry_run": true,
-        });
-        let secrets = HashMap::from([("TELEGRAM_BOT_TOKEN".to_string(), b"token".to_vec())]);
-        let history = http_mock::new_history();
-        let output = harness
-            .invoke(
-                "reconcile_webhook",
-                serde_json::to_vec(&input).expect("serialize input"),
-                &secrets,
-                HttpMode::Mock,
-                history,
-                None,
-            )
-            .expect("invoke");
-        let value: Value = serde_json::from_slice(&output).expect("parse json");
-        assert_eq!(value.get("ok").and_then(Value::as_bool), Some(true));
-        assert_eq!(
-            value
-                .get("expected_url")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-            "https://example.invalid/webhook"
-        );
     }
 
     #[test]

@@ -107,19 +107,7 @@ The typical workflow is to:
 
 ## Webhook reconciliation
 
-`webhook` runs the provider’s `reconcile_webhook` operation with your values so you can confirm the pack is using the host-supplied `public_base_url` without hitting a live API:
-
-```bash
-greentic-messaging-tester webhook \
-  --provider telegram \
-  --values values.json \
-  --public-base-url https://example.com \
-  --dry-run
-```
-
-The command prints the component’s JSON response (expected/current/final URL, whether `/setWebhook` was skipped, etc.). Provide `--public-base-url` so the pack can derive the webhook endpoint, add `--secret-token` if Telegram should verify the callback, and leave `--dry-run` out once you’re ready for the provider to call Telegram for real.
-
-You can also point the command at `--provider webex`. The `webex-webhook` component treats `public_base_url` as the full callback, manages the `messages.created` subscription, and optionally sets the provided secret so Webex sends `X-Webex-Signature` headers that your ingress code can validate.
+The standalone `telegram-webhook` / `webex-webhook` components were removed in 0.5. The equivalent operation now lives on the provider itself as `setup_webhook` (see `messaging-provider-telegram/src/ops/webhook.rs`). Invoke it through the provider's normal op dispatch rather than a dedicated sub-component.
 
 ## Building
 

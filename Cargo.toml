@@ -16,10 +16,6 @@ exclude = [
     "components/qa",
     "components/questions",
     "components/templates",
-    # TODO(0.5): Rewrite to new greentic:component@0.6.0 node ABI (describe + CBOR invoke).
-    # These still use the removed 0.4 `component_entrypoint!` macro with JSON invoke/on-start/on-stop.
-    "components/telegram-webhook",
-    "components/webex-webhook",
 ]
 resolver = "2"
 

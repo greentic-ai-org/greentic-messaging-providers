@@ -43,9 +43,7 @@ use tokio::signal;
 use crate::http_mock::{HttpHistory, HttpMode, new_history};
 use crate::requirements::ValidationReport;
 use crate::values::Values;
-use crate::wasm_harness::{
-    ComponentHarness, InvokeOptions, SharedStateStore, WasmHarness, find_component_wasm_path,
-};
+use crate::wasm_harness::{InvokeOptions, SharedStateStore, WasmHarness};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
@@ -117,18 +115,6 @@ enum Command {
         http_header: Vec<String>,
         #[arg(long, value_name = "PUBLIC_BASE_URL")]
         public_base_url: String,
-    },
-    Webhook {
-        #[arg(long)]
-        provider: String,
-        #[arg(long, value_name = "VALUES_JSON")]
-        values: PathBuf,
-        #[arg(long, value_name = "SECRET_TOKEN")]
-        secret_token: Option<String>,
-        #[arg(long, value_name = "PUBLIC_BASE_URL")]
-        public_base_url: String,
-        #[arg(long)]
-        dry_run: bool,
     },
     Webchat {
         #[arg(long, default_value = "webchat-gui")]
@@ -239,13 +225,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
             http_header,
             public_base_url,
         }),
-        Command::Webhook {
-            provider,
-            values,
-            secret_token,
-            public_base_url,
-            dry_run,
-        } => handle_webhook(provider, values, secret_token, public_base_url, dry_run),
         Command::Webchat {
             provider,
             values,
@@ -538,40 +517,6 @@ fn handle_listen(params: ListenParams) -> Result<(), CliError> {
         http_mode,
         signature_secret,
     )
-}
-
-fn handle_webhook(
-    provider: String,
-    values_path: PathBuf,
-    secret_token: Option<String>,
-    public_base_url: String,
-    dry_run: bool,
-) -> Result<(), CliError> {
-    let values =
-        Values::load(&values_path).map_err(|err| CliError::ValuesLoad(values_path.clone(), err))?;
-
-    let component = webhook_component_for(&provider)
-        .ok_or_else(|| CliError::WebhookUnsupported(provider.clone()))?;
-    let component_path = find_component_wasm_path(component).map_err(CliError::Webhook)?;
-    let harness = ComponentHarness::new(&component_path).map_err(CliError::Webhook)?;
-    let secrets = values.secret_bytes();
-    let http_mode = values.http_mode();
-    let history = new_history();
-    let input = build_webhook_input(public_base_url, secret_token, dry_run)?;
-    let input_bytes = serde_json::to_vec(&input).map_err(|err| CliError::ProviderOp(err.into()))?;
-    let out_bytes = harness
-        .invoke(
-            "reconcile_webhook",
-            input_bytes,
-            &secrets,
-            http_mode,
-            history,
-        )
-        .map_err(map_invoke_error)?;
-    let output: Value =
-        serde_json::from_slice(&out_bytes).map_err(|err| CliError::ProviderOp(err.into()))?;
-    println!("{}", serde_json::to_string_pretty(&output).unwrap());
-    Ok(())
 }
 
 fn handle_webchat(params: WebchatParams) -> Result<(), CliError> {
@@ -1072,14 +1017,6 @@ fn content_type_for_path(path: &Path) -> &'static str {
         "woff" => "font/woff",
         "woff2" => "font/woff2",
         _ => "application/octet-stream",
-    }
-}
-
-fn webhook_component_for(provider: &str) -> Option<&'static str> {
-    match provider {
-        "telegram" => Some("telegram-webhook"),
-        "webex" => Some("webex-webhook"),
-        _ => None,
     }
 }
 
@@ -1649,31 +1586,6 @@ struct HttpInFile {
     query: Option<String>,
 }
 
-#[derive(Serialize)]
-struct WebhookInput {
-    public_base_url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    secret_token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dry_run: Option<bool>,
-}
-
-fn build_webhook_input(
-    public_base_url: String,
-    secret_token: Option<String>,
-    dry_run: bool,
-) -> Result<WebhookInput, CliError> {
-    let trimmed = public_base_url.trim();
-    if trimmed.is_empty() {
-        return Err(CliError::Webhook(anyhow!("public_base_url is required")));
-    }
-    Ok(WebhookInput {
-        public_base_url: trimmed.to_string(),
-        secret_token,
-        dry_run: if dry_run { Some(true) } else { None },
-    })
-}
-
 #[derive(thiserror::Error, Debug)]
 enum CliError {
     #[error("requirements missing for provider {0}")]
@@ -1696,10 +1608,6 @@ enum CliError {
     WasmLoad(#[source] anyhow::Error),
     #[error("provider operation failed: {0}")]
     ProviderOp(#[source] anyhow::Error),
-    #[error("webhook reconciliation failed: {0}")]
-    Webhook(#[source] anyhow::Error),
-    #[error("webhook component not available for provider {0}")]
-    WebhookUnsupported(String),
     #[error("network error: {0}")]
     Network(String),
     #[error("listen helper failure: {0}")]
@@ -1719,8 +1627,6 @@ impl CliError {
             CliError::CardParse(_, _) => 1,
             CliError::WasmLoad(_) => 3,
             CliError::ProviderOp(_) => 4,
-            CliError::Webhook(_) => 8,
-            CliError::WebhookUnsupported(_) => 9,
             CliError::Network(_) => 5,
             CliError::Listen(_) => 7,
         }

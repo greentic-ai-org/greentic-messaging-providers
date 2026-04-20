@@ -22,7 +22,7 @@ if [ -z "${JOBS}" ]; then
 fi
 
 # NOTE: questions excluded until greentic:component/component-qa@0.6.0 WIT export is implemented
-PACKAGES=(secrets-probe slack teams telegram webchat webex webex-webhook whatsapp messaging-ingress-slack messaging-ingress-teams messaging-ingress-telegram messaging-ingress-whatsapp messaging-provider-dummy messaging-provider-telegram messaging-provider-teams messaging-provider-email messaging-provider-slack messaging-provider-webex messaging-provider-whatsapp messaging-provider-webchat)
+PACKAGES=(secrets-probe slack teams telegram webchat webex whatsapp messaging-ingress-slack messaging-ingress-teams messaging-ingress-telegram messaging-ingress-whatsapp messaging-provider-dummy messaging-provider-telegram messaging-provider-teams messaging-provider-email messaging-provider-slack messaging-provider-webex messaging-provider-whatsapp messaging-provider-webchat)
 
 if xargs -P 1 -n 1 echo >/dev/null 2>&1; then
   printf '%s\n' "${PACKAGES[@]}" | xargs -n 1 -P "${JOBS}" bash -c 'bash "$1/tools/build_components/$2.sh"' _ "${ROOT_DIR}"
