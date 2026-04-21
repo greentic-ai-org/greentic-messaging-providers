@@ -204,13 +204,18 @@ fn build_bot_activity_raw(
             attachments.extend(ext_atts.clone());
         }
         let passthroughs: &[(&str, &str)] = &[
-            ("channel_data", "channelData"),
             ("entities", "entities"),
             ("name", "name"),
             ("input_hint", "inputHint"),
             ("speak", "speak"),
             ("suggested_actions", "suggestedActions"),
         ];
+        if let Some(channel_data) = ext_obj
+            .get("channel_data")
+            .and_then(sanitize_outbound_channel_data)
+        {
+            raw["channelData"] = channel_data;
+        }
         for (src, dst) in passthroughs {
             if let Some(v) = ext_obj.get(*src)
                 && !v.is_null()
@@ -224,6 +229,32 @@ fn build_bot_activity_raw(
         raw["attachments"] = Value::Array(attachments);
     }
     raw
+}
+
+fn sanitize_outbound_channel_data(value: &Value) -> Option<Value> {
+    let mut channel_data = match value {
+        Value::Object(map) => map.clone(),
+        other if !other.is_null() => return Some(other.clone()),
+        _ => return None,
+    };
+
+    // These keys are useful on the inbound Direct Line activity, but if they
+    // are echoed on a bot response the webchat client can treat the response
+    // as a postBack/request artefact instead of rendering the card.
+    for key in [
+        "postBack",
+        "clientActivityID",
+        "clientActivityId",
+        "attachmentSizes",
+    ] {
+        channel_data.remove(key);
+    }
+
+    if channel_data.is_empty() {
+        None
+    } else {
+        Some(Value::Object(channel_data))
+    }
 }
 
 #[cfg(test)]
@@ -371,6 +402,37 @@ mod tests {
         assert!(raw.get("channelData").is_none());
         assert!(raw.get("entities").is_none());
         assert_eq!(raw["speak"], "keep me");
+    }
+
+    #[test]
+    fn build_bot_activity_raw_strips_click_artifacts_from_channel_data() {
+        let extensions = json!({
+            "channel_data": {
+                "postBack": true,
+                "clientActivityID": "abc123",
+                "attachmentSizes": [],
+                "feature": "menu",
+                "rag": {"citations": [{"id": "c1"}]}
+            }
+        });
+        let raw = build_bot_activity_raw("submenu", None, Some(&extensions), None);
+        assert_eq!(raw["channelData"]["feature"], "menu");
+        assert_eq!(raw["channelData"]["rag"]["citations"][0]["id"], "c1");
+        assert!(raw["channelData"].get("postBack").is_none());
+        assert!(raw["channelData"].get("clientActivityID").is_none());
+        assert!(raw["channelData"].get("attachmentSizes").is_none());
+    }
+
+    #[test]
+    fn build_bot_activity_raw_drops_channel_data_when_only_click_artifacts_remain() {
+        let extensions = json!({
+            "channel_data": {
+                "postBack": true,
+                "clientActivityID": "abc123"
+            }
+        });
+        let raw = build_bot_activity_raw("submenu", None, Some(&extensions), None);
+        assert!(raw.get("channelData").is_none());
     }
 
     #[test]
