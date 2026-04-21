@@ -8,11 +8,8 @@ use crate::{
 use greentic_types::ChannelMessageEnvelope;
 use serde_json::{Value, json};
 
-/// Resolve an Adaptive Card from extensions (typed Value) or metadata (legacy JSON string).
+/// Resolve an Adaptive Card from message metadata.
 fn resolve_adaptive_card(envelope: &ChannelMessageEnvelope) -> Option<Value> {
-    if let Some(ac) = envelope.extensions.get("adaptive_card") {
-        return Some(ac.clone());
-    }
     envelope
         .metadata
         .get("adaptive_card")

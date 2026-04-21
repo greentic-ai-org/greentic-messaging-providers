@@ -204,7 +204,6 @@ mod tests {
             text: Some("hello".to_string()),
             attachments: Vec::new(),
             metadata: MessageMetadata::new(),
-            extensions: Default::default(),
         }
     }
 

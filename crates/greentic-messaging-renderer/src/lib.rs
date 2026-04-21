@@ -8,6 +8,7 @@ pub mod capabilities;
 pub mod context;
 pub mod errors;
 pub mod mode;
+pub mod neutral_presentation;
 pub mod plan;
 pub mod planner;
 pub mod renderer;
@@ -17,6 +18,10 @@ pub use capabilities::capabilities_for;
 pub use context::RenderContext;
 pub use errors::RendererError;
 pub use mode::RendererMode;
+pub use neutral_presentation::{
+    AdaptivePresentationModel, AdaptivePresentationSection, adaptive_card_from_presentation,
+    parse_presentation, render_plan_from_presentation,
+};
 pub use plan::{RenderItem, RenderPlan, RenderTier, RenderWarning};
 pub use planner::{PlannerAction, PlannerCapabilities, PlannerCard, plan_render};
 pub use renderer::{

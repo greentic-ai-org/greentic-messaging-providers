@@ -397,7 +397,6 @@ pub fn build_envelope(id: ProviderId) -> ChannelMessageEnvelope {
         text: Some(format!("universal {} message", channel)),
         attachments: Vec::new(),
         metadata,
-        extensions: Default::default(),
     }
 }
 

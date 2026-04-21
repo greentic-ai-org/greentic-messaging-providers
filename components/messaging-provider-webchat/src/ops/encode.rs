@@ -122,8 +122,15 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         Ok(value) => value,
         Err(err) => return encode_error(&err),
     };
+    let metadata_extensions = encode_message
+        .metadata
+        .get("extensions")
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        .and_then(|value| value.as_object().cloned());
     let has_adaptive_card = encode_message.metadata.contains_key("adaptive_card")
-        || encode_message.extensions.contains_key("adaptive_card");
+        || metadata_extensions
+            .as_ref()
+            .is_some_and(|ext| ext.contains_key("adaptive_card"));
     let text = encode_message
         .text
         .clone()
@@ -169,14 +176,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     // extensions (if any), then layer DirectLine-native fields extracted from
     // raw input. The snake_case keys here are the ones `send_payload.rs`
     // already maps back to camelCase on the outbound activity.
-    let mut extensions_map: Map<String, Value> = if encode_message.extensions.is_empty() {
-        Map::new()
-    } else {
-        serde_json::to_value(&encode_message.extensions)
-            .ok()
-            .and_then(|v| v.as_object().cloned())
-            .unwrap_or_default()
-    };
+    let mut extensions_map: Map<String, Value> = metadata_extensions.unwrap_or_default();
     if let Some(rag) = passthrough.rag {
         // RAG context lives under channelData.rag on the DirectLine activity
         // so client-side UI (Paul's Astro three-panel) can read it without
