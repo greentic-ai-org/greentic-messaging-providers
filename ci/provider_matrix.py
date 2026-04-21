@@ -32,10 +32,44 @@ def matches_path(path: str, candidate: str) -> bool:
     return path == candidate
 
 
-def detect_changed_files(base: str, head: str) -> list[str]:
+def git_ref_exists(ref: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+            cwd=ROOT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def diff_name_only(base: str, head: str) -> list[str]:
     cmd = ["git", "diff", "--name-only", f"{base}..{head}"]
     output = subprocess.check_output(cmd, cwd=ROOT_DIR, text=True)
     return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def detect_changed_files(base: str, head: str) -> tuple[list[str], str | None]:
+    try:
+        return diff_name_only(base, head), None
+    except subprocess.CalledProcessError:
+        if not git_ref_exists(head) or not git_ref_exists("origin/main"):
+            raise
+
+        fallback_base = subprocess.check_output(
+            ["git", "merge-base", head, "origin/main"],
+            cwd=ROOT_DIR,
+            text=True,
+        ).strip()
+        if not fallback_base:
+            raise
+
+        return (
+            diff_name_only(fallback_base, head),
+            f"base revision {base} unavailable; using merge-base against origin/main",
+        )
 
 
 def resolve_provider(args: argparse.Namespace) -> int:
@@ -82,7 +116,7 @@ def build_all_result(matrix: dict, changed_files: list[str], reason: str) -> dic
 
 def detect_changes(args: argparse.Namespace) -> int:
     matrix = load_matrix()
-    changed_files = detect_changed_files(args.base, args.head)
+    changed_files, fallback_reason = detect_changed_files(args.base, args.head)
     if not changed_files:
         print(json.dumps(build_all_result(matrix, changed_files, "no changed files detected")))
         return 0
@@ -120,7 +154,7 @@ def detect_changes(args: argparse.Namespace) -> int:
 
     result = {
         "build_all": False,
-        "reason": "provider-scoped changes only",
+        "reason": fallback_reason or "provider-scoped changes only",
         "changed_files": changed_files,
         "affected_providers": affected_providers,
         "affected_components": list(dict.fromkeys(affected_components)),
