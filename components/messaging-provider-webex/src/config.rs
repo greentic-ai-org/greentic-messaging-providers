@@ -176,7 +176,6 @@ pub(crate) fn build_send_envelope_from_input(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
-        extensions: Default::default(),
     })
 }
 
