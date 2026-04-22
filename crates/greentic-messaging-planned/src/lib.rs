@@ -1,4 +1,8 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
+use greentic_messaging_renderer::{
+    AdaptivePresentationModel, RenderItem, RenderTier as RendererTier, capabilities_for,
+    parse_presentation, render_plan_from_presentation,
+};
 use greentic_types::ChannelMessageEnvelope;
 use provider_common::{RenderPlan, RenderTier};
 use serde::{Deserialize, Serialize};
@@ -69,6 +73,28 @@ pub fn encode_from_render_plan(
     }
 }
 
+pub fn encode_from_presentation(
+    presentation_json: &str,
+    envelope: &ChannelMessageEnvelope,
+    provider_hint: Option<&str>,
+) -> EncodeResult {
+    let value = match serde_json::from_str::<Value>(presentation_json) {
+        Ok(value) => value,
+        Err(err) => {
+            return EncodeResult::failure(format!("presentation json invalid: {err}"));
+        }
+    };
+
+    let presentation = match parse_presentation(&value) {
+        Ok(presentation) => presentation,
+        Err(err) => {
+            return EncodeResult::failure(format!("presentation json invalid: {err}"));
+        }
+    };
+
+    build_encode_result_from_presentation(&presentation, envelope, provider_hint)
+}
+
 fn build_encode_result(
     plan: RenderPlan,
     envelope: &ChannelMessageEnvelope,
@@ -114,6 +140,41 @@ fn build_encode_result(
             body_b64: STANDARD.encode(bytes),
             metadata: Map::new(),
         }
+    };
+
+    EncodeResult::success(payload, warnings)
+}
+
+fn build_encode_result_from_presentation(
+    presentation: &AdaptivePresentationModel,
+    envelope: &ChannelMessageEnvelope,
+    provider_hint: Option<&str>,
+) -> EncodeResult {
+    let capabilities = provider_hint.and_then(capabilities_for).unwrap_or_default();
+    let plan = render_plan_from_presentation(presentation, &capabilities);
+
+    let warnings = plan
+        .warnings
+        .iter()
+        .cloned()
+        .map(|warning| RenderWarning {
+            code: warning.code,
+            message: warning.message,
+            details: warning.path.map(|path| json!({ "path": path })),
+        })
+        .collect::<Vec<_>>();
+
+    let prepared = prepare_envelope_from_renderer_plan(
+        envelope,
+        &plan,
+        provider_hint,
+        Some(presentation.summary.as_str()),
+    );
+
+    let payload = ProviderPayload {
+        content_type: "application/json".to_string(),
+        body_b64: STANDARD.encode(envelope_body_bytes(&prepared)),
+        metadata: Map::new(),
     };
 
     EncodeResult::success(payload, warnings)
@@ -218,6 +279,74 @@ fn default_summary(provider_hint: Option<&str>) -> String {
     provider_hint
         .map(|hint| format!("{hint} universal payload"))
         .unwrap_or_else(|| "universal payload".to_string())
+}
+
+fn prepare_envelope_from_renderer_plan(
+    envelope: &ChannelMessageEnvelope,
+    plan: &greentic_messaging_renderer::RenderPlan,
+    provider_hint: Option<&str>,
+    fallback_summary: Option<&str>,
+) -> ChannelMessageEnvelope {
+    let mut prepared = envelope.clone();
+
+    let mut text_summary = plan
+        .summary_text
+        .clone()
+        .filter(|value| !value.trim().is_empty());
+    let mut adaptive_card = None;
+
+    for item in &plan.items {
+        match item {
+            RenderItem::Text(text) if text_summary.is_none() && !text.trim().is_empty() => {
+                text_summary = Some(text.clone());
+            }
+            RenderItem::AdaptiveCard(card) if adaptive_card.is_none() => {
+                adaptive_card = Some(card.clone());
+            }
+            _ => {}
+        }
+    }
+
+    match plan.tier {
+        RendererTier::TierA | RendererTier::TierB | RendererTier::TierC => {
+            if let Some(summary) = text_summary {
+                prepared.text = Some(summary);
+            } else if prepared
+                .text
+                .as_ref()
+                .map(|value| value.trim().is_empty())
+                .unwrap_or(true)
+            {
+                prepared.text = fallback_summary
+                    .map(|value| value.to_string())
+                    .or_else(|| Some(default_summary(provider_hint)));
+            }
+            if let Some(card) = adaptive_card {
+                if let Ok(card_str) = serde_json::to_string(&card) {
+                    prepared
+                        .metadata
+                        .insert("adaptive_card".to_string(), card_str);
+                }
+            }
+        }
+        RendererTier::TierD => {
+            prepared.metadata.remove("adaptive_card");
+            if let Some(summary) = text_summary {
+                prepared.text = Some(summary);
+            } else if prepared
+                .text
+                .as_ref()
+                .map(|value| value.trim().is_empty())
+                .unwrap_or(true)
+            {
+                prepared.text = fallback_summary
+                    .map(|value| value.to_string())
+                    .or_else(|| Some(default_summary(provider_hint)));
+            }
+        }
+    }
+
+    prepared
 }
 
 #[cfg(test)]
@@ -346,6 +475,79 @@ mod tests {
                 .as_deref()
                 .unwrap_or_default()
                 .contains("render_plan json invalid")
+        );
+    }
+
+    #[test]
+    fn encode_presentation_for_teams_keeps_adaptive_card() {
+        let envelope = envelope_with_text(None);
+        let presentation = json!({
+            "playbook_id": "tx.playbook.port_utilisation",
+            "result": "success",
+            "summary": "Found 1 ports with peak utilisation at or above 85.0%",
+            "severity": "warning",
+            "sections": [
+                {
+                    "section_id": "summary",
+                    "section_type": "facts",
+                    "title": "Port utilisation summary",
+                    "items": [
+                        { "label": "device_id", "value": "aci-p1-n2201" }
+                    ]
+                }
+            ],
+            "recommended_actions": ["Inspect the affected interface."]
+        })
+        .to_string();
+
+        let result = encode_from_presentation(&presentation, &envelope, Some("teams"));
+        assert!(result.ok);
+        let payload = result.payload.expect("payload");
+        let decoded = STANDARD.decode(&payload.body_b64).expect("decode");
+        let decoded_value: Value = serde_json::from_slice(&decoded).expect("json");
+        assert_eq!(
+            decoded_value["metadata"]["adaptive_card"]
+                .as_str()
+                .is_some(),
+            true
+        );
+        assert!(decoded_value["text"].as_str().is_some_and(|text| {
+            text.contains("Found 1 ports with peak utilisation at or above 85.0%")
+        }));
+    }
+
+    #[test]
+    fn encode_presentation_for_slack_does_not_emit_adaptive_card() {
+        let envelope = envelope_with_text(None);
+        let presentation = json!({
+            "playbook_id": "tx.playbook.change_correlation",
+            "result": "success",
+            "summary": "Found 2 recent changes in the incident window",
+            "severity": "warning",
+            "sections": [
+                {
+                    "section_id": "changes",
+                    "section_type": "list",
+                    "title": "Recent changes",
+                    "items": [
+                        { "change_id": "chg-1", "actor": "ops" }
+                    ]
+                }
+            ],
+            "recommended_actions": ["Review correlated changes."]
+        })
+        .to_string();
+
+        let result = encode_from_presentation(&presentation, &envelope, Some("slack"));
+        assert!(result.ok);
+        let payload = result.payload.expect("payload");
+        let decoded = STANDARD.decode(&payload.body_b64).expect("decode");
+        let decoded_value: Value = serde_json::from_slice(&decoded).expect("json");
+        assert!(decoded_value["metadata"]["adaptive_card"].is_null());
+        assert!(
+            decoded_value["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("Found 2 recent changes in the incident window"))
         );
     }
 }
