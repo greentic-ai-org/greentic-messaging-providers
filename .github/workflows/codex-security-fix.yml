@@ -4,7 +4,7 @@ name: Codex Security Fix
 
 on:
   schedule:
-    - cron: "21 5 * * *"
+    - cron: "11 3 * * *"
   workflow_dispatch:
     inputs:
       branch:
