@@ -58,6 +58,19 @@ fn envelope_object(raw: &Value) -> Option<&Map<String, Value>> {
     raw.as_object()
 }
 
+/// Read the `extensions` object from the raw input envelope. greentic-start
+/// 0.5.x serialises `ChannelMessageEnvelope.extensions` (typed field) as a
+/// top-level `extensions` object — but this crate still pins greentic-types
+/// 0.4.x which has no such field, so strict decode drops it. Pull it off the
+/// raw JSON before that happens (TASK-082 Bug 3 regression guard).
+fn raw_envelope_extensions(raw: &Value) -> Map<String, Value> {
+    envelope_object(raw)
+        .and_then(|obj| obj.get("extensions"))
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default()
+}
+
 fn extract_raw_passthrough(raw: &Value) -> RawPassthrough {
     let get = |key: &str| {
         envelope_object(raw)
@@ -115,6 +128,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     // that strict decoding would reject or silently drop.
     let raw_input: Value = serde_json::from_slice(input_json).unwrap_or(Value::Null);
     let passthrough = extract_raw_passthrough(&raw_input);
+    let raw_envelope_extensions = raw_envelope_extensions(&raw_input);
     let sanitized = sanitize_for_strict_decode(raw_input);
     let sanitized_bytes = serde_json::to_vec(&sanitized).unwrap_or_else(|_| b"{}".to_vec());
 
@@ -122,15 +136,26 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         Ok(value) => value,
         Err(err) => return encode_error(&err),
     };
-    let metadata_extensions = encode_message
+    // Extensions arrive in two shapes depending on the upstream caller:
+    //  * Raw envelope field: greentic-start 0.5.x serialises
+    //    `ChannelMessageEnvelope.extensions` (typed) as an `extensions` object
+    //    under the envelope. This crate still pins greentic-types 0.4.x which
+    //    lacks that field, so serde silently drops it during strict decode —
+    //    we have to re-extract from the raw JSON before it is erased.
+    //  * Metadata string: `encode_message.metadata["extensions"]` — a
+    //    JSON-encoded object set by the neutral-presentation renderer path.
+    // Merge with raw-envelope winning on key conflicts, so greentic-start's
+    // DirectLine passthrough (attachments / channelData / entities) survives
+    // end to end (TASK-082 Bug 3 regression guard).
+    let metadata_extensions: Map<String, Value> = encode_message
         .metadata
         .get("extensions")
         .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
-        .and_then(|value| value.as_object().cloned());
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
     let has_adaptive_card = encode_message.metadata.contains_key("adaptive_card")
-        || metadata_extensions
-            .as_ref()
-            .is_some_and(|ext| ext.contains_key("adaptive_card"));
+        || raw_envelope_extensions.contains_key("adaptive_card")
+        || metadata_extensions.contains_key("adaptive_card");
     let text = encode_message
         .text
         .clone()
@@ -172,11 +197,16 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         payload_body["team"] = Value::String(team.clone());
     }
     // Build the extensions map for downstream `build_bot_activity_raw` to
-    // materialise onto the DirectLine activity. Start from the typed envelope
-    // extensions (if any), then layer DirectLine-native fields extracted from
-    // raw input. The snake_case keys here are the ones `send_payload.rs`
-    // already maps back to camelCase on the outbound activity.
-    let mut extensions_map: Map<String, Value> = metadata_extensions.unwrap_or_default();
+    // materialise onto the DirectLine activity. Start from the metadata string
+    // extensions (neutral-presentation path), then overlay the raw-envelope
+    // extensions so greentic-start's passthrough wins on conflicts. Finally
+    // layer DirectLine-native fields extracted from raw input. The snake_case
+    // keys here are the ones `send_payload.rs` already maps back to camelCase
+    // on the outbound activity.
+    let mut extensions_map: Map<String, Value> = metadata_extensions;
+    for (key, value) in raw_envelope_extensions {
+        extensions_map.insert(key, value);
+    }
     if let Some(rag) = passthrough.rag {
         // RAG context lives under channelData.rag on the DirectLine activity
         // so client-side UI (Paul's Astro three-panel) can read it without
@@ -412,6 +442,103 @@ mod tests {
         assert_eq!(body["extensions"]["entities"][0]["type"], "mention");
         assert_eq!(body["extensions"]["name"], "event/custom");
         assert_eq!(body["extensions"]["input_hint"], "acceptingInput");
+    }
+
+    #[test]
+    fn encode_op_forwards_raw_envelope_extensions_to_payload_body() {
+        // Regression test for TASK-082 Bug 3 re-regression via v0.4.84's
+        // neutral-presentation refactor. greentic-start 0.5.x's
+        // `copy_directline_passthrough` populates
+        // `ChannelMessageEnvelope.extensions` (the typed field on
+        // greentic-types 0.5.x) when routing flow output envelopes through
+        // the egress pipeline. Serialising the reply envelope produces a JSON
+        // payload with `message.extensions = { ... }`. This crate still pins
+        // greentic-types 0.4.x which has no `extensions` field, so strict
+        // decode drops it — encode_op must read it off the raw JSON before
+        // sanitization, otherwise attachments / channelData / entities fall
+        // on the floor and Paul's reproducer fires `BUG3_REGRESSION`.
+        let card = json!({
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [{"type": "TextBlock", "text": "Bug 3 probe"}]
+        });
+        let envelope = json!({
+            "message": {
+                "id": "msg-1",
+                "tenant": {"env": "demo", "tenant": "demo", "tenant_id": "demo", "attempt": 0},
+                "channel": "webchat",
+                "session_id": "conv-1",
+                "text": "probe",
+                "metadata": {},
+                "extensions": {
+                    "attachments": [
+                        {"contentType": "application/vnd.microsoft.card.adaptive", "content": card}
+                    ],
+                    "channel_data": {"bug3_probe": true, "probe_version": "1.0"},
+                    "entities": [{"type": "bug3-probe", "id": "attachment-passthrough-check"}]
+                }
+            }
+        });
+        let input = serde_json::to_vec(&envelope).unwrap();
+        let body = decode_payload_body(&encode_op(&input));
+
+        let extensions = body
+            .get("extensions")
+            .expect("payload body should expose extensions forwarded to send_payload");
+        let attachments = extensions
+            .get("attachments")
+            .and_then(Value::as_array)
+            .expect("extensions.attachments should be forwarded from raw envelope.extensions");
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(
+            attachments[0]["contentType"],
+            "application/vnd.microsoft.card.adaptive"
+        );
+        assert_eq!(extensions["channel_data"]["bug3_probe"], true);
+        let entities = extensions
+            .get("entities")
+            .and_then(Value::as_array)
+            .expect("extensions.entities should be forwarded");
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0]["type"], "bug3-probe");
+    }
+
+    #[test]
+    fn encode_op_merges_raw_and_metadata_extensions_with_raw_winning() {
+        // Both callers may populate extensions at once — the raw envelope
+        // `extensions` object carries greentic-start's DirectLine passthrough
+        // while `metadata["extensions"]` carries the neutral-presentation
+        // renderer output. When they collide on the same key, the raw
+        // envelope wins because greentic-start's passthrough reflects the
+        // most recent flow output.
+        let envelope = json!({
+            "message": {
+                "id": "msg-1",
+                "tenant": {"env": "demo", "tenant": "demo", "tenant_id": "demo", "attempt": 0},
+                "channel": "webchat",
+                "session_id": "conv-1",
+                "text": "hello",
+                "metadata": {
+                    "extensions": "{\"speak\":\"old\",\"entities\":[{\"type\":\"renderer\"}]}"
+                },
+                "extensions": {
+                    "speak": "new",
+                    "channel_data": {"kind": "passthrough"}
+                }
+            }
+        });
+        let input = serde_json::to_vec(&envelope).unwrap();
+        let body = decode_payload_body(&encode_op(&input));
+
+        assert_eq!(body["extensions"]["speak"], "new", "raw envelope must win");
+        assert_eq!(
+            body["extensions"]["channel_data"]["kind"], "passthrough",
+            "raw-only keys must survive"
+        );
+        assert_eq!(
+            body["extensions"]["entities"][0]["type"], "renderer",
+            "metadata-only keys must survive"
+        );
     }
 
     #[test]

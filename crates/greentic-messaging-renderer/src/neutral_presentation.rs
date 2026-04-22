@@ -232,10 +232,10 @@ fn object_to_line(value: &Value) -> String {
 fn narrative_item_to_text(value: &Value) -> String {
     match value {
         Value::Object(map) => {
-            if map.get("kind").and_then(Value::as_str) == Some("narrative") {
-                if let Some(text) = map.get("text") {
-                    return value_to_text(text);
-                }
+            if map.get("kind").and_then(Value::as_str) == Some("narrative")
+                && let Some(text) = map.get("text")
+            {
+                return value_to_text(text);
             }
             object_to_line(value)
         }
