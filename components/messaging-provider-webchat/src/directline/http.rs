@@ -2,7 +2,7 @@ use base64::{Engine as _, engine::general_purpose};
 use chrono::Utc;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
-use urlencoding::decode;
+use urlencoding::{decode, encode};
 use uuid::Uuid;
 
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
@@ -185,13 +185,14 @@ where
         value: conversation_id.clone(),
     });
 
+    let stream_url = build_stream_url(&conversation_id, &token);
     respond_json_with_headers(
         201,
         json!({
             "conversationId": conversation_id,
             "token": token,
             "expires_in": TTL_SECONDS,
-            "streamUrl": Value::Null,
+            "streamUrl": stream_url,
         }),
         headers,
     )
@@ -259,13 +260,14 @@ where
         }
     };
 
+    let stream_url = build_stream_url(conversation_id, &token);
     respond_json(
         200,
         json!({
             "conversationId": conversation_id,
             "token": token,
             "expires_in": TTL_SECONDS,
-            "streamUrl": Value::Null,
+            "streamUrl": stream_url,
         }),
     )
 }
@@ -355,7 +357,18 @@ where
         value: claims.ctx.tenant.clone(),
     });
 
-    respond_json_with_headers(201, json!({"id": activity.id}), headers)
+    // Emit `_greentic` metadata so the host can fire WebSocket push notifications
+    // for live activity streams. Underscore-prefixed keys are ignored by DirectLine
+    // clients, making this safe to add to the response body.
+    let body_value = json!({
+        "id": activity.id,
+        "_greentic": {
+            "watermark_bumped": watermark,
+            "conversation_id": conversation_id,
+            "tenant": claims.ctx.tenant,
+        },
+    });
+    respond_json_with_headers(201, body_value, headers)
 }
 
 fn handle_get_activities<S, SE>(
@@ -776,6 +789,36 @@ fn respond_cors_preflight() -> HttpOutV1 {
         body_b64: String::new(),
         events: Vec::new(),
     }
+}
+
+/// Build the WebSocket `streamUrl` advertised to BotFramework-WebChat clients.
+///
+/// The URL points at the host's WS upgrade endpoint at
+/// `/v3/directline/conversations/{id}/stream` and carries the conversation
+/// token in `t` so the WS handshake can authenticate without an Authorization
+/// header (browser WebSocket APIs cannot set custom headers).
+///
+/// `watermark=-1` instructs the server to replay all activities since the
+/// conversation began.
+fn build_stream_url(conversation_id: &str, token: &str) -> String {
+    format!(
+        "{base}/v3/directline/conversations/{conv_id}/stream?watermark=-1&t={token}",
+        base = public_base_url_or_relative(),
+        conv_id = conversation_id,
+        token = encode(token),
+    )
+}
+
+/// Resolve the public base URL for the streamUrl.
+///
+/// WASM components cannot read host environment variables directly; supplying
+/// an absolute URL would require a host import that does not yet exist. For
+/// the MVP we return an empty string so the resulting `streamUrl` is a
+/// site-relative path. Browsers (and the BotFramework WebChat SDK) resolve
+/// such paths against the page origin and automatically upgrade `http(s)://`
+/// to `ws(s)://` when opening the WebSocket.
+fn public_base_url_or_relative() -> String {
+    String::new()
 }
 
 #[cfg(test)]
