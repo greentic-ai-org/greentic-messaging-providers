@@ -185,7 +185,7 @@ where
         value: conversation_id.clone(),
     });
 
-    let stream_url = build_stream_url(&conversation_id, &token);
+    let stream_url = build_stream_url(&ctx.tenant, &conversation_id, &token);
     respond_json_with_headers(
         201,
         json!({
@@ -243,7 +243,9 @@ where
         Err(resp) => return resp,
     };
 
-    // Issue a new token bound to this conversation
+    // Issue a new token bound to this conversation. Clone ctx because we still
+    // need its tenant after the move into `issue_token` to build the streamUrl.
+    let tenant_for_stream = ctx.tenant.clone();
     let (token, _exp) = match issue_token(
         &signing_key,
         ctx,
@@ -260,7 +262,7 @@ where
         }
     };
 
-    let stream_url = build_stream_url(conversation_id, &token);
+    let stream_url = build_stream_url(&tenant_for_stream, conversation_id, &token);
     respond_json(
         200,
         json!({
@@ -793,17 +795,18 @@ fn respond_cors_preflight() -> HttpOutV1 {
 
 /// Build the WebSocket `streamUrl` advertised to BotFramework-WebChat clients.
 ///
-/// The URL points at the host's WS upgrade endpoint at
-/// `/v3/directline/conversations/{id}/stream` and carries the conversation
-/// token in `t` so the WS handshake can authenticate without an Authorization
-/// header (browser WebSocket APIs cannot set custom headers).
+/// The URL must match the host's WS upgrade route, which is registered under
+/// the tenant-scoped prefix `/v1/messaging/webchat/{tenant}/v3/directline/...`.
+/// Token rides in the `t` query param because browser WebSocket APIs cannot
+/// set custom headers.
 ///
 /// `watermark=-1` instructs the server to replay all activities since the
-/// conversation began.
-fn build_stream_url(conversation_id: &str, token: &str) -> String {
+/// conversation began (the host parses negative or missing values as 0).
+fn build_stream_url(tenant: &str, conversation_id: &str, token: &str) -> String {
     format!(
-        "{base}/v3/directline/conversations/{conv_id}/stream?watermark=-1&t={token}",
+        "{base}/v1/messaging/webchat/{tenant}/v3/directline/conversations/{conv_id}/stream?watermark=-1&t={token}",
         base = public_base_url_or_relative(),
+        tenant = encode(tenant),
         conv_id = conversation_id,
         token = encode(token),
     )
