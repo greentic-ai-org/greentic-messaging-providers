@@ -333,7 +333,7 @@ fn packs_lock_has_digest() -> Result<()> {
 }
 
 #[test]
-fn webchat_gui_pack_declares_static_assets_only() -> Result<()> {
+fn webchat_gui_pack_declares_provider_routes_and_static_assets() -> Result<()> {
     let root = workspace_root();
     let pack_dir = root.join("packs").join("messaging-webchat-gui");
     let manifest_path = pack_dir.join("pack.manifest.json");
@@ -363,12 +363,32 @@ fn webchat_gui_pack_declares_static_assets_only() -> Result<()> {
         Some("schemas/messaging/webchat-gui/public.config.schema.json")
     );
 
+    let http_routes = manifest
+        .get("extensions")
+        .and_then(|ext| ext.get("greentic.http-routes.v1"))
+        .and_then(|ext| ext.get("inline"))
+        .ok_or_else(|| anyhow!("webchat-gui manifest missing http-routes.v1"))?;
+    let routes = http_routes
+        .get("routes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("webchat-gui manifest missing http-routes array"))?;
     assert!(
-        manifest
-            .get("extensions")
-            .and_then(|ext| ext.get("greentic.http-routes.v1"))
-            .is_none(),
-        "webchat-gui should not declare backend messaging routes"
+        routes.iter().any(|route| {
+            route
+                .get("pattern")
+                .and_then(Value::as_str)
+                .is_some_and(|p| p.contains("/token"))
+        }),
+        "expected token route in http-routes"
+    );
+    assert!(
+        routes.iter().any(|route| {
+            route
+                .get("pattern")
+                .and_then(Value::as_str)
+                .is_some_and(|p| p.contains("/v3/directline/"))
+        }),
+        "expected directline route in http-routes"
     );
 
     let static_route = manifest
