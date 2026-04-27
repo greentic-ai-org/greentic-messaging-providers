@@ -5,7 +5,9 @@
     "mode": "local_queue"
   },
   "secrets_patch": {
-    "set": {},
+    "set": {
+      "jwt_signing_key": "test-jwt-signing-key"
+    },
     "delete": []
   },
   "webhook_ops": [],
