@@ -279,11 +279,33 @@ fn extract_context_from_response_headers(headers: &[Header]) -> Option<(String, 
 
 /// Collect DirectLine-native fields from an activity body into a typed
 /// extensions map. Only fields that are present (and non-null) are inserted.
+///
+/// `channelData` is filtered to drop client-protocol fields that must NOT
+/// echo back into the bot reply — `clientActivityID` and `postBack`. The
+/// BotFramework-WebChat client uses `clientActivityID` to reconcile its
+/// optimistic local bubble with the server echo; if the bot's outbound
+/// activity carries the same ID, the client treats it as the user's own
+/// echo and the bot card never renders.
 fn collect_directline_extensions(body: &Value) -> BTreeMap<String, Value> {
     let mut ext = BTreeMap::new();
+
+    if let Some(channel_data) = body.get("channelData").filter(|v| !v.is_null()) {
+        let mut filtered = channel_data.clone();
+        if let Some(obj) = filtered.as_object_mut() {
+            obj.remove("clientActivityID");
+            obj.remove("postBack");
+        }
+        let keep = filtered
+            .as_object()
+            .map(|obj| !obj.is_empty())
+            .unwrap_or(true);
+        if keep {
+            ext.insert("channel_data".to_string(), filtered);
+        }
+    }
+
     let passthroughs: &[(&str, &str)] = &[
         ("attachments", "attachments"),
-        ("channelData", "channel_data"),
         ("entities", "entities"),
         ("name", "name"),
         ("inputHint", "input_hint"),
@@ -365,6 +387,47 @@ mod tests {
         });
         let ext = collect_directline_extensions(&body);
         assert!(ext.is_empty());
+    }
+
+    #[test]
+    fn collect_directline_extensions_strips_client_activity_id_from_channel_data() {
+        // Action.Submit clicks include {clientActivityID, postBack} in channelData
+        // for client-side reconciliation. If these leak into the bot's reply
+        // channelData, BotFramework-WebChat treats the reply as an echo of the
+        // user's POST and drops it — the bot card never renders.
+        let body = json!({
+            "type": "message",
+            "from": {"id": "user-1"},
+            "channelData": {
+                "clientActivityID": "uqs9blhy9ph",
+                "postBack": true,
+                "webchat": {"feature": "keep-me"}
+            }
+        });
+
+        let ext = collect_directline_extensions(&body);
+        let channel_data = ext
+            .get("channel_data")
+            .expect("non-tracking fields preserved");
+        assert!(channel_data.get("clientActivityID").is_none());
+        assert!(channel_data.get("postBack").is_none());
+        assert_eq!(channel_data["webchat"]["feature"], "keep-me");
+    }
+
+    #[test]
+    fn collect_directline_extensions_drops_channel_data_when_only_tracking_fields_present() {
+        let body = json!({
+            "type": "message",
+            "channelData": {
+                "clientActivityID": "abc123",
+                "postBack": true
+            }
+        });
+        let ext = collect_directline_extensions(&body);
+        assert!(
+            !ext.contains_key("channel_data"),
+            "channel_data containing only client tracking fields should be dropped"
+        );
     }
 
     #[test]
