@@ -10,9 +10,7 @@
     "tenant_channel_id",
     "base_url"
   ],
-  "secret_required": [
-    "jwt_signing_key"
-  ],
+  "secret_required": [],
   "secret_optional": [],
   "oauth_required": false,
   "subscriptions_required": false

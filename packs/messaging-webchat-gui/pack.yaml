@@ -95,11 +95,6 @@ components:
     host: {}
   wasm: components/messaging_provider_webchat_gui.wasm
 dependencies:
-- alias: messaging-webchat
-  pack_id: messaging-webchat
-  version_req: '>=0.4.86'
-  required_capabilities:
-  - greentic.cap.messaging.provider.v1
 - alias: state-memory
   pack_id: state-memory
   version_req: '>=0.1.0'
@@ -131,6 +126,30 @@ extensions:
           qa_ref: components/messaging-provider-webchat-gui
         version: 0.4.86
       schema_version: 1
+  greentic.http-routes.v1:
+    kind: greentic.http-routes.v1
+    version: 0.4.86
+    inline:
+      routes:
+      - domain: messaging
+        id: webchat-gui-auth-config
+        methods:
+        - GET
+        pattern: /v1/messaging/webchat/{tenant}/auth/config
+        provider_op: ingest_http
+      - domain: messaging
+        id: webchat-gui-token
+        methods:
+        - GET
+        - POST
+        pattern: /v1/messaging/webchat/{tenant}/token
+        provider_op: ingest_http
+      - domain: messaging
+        id: webchat-gui-directline
+        methods: []
+        pattern: /v1/messaging/webchat/{tenant}/v3/directline/{path*}
+        provider_op: ingest_http
+      schema_version: 1
   greentic.messaging.validators.v1:
     kind: greentic.messaging.validators.v1
     version: 0.4.86
@@ -148,6 +167,9 @@ extensions:
         capabilities:
         - messaging
         ops:
+        - send
+        - ingest
+        - ingest_http
         - qa-spec
         - apply-answers
         - i18n-keys
@@ -170,3 +192,14 @@ extensions:
         source_root: assets/webchat-gui
         spa_fallback: index.html
       version: 1
+  messaging.provider_ingress.v1:
+    kind: messaging.provider_ingress.v1
+    version: 0.4.86
+    inline:
+      capabilities:
+        content_types:
+        - application/json
+        supports_webhook_validation: false
+      component_ref: messaging-provider-webchat-gui
+      export: ingest-http
+      world: greentic:provider/schema-core@1.0.0
