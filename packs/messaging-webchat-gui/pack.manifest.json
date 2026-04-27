@@ -3,7 +3,7 @@
   "version": "0.4.86",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Hosted WebChat messaging pack with Direct Line backend and packaged GUI.",
+  "description": "Hosted WebChat GUI pack depending on the messaging-webchat backend and packaged GUI assets.",
   "component_sources": [
     {
       "id": "ai.greentic.component-provision",
@@ -173,41 +173,6 @@
         "schema_version": 1
       }
     },
-    "greentic.http-routes.v1": {
-      "kind": "greentic.http-routes.v1",
-      "version": "0.4.86",
-      "inline": {
-        "routes": [
-          {
-            "domain": "messaging",
-            "id": "webchat-gui-auth-config",
-            "methods": [
-              "GET"
-            ],
-            "pattern": "/v1/messaging/webchat/{tenant}/auth/config",
-            "provider_op": "ingest_http"
-          },
-          {
-            "domain": "messaging",
-            "id": "webchat-gui-token",
-            "methods": [
-              "GET",
-              "POST"
-            ],
-            "pattern": "/v1/messaging/webchat/{tenant}/token",
-            "provider_op": "ingest_http"
-          },
-          {
-            "domain": "messaging",
-            "id": "webchat-gui-directline",
-            "methods": [],
-            "pattern": "/v1/messaging/webchat/{tenant}/v3/directline/{path*}",
-            "provider_op": "ingest_http"
-          }
-        ],
-        "schema_version": 1
-      }
-    },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
       "version": "0.4.86",
@@ -232,9 +197,6 @@
               "messaging"
             ],
             "ops": [
-              "send",
-              "ingest",
-              "ingest_http",
               "qa-spec",
               "apply-answers",
               "i18n-keys"
@@ -267,21 +229,6 @@
           }
         ],
         "version": 1
-      }
-    },
-    "messaging.provider_ingress.v1": {
-      "kind": "messaging.provider_ingress.v1",
-      "version": "0.4.86",
-      "inline": {
-        "capabilities": {
-          "content_types": [
-            "application/json"
-          ],
-          "supports_webhook_validation": false
-        },
-        "component_ref": "messaging-provider-webchat-gui",
-        "export": "ingest-http",
-        "world": "greentic:provider/schema-core@1.0.0"
       }
     }
   },
