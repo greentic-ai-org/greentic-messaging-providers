@@ -38,10 +38,17 @@ pub(super) fn build_webchat_envelope_with_ctx(
     if let Some(sid) = &session_id {
         metadata.insert("route".to_string(), sid.clone());
     }
-    if !extensions.is_empty()
-        && let Ok(serialized) = serde_json::to_string(&extensions)
-    {
-        metadata.insert("extensions".to_string(), serialized);
+    if !extensions.is_empty() {
+        if let Ok(serialized) = serde_json::to_string(&extensions) {
+            metadata.insert("extensions".to_string(), serialized);
+        }
+        for (key, value) in &extensions {
+            let rendered = match value {
+                Value::String(s) => s.clone(),
+                other => serde_json::to_string(other).unwrap_or_default(),
+            };
+            metadata.insert(format!("channel.{key}"), rendered);
+        }
     }
     ChannelMessageEnvelope {
         id: format!("webchat-{channel}"),
@@ -96,5 +103,55 @@ pub(super) fn build_webchat_envelope(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn extensions_are_flattened_into_channel_prefixed_metadata_entries() {
+        let mut extensions = BTreeMap::new();
+        extensions.insert(
+            "channel_data".into(),
+            json!({"r1_principals": {"user": "u1", "groups": ["admin"]}}),
+        );
+        extensions.insert(
+            "input_hint".into(),
+            Value::String("acceptingInput".into()),
+        );
+
+        let envelope = build_webchat_envelope_with_ctx(
+            "hello".into(),
+            Some("user-1".into()),
+            Some("session-1".into()),
+            Some("tenant-channel".into()),
+            "dev",
+            "demo",
+            extensions,
+        );
+
+        assert!(
+            envelope.metadata.contains_key("extensions"),
+            "metadata.extensions JSON blob retained for back-compat consumers"
+        );
+
+        let channel_data_entry = envelope
+            .metadata
+            .get("channel.channel_data")
+            .expect("channel_data flattened to metadata.channel.channel_data");
+        let parsed: serde_json::Value = serde_json::from_str(channel_data_entry)
+            .expect("flattened channel_data is valid JSON for non-string values");
+        assert_eq!(
+            parsed.pointer("/r1_principals/user"),
+            Some(&Value::String("u1".into()))
+        );
+
+        assert_eq!(
+            envelope.metadata.get("channel.input_hint").map(String::as_str),
+            Some("acceptingInput")
+        );
     }
 }
