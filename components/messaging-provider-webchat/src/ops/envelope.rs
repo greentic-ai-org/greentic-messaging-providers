@@ -118,10 +118,7 @@ mod tests {
             "channel_data".into(),
             json!({"r1_principals": {"user": "u1", "groups": ["admin"]}}),
         );
-        extensions.insert(
-            "input_hint".into(),
-            Value::String("acceptingInput".into()),
-        );
+        extensions.insert("input_hint".into(), Value::String("acceptingInput".into()));
 
         let envelope = build_webchat_envelope_with_ctx(
             "hello".into(),
@@ -150,7 +147,10 @@ mod tests {
         );
 
         assert_eq!(
-            envelope.metadata.get("channel.input_hint").map(String::as_str),
+            envelope
+                .metadata
+                .get("channel.input_hint")
+                .map(String::as_str),
             Some("acceptingInput")
         );
     }
