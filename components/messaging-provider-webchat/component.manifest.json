@@ -16,7 +16,12 @@
       "path": "schemas/messaging/webchat/public.config.schema.json"
     }
   },
-  "secret_requirements": [],
+  "secret_requirements": [
+    {
+      "name": "jwt_signing_key",
+      "required": true
+    }
+  ],
   "operations": [
     {
       "name": "qa-spec",

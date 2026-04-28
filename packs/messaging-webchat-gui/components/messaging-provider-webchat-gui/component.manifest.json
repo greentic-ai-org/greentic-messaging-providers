@@ -21,6 +21,12 @@
     }
   },
   "operations": [],
+  "secret_requirements": [
+    {
+      "name": "jwt_signing_key",
+      "required": true
+    }
+  ],
   "resources": {},
   "dev_flows": {}
 }
