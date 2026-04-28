@@ -1,6 +1,6 @@
 pack_id: messaging-email
 display_name: Email
-version: 0.4.86
+version: 0.4.88
 kind: application
 publisher: Greentic
 description: "Email messaging provider \u2014 Microsoft Graph API with SMTP fallback"

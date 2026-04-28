@@ -1,6 +1,6 @@
 pack_id: messaging-telegram
 display_name: Telegram
-version: 0.4.86
+version: 0.4.88
 kind: application
 publisher: Greentic
 components:

@@ -1,6 +1,6 @@
 {
   "id": "messaging-ingress-slack",
-  "version": "0.4.86",
+  "version": "0.4.88",
   "supports": [
     "messaging"
   ],

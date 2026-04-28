@@ -1,6 +1,6 @@
 pack_id: messaging-whatsapp
 display_name: WhatsApp
-version: 0.4.86
+version: 0.4.88
 kind: application
 publisher: Greentic
 components:
