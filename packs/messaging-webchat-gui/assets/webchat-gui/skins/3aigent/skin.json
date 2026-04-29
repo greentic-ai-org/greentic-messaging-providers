@@ -1,0 +1,31 @@
+{
+  "tenant": "3aigent",
+  "mode": "fullpage",
+  "brand": {
+    "name": "3AIgent",
+    "favicon": "/skins/3aigent/assets/favicon.ico",
+    "logo": "/skins/3aigent/assets/logo.svg",
+    "primary": "#06b6d4"
+  },
+  "directLine": {},
+  "webchat": {
+    "styleOptions": "/skins/3aigent/webchat/styleOptions.json",
+    "adaptiveCardsHostConfig": "/skins/3aigent/webchat/hostconfig.json",
+    "locale": "en-US"
+  },
+  "statusBar": {
+    "show": true,
+    "brand": {
+      "ok": "#22c55e",
+      "warn": "#f59e0b",
+      "err": "#ef4444"
+    }
+  },
+  "fullpage": {
+    "index": "/skins/3aigent/fullpage/index.html",
+    "css": "/skins/3aigent/fullpage/page.css"
+  },
+  "hooks": {
+    "script": "/skins/3aigent/webchat/hooks.js"
+  }
+}
