@@ -2,6 +2,8 @@
  * Ported 1:1 from the V1 Greentic skin so V2 modules look identical to TASK-001..004.
  */
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 :root {
   color-scheme: dark;
   --font: 'Inter', system-ui, -apple-system, sans-serif;
@@ -805,31 +807,11 @@ html, body {
   text-align: right;
 }
 .playground-panel__slider {
-  -webkit-appearance: none;
-  appearance: none;
   width: 100%;
   height: 4px;
-  background: linear-gradient(90deg, var(--brand) 0%, var(--brand) var(--temp-pct,70%), var(--border-subtle) var(--temp-pct,70%), var(--border-subtle) 100%);
+  accent-color: var(--brand);
   border-radius: 999px;
   outline: none;
-  cursor: pointer;
-}
-.playground-panel__slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px; height: 18px;
-  border-radius: 50%;
-  background: var(--bg-panel);
-  border: 2px solid var(--brand);
-  box-shadow: 0 0 0 4px rgba(6,182,212,0.10);
-  cursor: pointer;
-}
-.playground-panel__slider::-moz-range-thumb {
-  width: 18px; height: 18px;
-  border-radius: 50%;
-  background: var(--bg-panel);
-  border: 2px solid var(--brand);
-  box-shadow: 0 0 0 4px rgba(6,182,212,0.10);
   cursor: pointer;
 }
 .playground-panel__reset {
@@ -861,7 +843,7 @@ html, body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg-base);
+  background: var(--bg-panel);
   padding: 1.25rem 2rem 1.25rem;
 }
 .chat-panel__surface {
@@ -1383,4 +1365,202 @@ html, body {
     grid-template-columns: 1fr;
     grid-auto-rows: minmax(220px, 1fr);
   }
+}
+
+/* ── Fake form controls (DOMPurify strips <textarea>/<input>/<button> + inline styles) ── */
+
+.playground-panel__field-fake {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-family: var(--font);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.playground-panel__temperature-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+}
+
+.playground-panel__slider-fake {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand) 70%, var(--border-subtle) 70%, var(--border-subtle) 100%);
+}
+
+.playground-panel__slider-fake > span {
+  position: absolute;
+  left: 70%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 2px solid var(--brand);
+  display: block;
+}
+
+span.playground-panel__reset {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 1rem;
+  background: #7f1d1d;
+  color: #fef2f2;
+  border-radius: 8px;
+  font-family: var(--font);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #991b1b;
+}
+
+
+
+
+/* Theme-based logo swap (default = dark visible, light hidden) */
+.topbar__brand--light { display: none; }
+[data-theme="light"] .topbar__brand--dark { display: none; }
+[data-theme="light"] .topbar__brand--light { display: inline-block; }
+
+/* Hide empty-state when Webchat has rendered activities (any version's class name) */
+.chat-log:has(.webchat__activity) .chat-log__empty,
+.chat-log:has(.webchat__basic-transcript__activity) .chat-log__empty,
+.chat-log:has([class*="transcript__activity"]) .chat-log__empty,
+.chat-log:has([class*="activity-row"]) .chat-log__empty {
+  display: none;
+}
+
+/* Empty-state overlay positioned inside chat box (centered, fills surface) */
+.chat-log {
+  position: relative;
+}
+.chat-log__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  pointer-events: none;
+  z-index: 1;
+}
+.chat-log__empty > * {
+  pointer-events: auto;
+}
+
+/* Bot Framework Webchat transcript scrollable bg */
+.webchat__basic-transcript__scrollable,
+[class*="react-scroll-to-bottom"] {
+  background: var(--bg-panel) !important;
+}
+
+/* Adaptive Card inputs — force visible in both themes (override SDK) */
+.ac-input,
+.ac-textInput,
+.ac-input.ac-textInput,
+.ac-input.ac-textInput.ac-multiline {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  caret-color: var(--brand) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 6px !important;
+  padding: 0.5rem 0.75rem !important;
+}
+.ac-input::placeholder,
+.ac-textInput::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+.ac-input:focus,
+.ac-textInput:focus {
+  outline: none;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 2px var(--brand-muted);
+}
+
+/* Webchat compose/send-box input — force visible text in dark theme */
+.webchat__send-box-text-box,
+.webchat__send-box-text-box__input,
+.webchat__send-box__main input,
+.webchat__send-box__main textarea,
+[class*="send-box"] input,
+[class*="send-box"] textarea {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  caret-color: var(--brand) !important;
+}
+[class*="send-box"] input::placeholder,
+[class*="send-box"] textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+
+/* Welcome banner jewel theme swap */
+.welcome-banner__jewel--light { display: none; }
+[data-theme="light"] .welcome-banner__jewel--dark { display: none; }
+[data-theme="light"] .welcome-banner__jewel--light { display: block; }
+
+/* Broad fallback — any input/textarea inside webchat mount */
+#webchat input,
+#webchat textarea,
+.chat-panel input,
+.chat-panel textarea {
+  color: var(--text-primary) !important;
+  caret-color: var(--brand) !important;
+}
+#webchat input::placeholder,
+#webchat textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+
+/* Ultimate fallback — covers contenteditable, webkit-text-fill-color, autofill */
+#webchat input,
+#webchat textarea,
+#webchat [contenteditable="true"],
+#webchat [contenteditable=""],
+.chat-panel input,
+.chat-panel textarea,
+.chat-panel [contenteditable] {
+  color: var(--text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--brand) !important;
+}
+/* autofill override (some browsers force own colors on autofilled fields) */
+#webchat input:-webkit-autofill,
+.chat-panel input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-surface) inset !important;
+}
+
+/* Module stub sections (M2/M3/M4 placeholder until full content authored) */
+.module-stub {
+  flex: 1 1 0%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+.module-stub__content {
+  text-align: center;
+  max-width: 540px;
+}
+.module-stub .welcome-banner__title {
+  margin-bottom: 0.6rem;
 }

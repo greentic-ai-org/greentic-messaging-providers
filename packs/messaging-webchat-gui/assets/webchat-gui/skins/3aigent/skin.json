@@ -4,7 +4,7 @@
   "brand": {
     "name": "3AIgent",
     "favicon": "/skins/3aigent/assets/favicon.ico",
-    "logo": "/skins/3aigent/assets/logo.svg",
+    "logo": "/skins/3aigent/assets/logo-dark.png",
     "primary": "#06b6d4"
   },
   "directLine": {},
