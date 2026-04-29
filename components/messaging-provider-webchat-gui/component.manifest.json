@@ -19,7 +19,9 @@
   "secret_requirements": [
     {
       "name": "jwt_signing_key",
-      "required": true
+      "required": true,
+      "scope": "tenant",
+      "description": "Secret key used for Direct Line JWT token signing and verification."
     }
   ],
   "capabilities": {

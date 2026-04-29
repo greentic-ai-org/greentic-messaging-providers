@@ -523,6 +523,11 @@
   },
   "secret_requirements": [
     {
+      "name": "jwt_signing_key",
+      "scope": "tenant",
+      "description": "Secret key used to sign Direct Line tokens."
+    },
+    {
       "name": "WEBCHAT_TOKEN",
       "scope": "tenant",
       "description": "Optional token used for webchat setup validation and conformance checks."
