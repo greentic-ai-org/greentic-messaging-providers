@@ -871,7 +871,50 @@ console.log('[runtime-bootstrap] loaded');
     }
 
     if (/skins\/[^/]+\/skin\.json$/i.test(url.pathname)) {
-      return originalFetch(input, init).then(async function (response) {
+      /**
+       * Tenant -> skin indirection.
+       *
+       * The URL path slug (`urlTenant`) identifies the tenant, but the skin
+       * (visual theme) is decoupled: tenants/<urlTenant>.json may declare a
+       * `skin` field naming a different folder under `skins/`. This lets
+       * multiple tenants share a skin and a tenant switch skins without
+       * being renamed. The setup wizard's `skin` answer writes this field
+       * at deploy time.
+       *
+       * If the field is absent, missing, or the tenant config fetch fails,
+       * we fall through to the original URL — preserving today's behavior
+       * (load `skins/<urlTenant>/skin.json`, with the existing 404 -> default
+       * fallback below kicking in if that path doesn't exist either).
+       *
+       * The legacy `legacy_skin` field is intentionally NOT consulted here:
+       * its semantics (fallback skin name when the tenant config file is
+       * missing entirely) are unchanged.
+       */
+      return (async function () {
+        var effectiveInput = input;
+        var effectiveUrlPath = url.pathname;
+        var pathTenantMatch = url.pathname.match(/skins\/([^/]+)\/skin\.json$/i);
+        var urlTenantSlug = pathTenantMatch ? decodeURIComponent(pathTenantMatch[1]) : null;
+        if (urlTenantSlug) {
+          try {
+            var basePath = window.location.pathname.replace(/\/$/, '');
+            var tenantCfgUrl = basePath + '/config/tenants/' + encodeURIComponent(urlTenantSlug) + '.json';
+            var tenantCfgResp = await originalFetch(tenantCfgUrl);
+            if (tenantCfgResp && tenantCfgResp.ok) {
+              var tenantCfg = await tenantCfgResp.json();
+              var skinOverride = tenantCfg && typeof tenantCfg.skin === 'string' ? tenantCfg.skin.trim() : '';
+              if (skinOverride && skinOverride !== urlTenantSlug) {
+                console.log('[bootstrap] tenant config skin override: ' + urlTenantSlug + ' -> ' + skinOverride);
+                effectiveUrlPath = url.pathname.replace(/skins\/[^/]+\//, 'skins/' + encodeURIComponent(skinOverride) + '/');
+                effectiveInput = new URL(effectiveUrlPath, url).toString();
+              }
+            }
+          } catch (_) {
+            // Tenant config unreachable or unparseable: keep the original
+            // skin URL; the existing 404 -> default fallback still applies.
+          }
+        }
+        var response = await originalFetch(effectiveInput, init);
         // Fallback: tenant skin not found or SPA returned HTML
         var skinData;
         if (response.ok) {
@@ -883,7 +926,7 @@ console.log('[runtime-bootstrap] loaded');
           }
         }
         if (!skinData) {
-          var fbUrl = url.pathname.replace(/skins\/[^/]+\//, 'skins/default/');
+          var fbUrl = effectiveUrlPath.replace(/skins\/[^/]+\//, 'skins/default/');
           console.log('[bootstrap] skin not found, falling back to default:', fbUrl);
           var fbResp = await originalFetch(fbUrl);
           if (!fbResp.ok) return fbResp;
@@ -910,7 +953,7 @@ console.log('[runtime-bootstrap] loaded');
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
-      });
+      })();
     }
 
     return originalFetch(input, init);
