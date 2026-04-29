@@ -16,7 +16,12 @@
       "path": "schemas/messaging/webchat-gui/public.config.schema.json"
     }
   },
-  "secret_requirements": [],
+  "secret_requirements": [
+    {
+      "name": "jwt_signing_key",
+      "required": true
+    }
+  ],
   "capabilities": {
     "wasi": {},
     "host": {

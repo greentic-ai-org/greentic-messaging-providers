@@ -294,7 +294,13 @@
       }
     ]
   },
-  "secret_requirements": [],
+  "secret_requirements": [
+    {
+      "name": "jwt_signing_key",
+      "scope": "tenant",
+      "description": "Secret key used for Direct Line JWT token signing and verification."
+    }
+  ],
   "capabilities_cache": [
     {
       "component": "ai.greentic.component-templates",
