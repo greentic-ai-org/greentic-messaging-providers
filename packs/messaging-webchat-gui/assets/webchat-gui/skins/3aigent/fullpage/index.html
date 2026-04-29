@@ -1,15 +1,116 @@
 <header class="topbar">
   <div class="topbar__left">
+    <svg class="topbar__brand" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <circle cx="9" cy="11" r="3.5" fill="#06b6d4"></circle>
+      <circle cx="23" cy="11" r="3.5" fill="#06b6d4"></circle>
+      <circle cx="16" cy="23" r="3.5" fill="#06b6d4"></circle>
+    </svg>
     <div class="topbar__info">
-      <span class="topbar__title">3AIgent</span>
-      <span class="topbar__subtitle">3Point Training</span>
+      <span class="topbar__title">3AIgent Training &mdash; Module 1</span>
+      <span class="topbar__subtitle">LLM Behaviour Playground</span>
     </div>
-    <span class="topbar__status"><span class="topbar__status-dot"></span> Online</span>
   </div>
-  <div id="locale-picker-mount" class="topbar__controls"></div>
+  <nav class="module-nav" aria-label="Training modules">
+    <span class="module-nav__tab module-nav__tab--active" aria-current="page">
+      <span class="module-nav__num">M1</span>
+      <span class="module-nav__label">Playground</span>
+    </span>
+    <span class="module-nav__tab">
+      <span class="module-nav__num">M2</span>
+      <span class="module-nav__label">Red/Blue</span>
+    </span>
+    <span class="module-nav__tab">
+      <span class="module-nav__num">M3</span>
+      <span class="module-nav__label">Compare</span>
+    </span>
+    <span class="module-nav__tab">
+      <span class="module-nav__num">M4</span>
+      <span class="module-nav__label">RAG</span>
+    </span>
+  </nav>
+  <div class="topbar__controls">
+    <button type="button" class="theme-toggle" aria-label="Toggle theme">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+    </button>
+    <span class="topbar__divider" aria-hidden="true"></span>
+    <div id="locale-picker-mount"></div>
+  </div>
 </header>
+<section class="welcome-banner">
+  <button type="button" class="welcome-banner__toggle" aria-label="Collapse welcome banner">
+    <svg class="welcome-banner__chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  </button>
+  <div class="welcome-banner__content">
+    <svg class="welcome-banner__jewel" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <circle cx="34" cy="42" r="14" fill="#06b6d4"></circle>
+      <circle cx="86" cy="42" r="14" fill="#06b6d4"></circle>
+      <circle cx="60" cy="86" r="14" fill="#06b6d4"></circle>
+    </svg>
+    <span class="welcome-banner__badge">TRAINING MODULE 1</span>
+    <h1 class="welcome-banner__title">LLM Behaviour Playground</h1>
+    <p class="welcome-banner__lede">
+      Edit the <strong>system prompt</strong> and adjust the <strong>temperature</strong> on the card below, then send a message. Each turn is stateless &mdash; only the current settings and your message shape the reply. See how the persona, voice, and style of the model change in real time.
+    </p>
+    <div class="welcome-banner__chips">
+      <span class="welcome-chip">
+        <span class="welcome-chip__label">Try: &ldquo;You are a pirate.&rdquo; &rarr; &ldquo;Capital of France?&rdquo;</span>
+      </span>
+      <span class="welcome-chip">
+        <span class="welcome-chip__label">Try: &ldquo;Respond only in haiku.&rdquo; &rarr; any question</span>
+      </span>
+      <span class="welcome-chip">
+        <span class="welcome-chip__label">Try: temperature 0.0 &rarr; 0.9 &middot; &ldquo;Continue the lighthouse story&rdquo;</span>
+      </span>
+      <span class="welcome-chip">
+        <span class="welcome-chip__label">Try: &ldquo;Reply only as JSON.&rdquo; &rarr; &ldquo;Starry Night&rdquo;</span>
+      </span>
+      <span class="welcome-chip">
+        <span class="welcome-chip__label">Try: &ldquo;Think step by step.&rdquo; &rarr; caf&eacute;-latte word problem</span>
+      </span>
+      <span class="welcome-chip">
+        <span class="welcome-chip__label">Try: &ldquo;Reply only in emojis.&rdquo; &rarr; &ldquo;A perfect Sunday&rdquo;</span>
+      </span>
+    </div>
+  </div>
+</section>
+<section class="playground-panel">
+  <div class="playground-panel__system">
+    <div class="playground-panel__label">System prompt</div>
+    <textarea
+      class="playground-panel__field"
+      placeholder="You are a helpful assistant."
+      rows="2"
+    >You are a helpful assistant.</textarea>
+  </div>
+  <div class="playground-panel__temperature">
+    <div class="playground-panel__label">Temperature: <span class="playground-panel__temperature-value">0.7</span></div>
+    <div class="playground-panel__temperature-row" style="--temp-pct: 70%;">
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.1"
+        value="0.7"
+        class="playground-panel__slider"
+        aria-label="Temperature"
+      />
+    </div>
+  </div>
+  <button type="button" class="playground-panel__reset">Reset</button>
+</section>
 <section class="chat-panel">
-  <div id="webchat" class="chat-panel__surface" aria-live="polite"></div>
+  <div class="chat-log">
+    <div class="chat-log__empty">
+      <div class="chat-log__empty-eyebrow">3AIgent &middot; Module 1</div>
+      <div class="chat-log__empty-title">Start a turn</div>
+      <p class="chat-log__empty-lede">Edit the controls above, type your message below, and watch the model&rsquo;s behaviour shift turn-by-turn.</p>
+    </div>
+    <div id="webchat" class="chat-panel__surface" aria-live="polite"></div>
+  </div>
 </section>
 <footer class="footer">
   <span class="footer__copy">&copy; 2026 3Point. All rights reserved.</span>
