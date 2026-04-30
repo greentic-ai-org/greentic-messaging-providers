@@ -871,7 +871,50 @@ console.log('[runtime-bootstrap] loaded');
     }
 
     if (/skins\/[^/]+\/skin\.json$/i.test(url.pathname)) {
-      return originalFetch(input, init).then(async function (response) {
+      /**
+       * Tenant -> skin indirection.
+       *
+       * The URL path slug (`urlTenant`) identifies the tenant, but the skin
+       * (visual theme) is decoupled: tenants/<urlTenant>.json may declare a
+       * `skin` field naming a different folder under `skins/`. This lets
+       * multiple tenants share a skin and a tenant switch skins without
+       * being renamed. The setup wizard's `skin` answer writes this field
+       * at deploy time.
+       *
+       * If the field is absent, missing, or the tenant config fetch fails,
+       * we fall through to the original URL — preserving today's behavior
+       * (load `skins/<urlTenant>/skin.json`, with the existing 404 -> default
+       * fallback below kicking in if that path doesn't exist either).
+       *
+       * The legacy `legacy_skin` field is intentionally NOT consulted here:
+       * its semantics (fallback skin name when the tenant config file is
+       * missing entirely) are unchanged.
+       */
+      return (async function () {
+        var effectiveInput = input;
+        var effectiveUrlPath = url.pathname;
+        var pathTenantMatch = url.pathname.match(/skins\/([^/]+)\/skin\.json$/i);
+        var urlTenantSlug = pathTenantMatch ? decodeURIComponent(pathTenantMatch[1]) : null;
+        if (urlTenantSlug) {
+          try {
+            var basePath = window.location.pathname.replace(/\/$/, '');
+            var tenantCfgUrl = basePath + '/config/tenants/' + encodeURIComponent(urlTenantSlug) + '.json';
+            var tenantCfgResp = await originalFetch(tenantCfgUrl);
+            if (tenantCfgResp && tenantCfgResp.ok) {
+              var tenantCfg = await tenantCfgResp.json();
+              var skinOverride = tenantCfg && typeof tenantCfg.skin === 'string' ? tenantCfg.skin.trim() : '';
+              if (skinOverride && skinOverride !== urlTenantSlug) {
+                console.log('[bootstrap] tenant config skin override: ' + urlTenantSlug + ' -> ' + skinOverride);
+                effectiveUrlPath = url.pathname.replace(/skins\/[^/]+\//, 'skins/' + encodeURIComponent(skinOverride) + '/');
+                effectiveInput = new URL(effectiveUrlPath, url).toString();
+              }
+            }
+          } catch (_) {
+            // Tenant config unreachable or unparseable: keep the original
+            // skin URL; the existing 404 -> default fallback still applies.
+          }
+        }
+        var response = await originalFetch(effectiveInput, init);
         // Fallback: tenant skin not found or SPA returned HTML
         var skinData;
         if (response.ok) {
@@ -883,7 +926,7 @@ console.log('[runtime-bootstrap] loaded');
           }
         }
         if (!skinData) {
-          var fbUrl = url.pathname.replace(/skins\/[^/]+\//, 'skins/default/');
+          var fbUrl = effectiveUrlPath.replace(/skins\/[^/]+\//, 'skins/default/');
           console.log('[bootstrap] skin not found, falling back to default:', fbUrl);
           var fbResp = await originalFetch(fbUrl);
           if (!fbResp.ok) return fbResp;
@@ -910,7 +953,7 @@ console.log('[runtime-bootstrap] loaded');
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
-      });
+      })();
     }
 
     return originalFetch(input, init);
@@ -1113,4 +1156,58 @@ console.log('[runtime-bootstrap] loaded');
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+
+
+
+
+
+
+
+
+/* === Skin module-nav switcher (3aigent C-stub, with topbar title swap) === */
+(function () {
+  var SUBTITLES = {
+    m1: "LLM Behaviour Playground",
+    m2: "Defend the Numbers",
+    m3: "Fine-Tuning Is Not a Knowledge Tool",
+    m4: "RAG · ask the corpus"
+  };
+  function applyTitle(m) {
+    var num = m.replace(/^m/, "");
+    var titleEl = document.querySelector(".topbar__title");
+    if (titleEl) titleEl.textContent = "3AIgent Training — Module " + num;
+    var subtitleEl = document.querySelector(".topbar__subtitle");
+    if (subtitleEl) subtitleEl.textContent = SUBTITLES[m] || "";
+  }
+  function bind() {
+    var tabs = document.querySelectorAll(".module-nav__tab[data-module]");
+    if (!tabs.length) return false;
+    tabs.forEach(function (btn) {
+      if (btn.__moduleBound) return;
+      btn.__moduleBound = true;
+      btn.addEventListener("click", function () {
+        var m = btn.dataset.module;
+        document.querySelectorAll(".module-nav__tab").forEach(function (t) {
+          t.classList.toggle("module-nav__tab--active", t.dataset.module === m);
+        });
+        document.querySelectorAll("[data-module-content]").forEach(function (sec) {
+          sec.hidden = sec.dataset.moduleContent !== m;
+        });
+        applyTitle(m);
+        console.log("[3aigent] switched to", m);
+      });
+    });
+    return true;
+  }
+  function start() {
+    if (bind()) return;
+    var obs = new MutationObserver(function () { if (bind()) obs.disconnect(); });
+    obs.observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
 })();

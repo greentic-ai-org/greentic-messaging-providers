@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-webchat",
-  "version": "0.4.86",
+  "version": "0.4.89",
   "supports": [
     "messaging"
   ],
@@ -20,6 +20,13 @@
       }
     }
   },
+  "secret_requirements": [
+    {
+      "name": "jwt_signing_key",
+      "scope": "tenant",
+      "description": "Secret key used to sign Direct Line tokens."
+    }
+  ],
   "operations": [
     {
       "name": "qa-spec",
@@ -92,6 +99,12 @@
           }
         }
       }
+    }
+  ],
+  "secret_requirements": [
+    {
+      "name": "jwt_signing_key",
+      "required": true
     }
   ],
   "resources": {},
