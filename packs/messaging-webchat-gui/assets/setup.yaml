@@ -241,11 +241,10 @@ questions:
     kind: string
     required: false
     default: ""
-    placeholder: '[{"label":"Module 5","url":"https://...","external":true}]'
+    placeholder: '[{"label":"<text>","url":"<url>","external":true}]'
     help: |
       Optional JSON array of links to render in the topbar (between the brand
       and the locale picker). Each entry needs `label` and `url`; set
       `"external": true` to open in a new tab. Leave blank to hide the nav.
-      Example:
-      [{"label":"Module 5","url":"https://example.com/m5","external":true},{"label":"Help","url":"/help"}]
+      Format: [{"label":"<text>","url":"<url>","external":<true|false>}]
     group: Branding
