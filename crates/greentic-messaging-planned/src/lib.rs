@@ -321,12 +321,12 @@ fn prepare_envelope_from_renderer_plan(
                     .map(|value| value.to_string())
                     .or_else(|| Some(default_summary(provider_hint)));
             }
-            if let Some(card) = adaptive_card {
-                if let Ok(card_str) = serde_json::to_string(&card) {
-                    prepared
-                        .metadata
-                        .insert("adaptive_card".to_string(), card_str);
-                }
+            if let Some(card) = adaptive_card
+                && let Ok(card_str) = serde_json::to_string(&card)
+            {
+                prepared
+                    .metadata
+                    .insert("adaptive_card".to_string(), card_str);
             }
         }
         RendererTier::TierD => {
@@ -505,11 +505,10 @@ mod tests {
         let payload = result.payload.expect("payload");
         let decoded = STANDARD.decode(&payload.body_b64).expect("decode");
         let decoded_value: Value = serde_json::from_slice(&decoded).expect("json");
-        assert_eq!(
+        assert!(
             decoded_value["metadata"]["adaptive_card"]
                 .as_str()
-                .is_some(),
-            true
+                .is_some()
         );
         assert!(decoded_value["text"].as_str().is_some_and(|text| {
             text.contains("Found 1 ports with peak utilisation at or above 85.0%")
