@@ -818,3 +818,36 @@ button[data-action="logout"]:hover,
   padding-left: 1.75rem;
   padding-right: 0.625rem;
 }
+
+/* ── Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links) ── */
+.topbar-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0.5rem;
+}
+.topbar-nav:empty { display: none; }
+.topbar-nav__link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.topbar-nav__link:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-light);
+}
+.topbar-nav__link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}

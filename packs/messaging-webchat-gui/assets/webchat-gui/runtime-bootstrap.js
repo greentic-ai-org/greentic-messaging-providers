@@ -1156,4 +1156,62 @@ console.log('[runtime-bootstrap] loaded');
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  // ---------------------------------------------------------------------------
+  // Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links)
+  //
+  // Tenants opt in by adding a `nav_links` array to their tenant config:
+  //   "nav_links": [
+  //     { "label": "Module 5", "url": "https://...", "external": true },
+  //     { "label": "Help",     "url": "/help" }
+  //   ]
+  // Empty/missing array => no nav rendered (the slot stays empty and CSS
+  // hides it via :empty).
+  // ---------------------------------------------------------------------------
+
+  function renderTopbarNav(mountEl, links) {
+    while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
+    if (!Array.isArray(links) || links.length === 0) return;
+    links.forEach(function (entry) {
+      if (!entry || typeof entry.url !== 'string' || typeof entry.label !== 'string') return;
+      var label = entry.label.trim();
+      var url = entry.url.trim();
+      if (!label || !url) return;
+      var anchor = document.createElement('a');
+      anchor.className = 'topbar-nav__link';
+      anchor.href = url;
+      anchor.textContent = label;
+      if (entry.external === true) {
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+      }
+      mountEl.appendChild(anchor);
+    });
+  }
+
+  function fetchTenantNavLinks() {
+    var basePath = window.location.pathname.replace(/\/$/, '');
+    var urls = [
+      basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json',
+      basePath + '/config/tenants/default.json'
+    ];
+    return tryFetchFirst(urls)
+      .then(function (r) { return r ? r.json() : null; })
+      .then(function (data) { return data && Array.isArray(data.nav_links) ? data.nav_links : []; })
+      .catch(function () { return []; });
+  }
+
+  var navInitialized = false;
+  var navObserver = new MutationObserver(function () {
+    if (navInitialized) return;
+    var navEl = document.getElementById('topbar-nav');
+    if (navEl) {
+      navInitialized = true;
+      navObserver.disconnect();
+      fetchTenantNavLinks().then(function (links) {
+        renderTopbarNav(navEl, links);
+      });
+    }
+  });
+  navObserver.observe(document.documentElement, { childList: true, subtree: true });
 })();
