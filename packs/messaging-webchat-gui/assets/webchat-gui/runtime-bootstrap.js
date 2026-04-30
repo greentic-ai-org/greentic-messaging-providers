@@ -800,6 +800,39 @@ console.log('[runtime-bootstrap] loaded');
   // Fetch interceptor (tenant config + skin.json patching)
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // XHR interceptor — botframework-directlinejs (used by Bot Framework Webchat)
+  // dispatches its requests via XMLHttpRequest, not fetch. The picker's locale
+  // therefore never reaches the server's POST /v3/directline/conversations
+  // through the fetch wrapper below. We patch XHR open/send to inject the
+  // X-Greentic-Locale header on the conversation-create call so the autoStart
+  // envelope can pick the right language for the welcome card.
+  // ---------------------------------------------------------------------------
+  if (typeof window.XMLHttpRequest === 'function') {
+    var XHRProto = window.XMLHttpRequest.prototype;
+    var origOpen = XHRProto.open;
+    var origSend = XHRProto.send;
+    XHRProto.open = function (method, url) {
+      this.__gtcMethod = (method || '').toUpperCase();
+      this.__gtcUrl = url;
+      return origOpen.apply(this, arguments);
+    };
+    XHRProto.send = function (body) {
+      try {
+        if (selectedLocale && this.__gtcMethod === 'POST') {
+          var path = '';
+          try { path = new URL(this.__gtcUrl, window.location.href).pathname; } catch (_) {}
+          if (/\/v3\/directline\/conversations\/?$/i.test(path)) {
+            this.setRequestHeader('X-Greentic-Locale', selectedLocale);
+          }
+        }
+      } catch (_) {
+        // Header injection is best-effort; failure must not break the request.
+      }
+      return origSend.apply(this, arguments);
+    };
+  }
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     var requestUrl = typeof input === 'string' ? input : input.url;
@@ -808,6 +841,20 @@ console.log('[runtime-bootstrap] loaded');
 
     // Intercept Direct Line /conversations POST to persist conversation across page reloads.
     if (/\/v3\/directline\/conversations\/?$/i.test(url.pathname) && init && init.method === 'POST') {
+      // Forward the picker locale so the server-side autoStart envelope
+      // (which has no activity body) can resolve i18n tokens for the
+      // welcome card. POST /activities already carries `locale` in the
+      // BotFramework activity body, but conversation creation does not.
+      if (selectedLocale) {
+        init.headers = init.headers || {};
+        if (init.headers instanceof Headers) {
+          init.headers.set('X-Greentic-Locale', selectedLocale);
+        } else if (Array.isArray(init.headers)) {
+          init.headers.push(['X-Greentic-Locale', selectedLocale]);
+        } else {
+          init.headers['X-Greentic-Locale'] = selectedLocale;
+        }
+      }
       var savedConv = null;
       try { savedConv = localStorage.getItem('greentic_dl_conversation'); } catch (_) {}
       if (savedConv) {
