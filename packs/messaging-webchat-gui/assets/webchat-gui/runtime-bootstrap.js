@@ -800,6 +800,39 @@ console.log('[runtime-bootstrap] loaded');
   // Fetch interceptor (tenant config + skin.json patching)
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // XHR interceptor — botframework-directlinejs (used by Bot Framework Webchat)
+  // dispatches its requests via XMLHttpRequest, not fetch. The picker's locale
+  // therefore never reaches the server's POST /v3/directline/conversations
+  // through the fetch wrapper below. We patch XHR open/send to inject the
+  // X-Greentic-Locale header on the conversation-create call so the autoStart
+  // envelope can pick the right language for the welcome card.
+  // ---------------------------------------------------------------------------
+  if (typeof window.XMLHttpRequest === 'function') {
+    var XHRProto = window.XMLHttpRequest.prototype;
+    var origOpen = XHRProto.open;
+    var origSend = XHRProto.send;
+    XHRProto.open = function (method, url) {
+      this.__gtcMethod = (method || '').toUpperCase();
+      this.__gtcUrl = url;
+      return origOpen.apply(this, arguments);
+    };
+    XHRProto.send = function (body) {
+      try {
+        if (selectedLocale && this.__gtcMethod === 'POST') {
+          var path = '';
+          try { path = new URL(this.__gtcUrl, window.location.href).pathname; } catch (_) {}
+          if (/\/v3\/directline\/conversations\/?$/i.test(path)) {
+            this.setRequestHeader('X-Greentic-Locale', selectedLocale);
+          }
+        }
+      } catch (_) {
+        // Header injection is best-effort; failure must not break the request.
+      }
+      return origSend.apply(this, arguments);
+    };
+  }
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     var requestUrl = typeof input === 'string' ? input : input.url;
@@ -808,6 +841,20 @@ console.log('[runtime-bootstrap] loaded');
 
     // Intercept Direct Line /conversations POST to persist conversation across page reloads.
     if (/\/v3\/directline\/conversations\/?$/i.test(url.pathname) && init && init.method === 'POST') {
+      // Forward the picker locale so the server-side autoStart envelope
+      // (which has no activity body) can resolve i18n tokens for the
+      // welcome card. POST /activities already carries `locale` in the
+      // BotFramework activity body, but conversation creation does not.
+      if (selectedLocale) {
+        init.headers = init.headers || {};
+        if (init.headers instanceof Headers) {
+          init.headers.set('X-Greentic-Locale', selectedLocale);
+        } else if (Array.isArray(init.headers)) {
+          init.headers.push(['X-Greentic-Locale', selectedLocale]);
+        } else {
+          init.headers['X-Greentic-Locale'] = selectedLocale;
+        }
+      }
       var savedConv = null;
       try { savedConv = localStorage.getItem('greentic_dl_conversation'); } catch (_) {}
       if (savedConv) {
@@ -1156,58 +1203,62 @@ console.log('[runtime-bootstrap] loaded');
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
-})();
 
+  // ---------------------------------------------------------------------------
+  // Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links)
+  //
+  // Tenants opt in by adding a `nav_links` array to their tenant config:
+  //   "nav_links": [
+  //     { "label": "Module 5", "url": "https://...", "external": true },
+  //     { "label": "Help",     "url": "/help" }
+  //   ]
+  // Empty/missing array => no nav rendered (the slot stays empty and CSS
+  // hides it via :empty).
+  // ---------------------------------------------------------------------------
 
-
-
-
-
-
-
-/* === Skin module-nav switcher (3aigent C-stub, with topbar title swap) === */
-(function () {
-  var SUBTITLES = {
-    m1: "LLM Behaviour Playground",
-    m2: "Defend the Numbers",
-    m3: "Fine-Tuning Is Not a Knowledge Tool",
-    m4: "RAG · ask the corpus"
-  };
-  function applyTitle(m) {
-    var num = m.replace(/^m/, "");
-    var titleEl = document.querySelector(".topbar__title");
-    if (titleEl) titleEl.textContent = "3AIgent Training — Module " + num;
-    var subtitleEl = document.querySelector(".topbar__subtitle");
-    if (subtitleEl) subtitleEl.textContent = SUBTITLES[m] || "";
-  }
-  function bind() {
-    var tabs = document.querySelectorAll(".module-nav__tab[data-module]");
-    if (!tabs.length) return false;
-    tabs.forEach(function (btn) {
-      if (btn.__moduleBound) return;
-      btn.__moduleBound = true;
-      btn.addEventListener("click", function () {
-        var m = btn.dataset.module;
-        document.querySelectorAll(".module-nav__tab").forEach(function (t) {
-          t.classList.toggle("module-nav__tab--active", t.dataset.module === m);
-        });
-        document.querySelectorAll("[data-module-content]").forEach(function (sec) {
-          sec.hidden = sec.dataset.moduleContent !== m;
-        });
-        applyTitle(m);
-        console.log("[3aigent] switched to", m);
-      });
+  function renderTopbarNav(mountEl, links) {
+    while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
+    if (!Array.isArray(links) || links.length === 0) return;
+    links.forEach(function (entry) {
+      if (!entry || typeof entry.url !== 'string' || typeof entry.label !== 'string') return;
+      var label = entry.label.trim();
+      var url = entry.url.trim();
+      if (!label || !url) return;
+      var anchor = document.createElement('a');
+      anchor.className = 'topbar-nav__link';
+      anchor.href = url;
+      anchor.textContent = label;
+      if (entry.external === true) {
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+      }
+      mountEl.appendChild(anchor);
     });
-    return true;
   }
-  function start() {
-    if (bind()) return;
-    var obs = new MutationObserver(function () { if (bind()) obs.disconnect(); });
-    obs.observe(document.body, { childList: true, subtree: true });
+
+  function fetchTenantNavLinks() {
+    var basePath = window.location.pathname.replace(/\/$/, '');
+    var urls = [
+      basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json',
+      basePath + '/config/tenants/default.json'
+    ];
+    return tryFetchFirst(urls)
+      .then(function (r) { return r ? r.json() : null; })
+      .then(function (data) { return data && Array.isArray(data.nav_links) ? data.nav_links : []; })
+      .catch(function () { return []; });
   }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start);
-  } else {
-    start();
-  }
+
+  var navInitialized = false;
+  var navObserver = new MutationObserver(function () {
+    if (navInitialized) return;
+    var navEl = document.getElementById('topbar-nav');
+    if (navEl) {
+      navInitialized = true;
+      navObserver.disconnect();
+      fetchTenantNavLinks().then(function (links) {
+        renderTopbarNav(navEl, links);
+      });
+    }
+  });
+  navObserver.observe(document.documentElement, { childList: true, subtree: true });
 })();

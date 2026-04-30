@@ -21,7 +21,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.4.89"
+version = "0.4.93"
 license = "MIT"
 
 
