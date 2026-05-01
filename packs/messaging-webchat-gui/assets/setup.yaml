@@ -237,14 +237,29 @@ questions:
     group: Branding
 
   - name: nav_links_json
-    title: Top-menu nav links
+    title: Top-menu nav links (JSON)
     kind: string
     required: false
     default: ""
-    placeholder: '[{"label":"<text>","url":"<url>","external":true}]'
+    placeholder: '[{"label":{"en":"Help","id":"Bantuan"},"url":"/help","external":true}]'
     help: |
-      Optional JSON array of links to render in the topbar (between the brand
-      and the locale picker). Each entry needs `label` and `url`; set
-      `"external": true` to open in a new tab. Leave blank to hide the nav.
-      Format: [{"label":"<text>","url":"<url>","external":<true|false>}]
+      Optional JSON array of links rendered in the topbar between the brand
+      and the locale picker. Leave blank to hide the nav.
+
+      Each entry: { "label": <text>, "url": <url>, "external": <bool, optional> }
+
+      `label` accepts two forms:
+        1. Plain string for a single language:
+             { "label": "Help", "url": "/help" }
+        2. Locale-keyed object for multi-language demos (matches the runtime
+           card-i18n pattern — the SPA picks selectedLocale → base language
+           → "en" → first non-empty value):
+             { "label": { "en": "Help", "id": "Bantuan", "de": "Hilfe" },
+               "url": "/help" }
+
+      `"external": true` opens the link in a new tab.
+
+      Tip: paste the placeholder above as a starter, then replace labels/urls.
+      A richer in-wizard editor (table/row-style input) is tracked as a
+      follow-up — current QA spec only supports text/bool/choice/number kinds.
     group: Branding
