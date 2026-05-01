@@ -13,9 +13,7 @@
     "styleOptionsThemed": true,
     "adaptiveCardsHostConfig": "/skins/3aigent/webchat/hostconfig.json",
     "locale": "en-US",
-    "localePickerLocales": [
-      "en", "id", "es", "fr", "de", "it", "pt", "nl", "ja", "zh", "ko", "ar", "hi", "ru", "tr"
-    ]
+    "localePickerLocales": ["en", "de"]
   },
   "statusBar": {
     "show": true,
