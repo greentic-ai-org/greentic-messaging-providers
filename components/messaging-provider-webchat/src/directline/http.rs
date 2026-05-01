@@ -57,6 +57,10 @@ where
             handle_tokens(request, state_store, secrets)
         }
         ["v3", "directline", "tokens", "generate"] => method_not_allowed(),
+        ["v3", "directline", "tokens", "refresh"] if method_is(request, "POST") => {
+            handle_refresh_token(request, state_store, secrets)
+        }
+        ["v3", "directline", "tokens", "refresh"] => method_not_allowed(),
         ["v3", "directline", "conversations"] if method_is(request, "POST") => {
             handle_conversations(request, state_store, secrets)
         }
@@ -194,6 +198,66 @@ where
             "streamUrl": Value::Null,
         }),
         headers,
+    )
+}
+
+fn handle_refresh_token<S, SE>(
+    request: &HttpInV1,
+    state_store: &mut S,
+    secrets: &SE,
+) -> HttpOutV1
+where
+    S: StateStore,
+    SE: SecretStore,
+{
+    let authorization = match extract_bearer(request.headers.as_slice()) {
+        Some(header) => header,
+        None => return respond_unauthorized("missing Authorization header"),
+    };
+    let signing_key = match load_signing_key(request, secrets) {
+        Ok(key) => key,
+        Err(resp) => return resp,
+    };
+    let claims = match verify_token(&signing_key, &authorization) {
+        Ok(claims) => claims,
+        Err(err) => return respond_unauthorized(&format!("invalid token: {err:?}")),
+    };
+
+    if let Some(conversation_id) = claims.conv.as_deref() {
+        let conv_key = conversation_key(&claims.ctx, conversation_id);
+        let conversation = match load_conversation_state(state_store, &conv_key) {
+            Ok(state) => state,
+            Err(resp) => return resp,
+        };
+
+        if conversation.ctx != claims.ctx {
+            return respond_forbidden("token context mismatch");
+        }
+    }
+
+    let (token, _exp) = match issue_token(
+        &signing_key,
+        claims.ctx.clone(),
+        &claims.sub,
+        claims.conv.clone(),
+    ) {
+        Ok(pair) => pair,
+        Err(err) => {
+            return respond_error(
+                500,
+                "token_issue_failed",
+                format!("failed to mint refresh token: {err:?}"),
+            );
+        }
+    };
+
+    respond_json(
+        200,
+        json!({
+            "conversationId": claims.conv,
+            "token": token,
+            "expires_in": TTL_SECONDS,
+        }),
     )
 }
 
@@ -976,6 +1040,28 @@ mod tests {
         let empty_body = decode_body(&empty_response);
         assert!(empty_body["activities"].as_array().unwrap().is_empty());
         assert_eq!(empty_body["watermark"], Value::String("1".to_string()));
+
+        let refresh_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/refresh",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {conv_token}"),
+                }],
+            ),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(refresh_response.status, 200);
+        let refresh_body = decode_body(&refresh_response);
+        assert_eq!(
+            refresh_body["conversationId"],
+            Value::String(conversation_id.to_string())
+        );
+        assert!(refresh_body["token"].as_str().is_some());
 
         let wrong_conv_response = handle_directline_request(
             &build_request(

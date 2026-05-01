@@ -1,5 +1,6 @@
 //! WebChat GUI messaging provider component.
 
+use base64::{Engine as _, engine::general_purpose};
 use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
 use serde::{Deserialize, Serialize};
@@ -127,10 +128,10 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
     match op {
         "run" | "send" => handle_send(input_json),
         "ingest" => handle_ingest(input_json),
-        "ingest_http" => ingest_http(input_json),
-        "render_plan" => render_plan(input_json),
+        "ingest_http" | "ingest-http" => ingest_http(input_json),
+        "render_plan" | "render-plan" => render_plan(input_json),
         "encode" => encode_op(input_json),
-        "send_payload" => send_payload(input_json),
+        "send_payload" | "send-payload" => send_payload(input_json),
         other => json_bytes(&json!({"ok": false, "error": format!("unsupported op: {other}")})),
     }
 }
@@ -205,6 +206,9 @@ fn apply_answers_impl(
         merged.tenant_channel_id = optional_string_from(&answers, "tenant_channel_id")
             .or(merged.tenant_channel_id.clone());
         merged.base_url = optional_string_from(&answers, "base_url").or(merged.base_url.clone());
+        merged.jwt_signing_key_b64 = optional_string_from(&answers, "jwt_signing_key")
+            .map(|value| general_purpose::STANDARD.encode(value.as_bytes()))
+            .or(merged.jwt_signing_key_b64.clone());
         merged.oauth_enabled = answers
             .get("oauth_enabled")
             .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
@@ -235,6 +239,10 @@ fn apply_answers_impl(
         }
         if has("base_url") {
             merged.base_url = optional_string_from(&answers, "base_url");
+        }
+        if has("jwt_signing_key") {
+            merged.jwt_signing_key_b64 = optional_string_from(&answers, "jwt_signing_key")
+                .map(|value| general_purpose::STANDARD.encode(value.as_bytes()));
         }
         if has("oauth_enabled") {
             merged.oauth_enabled = answers

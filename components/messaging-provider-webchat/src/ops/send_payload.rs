@@ -118,13 +118,33 @@ fn append_bot_activity_to_conversation(
         tenant: tenant.unwrap_or("default").to_string(),
         team: team.map(str::to_string),
     };
-    let conv_key = conversation_key(&ctx, conversation_id);
     let mut store = HostStateStore;
+    append_bot_activity_to_conversation_with_store(
+        &mut store,
+        &ctx,
+        conversation_id,
+        text,
+        adaptive_card_json,
+        extensions,
+        envelope_attachments,
+    )
+}
 
-    let conv_bytes = match store.read(&conv_key) {
-        Ok(Some(bytes)) => bytes,
-        _ => return Ok(()),
-    };
+#[allow(clippy::too_many_arguments)]
+fn append_bot_activity_to_conversation_with_store<S: crate::directline::store::StateStore>(
+    store: &mut S,
+    ctx: &DirectLineContext,
+    conversation_id: &str,
+    text: &str,
+    adaptive_card_json: Option<&str>,
+    extensions: Option<&Value>,
+    envelope_attachments: Option<&Value>,
+) -> Result<(), String> {
+    let (conv_key, conv_bytes) =
+        match find_existing_conversation_state(store, ctx, conversation_id)? {
+            Some(found) => found,
+            None => return Ok(()),
+        };
 
     let mut conversation: crate::directline::state::ConversationState =
         serde_json::from_slice(&conv_bytes).map_err(|e| e.to_string())?;
@@ -150,6 +170,43 @@ fn append_bot_activity_to_conversation(
     let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
     store.write(&conv_key, &updated)?;
     Ok(())
+}
+
+fn find_existing_conversation_state<S: crate::directline::store::StateStore>(
+    store: &mut S,
+    ctx: &DirectLineContext,
+    conversation_id: &str,
+) -> Result<Option<(String, Vec<u8>)>, String> {
+    for candidate_ctx in candidate_conversation_contexts(ctx) {
+        let key = conversation_key(&candidate_ctx, conversation_id);
+        if let Some(bytes) = store.read(&key)? {
+            return Ok(Some((key, bytes)));
+        }
+    }
+    Ok(None)
+}
+
+fn candidate_conversation_contexts(ctx: &DirectLineContext) -> Vec<DirectLineContext> {
+    let mut contexts = Vec::new();
+    contexts.push(ctx.clone());
+
+    let team_trimmed = ctx.team.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    if team_trimmed.is_some() {
+        contexts.push(DirectLineContext {
+            env: ctx.env.clone(),
+            tenant: ctx.tenant.clone(),
+            team: None,
+        });
+    } else {
+        contexts.push(DirectLineContext {
+            env: ctx.env.clone(),
+            tenant: ctx.tenant.clone(),
+            team: Some("default".to_string()),
+        });
+    }
+
+    contexts.dedup();
+    contexts
 }
 
 /// Build the raw DirectLine activity JSON for a bot message, merging any
@@ -261,6 +318,23 @@ fn sanitize_outbound_channel_data(value: &Value) -> Option<Value> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::BTreeMap;
+
+    #[derive(Default)]
+    struct MemoryStateStore {
+        values: BTreeMap<String, Vec<u8>>,
+    }
+
+    impl crate::directline::store::StateStore for MemoryStateStore {
+        fn read(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
+            Ok(self.values.get(key).cloned())
+        }
+
+        fn write(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
+            self.values.insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+    }
 
     #[test]
     fn build_bot_activity_raw_plain_text_only() {
@@ -509,6 +583,71 @@ mod tests {
         assert_eq!(
             value_as_trimmed_string(json!({"team": "  "}).get("team")),
             None
+        );
+    }
+
+    #[test]
+    fn candidate_conversation_contexts_falls_back_between_default_and_teamless() {
+        let with_default = DirectLineContext {
+            env: "default".into(),
+            tenant: "demo".into(),
+            team: Some("default".into()),
+        };
+        let teamless = DirectLineContext {
+            env: "default".into(),
+            tenant: "demo".into(),
+            team: None,
+        };
+
+        assert_eq!(
+            candidate_conversation_contexts(&with_default),
+            vec![with_default.clone(), teamless.clone()]
+        );
+        assert_eq!(
+            candidate_conversation_contexts(&teamless),
+            vec![teamless, with_default]
+        );
+    }
+
+    #[test]
+    fn append_bot_activity_uses_existing_teamless_conversation_for_default_team_payload() {
+        let mut store = MemoryStateStore::default();
+        let existing_ctx = DirectLineContext {
+            env: "default".into(),
+            tenant: "demo".into(),
+            team: None,
+        };
+        let requested_ctx = DirectLineContext {
+            env: "default".into(),
+            tenant: "demo".into(),
+            team: Some("default".into()),
+        };
+        let conversation_id = "conv-1";
+        let key = conversation_key(&existing_ctx, conversation_id);
+        let state = crate::directline::state::ConversationState::new(existing_ctx.clone());
+        store
+            .write(&key, &serde_json::to_vec(&state).unwrap())
+            .unwrap();
+
+        append_bot_activity_to_conversation_with_store(
+            &mut store,
+            &requested_ctx,
+            conversation_id,
+            "hello",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let bytes = store.read(&key).unwrap().expect("updated conversation");
+        let updated: crate::directline::state::ConversationState =
+            serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(updated.activities.len(), 1);
+        assert_eq!(updated.activities[0].text.as_deref(), Some("hello"));
+        assert_eq!(
+            updated.activities[0].raw["from"]["id"].as_str(),
+            Some("bot")
         );
     }
 }
