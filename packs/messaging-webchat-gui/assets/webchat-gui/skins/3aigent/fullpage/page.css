@@ -24,7 +24,36 @@
   --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 }
 
+/* SPA's outer shell renders a "Connecting to agent…" loading panel before
+   Web Chat mounts, using Tailwind/shadcn HSL tokens defined unconditionally
+   in `assets/index-*.css`. Override per-theme so the loading flash matches
+   our palette instead of always-light. */
+[data-theme="dark"] {
+  --background: 0 0% 6%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 9%;
+  --card-foreground: 0 0% 90%;
+  --primary: 188 95% 43%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 10%;
+  --secondary-foreground: 0 0% 90%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 188 95% 43%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 16%;
+  --input: 0 0% 12%;
+  --ring: 188 95% 43%;
+}
+
 [data-theme="light"] {
+  --primary: 191 91% 36%;
+  --accent: 191 91% 36%;
+  --ring: 191 91% 36%;
+  /* keep SPA defaults for background/card/border in light mode */
+
   --bg-base: #f8fafc;
   --bg-panel: #ffffff;
   --bg-panel-alt: #f1f5f9;
