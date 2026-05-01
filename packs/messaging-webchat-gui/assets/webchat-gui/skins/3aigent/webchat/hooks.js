@@ -24,14 +24,12 @@
     }
   }
 
-  // Apply on init (page-load)
+  // Apply on init. If the document is still loading (toggle button not in DOM
+  // yet), re-apply once DOMContentLoaded fires so the button icon picks up the
+  // current theme.
   applyTheme(readTheme());
-
-  // Re-apply on hooks.js late-load (icon may not have existed at first apply)
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () { applyTheme(readTheme()); });
-  } else {
-    applyTheme(readTheme());
   }
 
   // Click handler — delegate so it works even if the button is rendered late

@@ -993,16 +993,16 @@ console.log('[runtime-bootstrap] loaded');
         // the operator's persisted theme preference. Skins that don't set
         // the flag are unaffected.
         if (skinData.webchat && skinData.webchat.styleOptionsThemed === true && skinData.webchat.styleOptions) {
-          var __theme;
-          try { __theme = localStorage.getItem('greentic.theme') === 'light' ? 'light' : 'dark'; }
-          catch (_) { __theme = 'dark'; }
-          var __pat = /styleOptions\.json$/i;
-          if (__pat.test(skinData.webchat.styleOptions)) {
+          var theme;
+          try { theme = localStorage.getItem('greentic.theme') === 'light' ? 'light' : 'dark'; }
+          catch (_) { theme = 'dark'; }
+          var pat = /styleOptions\.json$/i;
+          if (pat.test(skinData.webchat.styleOptions)) {
             skinData.webchat.styleOptions = skinData.webchat.styleOptions.replace(
-              __pat,
-              'styleOptions-' + __theme + '.json'
+              pat,
+              'styleOptions-' + theme + '.json'
             );
-            console.log('[bootstrap] themed styleOptions selected:', __theme);
+            console.log('[bootstrap] themed styleOptions selected:', theme);
           }
         }
         skinData.statusBar = skinData.statusBar || {};
