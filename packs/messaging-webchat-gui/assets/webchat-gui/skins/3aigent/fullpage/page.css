@@ -242,7 +242,7 @@ body {
   flex: 1 1 0%;
   min-height: 0;
   background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: 12px;
   overflow: hidden;
 }
@@ -298,6 +298,19 @@ body {
 [data-theme="light"] .webchat__bubble--from-user .webchat__bubble__content {
   color: var(--text-primary);
 }
+/* Borderless bubbles + cards — Web Chat sometimes inlines border styles
+   that beat styleOptions, and the AC renderer adds its own .ac-container
+   border in some skins. Force-remove across both themes. */
+.webchat__bubble,
+.webchat__bubble__content,
+.webchat__bubble--from-user,
+.webchat__bubble--from-user .webchat__bubble__content,
+.ac-adaptiveCard,
+.ac-container {
+  border: none !important;
+  box-shadow: none !important;
+}
+
 /* Send-box placeholder visibility per theme (SPA inline-overrides cover
    the typed text color but not the placeholder). */
 [data-theme="dark"] .webchat__send-box-text-box__input::placeholder,
