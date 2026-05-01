@@ -1056,6 +1056,24 @@ console.log('[runtime-bootstrap] loaded');
   // Fetch the flow pack's i18n manifest to determine which locales have
   // actual translations.  Only those locales appear in the picker.
   function fetchAvailableFlowLocales(callback) {
+    // Skin-level override: if skin.json declares
+    // `webchat.localePickerLocales: [...]`, honor it directly and skip the
+    // flow-card manifest probe. Useful when the demo flow ships only
+    // English cards but the operator still wants the GUI's locale picker
+    // to expose the wider set of UI translations under `i18n/<code>.json`.
+    if (window.__SKIN__ &&
+        window.__SKIN__.webchat &&
+        Array.isArray(window.__SKIN__.webchat.localePickerLocales) &&
+        window.__SKIN__.webchat.localePickerLocales.length > 0) {
+      var override = {};
+      window.__SKIN__.webchat.localePickerLocales.forEach(function (code) {
+        if (SUPPORTED_LOCALES[code]) override[code] = SUPPORTED_LOCALES[code];
+      });
+      if (!override['en']) override['en'] = 'English';
+      console.log('[bootstrap] locale picker override:', Object.keys(override).length, 'locales');
+      callback(override);
+      return;
+    }
     // The i18n manifest lists locale codes that have card translations.
     // Served from the webchat-gui pack's i18n directory.
     var manifestUrl = guiBase + 'i18n/_manifest.json';
