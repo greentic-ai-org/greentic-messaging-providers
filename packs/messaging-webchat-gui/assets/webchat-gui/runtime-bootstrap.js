@@ -987,14 +987,18 @@ console.log('[runtime-bootstrap] loaded');
           skinData.webchat = skinData.webchat || {};
           skinData.webchat.locale = selectedLocale;
         }
-        // Theme-aware styleOptions URL swap. Skin opts in via
+        // Theme-aware Web Chat assets. Skin opts in via
         // `webchat.styleOptionsThemed: true`; runtime rewrites the
-        // `styleOptions.json` URL to `styleOptions-<theme>.json` based on
-        // the SPA's persisted theme. Read order matches the locale picker's
-        // theme button: sessionStorage["greentic-theme"], then the
-        // <html data-theme> attribute, then default to dark. Skins that
-        // don't set the flag are unaffected.
-        if (skinData.webchat && skinData.webchat.styleOptionsThemed === true && skinData.webchat.styleOptions) {
+        // `styleOptions.json` AND `hostconfig.json` URLs to
+        // `<name>-<theme>.json` based on the SPA's persisted theme. Read
+        // order matches the locale picker's theme button:
+        // sessionStorage["greentic-theme"], then <html data-theme>, then
+        // default to dark. For first-load when neither is set, also pin
+        // <html data-theme> to the resolved value so SPA's
+        // applyDarkModeInlineOverrides and our CSS pick up the matching
+        // palette without flicker. Skins that don't set the flag are
+        // unaffected.
+        if (skinData.webchat && skinData.webchat.styleOptionsThemed === true) {
           var theme = 'dark';
           try {
             var saved = sessionStorage.getItem('greentic-theme');
@@ -1005,14 +1009,23 @@ console.log('[runtime-bootstrap] loaded');
               if (attr === 'light') theme = 'light';
             }
           } catch (_) { /* keep default */ }
-          var pat = /styleOptions\.json$/i;
-          if (pat.test(skinData.webchat.styleOptions)) {
+          if (!document.documentElement.getAttribute('data-theme')) {
+            document.documentElement.setAttribute('data-theme', theme);
+          }
+          var pat = /\.json$/i;
+          if (skinData.webchat.styleOptions && /styleOptions\.json$/i.test(skinData.webchat.styleOptions)) {
             skinData.webchat.styleOptions = skinData.webchat.styleOptions.replace(
-              pat,
+              /styleOptions\.json$/i,
               'styleOptions-' + theme + '.json'
             );
-            console.log('[bootstrap] themed styleOptions selected:', theme);
           }
+          if (skinData.webchat.adaptiveCardsHostConfig && /hostconfig\.json$/i.test(skinData.webchat.adaptiveCardsHostConfig)) {
+            skinData.webchat.adaptiveCardsHostConfig = skinData.webchat.adaptiveCardsHostConfig.replace(
+              /hostconfig\.json$/i,
+              'hostconfig-' + theme + '.json'
+            );
+          }
+          console.log('[bootstrap] themed Web Chat assets selected:', theme);
         }
         skinData.statusBar = skinData.statusBar || {};
         skinData.statusBar.show = false;
