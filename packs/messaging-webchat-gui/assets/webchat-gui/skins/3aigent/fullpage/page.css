@@ -231,17 +231,95 @@ body {
   height: 100%;
 }
 
-/* ===== WEB CHAT LIGHT-THEME SAFETY NET ===== */
+/* ===== WEB CHAT THEME SAFETY NET ===== */
 /* styleOptions cover most colors; these target elements that don't pick up
    the theme reliably. Bulk styling lives in styleOptions-{dark,light}.json.
    The SPA also applies its own !important inline overrides for send box /
    bot bubble / transcript backgrounds — see runtime-bootstrap.js. */
 [data-theme="light"] .webchat__send-box-text-box__input {
   background: var(--bg-surface);
-  color: var(--text-primary);
 }
 [data-theme="light"] .webchat__bubble--from-user .webchat__bubble__content {
   color: var(--text-primary);
+}
+/* Send-box placeholder visibility per theme (SPA inline-overrides cover
+   the typed text color but not the placeholder). */
+[data-theme="dark"] .webchat__send-box-text-box__input::placeholder,
+:root:not([data-theme="light"]) .webchat__send-box-text-box__input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+[data-theme="light"] .webchat__send-box-text-box__input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+
+/* ===== ADAPTIVE CARD TEXT INPUTS ===== */
+/* Adaptive Cards renderer styles `.ac-textInput` / `.ac-input` from the
+   browser default — white-on-white in light, white-on-dark host bg in
+   dark. Force visible foreground/background per theme. */
+[data-theme="dark"] .ac-textInput,
+[data-theme="dark"] .ac-input,
+[data-theme="dark"] textarea.ac-input,
+[data-theme="dark"] input.ac-input,
+[data-theme="dark"] .ac-multichoiceInput,
+[data-theme="dark"] .ac-numberInput,
+[data-theme="dark"] .ac-dateInput,
+[data-theme="dark"] .ac-timeInput,
+:root:not([data-theme="light"]) .ac-textInput,
+:root:not([data-theme="light"]) .ac-input,
+:root:not([data-theme="light"]) textarea.ac-input,
+:root:not([data-theme="light"]) input.ac-input,
+:root:not([data-theme="light"]) .ac-multichoiceInput,
+:root:not([data-theme="light"]) .ac-numberInput,
+:root:not([data-theme="light"]) .ac-dateInput,
+:root:not([data-theme="light"]) .ac-timeInput {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+}
+[data-theme="dark"] .ac-textInput::placeholder,
+[data-theme="dark"] .ac-input::placeholder,
+:root:not([data-theme="light"]) .ac-textInput::placeholder,
+:root:not([data-theme="light"]) .ac-input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+[data-theme="dark"] .ac-textInput:focus,
+[data-theme="dark"] .ac-input:focus,
+:root:not([data-theme="light"]) .ac-textInput:focus,
+:root:not([data-theme="light"]) .ac-input:focus {
+  border-color: var(--brand) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--brand-glow) !important;
+}
+
+[data-theme="light"] .ac-textInput,
+[data-theme="light"] .ac-input,
+[data-theme="light"] textarea.ac-input,
+[data-theme="light"] input.ac-input,
+[data-theme="light"] .ac-multichoiceInput,
+[data-theme="light"] .ac-numberInput,
+[data-theme="light"] .ac-dateInput,
+[data-theme="light"] .ac-timeInput {
+  background: #ffffff !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+}
+[data-theme="light"] .ac-textInput::placeholder,
+[data-theme="light"] .ac-input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+[data-theme="light"] .ac-textInput:focus,
+[data-theme="light"] .ac-input:focus {
+  border-color: var(--brand) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--brand-glow) !important;
 }
 
 /* ===== ADAPTIVE CARD ACTION BUTTONS ===== */

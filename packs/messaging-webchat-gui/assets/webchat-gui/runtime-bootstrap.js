@@ -1126,10 +1126,15 @@ console.log('[runtime-bootstrap] loaded');
       themeBtn.textContent = isDark ? '☀️' : '🌙';
       // Override WebChat SDK inline styles that use !important (can't beat with CSS alone)
       function applyDarkModeInlineOverrides(dark) {
-        // Send box input
+        // Send box input. In dark mode Web Chat's default white text would
+        // be unreadable against the dark send box bg below; in light mode
+        // some Web Chat builds inline a near-invisible color so we force a
+        // visible dark slate. Pick the color based on `dark` rather than
+        // hardcoding black (which used to render invisible against the dark
+        // send box).
         var inputs = document.querySelectorAll('.webchat__send-box-text-box__input');
         for (var i = 0; i < inputs.length; i++) {
-          inputs[i].style.setProperty('color', 'black', 'important');
+          inputs[i].style.setProperty('color', dark ? '#e5e7eb' : '#1f2937', 'important');
           if (!dark) delete inputs[i].dataset.darkOverride;
         }
         // Send box container and all children with inline backgrounds
