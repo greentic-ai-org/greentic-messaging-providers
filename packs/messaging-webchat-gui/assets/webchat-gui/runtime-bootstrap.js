@@ -988,14 +988,23 @@ console.log('[runtime-bootstrap] loaded');
           skinData.webchat.locale = selectedLocale;
         }
         // Theme-aware styleOptions URL swap. Skin opts in via
-        // `webchat.styleOptionsThemed: true`; runtime then rewrites the
+        // `webchat.styleOptionsThemed: true`; runtime rewrites the
         // `styleOptions.json` URL to `styleOptions-<theme>.json` based on
-        // the operator's persisted theme preference. Skins that don't set
-        // the flag are unaffected.
+        // the SPA's persisted theme. Read order matches the locale picker's
+        // theme button: sessionStorage["greentic-theme"], then the
+        // <html data-theme> attribute, then default to dark. Skins that
+        // don't set the flag are unaffected.
         if (skinData.webchat && skinData.webchat.styleOptionsThemed === true && skinData.webchat.styleOptions) {
-          var theme;
-          try { theme = localStorage.getItem('greentic.theme') === 'light' ? 'light' : 'dark'; }
-          catch (_) { theme = 'dark'; }
+          var theme = 'dark';
+          try {
+            var saved = sessionStorage.getItem('greentic-theme');
+            if (saved === 'light' || saved === 'dark') {
+              theme = saved;
+            } else {
+              var attr = document.documentElement.getAttribute('data-theme');
+              if (attr === 'light') theme = 'light';
+            }
+          } catch (_) { /* keep default */ }
           var pat = /styleOptions\.json$/i;
           if (pat.test(skinData.webchat.styleOptions)) {
             skinData.webchat.styleOptions = skinData.webchat.styleOptions.replace(
@@ -1175,6 +1184,14 @@ console.log('[runtime-bootstrap] loaded');
         themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
         try { sessionStorage.setItem('greentic-theme', next); } catch (_) {}
         applyDarkModeInlineOverrides(next === 'dark');
+        // Skins with `webchat.styleOptionsThemed: true` ship per-theme
+        // styleOptions JSON; Web Chat reads styleOptions only at mount, so
+        // a reload is required to pick up the matching palette. Skins that
+        // don't opt in skip the reload — the inline overrides above are
+        // enough for them.
+        if (window.__SKIN__ && window.__SKIN__.webchat && window.__SKIN__.webchat.styleOptionsThemed === true) {
+          location.reload();
+        }
       };
       // Restore saved theme
       try {

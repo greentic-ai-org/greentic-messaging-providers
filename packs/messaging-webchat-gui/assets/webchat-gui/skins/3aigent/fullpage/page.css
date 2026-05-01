@@ -124,7 +124,9 @@ body {
   align-items: center;
   gap: 8px;
 }
-.topbar__theme-toggle {
+/* SPA's runtime-bootstrap injects a `.theme-toggle` button into
+   #locale-picker-mount; style it to match the brand palette. */
+.theme-toggle {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -138,13 +140,19 @@ body {
   transition: border-color 0.15s ease, background 0.15s ease;
   color: var(--text-secondary);
 }
-.topbar__theme-toggle:hover {
+.theme-toggle:hover {
   border-color: var(--brand-border);
   background: var(--brand-muted);
 }
-.topbar__theme-toggle:focus-visible {
+.theme-toggle:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+.topbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle);
+  display: inline-block;
 }
 
 /* ===== CHAT PANEL ===== */
@@ -166,11 +174,46 @@ body {
 
 /* ===== WEB CHAT LIGHT-THEME SAFETY NET ===== */
 /* styleOptions cover most colors; these target elements that don't pick up
-   the theme reliably. Bulk styling lives in styleOptions-{dark,light}.json. */
+   the theme reliably. Bulk styling lives in styleOptions-{dark,light}.json.
+   The SPA also applies its own !important inline overrides for send box /
+   bot bubble / transcript backgrounds — see runtime-bootstrap.js. */
 [data-theme="light"] .webchat__send-box-text-box__input {
   background: var(--bg-surface);
   color: var(--text-primary);
 }
 [data-theme="light"] .webchat__bubble--from-user .webchat__bubble__content {
   color: var(--text-primary);
+}
+
+/* ===== ADAPTIVE CARD ACTION BUTTONS ===== */
+/* Adaptive Cards renderer styles `.ac-pushButton` outside the host config's
+   color graph; in dark mode the default white pill clashes hard with our
+   dark panels. Force brand-tinted styling. */
+[data-theme="dark"] .ac-pushButton,
+:root:not([data-theme="light"]) .ac-pushButton {
+  background: var(--brand-muted) !important;
+  color: var(--brand-light) !important;
+  border: 1px solid var(--brand-border) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+  font-weight: 500 !important;
+}
+[data-theme="dark"] .ac-pushButton:hover,
+:root:not([data-theme="light"]) .ac-pushButton:hover {
+  background: var(--brand-glow) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--brand) !important;
+}
+[data-theme="light"] .ac-pushButton {
+  background: var(--brand-muted) !important;
+  color: var(--brand-dark) !important;
+  border: 1px solid var(--brand-border) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+  font-weight: 500 !important;
+}
+[data-theme="light"] .ac-pushButton:hover {
+  background: var(--brand-glow) !important;
+  color: var(--brand-dark) !important;
+  border-color: var(--brand) !important;
 }
