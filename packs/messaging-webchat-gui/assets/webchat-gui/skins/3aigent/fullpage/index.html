@@ -1,13 +1,16 @@
 <header class="topbar">
   <div class="topbar__left">
     <div class="topbar__avatar">
-      <img class="topbar__logo" src="/skins/3aigent/assets/logo-dark.png" alt="3AIgent logo" />
+      <img class="topbar__logo" src="/skins/3aigent/assets/3point-jewel.png" alt="3AIgent logo" />
     </div>
     <span class="topbar__title">3AIgent</span>
     <span class="topbar__status"><span class="topbar__status-dot"></span> Online</span>
   </div>
   <nav id="topbar-nav" class="topbar-nav" aria-label="Site navigation"></nav>
-  <div id="locale-picker-mount" class="topbar__controls"></div>
+  <div class="topbar__controls">
+    <button id="theme-toggle" class="topbar__theme-toggle" type="button" aria-label="Toggle theme">🌙</button>
+    <div id="locale-picker-mount"></div>
+  </div>
 </header>
 <section class="chat-panel">
   <div id="webchat" class="chat-panel__surface" aria-live="polite"></div>

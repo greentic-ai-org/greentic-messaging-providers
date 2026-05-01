@@ -1,20 +1,95 @@
 {
-  "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  "fontFamily": "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif",
+  "fontSizes": {
+    "small": 12,
+    "default": 14,
+    "medium": 16,
+    "large": 20,
+    "extraLarge": 24
+  },
+  "fontWeights": {
+    "lighter": 300,
+    "default": 400,
+    "bolder": 600
+  },
   "spacing": {
+    "none": 0,
     "small": 6,
     "default": 12,
     "medium": 16,
-    "large": 20
+    "large": 20,
+    "extraLarge": 28,
+    "padding": 16
   },
-  "actions": {
-    "maxActions": 10
+  "separator": {
+    "lineThickness": 1,
+    "lineColor": "#2a2a2a"
   },
   "containerStyles": {
     "default": {
+      "backgroundColor": "#1f1f1f",
       "foregroundColors": {
-        "default": { "default": "#161616", "subtle": "#525252" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" }
+        "default": { "default": "#f5f5f5", "subtle": "#9ca3af" },
+        "accent":  { "default": "#06b6d4", "subtle": "#22d3ee" },
+        "attention": { "default": "#ef4444", "subtle": "#fca5a5" },
+        "good":    { "default": "#22c55e", "subtle": "#86efac" },
+        "warning": { "default": "#f59e0b", "subtle": "#fcd34d" }
+      }
+    },
+    "emphasis": {
+      "backgroundColor": "#171717",
+      "foregroundColors": {
+        "default": { "default": "#f5f5f5", "subtle": "#9ca3af" },
+        "accent":  { "default": "#06b6d4", "subtle": "#22d3ee" }
+      }
+    },
+    "good": {
+      "backgroundColor": "#0b2018",
+      "foregroundColors": {
+        "default": { "default": "#86efac", "subtle": "#22c55e" },
+        "accent":  { "default": "#06b6d4", "subtle": "#22d3ee" }
+      }
+    },
+    "attention": {
+      "backgroundColor": "#2a0f0f",
+      "foregroundColors": {
+        "default": { "default": "#fca5a5", "subtle": "#ef4444" },
+        "accent":  { "default": "#06b6d4", "subtle": "#22d3ee" }
       }
     }
+  },
+  "actions": {
+    "actionsOrientation": "horizontal",
+    "actionAlignment": "stretch",
+    "buttonSpacing": 8,
+    "maxActions": 10,
+    "showCard": { "actionMode": "inline" }
+  },
+  "adaptiveCard": {
+    "allowCustomStyle": true,
+    "padding": 16
+  },
+  "textBlock": {
+    "headingLevel": 2
+  },
+  "imageSet": {
+    "imageSize": "medium"
+  },
+  "factSet": {
+    "title": {
+      "color": "default",
+      "size": "default",
+      "isSubtle": false,
+      "weight": "bolder",
+      "wrap": true
+    },
+    "value": {
+      "color": "default",
+      "size": "default",
+      "isSubtle": true,
+      "weight": "default",
+      "wrap": true
+    },
+    "spacing": 8
   }
 }

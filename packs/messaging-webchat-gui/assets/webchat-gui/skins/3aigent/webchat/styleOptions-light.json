@@ -1,0 +1,34 @@
+{
+  "accent": "#0891b2",
+  "subtle": "#475569",
+  "backgroundColor": "#ffffff",
+
+  "bubbleBackground": "#f1f5f9",
+  "bubbleTextColor": "#334155",
+  "bubbleBorderColor": "#e2e8f0",
+  "bubbleBorderRadius": 12,
+  "bubbleBorderStyle": "solid",
+  "bubbleBorderWidth": 1,
+
+  "bubbleFromUserBackground": "rgba(6, 182, 212, 0.07)",
+  "bubbleFromUserTextColor": "#0f172a",
+  "bubbleFromUserBorderColor": "rgba(6, 182, 212, 0.35)",
+  "bubbleFromUserBorderRadius": 12,
+  "bubbleFromUserBorderStyle": "solid",
+  "bubbleFromUserBorderWidth": 1,
+
+  "paragraphSpacing": 12,
+
+  "primaryFont": "'Inter', system-ui, -apple-system, sans-serif",
+  "monospaceFont": "'JetBrains Mono', 'Courier New', monospace",
+
+  "sendBoxBackground": "#f8fafc",
+  "sendBoxButtonColor": "#475569",
+  "sendBoxButtonColorOnHover": "#0891b2",
+  "sendBoxTextColor": "#334155",
+  "sendBoxBorderTop": "1px solid #e2e8f0",
+
+  "suggestedActionBorderColor": "#e2e8f0",
+  "suggestedActionBackgroundColor": "#f1f5f9",
+  "suggestedActionTextColor": "#334155"
+}
