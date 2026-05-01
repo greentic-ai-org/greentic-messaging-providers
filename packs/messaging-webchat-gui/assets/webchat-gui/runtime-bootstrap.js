@@ -1283,18 +1283,56 @@ console.log('[runtime-bootstrap] loaded');
   //     { "label": "Module 5", "url": "https://...", "external": true },
   //     { "label": "Help",     "url": "/help" }
   //   ]
+  //
+  // For i18n parity with flow-card translation, `label` may also be a
+  // locale-keyed object so the operator can ship one entry per language:
+  //   "nav_links": [
+  //     { "label": { "en": "Help", "id": "Bantuan", "de": "Hilfe" }, "url": "/help" }
+  //   ]
+  // Resolution order: exact `selectedLocale` (e.g. "id-ID") → base language
+  // ("id") → `en` → first non-empty value → URL fallback. String labels keep
+  // their existing single-language behaviour.
+  //
   // Empty/missing array => no nav rendered (the slot stays empty and CSS
   // hides it via :empty).
   // ---------------------------------------------------------------------------
+
+  function pickNavLabel(rawLabel) {
+    if (typeof rawLabel === 'string') {
+      var trimmed = rawLabel.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+    if (!rawLabel || typeof rawLabel !== 'object') return null;
+    var locale = selectedLocale || 'en';
+    var base = locale.split('-')[0];
+    var candidates = [locale, base, 'en'];
+    for (var i = 0; i < candidates.length; i++) {
+      var v = rawLabel[candidates[i]];
+      if (typeof v === 'string') {
+        var t = v.trim();
+        if (t.length > 0) return t;
+      }
+    }
+    var keys = Object.keys(rawLabel);
+    for (var j = 0; j < keys.length; j++) {
+      var v2 = rawLabel[keys[j]];
+      if (typeof v2 === 'string') {
+        var t2 = v2.trim();
+        if (t2.length > 0) return t2;
+      }
+    }
+    return null;
+  }
 
   function renderTopbarNav(mountEl, links) {
     while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
     if (!Array.isArray(links) || links.length === 0) return;
     links.forEach(function (entry) {
-      if (!entry || typeof entry.url !== 'string' || typeof entry.label !== 'string') return;
-      var label = entry.label.trim();
+      if (!entry || typeof entry.url !== 'string') return;
       var url = entry.url.trim();
-      if (!label || !url) return;
+      if (!url) return;
+      var label = pickNavLabel(entry.label);
+      if (!label) return;
       var anchor = document.createElement('a');
       anchor.className = 'topbar-nav__link';
       anchor.href = url;
