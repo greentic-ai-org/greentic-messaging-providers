@@ -72,7 +72,7 @@ body {
 }
 .fullpage-status { display: none !important; }
 
-/* ===== TOPBAR ===== */
+/* ===== TOPBAR (V2 parity with 3Point Training Modules M1–M4) ===== */
 .topbar {
   display: flex;
   align-items: center;
@@ -81,54 +81,50 @@ body {
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  position: relative;
+}
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+  opacity: 0.4;
+  pointer-events: none;
 }
 .topbar__left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.875rem;
   min-width: 0;
 }
-.topbar__avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: var(--bg-panel-alt);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 0 1px var(--brand-border), 0 0 36px var(--brand-glow);
-  flex-shrink: 0;
-}
-.topbar__logo {
+.topbar__brand {
   width: 64px;
   height: 64px;
   object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.35));
+}
+.topbar__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.15;
+  min-width: 0;
 }
 .topbar__title {
   font-family: var(--font-logo);
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: 0.02em;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: 0.02em;
+  line-height: 1.1;
 }
-.topbar__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: var(--bg-surface);
-  border: 1px solid var(--brand-border);
-  border-radius: 999px;
-  font-size: 12px;
+.topbar__subtitle {
+  font-size: 0.78rem;
   color: var(--text-muted);
-  box-shadow: 0 0 12px var(--brand-glow);
-}
-.topbar__status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--brand);
-  box-shadow: 0 0 6px var(--brand);
+  letter-spacing: 0.04em;
+  line-height: 1.2;
 }
 .topbar-nav {
   flex: 1;
@@ -229,6 +225,39 @@ body {
 /* Web Chat injects its own root into #webchat; force it to fill the surface. */
 #webchat > * {
   height: 100%;
+}
+
+/* ===== FOOTER (V2 parity with 3Point Training Modules M1–M4) ===== */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.footer__copy {
+  font-family: var(--font);
+}
+.footer__links {
+  display: flex;
+  gap: 1.25rem;
+}
+.footer__links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.footer__links a:hover {
+  color: var(--brand-light);
+}
+.footer__links a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ===== WEB CHAT THEME SAFETY NET ===== */
