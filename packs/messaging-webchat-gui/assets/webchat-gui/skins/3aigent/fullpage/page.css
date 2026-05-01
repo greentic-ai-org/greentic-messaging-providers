@@ -89,19 +89,19 @@ body {
   min-width: 0;
 }
 .topbar__avatar {
-  width: 36px;
-  height: 36px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background: var(--bg-panel-alt);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 0 1px var(--brand-border), 0 0 24px var(--brand-glow);
+  box-shadow: 0 0 0 1px var(--brand-border), 0 0 28px var(--brand-glow);
   flex-shrink: 0;
 }
 .topbar__logo {
-  width: 24px;
-  height: 24px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
 }
 .topbar__title {
