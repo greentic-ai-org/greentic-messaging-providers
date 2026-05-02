@@ -1,158 +1,392 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-/* ── 3AIgent WebChat · Cyan Brand Theme ─────────────────── */
-
+/* ===== TOKENS ===== */
 :root {
-  color-scheme: light;
-  --font: 'Poppins', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bg-base: #0f0f0f;
+  --bg-panel: #171717;
+  --bg-panel-alt: #1a1a1a;
+  --bg-surface: #1f1f1f;
+  --border-subtle: #2a2a2a;
+  --border-hover: #3a3a3a;
+  --text-primary: #f5f5f5;
+  --text-secondary: #e5e7eb;
+  --text-muted: #9ca3af;
+  --text-subtle: #6b7280;
   --brand: #06b6d4;
-  --brand-light: #cffafe;
-  --brand-dark: #0e7490;
-  --surface: #ffffff;
-  --bg: #f8fafb;
-  --border: #e5e7eb;
-  --text: #1f2937;
-  --text-muted: #6b7280;
-  --text-light: #9ca3af;
-  --radius: 12px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --brand-light: #22d3ee;
+  --brand-dark: #0891b2;
+  --brand-glow: rgba(6, 182, 212, 0.18);
+  --brand-muted: rgba(6, 182, 212, 0.10);
+  --brand-border: rgba(6, 182, 212, 0.30);
+
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-logo: 'Orbitron', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* SPA's outer shell renders a "Connecting to agent…" loading panel before
+   Web Chat mounts, using Tailwind/shadcn HSL tokens defined unconditionally
+   in `assets/index-*.css`. Override per-theme so the loading flash matches
+   our palette instead of always-light. */
+[data-theme="dark"] {
+  --background: 0 0% 6%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 9%;
+  --card-foreground: 0 0% 90%;
+  --primary: 188 95% 43%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 10%;
+  --secondary-foreground: 0 0% 90%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 188 95% 43%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 16%;
+  --input: 0 0% 12%;
+  --ring: 188 95% 43%;
+}
 
+[data-theme="light"] {
+  --primary: 191 91% 36%;
+  --accent: 191 91% 36%;
+  --ring: 191 91% 36%;
+  /* keep SPA defaults for background/card/border in light mode */
+
+  --bg-base: #f8fafc;
+  --bg-panel: #ffffff;
+  --bg-panel-alt: #f1f5f9;
+  --bg-surface: #f8fafc;
+  --border-subtle: #e2e8f0;
+  --border-hover: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --text-subtle: #94a3b8;
+  --brand: #0891b2;
+  --brand-light: #06b6d4;
+  --brand-dark: #155e75;
+  --brand-glow: rgba(6, 182, 212, 0.10);
+  --brand-muted: rgba(6, 182, 212, 0.07);
+  --brand-border: rgba(6, 182, 212, 0.35);
+}
+
+/* ===== PAGE CHROME ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
+  background: var(--bg-base);
+  color: var(--text-secondary);
   font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
+  font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Light-mode send box fix (ensure input text is visible) ── */
-.webchat__send-box-text-box__input {
-  color: var(--text, #1f2937) !important;
-}
-
-/* ── SPA overrides ──────────────────────────────────────── */
-
-.fullpage-status { display: none !important; }
-
+/* SPA wrappers — match the flex chain expected by webchat-gui index.html.
+   `.fullpage-shell` is the viewport-tall flex column the SPA injects;
+   `.fullpage-shell-content` holds the skin fragment beneath the topbar. */
 .fullpage-shell {
   display: flex;
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  background: var(--bg-base);
 }
-
 .fullpage-shell-content {
   display: flex;
   flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
 }
+.fullpage-status { display: none !important; }
 
-/* ── Topbar ─────────────────────────────────────────────── */
+/* ===== SPA LOADING / CONNECTING STATES =====
+   The SPA renders skeleton shimmers + a "Connect chat" CTA card before
+   Web Chat mounts (or while reconnecting). Default styling falls back to
+   shadcn neutrals which look bland/unbranded against our palette. Polish
+   them with brand tokens, smoother shimmer keyframes, and a centered
+   card layout so the pre-chat state matches the M1–M4 modules. */
+@keyframes greentic-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-panel-alt) 0%,
+    var(--brand-muted) 50%,
+    var(--bg-panel-alt) 100%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: greentic-shimmer 1.6s ease-in-out infinite !important;
+  border-radius: 6px !important;
+}
+[data-theme="dark"] .loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(6,182,212,0.10) 50%,
+    rgba(255,255,255,0.04) 100%
+  ) !important;
+  background-size: 200% 100% !important;
+}
 
+/* Connect / unavailable panels — when the SPA shows "Chat is ready to
+   start" with a Connect CTA, or "Connecting…" / "Disconnected. Reconnecting…"
+   states, style as a centered card. The SPA emits these in its outer
+   loading shell which lives inside `.chat-panel__surface` or similar
+   wrappers; target generic shadcn class combos so we don't fight the
+   compiled SPA bundle for class names. */
+.chat-panel__surface .is-loading,
+.chat-panel__surface [class*="connect"],
+.chat-panel__surface [class*="status"] {
+  /* baseline so children inherit our font + token colors */
+  font-family: var(--font);
+  color: var(--text-primary);
+}
+
+/* Spinner / dot pulse for "Connecting…" */
+@keyframes greentic-pulse-dot {
+  0%, 80%, 100% { transform: scale(0.8); opacity: 0.4; }
+  40%           { transform: scale(1.0); opacity: 1.0; }
+}
+.greentic-connecting-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: 8px;
+}
+.greentic-connecting-dots span {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: greentic-pulse-dot 1.2s ease-in-out infinite;
+}
+.greentic-connecting-dots span:nth-child(2) { animation-delay: 0.15s; }
+.greentic-connecting-dots span:nth-child(3) { animation-delay: 0.30s; }
+
+/* ===== TOPBAR (V2 parity with 3Point Training Modules M1–M4) ===== */
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 64px;
-  padding: 0 1.25rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  position: relative;
 }
-
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+  opacity: 0.4;
+  pointer-events: none;
+}
 .topbar__left {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.875rem;
+  min-width: 0;
 }
-
-.topbar__avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--brand-light);
+.topbar__brand {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.35));
+}
+.topbar__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.15;
+  min-width: 0;
+}
+.topbar__title {
+  font-family: var(--font-logo);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+.topbar__subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.topbar-nav {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  gap: 1.5rem;
 }
-
-.topbar__logo {
-  width: 20px;
-  height: 20px;
-}
-
-.topbar__title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1;
-}
-
-.topbar__status {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  display: flex;
+.topbar-nav__link {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  margin-left: -0.25rem;
+  gap: 0.5rem;
+  font-family: var(--font-logo);
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-panel-alt);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.topbar-nav__link:hover {
+  color: var(--brand-light);
+  background: var(--brand-muted);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand), 0 0 16px var(--brand-glow);
+}
+.topbar-nav__link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.topbar-nav__num {
+  color: var(--brand-light);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.topbar-nav__label {
+  color: inherit;
 }
 
-.topbar__status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #22c55e;
-  flex-shrink: 0;
+/* Hover popover. The .topbar-nav__tooltip lives inside the anchor so it
+   inherits hover state automatically. Pointer events stay disabled until
+   the parent anchor is hovered, so it doesn't intercept stray mouse moves. */
+.topbar-nav__tooltip {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  min-width: 320px;
+  max-width: 420px;
+  padding: 1rem 1.25rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 24px var(--brand-glow);
+  font-family: var(--font);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+  z-index: 50;
 }
-
+.topbar-nav__link--has-tooltip:hover .topbar-nav__tooltip,
+.topbar-nav__link--has-tooltip:focus-within .topbar-nav__tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0s;
+}
+/* Arrow pointing up at the pill. */
+.topbar-nav__tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 8px 8px 8px;
+  border-style: solid;
+  border-color: transparent transparent var(--brand-border) transparent;
+}
+.topbar-nav__tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 7px 7px 7px;
+  border-style: solid;
+  border-color: transparent transparent var(--bg-panel) transparent;
+}
+.topbar-nav__tooltip-eyebrow {
+  display: block;
+  font-family: var(--font-logo);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--brand-light);
+  margin-bottom: 0.4rem;
+}
+.topbar-nav__tooltip-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+.topbar-nav__tooltip-lede {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.topbar-nav__tooltip-lede strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
 .topbar__controls {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 8px;
 }
-
-/* ── Control dividers ───────────────────────────────────── */
-
+/* SPA's runtime-bootstrap injects a `.theme-toggle` button into
+   #locale-picker-mount; style it to match the brand palette. */
+.theme-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  color: var(--text-secondary);
+}
+.theme-toggle:hover {
+  border-color: var(--brand-border);
+  background: var(--brand-muted);
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .topbar__divider {
   width: 1px;
   height: 20px;
-  background: var(--border);
+  background: var(--border-subtle);
+  display: inline-block;
   flex-shrink: 0;
 }
 
-/* ── Theme toggle ───────────────────────────────────────── */
-
-.theme-toggle {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: all 0.15s;
-  flex-shrink: 0;
-  padding: 0;
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.theme-toggle:hover {
-  border-color: var(--brand);
-  color: var(--brand);
-}
-
-/* ── Locale picker ──────────────────────────────────────── */
-
+/* ===== LOCALE PICKER (injected by SPA into #locale-picker-mount) ===== */
 .locale-picker {
   display: inline-flex;
   align-items: center;
@@ -160,694 +394,270 @@ body {
   cursor: pointer;
   color: var(--text-muted);
 }
-
 .locale-picker svg { flex-shrink: 0; }
-
 .locale-picker__select {
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 0.375rem 1.75rem 0.375rem 0.625rem;
   font-size: 0.8125rem;
   font-family: var(--font);
-  background: var(--surface)
+  background: var(--bg-surface)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E")
     no-repeat right 0.625rem center;
   cursor: pointer;
-  color: var(--text);
+  color: var(--text-secondary);
   max-width: 160px;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background-color 0.15s;
 }
-
-.locale-picker__select:hover { border-color: var(--brand); }
+.locale-picker__select:hover {
+  border-color: var(--brand-border);
+  background-color: var(--brand-muted);
+}
 .locale-picker__select:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(5,150,105,0.12);
+  box-shadow: 0 0 0 3px var(--brand-glow);
 }
-
 .locale-picker__select option {
-  color: var(--text);
-  background: var(--surface);
+  color: var(--text-primary);
+  background: var(--bg-panel);
 }
 
-/* ── Logout button ──────────────────────────────────────── */
-
-.logout-btn,
-button[data-action="logout"],
-#greentic-logout-btn {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.8125rem;
-  font-family: var(--font);
-  background: var(--surface);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.logout-btn:hover,
-button[data-action="logout"]:hover,
-#greentic-logout-btn:hover {
-  border-color: var(--brand);
-  color: var(--brand);
-}
-
-/* ── Chat panel ─────────────────────────────────────────── */
-
+/* ===== CHAT PANEL ===== */
 .chat-panel {
   flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg);
+  background: var(--bg-base);
+  padding: 16px;
 }
-
 .chat-panel__surface {
   flex: 1 1 0%;
   min-height: 0;
-  background: var(--surface);
-  margin: 0;
+  background: var(--bg-panel);
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
 }
-
+/* Web Chat injects its own root into #webchat; force it to fill the surface. */
 #webchat > * {
   height: 100%;
 }
 
-/* ── Adaptive Card · shadcn/ui style ───────────────────── */
-
-/* Card typography */
-[class*="webchat__bubble__content"] .ac-textBlock {
-  font-family: var(--font) !important;
-}
-
-/* FactSet — table style */
-.ac-factSet {
-  display: table !important;
-  width: 100% !important;
-  border-collapse: collapse !important;
-  font-family: var(--font) !important;
-  font-size: 0.8125rem !important;
-}
-
-.ac-fact {
-  display: table-row !important;
-}
-
-.ac-fact .ac-factTitle {
-  display: table-cell !important;
-  font-weight: 600 !important;
-  color: var(--text) !important;
-  padding: 0.375rem 1rem 0.375rem 0 !important;
-  white-space: nowrap !important;
-  vertical-align: top !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-
-.ac-fact .ac-factValue {
-  display: table-cell !important;
-  color: var(--text-muted) !important;
-  padding: 0.375rem 0 !important;
-  vertical-align: top !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-
-.ac-fact:last-child .ac-factTitle,
-.ac-fact:last-child .ac-factValue {
-  border-bottom: none !important;
-}
-
-/* Action buttons — shadcn outline variant */
-.ac-pushButton {
-  font-family: var(--font) !important;
-  font-weight: 500 !important;
-  font-size: 0.8125rem !important;
-  line-height: 1.25rem !important;
-  border-radius: 6px !important;
-  border: 1px solid var(--border) !important;
-  background-color: var(--surface) !important;
-  color: var(--text) !important;
-  padding: 0.5rem 0.875rem !important;
-  cursor: pointer !important;
-  transition: background 0.15s, border-color 0.15s !important;
-}
-
-.ac-pushButton div,
-.ac-pushButton span,
-.ac-pushButton p {
-  color: inherit !important;
-}
-
-.ac-pushButton:hover {
-  background-color: var(--bg) !important;
-  border-color: var(--text-muted) !important;
-}
-
-/* Action set — flex-wrap so buttons don't overflow */
-.ac-actionSet {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 0.375rem !important;
-}
-
-/* ── Footer ─────────────────────────────────────────────── */
-
+/* ===== FOOTER (V2 parity with 3Point Training Modules M1–M4) ===== */
 .footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.625rem 1.5rem;
-  font-size: 0.75rem;
-  color: var(--text-light);
-  border-top: 1px solid var(--border);
-  background: var(--surface);
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
-
 .footer__copy {
-  white-space: nowrap;
+  font-family: var(--font);
+  justify-self: start;
 }
-
 .footer__links {
   display: flex;
-  gap: 1rem;
+  gap: 1.25rem;
+  justify-self: center;
 }
-
 .footer__links a {
   color: var(--text-muted);
   text-decoration: none;
-  transition: color 0.15s;
+  transition: color 0.15s ease;
 }
-
 .footer__links a:hover {
-  color: var(--brand);
+  color: var(--brand-light);
 }
-
-/* ── Responsive ─────────────────────────────────────────── */
-
-@media (min-width: 769px) {
-  .chat-panel {
-    padding: 1rem 1.5rem 1.5rem;
-  }
-
-  .chat-panel__surface {
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-md);
-    border: 1px solid var(--border);
-    overflow: hidden;
-  }
-}
-
-@media (max-width: 768px) {
-  .topbar {
-    height: 56px;
-    padding: 0 0.75rem;
-  }
-
-  .topbar__avatar {
-    width: 36px;
-    height: 36px;
-  }
-
-  .topbar__logo {
-    width: 18px;
-    height: 18px;
-  }
-
-  .topbar__title {
-    font-size: 0.875rem;
-  }
-
-  .locale-picker__select {
-    max-width: 100px;
-    font-size: 0.75rem;
-  }
-
-  .chat-panel {
-    padding: 0;
-  }
-
-  .chat-panel__surface {
-    border-radius: 0;
-  }
-
-  .footer {
-    flex-direction: column;
-    gap: 0.25rem;
-    text-align: center;
-    padding: 0.5rem 0.75rem;
-  }
-}
-
-/* ── Dark mode ──────────────────────────────────────────── */
-/* Auto dark mode (system preference) */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --surface: #111827;
-    --bg: #0a0f1a;
-    --border: #374151;
-    --text: #f3f4f6;
-    --text-muted: #9ca3af;
-    --text-light: #6b7280;
-    --brand-light: rgba(5,150,105,0.25);
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
-
-    /* Tailwind/shadcn theme overrides for React app */
-    --background: 222 47% 7%;
-    --foreground: 220 14% 96%;
-    --card: 224 30% 16%;
-    --card-foreground: 220 14% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 220 14% 96%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 218 11% 65%;
-    --accent: 166 70% 45%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 217 19% 27%;
-    --input: 217 19% 27%;
-    --ring: 217 91% 60%;
-  }
-}
-
-/* Manual dark mode (toggle) */
-[data-theme="dark"] {
-  --surface: #111827;
-  --bg: #0a0f1a;
-  --border: #374151;
-  --text: #f3f4f6;
-  --text-muted: #9ca3af;
-  --text-light: #6b7280;
-  --brand-light: rgba(5,150,105,0.25);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
-
-  /* Tailwind/shadcn theme overrides for React app */
-  --background: 222 47% 7%;
-  --foreground: 220 14% 96%;
-  --card: 224 30% 16%;
-  --card-foreground: 220 14% 96%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 220 14% 96%;
-  --muted: 217 33% 17%;
-  --muted-foreground: 218 11% 65%;
-  --accent: 166 70% 45%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 217 19% 27%;
-  --input: 217 19% 27%;
-  --ring: 217 91% 60%;
-}
-
-/* Dark overrides for controls */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .locale-picker__select,
-  :root:not([data-theme="light"]) .theme-toggle {
-    border-color: #4b5563;
-    background-color: #1f2937;
-    color: #f3f4f6;
-  }
-  :root:not([data-theme="light"]) #greentic-logout-btn {
-    border-color: #4b5563;
-    color: #d1d5db;
-  }
-  :root:not([data-theme="light"]) .topbar__avatar {
-    background: rgba(5,150,105,0.3);
-  }
-  :root:not([data-theme="light"]) .topbar__logo {
-    filter: brightness(1.5);
-  }
-}
-[data-theme="dark"] .locale-picker__select,
-[data-theme="dark"] .theme-toggle {
-  border-color: #4b5563;
-  background-color: #1f2937;
-  color: #f3f4f6;
-}
-[data-theme="dark"] #greentic-logout-btn {
-  border-color: #4b5563;
-  color: #d1d5db;
-}
-[data-theme="dark"] .topbar__avatar {
-  background: rgba(5,150,105,0.3);
-}
-[data-theme="dark"] .topbar__logo {
-  filter: brightness(1.5);
-}
-
-/* Dark card button overrides */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .ac-fact .ac-factTitle {
-    color: #f3f4f6 !important;
-    border-bottom-color: #374151 !important;
-  }
-  :root:not([data-theme="light"]) .ac-fact .ac-factValue {
-    color: #9ca3af !important;
-    border-bottom-color: #374151 !important;
-  }
-  :root:not([data-theme="light"]) .ac-pushButton {
-    background-color: #1f2937 !important;
-    border-color: #374151 !important;
-    color: #f3f4f6 !important;
-  }
-  :root:not([data-theme="light"]) .ac-pushButton div,
-  :root:not([data-theme="light"]) .ac-pushButton span,
-  :root:not([data-theme="light"]) .ac-pushButton p {
-    color: #f3f4f6 !important;
-  }
-  :root:not([data-theme="light"]) .ac-pushButton:hover {
-    background-color: #374151 !important;
-    border-color: #6b7280 !important;
-  }
-}
-[data-theme="dark"] .ac-fact .ac-factTitle {
-  color: #f3f4f6 !important;
-  border-bottom-color: #374151 !important;
-}
-[data-theme="dark"] .ac-fact .ac-factValue {
-  color: #9ca3af !important;
-  border-bottom-color: #374151 !important;
-}
-[data-theme="dark"] .ac-pushButton {
-  background-color: #1f2937 !important;
-  border-color: #374151 !important;
-  color: #f3f4f6 !important;
-}
-[data-theme="dark"] .ac-pushButton div,
-[data-theme="dark"] .ac-pushButton span,
-[data-theme="dark"] .ac-pushButton p {
-  color: #f3f4f6 !important;
-}
-[data-theme="dark"] .ac-pushButton:hover {
-  background-color: #374151 !important;
-  border-color: #6b7280 !important;
-}
-
-/* ── Error card layout polish ──────────────────────────── */
-
-/* Card container — rounding + shadow */
-.widget-card-wrapper {
-  border-radius: var(--radius, 1rem) !important;
-  overflow: hidden;
-}
-
-/* CardHeader — more generous top/bottom padding */
-.widget-card-wrapper > div:first-child {
-  padding: 2rem 1.5rem 1rem !important;
-}
-
-/* Alert box — comfortable internal spacing */
-.widget-card-wrapper [role="alert"] {
-  padding: 1.25rem 1rem 1.25rem 1rem !important;
-  border-radius: 0.75rem !important;
-  text-align: left;
-}
-
-/* Alert icon — proper position, don't overlap text */
-.widget-card-wrapper [role="alert"] > svg {
-  top: 1.4rem !important;
-  left: 1rem !important;
-}
-
-/* Alert text — clear the icon + white for readability */
-.widget-card-wrapper [role="alert"] > svg ~ * {
-  padding-left: 2.25rem !important;
-  color: #f3f4f6 !important;
-}
-
-/* Alert title */
-.widget-card-wrapper [role="alert"] > svg + div {
-  font-size: 0.9375rem;
-  line-height: 1.4;
-  font-weight: 600;
-}
-
-/* Alert description */
-.widget-card-wrapper [role="alert"] > svg ~ * + * {
-  margin-top: 0.375rem !important;
-  line-height: 1.5;
-  opacity: 0.8;
-}
-
-/* CardContent (button + footer) — center + generous padding */
-.widget-card-wrapper > div:last-child {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  padding: 1rem 1.5rem 2rem !important;
-  gap: 0.75rem !important;
-}
-
-/* Try-again button — proper tap target */
-.widget-card-wrapper button {
-  min-height: 2.5rem;
-  padding: 0.5rem 1.5rem !important;
-  border-radius: 0.5rem !important;
-  font-family: var(--font, inherit);
-  font-weight: 500;
-  cursor: pointer;
-}
-
-/* ── Error card dark-mode polish ────────────────────────── */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .widget-card-wrapper {
-    background: hsl(224, 30%, 16%);
-    border: 1px solid hsl(217, 19%, 27%);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
-  }
-  :root:not([data-theme="light"]) .webchat__basic-transcript {
-    background-color: #111827 !important;
-  }
-  :root:not([data-theme="light"]) .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content {
-    background: #1f2937 !important;
-    border-color: #374151 !important;
-    color: #f3f4f6 !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
-  }
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-adaptiveCard,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-container,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-columnSet,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-column,
-  :root:not([data-theme="light"]) .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content > div {
-    background-color: transparent !important;
-  }
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock *,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textBlock p,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textRun,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factTitle,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-fact .ac-factValue {
-    color: #f3f4f6 !important;
-  }
-  :root:not([data-theme="light"]) .webchat__send-box {
-    background: #111827 !important;
-    border-top-color: #374151 !important;
-  }
-  :root:not([data-theme="light"]) .webchat__send-box-text-box__input {
-    background: transparent !important;
-    color: #f3f4f6 !important;
-  }
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-textInput,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input-container input,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input-container textarea,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-input-container select {
-    background: #1f2937 !important;
-    border-color: #4b5563 !important;
-    color: #f3f4f6 !important;
-  }
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-separator {
-    border-color: #374151 !important;
-  }
-}
-[data-theme="dark"] .widget-card-wrapper {
-  background: hsl(224, 30%, 16%);
-  border: 1px solid hsl(217, 19%, 27%);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
-}
-[data-theme="dark"] .webchat__basic-transcript {
-  background-color: #111827 !important;
-}
-[data-theme="dark"] .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content {
-  background: #1f2937 !important;
-  border-color: #374151 !important;
-  color: #f3f4f6 !important;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15) !important;
-}
-[data-theme="dark"] .webchat__bubble__content .ac-adaptiveCard,
-[data-theme="dark"] .webchat__bubble__content .ac-container,
-[data-theme="dark"] .webchat__bubble__content .ac-columnSet,
-[data-theme="dark"] .webchat__bubble__content .ac-column,
-[data-theme="dark"] .webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content > div {
-  background-color: transparent !important;
-}
-[data-theme="dark"] .webchat__bubble__content .ac-textBlock,
-[data-theme="dark"] .webchat__bubble__content .ac-textBlock *,
-[data-theme="dark"] .webchat__bubble__content .ac-textBlock p,
-[data-theme="dark"] .webchat__bubble__content .ac-textRun,
-[data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factTitle,
-[data-theme="dark"] .webchat__bubble__content .ac-fact .ac-factValue {
-  color: #f3f4f6 !important;
-}
-[data-theme="dark"] .webchat__send-box {
-  background: #111827 !important;
-  border-top-color: #374151 !important;
-}
-[data-theme="dark"] .webchat__send-box-text-box__input {
-  background: transparent !important;
-  color: #f3f4f6 !important;
-}
-[data-theme="dark"] .webchat__bubble__content .ac-input,
-[data-theme="dark"] .webchat__bubble__content .ac-textInput,
-[data-theme="dark"] .webchat__bubble__content .ac-input-container input,
-[data-theme="dark"] .webchat__bubble__content .ac-input-container textarea,
-[data-theme="dark"] .webchat__bubble__content .ac-input-container select {
-  background: #1f2937 !important;
-  border-color: #4b5563 !important;
-  color: #f3f4f6 !important;
-}
-[data-theme="dark"] .webchat__bubble__content .ac-separator {
-  border-color: #374151 !important;
-}
-
-/* ── Welcome overlay ───────────────────────────────────── */
-
-.welcome {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  pointer-events: none;
-  z-index: 1;
-  font-family: var(--font);
-}
-
-.welcome__card {
-  pointer-events: auto;
-  text-align: center;
-  max-width: 400px;
-}
-
-.welcome__icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--brand-light);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1.25rem;
-}
-
-.welcome__heading {
-  margin: 0 0 0.5rem;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.welcome__text {
-  margin: 0 0 1.5rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  line-height: 1.6;
-}
-
-.welcome__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: center;
-}
-
-.welcome__btn {
-  padding: 0.5rem 1rem;
-  border: 1px solid #d1fae5;
-  border-radius: 20px;
-  background: #ecfdf5;
-  color: #059669;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s;
-}
-
-.welcome__btn:hover {
-  background: #d1fae5;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .welcome__btn {
-    background: #1f2937;
-    border-color: #374151;
-    color: #34d399;
-  }
-  :root:not([data-theme="light"]) .welcome__btn:hover {
-    background: #374151;
-  }
-}
-[data-theme="dark"] .welcome__btn {
-  background: #1f2937;
-  border-color: #374151;
-  color: #34d399;
-}
-[data-theme="dark"] .welcome__btn:hover {
-  background: #374151;
-}
-
-/* ── RTL support ────────────────────────────────────────── */
-
-[dir="rtl"] .topbar__left { flex-direction: row-reverse; }
-[dir="rtl"] .topbar__info { text-align: right; }
-[dir="rtl"] .topbar__status { flex-direction: row-reverse; }
-[dir="rtl"] .locale-picker__select {
-  background-position: left 0.625rem center;
-  padding-left: 1.75rem;
-  padding-right: 0.625rem;
-}
-
-/* ── Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links) ── */
-.topbar-nav {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0 0.5rem;
-}
-.topbar-nav:empty { display: none; }
-.topbar-nav__link {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.4rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-.topbar-nav__link:hover {
-  border-color: var(--brand);
-  color: var(--brand);
-  background: var(--brand-light);
-}
-.topbar-nav__link:focus-visible {
+.footer__links a:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ===== WEB CHAT THEME SAFETY NET ===== */
+/* styleOptions cover most colors; these target elements that don't pick up
+   the theme reliably. Bulk styling lives in styleOptions-{dark,light}.json.
+   The SPA also applies its own !important inline overrides for send box /
+   bot bubble / transcript backgrounds — see runtime-bootstrap.js. */
+[data-theme="light"] .webchat__send-box-text-box__input {
+  background: var(--bg-surface);
+}
+[data-theme="light"] .webchat__bubble--from-user .webchat__bubble__content {
+  color: var(--text-primary);
+}
+/* Borderless bubbles + cards — brute force everything inside the chat
+   surface. Web Chat 4.x ships borders/shadows on a moving target of
+   wrapper classes (`.webchat__bubble`, `.webchat__row`, `.webchat__activity`,
+   `.webchat__attachment`, plus AC `.ac-adaptiveCard` / `.ac-container`).
+   Strip them all, then re-enable on the few elements we genuinely want
+   bordered (inputs + action buttons). */
+.chat-panel__surface,
+.chat-panel__surface * {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.chat-panel__surface ::before,
+.chat-panel__surface ::after {
+  border: none !important;
+  box-shadow: none !important;
+}
+.chat-panel__surface .ac-textInput,
+.chat-panel__surface .ac-input,
+.chat-panel__surface textarea.ac-input,
+.chat-panel__surface input.ac-input {
+  border: 1px solid var(--border-subtle) !important;
+}
+.chat-panel__surface .ac-textInput:focus,
+.chat-panel__surface .ac-input:focus,
+.chat-panel__surface textarea.ac-input:focus,
+.chat-panel__surface input.ac-input:focus {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px var(--brand-glow) !important;
+}
+.chat-panel__surface .ac-pushButton {
+  border: 1px solid var(--brand-border) !important;
+}
+/* Send-box (chat composer) — the brute-force border:none above kills the
+   1px border Web Chat normally draws around the textarea. In light mode
+   the input then floats borderless on a white surface and is visually
+   indistinguishable from the transcript. Re-enable here for both themes,
+   plus a focus ring matching the AC input pattern above. */
+.chat-panel__surface .webchat__send-box-text-box {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+}
+.chat-panel__surface .webchat__send-box-text-box:focus-within {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px var(--brand-glow) !important;
+}
+
+/* Hide Web Chat's file-upload (attachment) button in the send box. */
+.webchat__send-box-text-box__upload-button,
+.webchat__send-box__attachment-button,
+button[title*="Upload" i],
+button[aria-label*="Upload" i] {
+  display: none !important;
+}
+
+/* Send-box placeholder visibility per theme (SPA inline-overrides cover
+   the typed text color but not the placeholder). */
+[data-theme="dark"] .webchat__send-box-text-box__input::placeholder,
+:root:not([data-theme="light"]) .webchat__send-box-text-box__input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+[data-theme="light"] .webchat__send-box-text-box__input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+
+/* ===== ADAPTIVE CARD TEXT INPUTS ===== */
+/* Adaptive Cards renderer styles `.ac-textInput` / `.ac-input` from the
+   browser default — white-on-white in light, white-on-dark host bg in
+   dark. Force visible foreground/background per theme. */
+[data-theme="dark"] .ac-textInput,
+[data-theme="dark"] .ac-input,
+[data-theme="dark"] textarea.ac-input,
+[data-theme="dark"] input.ac-input,
+[data-theme="dark"] .ac-multichoiceInput,
+[data-theme="dark"] .ac-numberInput,
+[data-theme="dark"] .ac-dateInput,
+[data-theme="dark"] .ac-timeInput,
+:root:not([data-theme="light"]) .ac-textInput,
+:root:not([data-theme="light"]) .ac-input,
+:root:not([data-theme="light"]) textarea.ac-input,
+:root:not([data-theme="light"]) input.ac-input,
+:root:not([data-theme="light"]) .ac-multichoiceInput,
+:root:not([data-theme="light"]) .ac-numberInput,
+:root:not([data-theme="light"]) .ac-dateInput,
+:root:not([data-theme="light"]) .ac-timeInput {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+}
+[data-theme="dark"] .ac-textInput::placeholder,
+[data-theme="dark"] .ac-input::placeholder,
+:root:not([data-theme="light"]) .ac-textInput::placeholder,
+:root:not([data-theme="light"]) .ac-input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+[data-theme="dark"] .ac-textInput:focus,
+[data-theme="dark"] .ac-input:focus,
+:root:not([data-theme="light"]) .ac-textInput:focus,
+:root:not([data-theme="light"]) .ac-input:focus {
+  border-color: var(--brand) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--brand-glow) !important;
+}
+
+[data-theme="light"] .ac-textInput,
+[data-theme="light"] .ac-input,
+[data-theme="light"] textarea.ac-input,
+[data-theme="light"] input.ac-input,
+[data-theme="light"] .ac-multichoiceInput,
+[data-theme="light"] .ac-numberInput,
+[data-theme="light"] .ac-dateInput,
+[data-theme="light"] .ac-timeInput {
+  background: #ffffff !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+}
+[data-theme="light"] .ac-textInput::placeholder,
+[data-theme="light"] .ac-input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+[data-theme="light"] .ac-textInput:focus,
+[data-theme="light"] .ac-input:focus {
+  border-color: var(--brand) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--brand-glow) !important;
+}
+
+/* ===== ADAPTIVE CARD ACTION BUTTONS ===== */
+/* Adaptive Cards renderer styles `.ac-pushButton` outside the host config's
+   color graph; in dark mode the default white pill clashes hard with our
+   dark panels. Force brand-tinted styling. */
+[data-theme="dark"] .ac-pushButton,
+:root:not([data-theme="light"]) .ac-pushButton {
+  background: var(--brand-muted) !important;
+  color: var(--brand-light) !important;
+  border: 1px solid var(--brand-border) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+  font-weight: 500 !important;
+}
+[data-theme="dark"] .ac-pushButton:hover,
+:root:not([data-theme="light"]) .ac-pushButton:hover {
+  background: var(--brand-glow) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--brand) !important;
+}
+[data-theme="light"] .ac-pushButton {
+  background: var(--brand-muted) !important;
+  color: var(--brand-dark) !important;
+  border: 1px solid var(--brand-border) !important;
+  border-radius: 8px !important;
+  font-family: var(--font) !important;
+  font-weight: 500 !important;
+}
+[data-theme="light"] .ac-pushButton:hover {
+  background: var(--brand-glow) !important;
+  color: var(--brand-dark) !important;
+  border-color: var(--brand) !important;
 }

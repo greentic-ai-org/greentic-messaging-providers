@@ -1,11 +1,67 @@
 {
   "packs": [
     {
+      "name": "messaging-dummy",
+      "file": "dist/packs/messaging-dummy.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-dummy:0.4.95",
+      "digest": "sha256:48e29b432679b3d3d4601b1ea3eb21948edd1159f87bbe51456595c25572e3a0",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
+      "name": "messaging-email",
+      "file": "dist/packs/messaging-email.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-email:0.4.95",
+      "digest": "sha256:f98bfa8848207a398715cf2247ceb7fb41753667831690b5ee285bd6ba4b1542",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
+      "name": "messaging-slack",
+      "file": "dist/packs/messaging-slack.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-slack:0.4.95",
+      "digest": "sha256:ea64e18ab41bb295bd7ebd22bbdb0a71f37e889eae92c145dbc1ba619ca2ccd4",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
+      "name": "messaging-teams",
+      "file": "dist/packs/messaging-teams.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.4.95",
+      "digest": "sha256:dbaacdf74ba562525bb68004b90b3c8565901e639bcddfd7f9341b25ff9fe577",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
+      "name": "messaging-telegram",
+      "file": "dist/packs/messaging-telegram.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-telegram:0.4.95",
+      "digest": "sha256:7dbda722c01c704b7042779878e6aa0e72178f608142b6a2ee02a2e5525cccf0",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
+      "name": "messaging-webchat",
+      "file": "dist/packs/messaging-webchat.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webchat:0.4.95",
+      "digest": "sha256:ce5da460f14c8cf63af4bced62367e8f93249e8be506a14658b1a37a942066cc",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
       "name": "messaging-webchat-gui",
       "file": "dist/packs/messaging-webchat-gui.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:0.4.93",
-      "digest": "sha256:5d6ae2abb6acdcc1fe09f28356dc1bec4b83d8a6de1ae912f178916d8c424367",
-      "built_at": "2026-05-01T06:24:26Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:0.4.95",
+      "digest": "sha256:0ca1b34b808114e2f66a2fdf3f8f227d2ab0ce377aa480fb1946c694f96bb191",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
+      "name": "messaging-webex",
+      "file": "dist/packs/messaging-webex.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webex:0.4.95",
+      "digest": "sha256:7a5d6ea3d4d230a04a13c9603bc7c1548f3e789f631a8827e53e4066e3176bfa",
+      "built_at": "2026-05-02T12:18:28Z"
+    },
+    {
+      "name": "messaging-whatsapp",
+      "file": "dist/packs/messaging-whatsapp.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-whatsapp:0.4.95",
+      "digest": "sha256:5d807baa9a56e6ccd0ec1cbfd9439acdcc9b465e3ba492b46228dcd49d89209e",
+      "built_at": "2026-05-02T12:18:28Z"
     }
   ]
 }

@@ -236,15 +236,64 @@ questions:
     help: "Visual skin/theme. Must match a skins/<name>/ folder shipped in the messaging-webchat-gui pack. Use 'default' for the Greentic look or '3aigent' for the 3Point Training brand."
     group: Branding
 
-  - name: nav_links_json
-    title: Top-menu nav links
-    kind: string
+  - name: nav_links
+    title: "Top-menu nav links"
+    kind: table
     required: false
-    default: ""
-    placeholder: '[{"label":"<text>","url":"<url>","external":true}]'
     help: |
-      Optional JSON array of links to render in the topbar (between the brand
-      and the locale picker). Each entry needs `label` and `url`; set
-      `"external": true` to open in a new tab. Leave blank to hide the nav.
-      Format: [{"label":"<text>","url":"<url>","external":<true|false>}]
+      Pills rendered in the topbar between the brand and the locale picker.
+      Each row becomes one pill. Click "+ language" inside Label / Tooltip
+      cells to add per-locale translations — the SPA renders whichever one
+      matches the active locale (with fallback to English).
+
+      Tooltip fields are optional. Fill the Title (and optionally Eyebrow
+      and Description) to make the pill show a hover popover, matching the
+      M1–M4 training-modules pill style. Description supports inline
+      <strong>/<em>/<br> markup.
+    min_rows: 0
+    max_rows: 8
+    columns:
+      - key: label
+        title: "Label"
+        kind: string
+        required: true
+        multilingual: true
+        placeholder: "Help"
+        help: "Pill text. Click + language for translations."
+      - key: url
+        title: "URL"
+        kind: string
+        required: true
+        placeholder: "/help or https://example.com"
+      - key: external
+        title: "Open in new tab"
+        kind: boolean
+        required: false
+      - key: num
+        title: "Num"
+        kind: string
+        required: false
+        placeholder: "M5"
+        help: "Optional small chip prefix shown before the label."
+      - key: tooltip_eyebrow
+        title: "Tooltip — Eyebrow"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "Module 5"
+        help: "Optional small caps line above the tooltip title."
+      - key: tooltip_title
+        title: "Tooltip — Title"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "When One Agent Isn't Enough"
+        help: "Hover-popover heading. Leave blank to disable the tooltip."
+      - key: tooltip_lede
+        title: "Tooltip — Description"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "Use a planner and a research agent together."
+        help: "Hover-popover body. Inline <strong>/<em>/<br> allowed."
     group: Branding

@@ -987,6 +987,46 @@ console.log('[runtime-bootstrap] loaded');
           skinData.webchat = skinData.webchat || {};
           skinData.webchat.locale = selectedLocale;
         }
+        // Theme-aware Web Chat assets. Skin opts in via
+        // `webchat.styleOptionsThemed: true`; runtime rewrites the
+        // `styleOptions.json` AND `hostconfig.json` URLs to
+        // `<name>-<theme>.json` based on the SPA's persisted theme. Read
+        // order matches the locale picker's theme button:
+        // sessionStorage["greentic-theme"], then <html data-theme>, then
+        // default to dark. For first-load when neither is set, also pin
+        // <html data-theme> to the resolved value so SPA's
+        // applyDarkModeInlineOverrides and our CSS pick up the matching
+        // palette without flicker. Skins that don't set the flag are
+        // unaffected.
+        if (skinData.webchat && skinData.webchat.styleOptionsThemed === true) {
+          var theme = 'dark';
+          try {
+            var saved = sessionStorage.getItem('greentic-theme');
+            if (saved === 'light' || saved === 'dark') {
+              theme = saved;
+            } else {
+              var attr = document.documentElement.getAttribute('data-theme');
+              if (attr === 'light') theme = 'light';
+            }
+          } catch (_) { /* keep default */ }
+          if (!document.documentElement.getAttribute('data-theme')) {
+            document.documentElement.setAttribute('data-theme', theme);
+          }
+          var pat = /\.json$/i;
+          if (skinData.webchat.styleOptions && /styleOptions\.json$/i.test(skinData.webchat.styleOptions)) {
+            skinData.webchat.styleOptions = skinData.webchat.styleOptions.replace(
+              /styleOptions\.json$/i,
+              'styleOptions-' + theme + '.json'
+            );
+          }
+          if (skinData.webchat.adaptiveCardsHostConfig && /hostconfig\.json$/i.test(skinData.webchat.adaptiveCardsHostConfig)) {
+            skinData.webchat.adaptiveCardsHostConfig = skinData.webchat.adaptiveCardsHostConfig.replace(
+              /hostconfig\.json$/i,
+              'hostconfig-' + theme + '.json'
+            );
+          }
+          console.log('[bootstrap] themed Web Chat assets selected:', theme);
+        }
         skinData.statusBar = skinData.statusBar || {};
         skinData.statusBar.show = false;
         window.__SKIN__ = skinData;
@@ -1016,6 +1056,24 @@ console.log('[runtime-bootstrap] loaded');
   // Fetch the flow pack's i18n manifest to determine which locales have
   // actual translations.  Only those locales appear in the picker.
   function fetchAvailableFlowLocales(callback) {
+    // Skin-level override: if skin.json declares
+    // `webchat.localePickerLocales: [...]`, honor it directly and skip the
+    // flow-card manifest probe. Useful when the demo flow ships only
+    // English cards but the operator still wants the GUI's locale picker
+    // to expose the wider set of UI translations under `i18n/<code>.json`.
+    if (window.__SKIN__ &&
+        window.__SKIN__.webchat &&
+        Array.isArray(window.__SKIN__.webchat.localePickerLocales) &&
+        window.__SKIN__.webchat.localePickerLocales.length > 0) {
+      var override = {};
+      window.__SKIN__.webchat.localePickerLocales.forEach(function (code) {
+        if (SUPPORTED_LOCALES[code]) override[code] = SUPPORTED_LOCALES[code];
+      });
+      if (!override['en']) override['en'] = 'English';
+      console.log('[bootstrap] locale picker override:', Object.keys(override).length, 'locales');
+      callback(override);
+      return;
+    }
     // The i18n manifest lists locale codes that have card translations.
     // Served from the webchat-gui pack's i18n directory.
     var manifestUrl = guiBase + 'i18n/_manifest.json';
@@ -1086,51 +1144,77 @@ console.log('[runtime-bootstrap] loaded');
       themeBtn.textContent = isDark ? '☀️' : '🌙';
       // Override WebChat SDK inline styles that use !important (can't beat with CSS alone)
       function applyDarkModeInlineOverrides(dark) {
+        // Per-theme palette. Web Chat 4.x loads styleOptions once at mount,
+        // so realtime theme switches need both dark→light AND light→dark
+        // to PROACTIVELY set the new palette (clearing inline styles isn't
+        // enough — Web Chat's React state still holds the mount-time
+        // styleOptions and re-applies them on every DOM mutation).
+        var palette = dark ? {
+          inputColor: '#e5e7eb',
+          inputBg: '#111827',
+          sendBoxBg: '#111827',
+          sendBoxBorder: '#374151',
+          bubbleBg: '#1f2937',
+          bubbleColor: '#e5e7eb',
+          transcriptBg: '#111827',
+          userBubbleBg: '#0e7490',
+          userBubbleColor: '#ffffff'
+        } : {
+          inputColor: '#1f2937',
+          inputBg: '#ffffff',
+          sendBoxBg: '#ffffff',
+          sendBoxBorder: '#e2e8f0',
+          bubbleBg: '#ffffff',
+          bubbleColor: '#0f172a',
+          transcriptBg: '#f8fafc',
+          userBubbleBg: '#0891b2',
+          userBubbleColor: '#ffffff'
+        };
+
         // Send box input
         var inputs = document.querySelectorAll('.webchat__send-box-text-box__input');
         for (var i = 0; i < inputs.length; i++) {
-          inputs[i].style.setProperty('color', 'black', 'important');
-          if (!dark) delete inputs[i].dataset.darkOverride;
+          inputs[i].style.setProperty('color', palette.inputColor, 'important');
+          inputs[i].style.setProperty('background', palette.inputBg, 'important');
         }
-        // Send box container and all children with inline backgrounds
+        // Send box container + descendants — strip inline whites/darks Web
+        // Chat baked in at mount, then set explicit theme-correct values on
+        // the wrapper.
         var sendBoxes = document.querySelectorAll('.webchat__send-box, .webchat__send-box *');
         for (var j = 0; j < sendBoxes.length; j++) {
           var el = sendBoxes[j];
           if (el.tagName === 'BUTTON' || el.tagName === 'SVG' || el.tagName === 'PATH') continue;
-          var bg = el.style.backgroundColor || el.style.background;
-          if (dark && bg) {
-            el.style.setProperty('background-color', 'transparent', 'important');
-            el.style.setProperty('background', 'transparent', 'important');
-          } else if (!dark && el.dataset.darkOverride) {
-            el.style.removeProperty('background-color');
-            el.style.removeProperty('background');
-          }
-          if (dark) el.dataset.darkOverride = '1';
-          else delete el.dataset.darkOverride;
+          el.style.setProperty('background-color', 'transparent', 'important');
+          el.style.setProperty('background', 'transparent', 'important');
         }
         // Send box wrapper itself
         var sendBoxRoot = document.querySelectorAll('.webchat__send-box');
         for (var k = 0; k < sendBoxRoot.length; k++) {
-          sendBoxRoot[k].style.setProperty('background', dark ? '#111827' : '', 'important');
-          sendBoxRoot[k].style.setProperty('border-top-color', dark ? '#374151' : '', 'important');
+          sendBoxRoot[k].style.setProperty('background', palette.sendBoxBg, 'important');
+          sendBoxRoot[k].style.setProperty('border-top-color', palette.sendBoxBorder, 'important');
         }
-        // Bot bubble backgrounds (Adaptive Card containers with inline white bg)
-        var bubbles = document.querySelectorAll('.webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content');
-        for (var b = 0; b < bubbles.length; b++) {
-          bubbles[b].style.setProperty('background', dark ? '#1f2937' : '', 'important');
-          // Clear white backgrounds on all child divs
-          var children = bubbles[b].querySelectorAll('div[style]');
+        // Bot bubble (Adaptive Card containers)
+        var botBubbles = document.querySelectorAll('.webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content');
+        for (var b = 0; b < botBubbles.length; b++) {
+          botBubbles[b].style.setProperty('background', palette.bubbleBg, 'important');
+          botBubbles[b].style.setProperty('color', palette.bubbleColor, 'important');
+          // Strip every nested div's inline bg so the bubble bg shows
+          // through cleanly in both directions (dark→light and light→dark).
+          var children = botBubbles[b].querySelectorAll('div[style]');
           for (var c = 0; c < children.length; c++) {
-            var cs = children[c].style;
-            if (cs.backgroundColor === 'rgb(255, 255, 255)' || cs.backgroundColor === '#ffffff' || cs.backgroundColor === 'white') {
-              cs.setProperty('background-color', 'transparent', 'important');
-            }
+            children[c].style.setProperty('background-color', 'transparent', 'important');
           }
+        }
+        // User bubble — keep brand-cyan filling, just sync the text color.
+        var userBubbles = document.querySelectorAll('.webchat__bubble--from-user .webchat__bubble__content');
+        for (var u = 0; u < userBubbles.length; u++) {
+          userBubbles[u].style.setProperty('background', palette.userBubbleBg, 'important');
+          userBubbles[u].style.setProperty('color', palette.userBubbleColor, 'important');
         }
         // Transcript background
         var transcripts = document.querySelectorAll('.webchat__basic-transcript');
         for (var t = 0; t < transcripts.length; t++) {
-          transcripts[t].style.setProperty('background-color', dark ? '#111827' : '', 'important');
+          transcripts[t].style.setProperty('background-color', palette.transcriptBg, 'important');
         }
       }
 
@@ -1156,6 +1240,13 @@ console.log('[runtime-bootstrap] loaded');
         html.setAttribute('data-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
         try { sessionStorage.setItem('greentic-theme', next); } catch (_) {}
+        // Realtime theme switch: keep the chat session alive. Inline
+        // overrides cover the surfaces Web Chat sets via styleOptions
+        // (send box, bubbles, transcript bg). Anything else picks up the
+        // new palette through `[data-theme]` CSS variables. If a few
+        // styleOptions-only properties stay stale until next mount,
+        // accept the cosmetic delta — losing the conversation on every
+        // toggle was the worse trade.
         applyDarkModeInlineOverrides(next === 'dark');
       };
       // Restore saved theme
@@ -1205,47 +1296,142 @@ console.log('[runtime-bootstrap] loaded');
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
   // ---------------------------------------------------------------------------
-  // Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links)
+  // Topbar tenant nav. Reads `nav_links: [...]` from the tenant config JSON
+  // and renders one anchor per entry into `#topbar-nav`.
   //
-  // Tenants opt in by adding a `nav_links` array to their tenant config:
-  //   "nav_links": [
-  //     { "label": "Module 5", "url": "https://...", "external": true },
-  //     { "label": "Help",     "url": "/help" }
-  //   ]
-  // Empty/missing array => no nav rendered (the slot stays empty and CSS
-  // hides it via :empty).
+  // Each entry shape (all fields except `label`/`url` optional):
+  //   {
+  //     "label":    string | { en, id, fr, ... },   // multilingual object
+  //     "url":      string,
+  //     "external": bool,                            // open in new tab
+  //     "num":      string | { en, ... },            // small chip prefix (e.g. "M5")
+  //     "tooltip":  {
+  //       "eyebrow": string | { en, ... },
+  //       "title":   string | { en, ... },
+  //       "lede":    string | { en, ... }            // supports inline markup
+  //     }
+  //   }
+  //
+  // Operator-set values come from `tenants/<tenant>.json` written by
+  // `greentic-setup`'s `sync_nav_links_to_tenant_config`. Locale-keyed
+  // labels resolve via selectedLocale → base language → "en" → first
+  // non-empty value.
   // ---------------------------------------------------------------------------
+  function pickNavLabel(raw) {
+    if (typeof raw === 'string') {
+      var t = raw.trim();
+      return t.length > 0 ? t : null;
+    }
+    if (!raw || typeof raw !== 'object') return null;
+    var locale = selectedLocale || 'en';
+    var base = locale.split('-')[0];
+    var candidates = [locale, base, 'en'];
+    for (var i = 0; i < candidates.length; i++) {
+      var v = raw[candidates[i]];
+      if (typeof v === 'string') {
+        var s = v.trim();
+        if (s.length > 0) return s;
+      }
+    }
+    var keys = Object.keys(raw);
+    for (var j = 0; j < keys.length; j++) {
+      var v2 = raw[keys[j]];
+      if (typeof v2 === 'string') {
+        var s2 = v2.trim();
+        if (s2.length > 0) return s2;
+      }
+    }
+    return null;
+  }
 
   function renderTopbarNav(mountEl, links) {
     while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
     if (!Array.isArray(links) || links.length === 0) return;
     links.forEach(function (entry) {
-      if (!entry || typeof entry.url !== 'string' || typeof entry.label !== 'string') return;
-      var label = entry.label.trim();
+      if (!entry || typeof entry.url !== 'string') return;
       var url = entry.url.trim();
-      if (!label || !url) return;
+      if (!url) return;
+      var label = pickNavLabel(entry.label);
+      if (!label) return;
       var anchor = document.createElement('a');
       anchor.className = 'topbar-nav__link';
       anchor.href = url;
-      anchor.textContent = label;
       if (entry.external === true) {
         anchor.target = '_blank';
         anchor.rel = 'noopener noreferrer';
+      }
+      var num = pickNavLabel(entry.num);
+      if (num) {
+        var numEl = document.createElement('span');
+        numEl.className = 'topbar-nav__num';
+        numEl.textContent = num;
+        anchor.appendChild(numEl);
+      }
+      var labelEl = document.createElement('span');
+      labelEl.className = 'topbar-nav__label';
+      labelEl.textContent = label;
+      anchor.appendChild(labelEl);
+      if (entry.tooltip && typeof entry.tooltip === 'object') {
+        var tip = document.createElement('div');
+        tip.className = 'topbar-nav__tooltip';
+        var hasContent = false;
+        var eyebrow = pickNavLabel(entry.tooltip.eyebrow);
+        if (eyebrow) {
+          var ebEl = document.createElement('span');
+          ebEl.className = 'topbar-nav__tooltip-eyebrow';
+          ebEl.textContent = eyebrow;
+          tip.appendChild(ebEl);
+          hasContent = true;
+        }
+        var title = pickNavLabel(entry.tooltip.title);
+        if (title) {
+          var tEl = document.createElement('h3');
+          tEl.className = 'topbar-nav__tooltip-title';
+          tEl.textContent = title;
+          tip.appendChild(tEl);
+          hasContent = true;
+        }
+        var lede = pickNavLabel(entry.tooltip.lede);
+        if (lede) {
+          var lEl = document.createElement('p');
+          lEl.className = 'topbar-nav__tooltip-lede';
+          lEl.innerHTML = lede;
+          tip.appendChild(lEl);
+          hasContent = true;
+        }
+        if (hasContent) {
+          anchor.classList.add('topbar-nav__link--has-tooltip');
+          tip.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+          });
+          anchor.appendChild(tip);
+        }
       }
       mountEl.appendChild(anchor);
     });
   }
 
   function fetchTenantNavLinks() {
+    // Sequential fallback: try the tenant-specific config first; only fall
+    // back to `default.json` when that file is missing OR has no
+    // `nav_links` field. `Promise.race` here was a bug — it returned
+    // whichever endpoint responded first, so a fast (but empty)
+    // `default.json` could mask a slower tenant config that had data.
     var basePath = window.location.pathname.replace(/\/$/, '');
-    var urls = [
-      basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json',
-      basePath + '/config/tenants/default.json'
-    ];
-    return tryFetchFirst(urls)
-      .then(function (r) { return r ? r.json() : null; })
-      .then(function (data) { return data && Array.isArray(data.nav_links) ? data.nav_links : []; })
-      .catch(function () { return []; });
+    var primary = basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json';
+    var fallback = basePath + '/config/tenants/default.json';
+    function load(url) {
+      return fetch(url)
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    }
+    return load(primary).then(function (data) {
+      if (data && Array.isArray(data.nav_links)) return data.nav_links;
+      return load(fallback).then(function (d) {
+        return d && Array.isArray(d.nav_links) ? d.nav_links : [];
+      });
+    });
   }
 
   var navInitialized = false;
