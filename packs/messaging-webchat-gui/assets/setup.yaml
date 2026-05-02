@@ -257,8 +257,9 @@ questions:
         title: "Label"
         kind: string
         required: true
+        multilingual: true
         placeholder: "Help"
-        help: "Text shown on the topbar pill."
+        help: "Text shown on the topbar pill. Click + language to add per-locale translations."
       - key: url
         title: "URL"
         kind: string
