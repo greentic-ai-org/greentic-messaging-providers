@@ -1336,10 +1336,66 @@ console.log('[runtime-bootstrap] loaded');
       var anchor = document.createElement('a');
       anchor.className = 'topbar-nav__link';
       anchor.href = url;
-      anchor.textContent = label;
       if (entry.external === true) {
         anchor.target = '_blank';
         anchor.rel = 'noopener noreferrer';
+      }
+      // Optional `num` field — short prefix (e.g. "M5") rendered as a chip
+      // before the label. Same i18n resolution as label.
+      var num = pickNavLabel(entry.num);
+      if (num) {
+        var numEl = document.createElement('span');
+        numEl.className = 'topbar-nav__num';
+        numEl.textContent = num;
+        anchor.appendChild(numEl);
+      }
+      var labelEl = document.createElement('span');
+      labelEl.className = 'topbar-nav__label';
+      labelEl.textContent = label;
+      anchor.appendChild(labelEl);
+
+      // Optional `tooltip` block — { eyebrow, title, lede } each accepting a
+      // string or a locale-keyed object. `lede` may contain inline markup
+      // (<strong>, <em>, <br>); operator owns the trust since this comes
+      // from tenant config JSON they control.
+      if (entry.tooltip && typeof entry.tooltip === 'object') {
+        var tip = document.createElement('div');
+        tip.className = 'topbar-nav__tooltip';
+        var hasContent = false;
+        var eyebrow = pickNavLabel(entry.tooltip.eyebrow);
+        if (eyebrow) {
+          var ebEl = document.createElement('span');
+          ebEl.className = 'topbar-nav__tooltip-eyebrow';
+          ebEl.textContent = eyebrow;
+          tip.appendChild(ebEl);
+          hasContent = true;
+        }
+        var title = pickNavLabel(entry.tooltip.title);
+        if (title) {
+          var tEl = document.createElement('h3');
+          tEl.className = 'topbar-nav__tooltip-title';
+          tEl.textContent = title;
+          tip.appendChild(tEl);
+          hasContent = true;
+        }
+        var lede = pickNavLabel(entry.tooltip.lede);
+        if (lede) {
+          var lEl = document.createElement('p');
+          lEl.className = 'topbar-nav__tooltip-lede';
+          lEl.innerHTML = lede;
+          tip.appendChild(lEl);
+          hasContent = true;
+        }
+        if (hasContent) {
+          anchor.classList.add('topbar-nav__link--has-tooltip');
+          // Block clicks on tooltip content from triggering the parent <a>
+          // (the tooltip is a descendant for hover-binding simplicity).
+          tip.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+          });
+          anchor.appendChild(tip);
+        }
       }
       mountEl.appendChild(anchor);
     });
