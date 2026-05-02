@@ -1274,6 +1274,155 @@ console.log('[runtime-bootstrap] loaded');
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+<<<<<<< Updated upstream
+=======
+
+  // ---------------------------------------------------------------------------
+  // Topbar tenant nav. Reads `nav_links: [...]` from the tenant config JSON
+  // and renders one anchor per entry into `#topbar-nav`.
+  //
+  // Each entry shape (all fields except `label`/`url` optional):
+  //   {
+  //     "label":    string | { en, id, fr, ... },   // multilingual object
+  //     "url":      string,
+  //     "external": bool,                            // open in new tab
+  //     "num":      string | { en, ... },            // small chip prefix (e.g. "M5")
+  //     "tooltip":  {
+  //       "eyebrow": string | { en, ... },
+  //       "title":   string | { en, ... },
+  //       "lede":    string | { en, ... }            // supports inline markup
+  //     }
+  //   }
+  //
+  // Operator-set values come from `tenants/<tenant>.json` written by
+  // `greentic-setup`'s `sync_nav_links_to_tenant_config`. Locale-keyed
+  // labels resolve via selectedLocale → base language → "en" → first
+  // non-empty value.
+  // ---------------------------------------------------------------------------
+  function pickNavLabel(raw) {
+    if (typeof raw === 'string') {
+      var t = raw.trim();
+      return t.length > 0 ? t : null;
+    }
+    if (!raw || typeof raw !== 'object') return null;
+    var locale = selectedLocale || 'en';
+    var base = locale.split('-')[0];
+    var candidates = [locale, base, 'en'];
+    for (var i = 0; i < candidates.length; i++) {
+      var v = raw[candidates[i]];
+      if (typeof v === 'string') {
+        var s = v.trim();
+        if (s.length > 0) return s;
+      }
+    }
+    var keys = Object.keys(raw);
+    for (var j = 0; j < keys.length; j++) {
+      var v2 = raw[keys[j]];
+      if (typeof v2 === 'string') {
+        var s2 = v2.trim();
+        if (s2.length > 0) return s2;
+      }
+    }
+    return null;
+  }
+
+  function renderTopbarNav(mountEl, links) {
+    while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
+    if (!Array.isArray(links) || links.length === 0) return;
+    links.forEach(function (entry) {
+      if (!entry || typeof entry.url !== 'string') return;
+      var url = entry.url.trim();
+      if (!url) return;
+      var label = pickNavLabel(entry.label);
+      if (!label) return;
+      var anchor = document.createElement('a');
+      anchor.className = 'topbar-nav__link';
+      anchor.href = url;
+      if (entry.external === true) {
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+      }
+      var num = pickNavLabel(entry.num);
+      if (num) {
+        var numEl = document.createElement('span');
+        numEl.className = 'topbar-nav__num';
+        numEl.textContent = num;
+        anchor.appendChild(numEl);
+      }
+      var labelEl = document.createElement('span');
+      labelEl.className = 'topbar-nav__label';
+      labelEl.textContent = label;
+      anchor.appendChild(labelEl);
+      if (entry.tooltip && typeof entry.tooltip === 'object') {
+        var tip = document.createElement('div');
+        tip.className = 'topbar-nav__tooltip';
+        var hasContent = false;
+        var eyebrow = pickNavLabel(entry.tooltip.eyebrow);
+        if (eyebrow) {
+          var ebEl = document.createElement('span');
+          ebEl.className = 'topbar-nav__tooltip-eyebrow';
+          ebEl.textContent = eyebrow;
+          tip.appendChild(ebEl);
+          hasContent = true;
+        }
+        var title = pickNavLabel(entry.tooltip.title);
+        if (title) {
+          var tEl = document.createElement('h3');
+          tEl.className = 'topbar-nav__tooltip-title';
+          tEl.textContent = title;
+          tip.appendChild(tEl);
+          hasContent = true;
+        }
+        var lede = pickNavLabel(entry.tooltip.lede);
+        if (lede) {
+          var lEl = document.createElement('p');
+          lEl.className = 'topbar-nav__tooltip-lede';
+          lEl.innerHTML = lede;
+          tip.appendChild(lEl);
+          hasContent = true;
+        }
+        if (hasContent) {
+          anchor.classList.add('topbar-nav__link--has-tooltip');
+          tip.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+          });
+          anchor.appendChild(tip);
+        }
+      }
+      mountEl.appendChild(anchor);
+    });
+  }
+
+  function fetchTenantNavLinks() {
+    var basePath = window.location.pathname.replace(/\/$/, '');
+    var urls = [
+      basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json',
+      basePath + '/config/tenants/default.json'
+    ];
+    return Promise.race(urls.map(function (u) {
+      return fetch(u).then(function (r) { return r.ok ? r : null; }).catch(function () { return null; });
+    }))
+      .then(function (r) { return r ? r.json() : null; })
+      .then(function (data) { return data && Array.isArray(data.nav_links) ? data.nav_links : []; })
+      .catch(function () { return []; });
+  }
+
+  var navInitialized = false;
+  var navObserver = new MutationObserver(function () {
+    if (navInitialized) return;
+    var navEl = document.getElementById('topbar-nav');
+    if (navEl) {
+      navInitialized = true;
+      navObserver.disconnect();
+      fetchTenantNavLinks().then(function (links) {
+        renderTopbarNav(navEl, links);
+      });
+    }
+  });
+  navObserver.observe(document.documentElement, { childList: true, subtree: true });
+})();
+>>>>>>> Stashed changes
 
   // ---------------------------------------------------------------------------
   // Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links)

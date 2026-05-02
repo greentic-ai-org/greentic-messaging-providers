@@ -242,6 +242,7 @@ questions:
     required: false
     help: |
       Pills rendered in the topbar between the brand and the locale picker.
+<<<<<<< Updated upstream
       Each row becomes one pill. The wizard prompts row-by-row — answer 'y'
       at "Add another row?" to keep adding, anything else to stop.
 
@@ -250,6 +251,16 @@ questions:
       a row's `"label"` with a locale-keyed object such as
       `{"en":"Help","id":"Bantuan","fr":"Aide"}`. Any locale code from the
       webchat-gui i18n bundle works; not limited to a fixed list.
+=======
+      Each row becomes one pill. Click "+ language" inside Label / Tooltip
+      cells to add per-locale translations — the SPA renders whichever one
+      matches the active locale (with fallback to English).
+
+      Tooltip fields are optional. Fill the Title (and optionally Eyebrow
+      and Description) to make the pill show a hover popover, matching the
+      M1–M4 training-modules pill style. Description supports inline
+      <strong>/<em>/<br> markup.
+>>>>>>> Stashed changes
     min_rows: 0
     max_rows: 8
     columns:
@@ -259,15 +270,52 @@ questions:
         required: true
         multilingual: true
         placeholder: "Help"
+<<<<<<< Updated upstream
         help: "Text shown on the topbar pill. Click + language to add per-locale translations."
+=======
+        help: "Pill text. Click + language for translations."
+>>>>>>> Stashed changes
       - key: url
         title: "URL"
         kind: string
         required: true
         placeholder: "/help or https://example.com"
+<<<<<<< Updated upstream
         help: "Where the pill links to."
+=======
+>>>>>>> Stashed changes
       - key: external
         title: "Open in new tab"
         kind: boolean
         required: false
+<<<<<<< Updated upstream
+=======
+      - key: num
+        title: "Num"
+        kind: string
+        required: false
+        placeholder: "M5"
+        help: "Optional small chip prefix shown before the label."
+      - key: tooltip_eyebrow
+        title: "Tooltip — Eyebrow"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "Module 5"
+        help: "Optional small caps line above the tooltip title."
+      - key: tooltip_title
+        title: "Tooltip — Title"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "When One Agent Isn't Enough"
+        help: "Hover-popover heading. Leave blank to disable the tooltip."
+      - key: tooltip_lede
+        title: "Tooltip — Description"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "Use a planner and a research agent together."
+        help: "Hover-popover body. Inline <strong>/<em>/<br> allowed."
+>>>>>>> Stashed changes
     group: Branding
