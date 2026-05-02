@@ -246,18 +246,36 @@ questions:
       Optional JSON array of links rendered in the topbar between the brand
       and the locale picker. Leave blank to hide the nav.
 
-      Each entry: { "label": <text>, "url": <url>, "external": <bool, optional> }
+      Each entry: { "label", "url", "external"?, "num"?, "tooltip"? }
 
-      `label` accepts two forms:
-        1. Plain string for a single language:
+      `label` and `url` are required. `label` accepts two forms:
+        1. Plain string (single-language):
              { "label": "Help", "url": "/help" }
-        2. Locale-keyed object for multi-language demos (matches the runtime
-           card-i18n pattern — the SPA picks selectedLocale → base language
-           → "en" → first non-empty value):
+        2. Locale-keyed object for multi-language demos — the SPA picks
+           selectedLocale → base language → "en" → first non-empty value:
              { "label": { "en": "Help", "id": "Bantuan", "de": "Hilfe" },
                "url": "/help" }
 
       `"external": true` opens the link in a new tab.
+
+      Optional `num`: short prefix rendered as a brand-tinted chip before
+      the label (e.g. "M5" for module 5). String or i18n object, same
+      resolution as label.
+
+      Optional `tooltip`: hover popover with three i18n-aware fields,
+      matching the M1–M4 training-module pill style. Each field accepts a
+      string or a locale-keyed object, and `lede` may contain inline
+      <strong>/<em>/<br>:
+        {
+          "label": { "en": "Deep Research", "id": "Riset Mendalam" },
+          "num": "M5",
+          "url": "https://m5.example.com",
+          "tooltip": {
+            "eyebrow": { "en": "Module 5", "id": "Modul 5" },
+            "title":   { "en": "When One Agent Isn't Enough" },
+            "lede":    { "en": "Use a <strong>planner</strong> and a <strong>research agent</strong> together." }
+          }
+        }
 
       Tip: paste the placeholder above as a starter, then replace labels/urls.
       A richer in-wizard editor (table/row-style input) is tracked as a
