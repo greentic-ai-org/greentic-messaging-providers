@@ -236,48 +236,37 @@ questions:
     help: "Visual skin/theme. Must match a skins/<name>/ folder shipped in the messaging-webchat-gui pack. Use 'default' for the Greentic look or '3aigent' for the 3Point Training brand."
     group: Branding
 
-  - name: nav_links_json
-    title: Top-menu nav links (JSON)
-    kind: string
+  - name: nav_links
+    title: "Top-menu nav links"
+    kind: table
     required: false
-    default: ""
-    placeholder: '[{"label":{"en":"Help","id":"Bantuan"},"url":"/help","external":true}]'
     help: |
-      Optional JSON array of links rendered in the topbar between the brand
-      and the locale picker. Leave blank to hide the nav.
+      Pills rendered in the topbar between the brand and the locale picker.
+      Each row becomes one pill. The wizard prompts row-by-row — answer 'y'
+      at "Add another row?" to keep adding, anything else to stop.
 
-      Each entry: { "label", "url", "external"?, "num"?, "tooltip"? }
-
-      `label` and `url` are required. `label` accepts two forms:
-        1. Plain string (single-language):
-             { "label": "Help", "url": "/help" }
-        2. Locale-keyed object for multi-language demos — the SPA picks
-           selectedLocale → base language → "en" → first non-empty value:
-             { "label": { "en": "Help", "id": "Bantuan", "de": "Hilfe" },
-               "url": "/help" }
-
-      `"external": true` opens the link in a new tab.
-
-      Optional `num`: short prefix rendered as a brand-tinted chip before
-      the label (e.g. "M5" for module 5). String or i18n object, same
-      resolution as label.
-
-      Optional `tooltip`: hover popover with three i18n-aware fields,
-      matching the M1–M4 training-module pill style. Each field accepts a
-      string or a locale-keyed object, and `lede` may contain inline
-      <strong>/<em>/<br>:
-        {
-          "label": { "en": "Deep Research", "id": "Riset Mendalam" },
-          "num": "M5",
-          "url": "https://m5.example.com",
-          "tooltip": {
-            "eyebrow": { "en": "Module 5", "id": "Modul 5" },
-            "title":   { "en": "When One Agent Isn't Enough" },
-            "lede":    { "en": "Use a <strong>planner</strong> and a <strong>research agent</strong> together." }
-          }
-        }
-
-      Tip: paste the placeholder above as a starter, then replace labels/urls.
-      A richer in-wizard editor (table/row-style input) is tracked as a
-      follow-up — current QA spec only supports text/bool/choice/number kinds.
+      Post-setup multi-language: edit
+      `<bundle>/assets/webchat-gui/config/tenants/<tenant>.json` and replace
+      a row's `"label"` with a locale-keyed object such as
+      `{"en":"Help","id":"Bantuan","fr":"Aide"}`. Any locale code from the
+      webchat-gui i18n bundle works; not limited to a fixed list.
+    min_rows: 0
+    max_rows: 8
+    columns:
+      - key: label
+        title: "Label"
+        kind: string
+        required: true
+        placeholder: "Help"
+        help: "Text shown on the topbar pill."
+      - key: url
+        title: "URL"
+        kind: string
+        required: true
+        placeholder: "/help or https://example.com"
+        help: "Where the pill links to."
+      - key: external
+        title: "Open in new tab"
+        kind: boolean
+        required: false
     group: Branding
