@@ -1144,56 +1144,77 @@ console.log('[runtime-bootstrap] loaded');
       themeBtn.textContent = isDark ? '☀️' : '🌙';
       // Override WebChat SDK inline styles that use !important (can't beat with CSS alone)
       function applyDarkModeInlineOverrides(dark) {
-        // Send box input. In dark mode Web Chat's default white text would
-        // be unreadable against the dark send box bg below; in light mode
-        // some Web Chat builds inline a near-invisible color so we force a
-        // visible dark slate. Pick the color based on `dark` rather than
-        // hardcoding black (which used to render invisible against the dark
-        // send box).
+        // Per-theme palette. Web Chat 4.x loads styleOptions once at mount,
+        // so realtime theme switches need both dark→light AND light→dark
+        // to PROACTIVELY set the new palette (clearing inline styles isn't
+        // enough — Web Chat's React state still holds the mount-time
+        // styleOptions and re-applies them on every DOM mutation).
+        var palette = dark ? {
+          inputColor: '#e5e7eb',
+          inputBg: '#111827',
+          sendBoxBg: '#111827',
+          sendBoxBorder: '#374151',
+          bubbleBg: '#1f2937',
+          bubbleColor: '#e5e7eb',
+          transcriptBg: '#111827',
+          userBubbleBg: '#0e7490',
+          userBubbleColor: '#ffffff'
+        } : {
+          inputColor: '#1f2937',
+          inputBg: '#ffffff',
+          sendBoxBg: '#ffffff',
+          sendBoxBorder: '#e2e8f0',
+          bubbleBg: '#ffffff',
+          bubbleColor: '#0f172a',
+          transcriptBg: '#f8fafc',
+          userBubbleBg: '#0891b2',
+          userBubbleColor: '#ffffff'
+        };
+
+        // Send box input
         var inputs = document.querySelectorAll('.webchat__send-box-text-box__input');
         for (var i = 0; i < inputs.length; i++) {
-          inputs[i].style.setProperty('color', dark ? '#e5e7eb' : '#1f2937', 'important');
-          if (!dark) delete inputs[i].dataset.darkOverride;
+          inputs[i].style.setProperty('color', palette.inputColor, 'important');
+          inputs[i].style.setProperty('background', palette.inputBg, 'important');
         }
-        // Send box container and all children with inline backgrounds
+        // Send box container + descendants — strip inline whites/darks Web
+        // Chat baked in at mount, then set explicit theme-correct values on
+        // the wrapper.
         var sendBoxes = document.querySelectorAll('.webchat__send-box, .webchat__send-box *');
         for (var j = 0; j < sendBoxes.length; j++) {
           var el = sendBoxes[j];
           if (el.tagName === 'BUTTON' || el.tagName === 'SVG' || el.tagName === 'PATH') continue;
-          var bg = el.style.backgroundColor || el.style.background;
-          if (dark && bg) {
-            el.style.setProperty('background-color', 'transparent', 'important');
-            el.style.setProperty('background', 'transparent', 'important');
-          } else if (!dark && el.dataset.darkOverride) {
-            el.style.removeProperty('background-color');
-            el.style.removeProperty('background');
-          }
-          if (dark) el.dataset.darkOverride = '1';
-          else delete el.dataset.darkOverride;
+          el.style.setProperty('background-color', 'transparent', 'important');
+          el.style.setProperty('background', 'transparent', 'important');
         }
         // Send box wrapper itself
         var sendBoxRoot = document.querySelectorAll('.webchat__send-box');
         for (var k = 0; k < sendBoxRoot.length; k++) {
-          sendBoxRoot[k].style.setProperty('background', dark ? '#111827' : '', 'important');
-          sendBoxRoot[k].style.setProperty('border-top-color', dark ? '#374151' : '', 'important');
+          sendBoxRoot[k].style.setProperty('background', palette.sendBoxBg, 'important');
+          sendBoxRoot[k].style.setProperty('border-top-color', palette.sendBoxBorder, 'important');
         }
-        // Bot bubble backgrounds (Adaptive Card containers with inline white bg)
-        var bubbles = document.querySelectorAll('.webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content');
-        for (var b = 0; b < bubbles.length; b++) {
-          bubbles[b].style.setProperty('background', dark ? '#1f2937' : '', 'important');
-          // Clear white backgrounds on all child divs
-          var children = bubbles[b].querySelectorAll('div[style]');
+        // Bot bubble (Adaptive Card containers)
+        var botBubbles = document.querySelectorAll('.webchat__bubble:not(.webchat__bubble--from-user) .webchat__bubble__content');
+        for (var b = 0; b < botBubbles.length; b++) {
+          botBubbles[b].style.setProperty('background', palette.bubbleBg, 'important');
+          botBubbles[b].style.setProperty('color', palette.bubbleColor, 'important');
+          // Strip every nested div's inline bg so the bubble bg shows
+          // through cleanly in both directions (dark→light and light→dark).
+          var children = botBubbles[b].querySelectorAll('div[style]');
           for (var c = 0; c < children.length; c++) {
-            var cs = children[c].style;
-            if (cs.backgroundColor === 'rgb(255, 255, 255)' || cs.backgroundColor === '#ffffff' || cs.backgroundColor === 'white') {
-              cs.setProperty('background-color', 'transparent', 'important');
-            }
+            children[c].style.setProperty('background-color', 'transparent', 'important');
           }
+        }
+        // User bubble — keep brand-cyan filling, just sync the text color.
+        var userBubbles = document.querySelectorAll('.webchat__bubble--from-user .webchat__bubble__content');
+        for (var u = 0; u < userBubbles.length; u++) {
+          userBubbles[u].style.setProperty('background', palette.userBubbleBg, 'important');
+          userBubbles[u].style.setProperty('color', palette.userBubbleColor, 'important');
         }
         // Transcript background
         var transcripts = document.querySelectorAll('.webchat__basic-transcript');
         for (var t = 0; t < transcripts.length; t++) {
-          transcripts[t].style.setProperty('background-color', dark ? '#111827' : '', 'important');
+          transcripts[t].style.setProperty('background-color', palette.transcriptBg, 'important');
         }
       }
 
@@ -1219,15 +1240,14 @@ console.log('[runtime-bootstrap] loaded');
         html.setAttribute('data-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
         try { sessionStorage.setItem('greentic-theme', next); } catch (_) {}
+        // Realtime theme switch: keep the chat session alive. Inline
+        // overrides cover the surfaces Web Chat sets via styleOptions
+        // (send box, bubbles, transcript bg). Anything else picks up the
+        // new palette through `[data-theme]` CSS variables. If a few
+        // styleOptions-only properties stay stale until next mount,
+        // accept the cosmetic delta — losing the conversation on every
+        // toggle was the worse trade.
         applyDarkModeInlineOverrides(next === 'dark');
-        // Skins with `webchat.styleOptionsThemed: true` ship per-theme
-        // styleOptions JSON; Web Chat reads styleOptions only at mount, so
-        // a reload is required to pick up the matching palette. Skins that
-        // don't opt in skip the reload — the inline overrides above are
-        // enough for them.
-        if (window.__SKIN__ && window.__SKIN__.webchat && window.__SKIN__.webchat.styleOptionsThemed === true) {
-          location.reload();
-        }
       };
       // Restore saved theme
       try {
@@ -1393,170 +1413,25 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function fetchTenantNavLinks() {
+    // Sequential fallback: try the tenant-specific config first; only fall
+    // back to `default.json` when that file is missing OR has no
+    // `nav_links` field. `Promise.race` here was a bug — it returned
+    // whichever endpoint responded first, so a fast (but empty)
+    // `default.json` could mask a slower tenant config that had data.
     var basePath = window.location.pathname.replace(/\/$/, '');
-    var urls = [
-      basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json',
-      basePath + '/config/tenants/default.json'
-    ];
-    return Promise.race(urls.map(function (u) {
-      return fetch(u).then(function (r) { return r.ok ? r : null; }).catch(function () { return null; });
-    }))
-      .then(function (r) { return r ? r.json() : null; })
-      .then(function (data) { return data && Array.isArray(data.nav_links) ? data.nav_links : []; })
-      .catch(function () { return []; });
-  }
-
-  var navInitialized = false;
-  var navObserver = new MutationObserver(function () {
-    if (navInitialized) return;
-    var navEl = document.getElementById('topbar-nav');
-    if (navEl) {
-      navInitialized = true;
-      navObserver.disconnect();
-      fetchTenantNavLinks().then(function (links) {
-        renderTopbarNav(navEl, links);
+    var primary = basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json';
+    var fallback = basePath + '/config/tenants/default.json';
+    function load(url) {
+      return fetch(url)
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    }
+    return load(primary).then(function (data) {
+      if (data && Array.isArray(data.nav_links)) return data.nav_links;
+      return load(fallback).then(function (d) {
+        return d && Array.isArray(d.nav_links) ? d.nav_links : [];
       });
-    }
-  });
-  navObserver.observe(document.documentElement, { childList: true, subtree: true });
-})();
-
-  // ---------------------------------------------------------------------------
-  // Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links)
-  //
-  // Tenants opt in by adding a `nav_links` array to their tenant config:
-  //   "nav_links": [
-  //     { "label": "Module 5", "url": "https://...", "external": true },
-  //     { "label": "Help",     "url": "/help" }
-  //   ]
-  //
-  // For i18n parity with flow-card translation, `label` may also be a
-  // locale-keyed object so the operator can ship one entry per language:
-  //   "nav_links": [
-  //     { "label": { "en": "Help", "id": "Bantuan", "de": "Hilfe" }, "url": "/help" }
-  //   ]
-  // Resolution order: exact `selectedLocale` (e.g. "id-ID") → base language
-  // ("id") → `en` → first non-empty value → URL fallback. String labels keep
-  // their existing single-language behaviour.
-  //
-  // Empty/missing array => no nav rendered (the slot stays empty and CSS
-  // hides it via :empty).
-  // ---------------------------------------------------------------------------
-
-  function pickNavLabel(rawLabel) {
-    if (typeof rawLabel === 'string') {
-      var trimmed = rawLabel.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    }
-    if (!rawLabel || typeof rawLabel !== 'object') return null;
-    var locale = selectedLocale || 'en';
-    var base = locale.split('-')[0];
-    var candidates = [locale, base, 'en'];
-    for (var i = 0; i < candidates.length; i++) {
-      var v = rawLabel[candidates[i]];
-      if (typeof v === 'string') {
-        var t = v.trim();
-        if (t.length > 0) return t;
-      }
-    }
-    var keys = Object.keys(rawLabel);
-    for (var j = 0; j < keys.length; j++) {
-      var v2 = rawLabel[keys[j]];
-      if (typeof v2 === 'string') {
-        var t2 = v2.trim();
-        if (t2.length > 0) return t2;
-      }
-    }
-    return null;
-  }
-
-  function renderTopbarNav(mountEl, links) {
-    while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
-    if (!Array.isArray(links) || links.length === 0) return;
-    links.forEach(function (entry) {
-      if (!entry || typeof entry.url !== 'string') return;
-      var url = entry.url.trim();
-      if (!url) return;
-      var label = pickNavLabel(entry.label);
-      if (!label) return;
-      var anchor = document.createElement('a');
-      anchor.className = 'topbar-nav__link';
-      anchor.href = url;
-      if (entry.external === true) {
-        anchor.target = '_blank';
-        anchor.rel = 'noopener noreferrer';
-      }
-      // Optional `num` field — short prefix (e.g. "M5") rendered as a chip
-      // before the label. Same i18n resolution as label.
-      var num = pickNavLabel(entry.num);
-      if (num) {
-        var numEl = document.createElement('span');
-        numEl.className = 'topbar-nav__num';
-        numEl.textContent = num;
-        anchor.appendChild(numEl);
-      }
-      var labelEl = document.createElement('span');
-      labelEl.className = 'topbar-nav__label';
-      labelEl.textContent = label;
-      anchor.appendChild(labelEl);
-
-      // Optional `tooltip` block — { eyebrow, title, lede } each accepting a
-      // string or a locale-keyed object. `lede` may contain inline markup
-      // (<strong>, <em>, <br>); operator owns the trust since this comes
-      // from tenant config JSON they control.
-      if (entry.tooltip && typeof entry.tooltip === 'object') {
-        var tip = document.createElement('div');
-        tip.className = 'topbar-nav__tooltip';
-        var hasContent = false;
-        var eyebrow = pickNavLabel(entry.tooltip.eyebrow);
-        if (eyebrow) {
-          var ebEl = document.createElement('span');
-          ebEl.className = 'topbar-nav__tooltip-eyebrow';
-          ebEl.textContent = eyebrow;
-          tip.appendChild(ebEl);
-          hasContent = true;
-        }
-        var title = pickNavLabel(entry.tooltip.title);
-        if (title) {
-          var tEl = document.createElement('h3');
-          tEl.className = 'topbar-nav__tooltip-title';
-          tEl.textContent = title;
-          tip.appendChild(tEl);
-          hasContent = true;
-        }
-        var lede = pickNavLabel(entry.tooltip.lede);
-        if (lede) {
-          var lEl = document.createElement('p');
-          lEl.className = 'topbar-nav__tooltip-lede';
-          lEl.innerHTML = lede;
-          tip.appendChild(lEl);
-          hasContent = true;
-        }
-        if (hasContent) {
-          anchor.classList.add('topbar-nav__link--has-tooltip');
-          // Block clicks on tooltip content from triggering the parent <a>
-          // (the tooltip is a descendant for hover-binding simplicity).
-          tip.addEventListener('click', function (ev) {
-            ev.preventDefault();
-            ev.stopPropagation();
-          });
-          anchor.appendChild(tip);
-        }
-      }
-      mountEl.appendChild(anchor);
     });
-  }
-
-  function fetchTenantNavLinks() {
-    var basePath = window.location.pathname.replace(/\/$/, '');
-    var urls = [
-      basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json',
-      basePath + '/config/tenants/default.json'
-    ];
-    return tryFetchFirst(urls)
-      .then(function (r) { return r ? r.json() : null; })
-      .then(function (data) { return data && Array.isArray(data.nav_links) ? data.nav_links : []; })
-      .catch(function () { return []; });
   }
 
   var navInitialized = false;
