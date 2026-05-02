@@ -28,6 +28,8 @@
   "sendBoxTextColor": "#e5e7eb",
   "sendBoxBorderTop": "1px solid #2a2a2a",
 
+  "hideUploadButton": true,
+
   "suggestedActionBorderColor": "#2a2a2a",
   "suggestedActionBackgroundColor": "#1a1a1a",
   "suggestedActionTextColor": "#e5e7eb"

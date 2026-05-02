@@ -329,15 +329,47 @@ body {
 }
 /* Borderless bubbles + cards — Web Chat sometimes inlines border styles
    that beat styleOptions, and the AC renderer adds its own .ac-container
-   border in some skins. Force-remove across both themes. */
+   border in some skins. Cast a wide net on the whole bubble subtree so
+   nested .ac-* containers and Web Chat's row wrappers are all flat. */
 .webchat__bubble,
-.webchat__bubble__content,
-.webchat__bubble--from-user,
-.webchat__bubble--from-user .webchat__bubble__content,
+.webchat__bubble *,
+.webchat__row,
+.webchat__row *,
+.webchat__bubble__attachment,
+.webchat__bubble__attachment *,
 .ac-adaptiveCard,
-.ac-container {
+.ac-container,
+.ac-adaptiveCard *,
+.ac-container * {
   border: none !important;
+  outline: none !important;
   box-shadow: none !important;
+}
+/* Re-enable the input-field borders we explicitly want — these get
+   stripped by the universal rule above. */
+.ac-textInput,
+.ac-input,
+textarea.ac-input,
+input.ac-input {
+  border: 1px solid var(--border-subtle) !important;
+}
+.ac-textInput:focus,
+.ac-input:focus,
+textarea.ac-input:focus,
+input.ac-input:focus {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px var(--brand-glow) !important;
+}
+.ac-pushButton {
+  border: 1px solid var(--brand-border) !important;
+}
+
+/* Hide Web Chat's file-upload (attachment) button in the send box. */
+.webchat__send-box-text-box__upload-button,
+.webchat__send-box__attachment-button,
+button[title*="Upload" i],
+button[aria-label*="Upload" i] {
+  display: none !important;
 }
 
 /* Send-box placeholder visibility per theme (SPA inline-overrides cover
