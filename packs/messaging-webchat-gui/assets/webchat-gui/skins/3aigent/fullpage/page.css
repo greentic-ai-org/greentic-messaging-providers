@@ -327,40 +327,37 @@ body {
 [data-theme="light"] .webchat__bubble--from-user .webchat__bubble__content {
   color: var(--text-primary);
 }
-/* Borderless bubbles + cards — Web Chat sometimes inlines border styles
-   that beat styleOptions, and the AC renderer adds its own .ac-container
-   border in some skins. Cast a wide net on the whole bubble subtree so
-   nested .ac-* containers and Web Chat's row wrappers are all flat. */
-.webchat__bubble,
-.webchat__bubble *,
-.webchat__row,
-.webchat__row *,
-.webchat__bubble__attachment,
-.webchat__bubble__attachment *,
-.ac-adaptiveCard,
-.ac-container,
-.ac-adaptiveCard *,
-.ac-container * {
+/* Borderless bubbles + cards — brute force everything inside the chat
+   surface. Web Chat 4.x ships borders/shadows on a moving target of
+   wrapper classes (`.webchat__bubble`, `.webchat__row`, `.webchat__activity`,
+   `.webchat__attachment`, plus AC `.ac-adaptiveCard` / `.ac-container`).
+   Strip them all, then re-enable on the few elements we genuinely want
+   bordered (inputs + action buttons). */
+.chat-panel__surface,
+.chat-panel__surface * {
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
 }
-/* Re-enable the input-field borders we explicitly want — these get
-   stripped by the universal rule above. */
-.ac-textInput,
-.ac-input,
-textarea.ac-input,
-input.ac-input {
+.chat-panel__surface ::before,
+.chat-panel__surface ::after {
+  border: none !important;
+  box-shadow: none !important;
+}
+.chat-panel__surface .ac-textInput,
+.chat-panel__surface .ac-input,
+.chat-panel__surface textarea.ac-input,
+.chat-panel__surface input.ac-input {
   border: 1px solid var(--border-subtle) !important;
 }
-.ac-textInput:focus,
-.ac-input:focus,
-textarea.ac-input:focus,
-input.ac-input:focus {
+.chat-panel__surface .ac-textInput:focus,
+.chat-panel__surface .ac-input:focus,
+.chat-panel__surface textarea.ac-input:focus,
+.chat-panel__surface input.ac-input:focus {
   border-color: var(--brand) !important;
   box-shadow: 0 0 0 3px var(--brand-glow) !important;
 }
-.ac-pushButton {
+.chat-panel__surface .ac-pushButton {
   border: 1px solid var(--brand-border) !important;
 }
 
