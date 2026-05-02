@@ -1274,8 +1274,6 @@ console.log('[runtime-bootstrap] loaded');
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
-<<<<<<< Updated upstream
-=======
 
   // ---------------------------------------------------------------------------
   // Topbar tenant nav. Reads `nav_links: [...]` from the tenant config JSON
@@ -1422,7 +1420,6 @@ console.log('[runtime-bootstrap] loaded');
   });
   navObserver.observe(document.documentElement, { childList: true, subtree: true });
 })();
->>>>>>> Stashed changes
 
   // ---------------------------------------------------------------------------
   // Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links)
