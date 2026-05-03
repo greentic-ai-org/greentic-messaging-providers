@@ -73,7 +73,7 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
         let env = value_as_trimmed_string(payload.get("env"));
         let tenant = value_as_trimmed_string(payload.get("tenant"));
         let team = value_as_trimmed_string(payload.get("team"));
-        let _ = append_bot_activity_to_conversation(
+        if let Err(err) = append_bot_activity_to_conversation(
             &session_id,
             &text,
             adaptive_card_json.as_deref(),
@@ -82,7 +82,21 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
             env.as_deref(),
             tenant.as_deref(),
             team.as_deref(),
-        );
+        ) {
+            // Surface failures: the activity append is best-effort but a
+            // silent miss leaves /activities polling empty. Operator log
+            // tail is the only signal we have when this happens in cloud.
+            eprintln!(
+                "[webchat send_payload] activity append failed conv={} env={:?} tenant={:?} team={:?} text_len={} ac={} err={}",
+                session_id,
+                env,
+                tenant,
+                team,
+                text.len(),
+                adaptive_card_json.is_some(),
+                err,
+            );
+        }
     }
 
     let public_base_url = public_base_url_from_value(payload);
@@ -177,32 +191,58 @@ fn find_existing_conversation_state<S: crate::directline::store::StateStore>(
     ctx: &DirectLineContext,
     conversation_id: &str,
 ) -> Result<Option<(String, Vec<u8>)>, String> {
+    let mut tried_keys: Vec<String> = Vec::new();
     for candidate_ctx in candidate_conversation_contexts(ctx) {
         let key = conversation_key(&candidate_ctx, conversation_id);
         if let Some(bytes) = store.read(&key)? {
             return Ok(Some((key, bytes)));
         }
+        tried_keys.push(key);
     }
+    // No candidate matched — log the keys we tried so operators can
+    // diff against what handle_conversations actually wrote.
+    eprintln!(
+        "[webchat send_payload] conversation lookup miss conv={} ctx_env={} ctx_tenant={} ctx_team={:?} tried_keys=[{}]",
+        conversation_id,
+        ctx.env,
+        ctx.tenant,
+        ctx.team,
+        tried_keys.join(","),
+    );
     Ok(None)
 }
 
 fn candidate_conversation_contexts(ctx: &DirectLineContext) -> Vec<DirectLineContext> {
-    let mut contexts = Vec::new();
+    let mut contexts: Vec<DirectLineContext> = Vec::new();
     contexts.push(ctx.clone());
 
-    let team_trimmed = ctx.team.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    if team_trimmed.is_some() {
-        contexts.push(DirectLineContext {
-            env: ctx.env.clone(),
-            tenant: ctx.tenant.clone(),
-            team: None,
-        });
-    } else {
-        contexts.push(DirectLineContext {
-            env: ctx.env.clone(),
-            tenant: ctx.tenant.clone(),
-            team: Some("default".to_string()),
-        });
+    // team=None — covers JWT contexts that didn't carry a team (token URL had
+    // no `team` query param) but the egress path injected one via metadata.
+    contexts.push(DirectLineContext {
+        env: ctx.env.clone(),
+        tenant: ctx.tenant.clone(),
+        team: None,
+    });
+
+    // team="default" — covers the inverse case where the conversation was
+    // created with the operator-default team but the egress path lost it.
+    contexts.push(DirectLineContext {
+        env: ctx.env.clone(),
+        tenant: ctx.tenant.clone(),
+        team: Some("default".to_string()),
+    });
+
+    // If the supplied team string has surrounding whitespace, also try the
+    // trimmed form. Defends against operator-side metadata stuffing.
+    if let Some(team) = ctx.team.as_deref() {
+        let trimmed = team.trim();
+        if !trimmed.is_empty() && trimmed != team {
+            contexts.push(DirectLineContext {
+                env: ctx.env.clone(),
+                tenant: ctx.tenant.clone(),
+                team: Some(trimmed.to_string()),
+            });
+        }
     }
 
     contexts.dedup();
