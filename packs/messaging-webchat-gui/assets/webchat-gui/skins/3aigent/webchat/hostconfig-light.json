@@ -1,0 +1,95 @@
+{
+  "fontFamily": "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif",
+  "fontSizes": {
+    "small": 12,
+    "default": 14,
+    "medium": 16,
+    "large": 20,
+    "extraLarge": 24
+  },
+  "fontWeights": {
+    "lighter": 300,
+    "default": 400,
+    "bolder": 600
+  },
+  "spacing": {
+    "none": 0,
+    "small": 6,
+    "default": 12,
+    "medium": 16,
+    "large": 20,
+    "extraLarge": 28,
+    "padding": 16
+  },
+  "separator": {
+    "lineThickness": 1,
+    "lineColor": "#e2e8f0"
+  },
+  "containerStyles": {
+    "default": {
+      "backgroundColor": "#ffffff",
+      "foregroundColors": {
+        "default": { "default": "#0f172a", "subtle": "#475569" },
+        "accent":  { "default": "#0891b2", "subtle": "#06b6d4" },
+        "attention": { "default": "#dc2626", "subtle": "#ef4444" },
+        "good":    { "default": "#16a34a", "subtle": "#22c55e" },
+        "warning": { "default": "#d97706", "subtle": "#f59e0b" }
+      }
+    },
+    "emphasis": {
+      "backgroundColor": "#f1f5f9",
+      "foregroundColors": {
+        "default": { "default": "#0f172a", "subtle": "#475569" },
+        "accent":  { "default": "#0891b2", "subtle": "#06b6d4" }
+      }
+    },
+    "good": {
+      "backgroundColor": "#ecfdf5",
+      "foregroundColors": {
+        "default": { "default": "#15803d", "subtle": "#16a34a" },
+        "accent":  { "default": "#0891b2", "subtle": "#06b6d4" }
+      }
+    },
+    "attention": {
+      "backgroundColor": "#fef2f2",
+      "foregroundColors": {
+        "default": { "default": "#b91c1c", "subtle": "#dc2626" },
+        "accent":  { "default": "#0891b2", "subtle": "#06b6d4" }
+      }
+    }
+  },
+  "actions": {
+    "actionsOrientation": "horizontal",
+    "actionAlignment": "stretch",
+    "buttonSpacing": 8,
+    "maxActions": 10,
+    "showCard": { "actionMode": "inline" }
+  },
+  "adaptiveCard": {
+    "allowCustomStyle": true,
+    "padding": 16
+  },
+  "textBlock": {
+    "headingLevel": 2
+  },
+  "imageSet": {
+    "imageSize": "medium"
+  },
+  "factSet": {
+    "title": {
+      "color": "default",
+      "size": "default",
+      "isSubtle": false,
+      "weight": "bolder",
+      "wrap": true
+    },
+    "value": {
+      "color": "default",
+      "size": "default",
+      "isSubtle": true,
+      "weight": "default",
+      "wrap": true
+    },
+    "spacing": 8
+  }
+}

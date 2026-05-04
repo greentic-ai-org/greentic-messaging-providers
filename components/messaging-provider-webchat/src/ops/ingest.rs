@@ -184,6 +184,24 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
         envelope
             .metadata
             .insert("autoStart".to_string(), "true".to_string());
+        // Carry the picker locale through to the runner so the auto-start
+        // welcome card is rendered in the user's language. Without this the
+        // first card always renders in `en` because POST /conversations has
+        // no activity body to read `locale` from. The SPA forwards the
+        // selected locale via X-Greentic-Locale on the conversation-create
+        // request; subsequent /activities POSTs already carry locale in the
+        // BotFramework activity body.
+        if let Some(locale) = request
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Locale"))
+            .map(|h| h.value.trim())
+            .filter(|v| !v.is_empty())
+        {
+            envelope
+                .metadata
+                .insert("locale".to_string(), locale.to_string());
+        }
         out.events.push(envelope);
     }
 
