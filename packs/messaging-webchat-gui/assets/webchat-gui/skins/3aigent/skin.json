@@ -4,14 +4,18 @@
   "brand": {
     "name": "3AIgent",
     "favicon": "/skins/3aigent/assets/favicon.ico",
-    "logo": "/skins/3aigent/assets/logo-dark.png",
+    "logo": "/skins/3aigent/assets/3point-jewel-round.png",
     "primary": "#06b6d4"
   },
   "directLine": {},
   "webchat": {
     "styleOptions": "/skins/3aigent/webchat/styleOptions.json",
+    "styleOptionsThemed": true,
     "adaptiveCardsHostConfig": "/skins/3aigent/webchat/hostconfig.json",
-    "locale": "en-US"
+    "locale": "en-US",
+    "localePickerLocales": [
+      "en", "id", "es", "fr", "de", "it", "pt", "nl", "ja", "zh", "ko", "ar", "hi", "ru", "tr"
+    ]
   },
   "statusBar": {
     "show": true,
