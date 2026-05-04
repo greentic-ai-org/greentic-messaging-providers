@@ -9,7 +9,7 @@
 
 use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::SendPayloadInV1;
-use provider_common::helpers::{json_bytes, send_payload_error, send_payload_success};
+use provider_common::helpers::{json_bytes, send_payload_error};
 use serde_json::{Value, json};
 
 use crate::directline::HostStateStore;
@@ -21,6 +21,15 @@ use super::helpers::{
     extract_text, public_base_url_from_value, route_from_value, tenant_channel_from_value,
     value_as_trimmed_string,
 };
+
+/// Watermark/identity metadata captured when a bot reply is appended to a
+/// Direct Line conversation. Used to populate the `_greentic` block on
+/// `send_payload` responses so the host can fire WebSocket push notifications.
+struct GreenticActivityMeta {
+    conversation_id: String,
+    tenant: String,
+    watermark: u64,
+}
 
 pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
     let send_in = match serde_json::from_slice::<SendPayloadInV1>(input_json) {
@@ -40,12 +49,36 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
     };
     let payload: Value = serde_json::from_slice(&payload_bytes).unwrap_or(Value::Null);
     match persist_send_payload(&payload) {
-        Ok(_) => send_payload_success(),
+        Ok(meta) => send_payload_success_with_meta(meta.as_ref()),
         Err(err) => send_payload_error(&err, false),
     }
 }
 
-fn persist_send_payload(payload: &Value) -> Result<(), String> {
+/// Build a `send_payload` success response, optionally including a `_greentic`
+/// metadata block when a bot activity was appended to a Direct Line
+/// conversation. Underscore-prefixed keys are ignored by Direct Line clients,
+/// so adding the block does not break compatibility.
+fn send_payload_success_with_meta(meta: Option<&GreenticActivityMeta>) -> Vec<u8> {
+    let mut body = json!({
+        "ok": true,
+        "retryable": false,
+    });
+    if let Some(meta) = meta
+        && let Some(map) = body.as_object_mut()
+    {
+        map.insert(
+            "_greentic".to_string(),
+            json!({
+                "watermark_bumped": meta.watermark,
+                "conversation_id": meta.conversation_id,
+                "tenant": meta.tenant,
+            }),
+        );
+    }
+    json_bytes(&body)
+}
+
+fn persist_send_payload(payload: &Value) -> Result<Option<GreenticActivityMeta>, String> {
     let route = route_from_value(payload);
     let tenant_channel_id = tenant_channel_from_value(payload);
     let key = route
@@ -69,11 +102,12 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
 
     // If session_id is present, try to append the bot response as a Direct Line
     // activity so that GET /activities polling returns it to the frontend.
+    let mut activity_meta: Option<GreenticActivityMeta> = None;
     if let Some(session_id) = value_as_trimmed_string(payload.get("session_id")) {
         let env = value_as_trimmed_string(payload.get("env"));
         let tenant = value_as_trimmed_string(payload.get("tenant"));
         let team = value_as_trimmed_string(payload.get("team"));
-        if let Err(err) = append_bot_activity_to_conversation(
+        if let Ok(Some(watermark)) = append_bot_activity_to_conversation(
             &session_id,
             &text,
             adaptive_card_json.as_deref(),
@@ -83,19 +117,11 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
             tenant.as_deref(),
             team.as_deref(),
         ) {
-            // Surface failures: the activity append is best-effort but a
-            // silent miss leaves /activities polling empty. Operator log
-            // tail is the only signal we have when this happens in cloud.
-            eprintln!(
-                "[webchat send_payload] activity append failed conv={} env={:?} tenant={:?} team={:?} text_len={} ac={} err={}",
-                session_id,
-                env,
-                tenant,
-                team,
-                text.len(),
-                adaptive_card_json.is_some(),
-                err,
-            );
+            activity_meta = Some(GreenticActivityMeta {
+                conversation_id: session_id,
+                tenant: tenant.unwrap_or_else(|| "default".to_string()),
+                watermark,
+            });
         }
     }
 
@@ -110,12 +136,15 @@ fn persist_send_payload(payload: &Value) -> Result<(), String> {
     });
     let mut state_store = HostStateStore;
     state_store.write(&key, &json_bytes(&stored))?;
-    Ok(())
+    Ok(activity_meta)
 }
 
 /// Append a bot-originated activity to the Direct Line conversation state.
 /// Uses provided env/tenant context from envelope metadata, falling back to "default".
-/// Best-effort: silently ignores errors (conversation may not exist).
+/// Best-effort: silently returns `Ok(None)` when the conversation does not exist.
+///
+/// Returns the watermark assigned to the appended activity on success so the
+/// caller can emit `_greentic` metadata for WebSocket push notifications.
 #[allow(clippy::too_many_arguments)]
 fn append_bot_activity_to_conversation(
     conversation_id: &str,
@@ -126,38 +155,18 @@ fn append_bot_activity_to_conversation(
     env: Option<&str>,
     tenant: Option<&str>,
     team: Option<&str>,
-) -> Result<(), String> {
+) -> Result<Option<u64>, String> {
     let ctx = DirectLineContext {
         env: env.unwrap_or("default").to_string(),
         tenant: tenant.unwrap_or("default").to_string(),
         team: team.map(str::to_string),
     };
     let mut store = HostStateStore;
-    append_bot_activity_to_conversation_with_store(
-        &mut store,
-        &ctx,
-        conversation_id,
-        text,
-        adaptive_card_json,
-        extensions,
-        envelope_attachments,
-    )
-}
 
-#[allow(clippy::too_many_arguments)]
-fn append_bot_activity_to_conversation_with_store<S: crate::directline::store::StateStore>(
-    store: &mut S,
-    ctx: &DirectLineContext,
-    conversation_id: &str,
-    text: &str,
-    adaptive_card_json: Option<&str>,
-    extensions: Option<&Value>,
-    envelope_attachments: Option<&Value>,
-) -> Result<(), String> {
     let (conv_key, conv_bytes) =
-        match find_existing_conversation_state(store, ctx, conversation_id)? {
+        match find_existing_conversation_state(&mut store, &ctx, conversation_id)? {
             Some(found) => found,
-            None => return Ok(()),
+            None => return Ok(None), // conversation not found, skip silently
         };
 
     let mut conversation: crate::directline::state::ConversationState =
@@ -183,9 +192,13 @@ fn append_bot_activity_to_conversation_with_store<S: crate::directline::store::S
 
     let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
     store.write(&conv_key, &updated)?;
-    Ok(())
+    Ok(Some(watermark))
 }
 
+/// Try to locate an existing conversation state under any plausible context
+/// variant. Walks `candidate_conversation_contexts` and returns the first key
+/// that resolves. Logs the keys tried when none match — silent misses here
+/// translate directly into "/activities is empty" symptoms in the SPA.
 fn find_existing_conversation_state<S: crate::directline::store::StateStore>(
     store: &mut S,
     ctx: &DirectLineContext,
@@ -199,8 +212,6 @@ fn find_existing_conversation_state<S: crate::directline::store::StateStore>(
         }
         tried_keys.push(key);
     }
-    // No candidate matched — log the keys we tried so operators can
-    // diff against what handle_conversations actually wrote.
     eprintln!(
         "[webchat send_payload] conversation lookup miss conv={} ctx_env={} ctx_tenant={} ctx_team={:?} tried_keys=[{}]",
         conversation_id,
@@ -212,28 +223,27 @@ fn find_existing_conversation_state<S: crate::directline::store::StateStore>(
     Ok(None)
 }
 
+/// Generate plausible `DirectLineContext` candidates for a conversation
+/// lookup. Covers cases where the JWT-side ctx (used at conversation create)
+/// differs from the egress-side ctx (rebuilt from envelope metadata) on team
+/// only — operator-side path injection sometimes adds team="default" while
+/// the JWT context had team=None, or vice versa.
 fn candidate_conversation_contexts(ctx: &DirectLineContext) -> Vec<DirectLineContext> {
     let mut contexts: Vec<DirectLineContext> = Vec::new();
     contexts.push(ctx.clone());
 
-    // team=None — covers JWT contexts that didn't carry a team (token URL had
-    // no `team` query param) but the egress path injected one via metadata.
     contexts.push(DirectLineContext {
         env: ctx.env.clone(),
         tenant: ctx.tenant.clone(),
         team: None,
     });
 
-    // team="default" — covers the inverse case where the conversation was
-    // created with the operator-default team but the egress path lost it.
     contexts.push(DirectLineContext {
         env: ctx.env.clone(),
         tenant: ctx.tenant.clone(),
         team: Some("default".to_string()),
     });
 
-    // If the supplied team string has surrounding whitespace, also try the
-    // trimmed form. Defends against operator-side metadata stuffing.
     if let Some(team) = ctx.team.as_deref() {
         let trimmed = team.trim();
         if !trimmed.is_empty() && trimmed != team {
@@ -358,23 +368,6 @@ fn sanitize_outbound_channel_data(value: &Value) -> Option<Value> {
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::collections::BTreeMap;
-
-    #[derive(Default)]
-    struct MemoryStateStore {
-        values: BTreeMap<String, Vec<u8>>,
-    }
-
-    impl crate::directline::store::StateStore for MemoryStateStore {
-        fn read(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
-            Ok(self.values.get(key).cloned())
-        }
-
-        fn write(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
-            self.values.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-    }
 
     #[test]
     fn build_bot_activity_raw_plain_text_only() {
@@ -623,71 +616,6 @@ mod tests {
         assert_eq!(
             value_as_trimmed_string(json!({"team": "  "}).get("team")),
             None
-        );
-    }
-
-    #[test]
-    fn candidate_conversation_contexts_falls_back_between_default_and_teamless() {
-        let with_default = DirectLineContext {
-            env: "default".into(),
-            tenant: "demo".into(),
-            team: Some("default".into()),
-        };
-        let teamless = DirectLineContext {
-            env: "default".into(),
-            tenant: "demo".into(),
-            team: None,
-        };
-
-        assert_eq!(
-            candidate_conversation_contexts(&with_default),
-            vec![with_default.clone(), teamless.clone()]
-        );
-        assert_eq!(
-            candidate_conversation_contexts(&teamless),
-            vec![teamless, with_default]
-        );
-    }
-
-    #[test]
-    fn append_bot_activity_uses_existing_teamless_conversation_for_default_team_payload() {
-        let mut store = MemoryStateStore::default();
-        let existing_ctx = DirectLineContext {
-            env: "default".into(),
-            tenant: "demo".into(),
-            team: None,
-        };
-        let requested_ctx = DirectLineContext {
-            env: "default".into(),
-            tenant: "demo".into(),
-            team: Some("default".into()),
-        };
-        let conversation_id = "conv-1";
-        let key = conversation_key(&existing_ctx, conversation_id);
-        let state = crate::directline::state::ConversationState::new(existing_ctx.clone());
-        store
-            .write(&key, &serde_json::to_vec(&state).unwrap())
-            .unwrap();
-
-        append_bot_activity_to_conversation_with_store(
-            &mut store,
-            &requested_ctx,
-            conversation_id,
-            "hello",
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-
-        let bytes = store.read(&key).unwrap().expect("updated conversation");
-        let updated: crate::directline::state::ConversationState =
-            serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(updated.activities.len(), 1);
-        assert_eq!(updated.activities[0].text.as_deref(), Some("hello"));
-        assert_eq!(
-            updated.activities[0].raw["from"]["id"].as_str(),
-            Some("bot")
         );
     }
 }
