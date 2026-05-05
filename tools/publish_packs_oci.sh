@@ -58,7 +58,7 @@ git_sha="$(cd "${ROOT_DIR}" && git rev-parse --short HEAD 2>/dev/null || echo "u
 # Default OCI location for the shared templates component used by many packs.
 TEMPLATES_REGISTRY="${TEMPLATES_REGISTRY:-${OCI_REGISTRY:-ghcr.io}}"
 TEMPLATES_NAMESPACE="${TEMPLATES_NAMESPACE:-${GHCR_NAMESPACE:-${OCI_ORG:-greenticai}}}"
-DEFAULT_TEMPLATES_IMAGE="${TEMPLATES_IMAGE:-${TEMPLATES_REGISTRY}/${TEMPLATES_NAMESPACE}/components/templates:latest}"
+DEFAULT_TEMPLATES_IMAGE="${TEMPLATES_IMAGE:-${TEMPLATES_REGISTRY}/${TEMPLATES_NAMESPACE}/components/templates:stable}"
 DEFAULT_TEMPLATES_DIGEST="${TEMPLATES_DIGEST:-}"
 DEFAULT_TEMPLATES_ARTIFACT="component_templates.wasm"
 DEFAULT_TEMPLATES_MANIFEST="component.publish.manifest.json"
@@ -758,7 +758,7 @@ if [ -f "${bundle_pack}" ]; then
 fi
 
 if compgen -G "${ROOT_DIR}/${OUT_DIR}/messaging-*.gtpack" >/dev/null; then
-  validator_ref="${VALIDATOR_PACK_REF:-oci://ghcr.io/greenticai/validators/messaging:latest}"
+  validator_ref="${VALIDATOR_PACK_REF:-oci://ghcr.io/greenticai/validators/messaging:stable}"
   validator_root="${ROOT_DIR}/.greentic/validators"
   validator_wasm="${VALIDATOR_WASM:-${validator_root}/greentic.validators.messaging.wasm}"
   mkdir -p "${validator_root}"
