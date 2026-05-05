@@ -130,6 +130,43 @@ console.log('[runtime-bootstrap] loaded');
   window.__SELECTED_LOCALE__ = selectedLocale;
 
   // ---------------------------------------------------------------------------
+  // Guest identity: stable per-browser UUID used as the rate-limit subject on
+  // the Direct Line /token endpoint. Without it, every anonymous visitor
+  // shares the server-side `anonymous` bucket, so any reasonable amount of
+  // concurrent traffic instantly trips the 429 cap.
+  // ---------------------------------------------------------------------------
+  var GUEST_ID_KEY = 'greentic_guest_id';
+  function generateGuestId() {
+    try {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+      }
+    } catch (_) {}
+    // Fallback for older browsers: RFC 4122 v4 shape using Math.random.
+    return 'gxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      var v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+  function resolveGuestId() {
+    try {
+      var existing = localStorage.getItem(GUEST_ID_KEY);
+      if (existing && existing.length > 0) return existing;
+      var fresh = generateGuestId();
+      localStorage.setItem(GUEST_ID_KEY, fresh);
+      return fresh;
+    } catch (_) {
+      // localStorage blocked (private mode / disabled) — generate per-load
+      // ID so we still split server buckets, even if not stable across reloads.
+      return generateGuestId();
+    }
+  }
+  var guestId = resolveGuestId();
+  window.__GUEST_ID__ = guestId;
+  console.log('[runtime-bootstrap] guest id:', guestId);
+
+  // ---------------------------------------------------------------------------
   // UI i18n: load translations for chrome strings (Logout, WebChat title, etc.)
   // ---------------------------------------------------------------------------
 
@@ -833,11 +870,109 @@ console.log('[runtime-bootstrap] loaded');
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Token cache + guest ID injection (from develop) — keeps POST /token off
+  // the rate-limit gate when the page reloads, and stamps a stable guest_id
+  // on the body so anonymous flows can correlate sessions across reloads.
+  // ---------------------------------------------------------------------------
+  // Token cache: holds {token, expires_in, expires_at} keyed in localStorage.
+  // We refresh BEFORE the server-side TTL elapses so a request never lands on
+  // an expired token. The 60s buffer matches the rate-limit window — if the
+  // server ever reduces TTL below the buffer, we just always refetch (which
+  // is the same behaviour as having no cache).
+  var TOKEN_CACHE_KEY = 'greentic_dl_token';
+  var TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
+
+  function readCachedToken() {
+    try {
+      var raw = localStorage.getItem(TOKEN_CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.token || !parsed.expires_at) return null;
+      if (parsed.expires_at - Date.now() <= TOKEN_REFRESH_BUFFER_MS) return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeCachedToken(payload) {
+    try {
+      var ttlMs = (Number(payload.expires_in) || 0) * 1000;
+      if (ttlMs <= TOKEN_REFRESH_BUFFER_MS) return;
+      var record = {
+        token: payload.token,
+        expires_in: payload.expires_in,
+        conversationId: payload.conversationId || null,
+        expires_at: Date.now() + ttlMs,
+      };
+      localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(record));
+    } catch (_) {}
+  }
+
+  function injectGuestIdIntoBody(init) {
+    var nextInit = Object.assign({}, init || {});
+    var nextHeaders = nextInit.headers ? Object.assign({}, nextInit.headers) : {};
+    var hasContentType = Object.keys(nextHeaders).some(function (k) {
+      return k.toLowerCase() === 'content-type';
+    });
+    if (!hasContentType) {
+      nextHeaders['Content-Type'] = 'application/json';
+    }
+    var existing = {};
+    if (nextInit.body) {
+      try { existing = JSON.parse(nextInit.body); } catch (_) { existing = {}; }
+    }
+    existing.user = existing.user || {};
+    if (!existing.user.id) existing.user.id = guestId;
+    nextInit.headers = nextHeaders;
+    nextInit.body = JSON.stringify(existing);
+    nextInit.method = nextInit.method || 'POST';
+    return nextInit;
+  }
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     var requestUrl = typeof input === 'string' ? input : input.url;
     var url = new URL(requestUrl, window.location.href);
     console.log('[bootstrap] fetch:', url.pathname);
+
+    // Intercept the Direct Line /token endpoint so we (a) attach the
+    // guest_id body the server uses for per-user rate-limit bucketing, and
+    // (b) reuse a still-valid token across reloads instead of minting a
+    // fresh one every page load.
+    if (/(?:^|\/)(?:token|v3\/directline\/tokens\/generate)$/i.test(url.pathname)) {
+      var cached = readCachedToken();
+      if (cached) {
+        console.log('[bootstrap] reusing cached token (expires in',
+          Math.round((cached.expires_at - Date.now()) / 1000), 's)');
+        return Promise.resolve(new Response(JSON.stringify({
+          token: cached.token,
+          expires_in: cached.expires_in,
+          conversationId: cached.conversationId,
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }));
+      }
+      var nextInit = injectGuestIdIntoBody(init);
+      return originalFetch(input, nextInit).then(function (response) {
+        if (response.status === 429) {
+          var retryAfter = response.headers.get('Retry-After');
+          console.warn('[bootstrap] /token rate-limited; Retry-After=', retryAfter);
+          return response;
+        }
+        if (!response.ok) return response;
+        var cloned = response.clone();
+        cloned.json().then(function (data) {
+          if (data && data.token && data.expires_in) {
+            writeCachedToken(data);
+            console.log('[bootstrap] cached new token, ttl=', data.expires_in, 's');
+          }
+        }).catch(function () {});
+        return response;
+      });
+    }
 
     // Intercept Direct Line /conversations POST to persist conversation across page reloads.
     if (/\/v3\/directline\/conversations\/?$/i.test(url.pathname) && init && init.method === 'POST') {

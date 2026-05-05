@@ -172,6 +172,18 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             .iter()
             .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-ConversationId"))
             .map(|h| h.value.clone());
+        let locale = request
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Locale"))
+            .map(|h| h.value.trim().to_string())
+            .filter(|v| !v.is_empty());
+        // Surface the autoStart envelope shape so a missing welcome card on
+        // the client can be diffed against the operator's flow execution.
+        eprintln!(
+            "[webchat ingest_http] autoStart envelope built env={} tenant={} conv={:?} user={:?} locale={:?}",
+            env_id, tenant_id, conv_id, user_id, locale,
+        );
         let mut envelope = build_webchat_envelope_with_ctx(
             String::new(),
             user_id,
@@ -191,16 +203,8 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
         // selected locale via X-Greentic-Locale on the conversation-create
         // request; subsequent /activities POSTs already carry locale in the
         // BotFramework activity body.
-        if let Some(locale) = request
-            .headers
-            .iter()
-            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Locale"))
-            .map(|h| h.value.trim())
-            .filter(|v| !v.is_empty())
-        {
-            envelope
-                .metadata
-                .insert("locale".to_string(), locale.to_string());
+        if let Some(locale) = locale {
+            envelope.metadata.insert("locale".to_string(), locale);
         }
         out.events.push(envelope);
     }

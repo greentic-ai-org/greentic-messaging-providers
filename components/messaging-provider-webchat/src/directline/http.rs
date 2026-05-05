@@ -1,8 +1,9 @@
 use base64::{Engine as _, engine::general_purpose};
 use chrono::Utc;
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use urlencoding::decode;
+use urlencoding::{decode, encode};
 use uuid::Uuid;
 
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
@@ -14,8 +15,8 @@ use super::store::{RateLimitState, SecretStore, StateStore};
 const DIRECTLINE_PREFIX: &str = "/v3/directline";
 const JSON_CONTENT_TYPE: &str = "application/json";
 const TOKEN_SECRET_KEY: &str = "jwt_signing_key";
-const RATE_LIMIT_WINDOW_SECONDS: i64 = 60;
-const RATE_LIMIT_REQUESTS: u32 = 5;
+const RATE_LIMIT_WINDOW_SECONDS_DEFAULT: i64 = 60;
+const RATE_LIMIT_REQUESTS_DEFAULT: u32 = 60;
 const MAX_ATTACHMENT_BYTES: usize = 512 * 1024;
 const ALLOWED_ATTACHMENT_TYPES: &[&str] = &[
     "text/plain",
@@ -57,6 +58,10 @@ where
             handle_tokens(request, state_store, secrets)
         }
         ["v3", "directline", "tokens", "generate"] => method_not_allowed(),
+        ["v3", "directline", "tokens", "refresh"] if method_is(request, "POST") => {
+            handle_refresh_token(request, state_store, secrets)
+        }
+        ["v3", "directline", "tokens", "refresh"] => method_not_allowed(),
         ["v3", "directline", "conversations"] if method_is(request, "POST") => {
             handle_conversations(request, state_store, secrets)
         }
@@ -87,14 +92,15 @@ where
     SE: SecretStore,
 {
     let ctx = parse_context(request.query.as_deref());
-    let user_id = match decode_json_body(request).and_then(|payload| extract_user_id(&payload)) {
-        Ok(Some(id)) => id,
-        Ok(None) => "anonymous".to_string(),
+    let body = match decode_json_body(request) {
+        Ok(payload) => payload,
         Err(resp) => return resp,
     };
+    let subject = determine_rate_limit_subject(request, &body);
     let now = Utc::now().timestamp();
-    let rate_key = rate_limit_key(&ctx, &user_id);
-    if let Err(resp) = enforce_rate_limit(state_store, &rate_key, now) {
+    let cfg = RateLimitConfig::from_request(request);
+    let rate_key = rate_limit_key(&ctx, &subject);
+    if let Err(resp) = enforce_rate_limit(state_store, &rate_key, now, &cfg) {
         return resp;
     }
 
@@ -103,7 +109,7 @@ where
         Err(resp) => return resp,
     };
 
-    match issue_token(&signing_key, ctx.clone(), &user_id, None) {
+    match issue_token(&signing_key, ctx.clone(), subject.token_subject(), None) {
         Ok((token, _exp)) => respond_json(
             200,
             json!({
@@ -185,15 +191,72 @@ where
         value: conversation_id.clone(),
     });
 
+    let stream_url = build_stream_url(&ctx.tenant, &conversation_id, &token);
     respond_json_with_headers(
         201,
         json!({
             "conversationId": conversation_id,
             "token": token,
             "expires_in": TTL_SECONDS,
-            "streamUrl": Value::Null,
+            "streamUrl": stream_url,
         }),
         headers,
+    )
+}
+
+fn handle_refresh_token<S, SE>(request: &HttpInV1, state_store: &mut S, secrets: &SE) -> HttpOutV1
+where
+    S: StateStore,
+    SE: SecretStore,
+{
+    let authorization = match extract_bearer(request.headers.as_slice()) {
+        Some(header) => header,
+        None => return respond_unauthorized("missing Authorization header"),
+    };
+    let signing_key = match load_signing_key(request, secrets) {
+        Ok(key) => key,
+        Err(resp) => return resp,
+    };
+    let claims = match verify_token(&signing_key, &authorization) {
+        Ok(claims) => claims,
+        Err(err) => return respond_unauthorized(&format!("invalid token: {err:?}")),
+    };
+
+    if let Some(conversation_id) = claims.conv.as_deref() {
+        let conv_key = conversation_key(&claims.ctx, conversation_id);
+        let conversation = match load_conversation_state(state_store, &conv_key) {
+            Ok(state) => state,
+            Err(resp) => return resp,
+        };
+
+        if conversation.ctx != claims.ctx {
+            return respond_forbidden("token context mismatch");
+        }
+    }
+
+    let (token, _exp) = match issue_token(
+        &signing_key,
+        claims.ctx.clone(),
+        &claims.sub,
+        claims.conv.clone(),
+    ) {
+        Ok(pair) => pair,
+        Err(err) => {
+            return respond_error(
+                500,
+                "token_issue_failed",
+                format!("failed to mint refresh token: {err:?}"),
+            );
+        }
+    };
+
+    respond_json(
+        200,
+        json!({
+            "conversationId": claims.conv,
+            "token": token,
+            "expires_in": TTL_SECONDS,
+        }),
     )
 }
 
@@ -242,7 +305,9 @@ where
         Err(resp) => return resp,
     };
 
-    // Issue a new token bound to this conversation
+    // Issue a new token bound to this conversation. Clone ctx because we still
+    // need its tenant after the move into `issue_token` to build the streamUrl.
+    let tenant_for_stream = ctx.tenant.clone();
     let (token, _exp) = match issue_token(
         &signing_key,
         ctx,
@@ -259,13 +324,14 @@ where
         }
     };
 
+    let stream_url = build_stream_url(&tenant_for_stream, conversation_id, &token);
     respond_json(
         200,
         json!({
             "conversationId": conversation_id,
             "token": token,
             "expires_in": TTL_SECONDS,
-            "streamUrl": Value::Null,
+            "streamUrl": stream_url,
         }),
     )
 }
@@ -355,7 +421,18 @@ where
         value: claims.ctx.tenant.clone(),
     });
 
-    respond_json_with_headers(201, json!({"id": activity.id}), headers)
+    // Emit `_greentic` metadata so the host can fire WebSocket push notifications
+    // for live activity streams. Underscore-prefixed keys are ignored by DirectLine
+    // clients, making this safe to add to the response body.
+    let body_value = json!({
+        "id": activity.id,
+        "_greentic": {
+            "watermark_bumped": watermark,
+            "conversation_id": conversation_id,
+            "tenant": claims.ctx.tenant,
+        },
+    });
+    respond_json_with_headers(201, body_value, headers)
 }
 
 fn handle_get_activities<S, SE>(
@@ -419,22 +496,21 @@ where
     )
 }
 
-fn enforce_rate_limit<S: StateStore>(store: &mut S, key: &str, now: i64) -> Result<(), HttpOutV1> {
+fn enforce_rate_limit<S: StateStore>(
+    store: &mut S,
+    key: &str,
+    now: i64,
+    cfg: &RateLimitConfig,
+) -> Result<(), HttpOutV1> {
     let mut state = match read_rate_limit_state(store, key) {
         Ok(Some(state)) => state,
         Ok(None) => RateLimitState::new(now),
         Err(resp) => return Err(resp),
     };
 
-    if state
-        .bump(now, RATE_LIMIT_WINDOW_SECONDS, RATE_LIMIT_REQUESTS)
-        .is_err()
-    {
-        return Err(respond_error(
-            429,
-            "rate_limited",
-            "token rate limit exceeded",
-        ));
+    if state.bump(now, cfg.window_seconds, cfg.requests).is_err() {
+        let retry_after = (cfg.window_seconds - (now - state.window_start)).max(1);
+        return Err(respond_rate_limited(retry_after));
     }
 
     let bytes = match serde_json::to_vec(&state) {
@@ -560,19 +636,149 @@ fn parse_watermark(query: Option<&str>) -> Result<Option<u64>, HttpOutV1> {
     }
 }
 
-fn rate_limit_key(ctx: &DirectLineContext, user_id: &str) -> String {
+fn rate_limit_key(ctx: &DirectLineContext, subject: &RateLimitSubject) -> String {
     format!(
         "webchat:rate:tokens:{}:{}:{}:{}",
         ctx.env,
         ctx.tenant,
         sanitize_team(ctx.team.as_deref()),
-        user_id
+        subject.bucket_key()
     )
+}
+
+/// Per-route rate limit configuration. Operators can override defaults via
+/// the provider config envelope: `rate_limit_requests` (per-window cap) and
+/// `rate_limit_window_seconds` (window length). Both fall back to sensible
+/// defaults that target ~60 token mints / minute / subject — enough for
+/// normal page reload + retry burst, while still bounding abuse.
+#[derive(Clone, Copy, Debug)]
+struct RateLimitConfig {
+    window_seconds: i64,
+    requests: u32,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            window_seconds: RATE_LIMIT_WINDOW_SECONDS_DEFAULT,
+            requests: RATE_LIMIT_REQUESTS_DEFAULT,
+        }
+    }
+}
+
+impl RateLimitConfig {
+    fn from_request(request: &HttpInV1) -> Self {
+        let mut cfg = Self::default();
+        let Some(config) = request.config.as_ref() else {
+            return cfg;
+        };
+        if let Some(req) = config.get("rate_limit_requests").and_then(Value::as_u64)
+            && req > 0
+            && req <= u32::MAX as u64
+        {
+            cfg.requests = req as u32;
+        }
+        if let Some(win) = config
+            .get("rate_limit_window_seconds")
+            .and_then(Value::as_i64)
+            && win > 0
+        {
+            cfg.window_seconds = win;
+        }
+        cfg
+    }
+}
+
+/// Bucket subject for rate limiting.
+///
+/// Authenticated users get their own per-user bucket. Anonymous requests
+/// are bucketed by hashed client IP (read from forwarding headers) so that
+/// 1000 unauthenticated visitors don't all share the single `anonymous`
+/// bucket. If neither id nor IP is available, a true anonymous bucket is
+/// used as last resort — operators behind misconfigured reverse proxies
+/// will see the legacy shared-bucket behaviour and should fix proxy
+/// `X-Forwarded-For` propagation.
+#[derive(Clone, Debug, PartialEq)]
+enum RateLimitSubject {
+    User(String),
+    Ip(String),
+    Anonymous,
+}
+
+impl RateLimitSubject {
+    fn bucket_key(&self) -> String {
+        match self {
+            Self::User(id) => format!("u:{id}"),
+            Self::Ip(hash) => format!("ip:{hash}"),
+            Self::Anonymous => "anonymous".to_string(),
+        }
+    }
+
+    fn token_subject(&self) -> &str {
+        match self {
+            Self::User(id) => id.as_str(),
+            Self::Ip(hash) => hash.as_str(),
+            Self::Anonymous => "anonymous",
+        }
+    }
+}
+
+fn determine_rate_limit_subject(request: &HttpInV1, body: &Value) -> RateLimitSubject {
+    if let Some(id) = body
+        .get("user")
+        .and_then(|v| v.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return RateLimitSubject::User(id.to_string());
+    }
+    if let Some(ip) = extract_client_ip(&request.headers) {
+        return RateLimitSubject::Ip(hash_client_id(&ip));
+    }
+    RateLimitSubject::Anonymous
+}
+
+/// Extract the originating client IP from common forwarding headers.
+///
+/// Priority: `True-Client-IP` (Cloudflare/Akamai) > `X-Real-IP` (nginx) >
+/// first hop of `X-Forwarded-For` (RFC 7239 / generic). Returns the raw
+/// string; callers should hash before persisting or logging.
+fn extract_client_ip(headers: &[Header]) -> Option<String> {
+    for header_name in ["true-client-ip", "x-real-ip", "x-forwarded-for"] {
+        for header in headers {
+            if !header.name.eq_ignore_ascii_case(header_name) {
+                continue;
+            }
+            let first_hop = header.value.split(',').next().unwrap_or("").trim();
+            if !first_hop.is_empty() {
+                return Some(first_hop.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Hash a client identifier (typically an IP) to a short stable token used
+/// for rate-limit bucketing. We never persist the raw IP — only the hash.
+fn hash_client_id(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    let hash = hasher.finalize();
+    let mut out = String::with_capacity(16);
+    for byte in &hash[..8] {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
 /// Load the JWT signing key from either injected config or secrets store.
 /// Injected config takes priority (for provider_core_only mode where host pre-fetches secrets).
-fn load_signing_key<SE: SecretStore>(request: &HttpInV1, secrets: &SE) -> Result<Vec<u8>, HttpOutV1> {
+fn load_signing_key<SE: SecretStore>(
+    request: &HttpInV1,
+    secrets: &SE,
+) -> Result<Vec<u8>, HttpOutV1> {
     // First, check for host-injected secret in config (for provider_core_only mode)
     if let Some(config) = &request.config {
         let config_key = format!("{TOKEN_SECRET_KEY}_b64");
@@ -667,15 +873,6 @@ fn decode_json_body(request: &HttpInV1) -> Result<Value, HttpOutV1> {
         .map_err(|err| respond_bad_request(&format!("invalid json payload: {err}")))
 }
 
-fn extract_user_id(body: &Value) -> Result<Option<String>, HttpOutV1> {
-    if let Some(value) = body.get("user")
-        && let Some(id) = value.get("id").and_then(|v| v.as_str())
-    {
-        return Ok(Some(id.to_string()));
-    }
-    Ok(None)
-}
-
 fn extract_bearer(headers: &[Header]) -> Option<String> {
     headers
         .iter()
@@ -741,6 +938,23 @@ fn respond_error(status: u16, error: &str, message: impl Into<String>) -> HttpOu
     )
 }
 
+fn respond_rate_limited(retry_after_seconds: i64) -> HttpOutV1 {
+    let mut headers = json_headers();
+    headers.push(Header {
+        name: "Retry-After".to_string(),
+        value: retry_after_seconds.to_string(),
+    });
+    respond_json_with_headers(
+        429,
+        json!({
+            "error": "rate_limited",
+            "message": "token rate limit exceeded",
+            "retry_after": retry_after_seconds,
+        }),
+        headers,
+    )
+}
+
 fn respond_bad_request(message: &str) -> HttpOutV1 {
     respond_error(400, "bad_request", message)
 }
@@ -776,6 +990,37 @@ fn respond_cors_preflight() -> HttpOutV1 {
         body_b64: String::new(),
         events: Vec::new(),
     }
+}
+
+/// Build the WebSocket `streamUrl` advertised to BotFramework-WebChat clients.
+///
+/// The URL must match the host's WS upgrade route, which is registered under
+/// the tenant-scoped prefix `/v1/messaging/webchat/{tenant}/v3/directline/...`.
+/// Token rides in the `t` query param because browser WebSocket APIs cannot
+/// set custom headers.
+///
+/// `watermark=-1` instructs the server to replay all activities since the
+/// conversation began (the host parses negative or missing values as 0).
+fn build_stream_url(tenant: &str, conversation_id: &str, token: &str) -> String {
+    format!(
+        "{base}/v1/messaging/webchat/{tenant}/v3/directline/conversations/{conv_id}/stream?watermark=-1&t={token}",
+        base = public_base_url_or_relative(),
+        tenant = encode(tenant),
+        conv_id = conversation_id,
+        token = encode(token),
+    )
+}
+
+/// Resolve the public base URL for the streamUrl.
+///
+/// WASM components cannot read host environment variables directly; supplying
+/// an absolute URL would require a host import that does not yet exist. For
+/// the MVP we return an empty string so the resulting `streamUrl` is a
+/// site-relative path. Browsers (and the BotFramework WebChat SDK) resolve
+/// such paths against the page origin and automatically upgrade `http(s)://`
+/// to `ws(s)://` when opening the WebSocket.
+fn public_base_url_or_relative() -> String {
+    String::new()
 }
 
 #[cfg(test)]
@@ -977,6 +1222,28 @@ mod tests {
         assert!(empty_body["activities"].as_array().unwrap().is_empty());
         assert_eq!(empty_body["watermark"], Value::String("1".to_string()));
 
+        let refresh_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/refresh",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {conv_token}"),
+                }],
+            ),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(refresh_response.status, 200);
+        let refresh_body = decode_body(&refresh_response);
+        assert_eq!(
+            refresh_body["conversationId"],
+            Value::String(conversation_id.to_string())
+        );
+        assert!(refresh_body["token"].as_str().is_some());
+
         let wrong_conv_response = handle_directline_request(
             &build_request(
                 "POST",
@@ -992,5 +1259,221 @@ mod tests {
             &secrets,
         );
         assert_eq!(wrong_conv_response.status, 403);
+    }
+
+    fn token_request_with_ip(client_ip: &str) -> HttpInV1 {
+        build_request(
+            "POST",
+            "/v3/directline/tokens/generate",
+            Some("env=default&tenant=default"),
+            None,
+            vec![Header {
+                name: "X-Forwarded-For".into(),
+                value: client_ip.to_string(),
+            }],
+        )
+    }
+
+    fn header_value<'a>(response: &'a HttpOutV1, name: &str) -> Option<&'a str> {
+        response
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case(name))
+            .map(|h| h.value.as_str())
+    }
+
+    #[test]
+    fn anonymous_visitors_with_distinct_ips_get_independent_buckets() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        // Send the default per-window cap from one IP — every call should
+        // succeed because the bucket only fills for that IP.
+        for _ in 0..RATE_LIMIT_REQUESTS_DEFAULT {
+            let resp = handle_directline_request(
+                &token_request_with_ip("203.0.113.10"),
+                &mut state,
+                &secrets,
+            );
+            assert_eq!(resp.status, 200, "first IP should not be rate-limited");
+        }
+
+        // A different IP arriving immediately afterwards must still get a
+        // fresh bucket — pre-fix this would have been blocked because
+        // both anonymous visitors collapsed onto the same `anonymous`
+        // bucket key.
+        let other_ip_resp = handle_directline_request(
+            &token_request_with_ip("198.51.100.20"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(
+            other_ip_resp.status, 200,
+            "distinct anonymous IP must not share rate-limit bucket"
+        );
+    }
+
+    #[test]
+    fn xff_chain_uses_first_hop_for_bucket() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        for _ in 0..RATE_LIMIT_REQUESTS_DEFAULT {
+            assert_eq!(
+                handle_directline_request(
+                    &token_request_with_ip("203.0.113.10, 10.0.0.1"),
+                    &mut state,
+                    &secrets,
+                )
+                .status,
+                200
+            );
+        }
+
+        // Same first hop, different proxy chain — must be the *same*
+        // bucket because identity is decided by the leftmost hop only.
+        let blocked = handle_directline_request(
+            &token_request_with_ip("203.0.113.10, 10.0.0.99"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(blocked.status, 429);
+    }
+
+    #[test]
+    fn rate_limit_response_includes_retry_after_header() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        for _ in 0..RATE_LIMIT_REQUESTS_DEFAULT {
+            assert_eq!(
+                handle_directline_request(
+                    &token_request_with_ip("203.0.113.55"),
+                    &mut state,
+                    &secrets,
+                )
+                .status,
+                200
+            );
+        }
+
+        let blocked =
+            handle_directline_request(&token_request_with_ip("203.0.113.55"), &mut state, &secrets);
+        assert_eq!(blocked.status, 429);
+        let retry_after = header_value(&blocked, "Retry-After")
+            .expect("Retry-After header must be present on 429");
+        let secs: i64 = retry_after
+            .parse()
+            .expect("Retry-After must be integer seconds");
+        assert!(
+            (1..=RATE_LIMIT_WINDOW_SECONDS_DEFAULT).contains(&secs),
+            "Retry-After should be within current window, got {secs}"
+        );
+
+        let body = decode_body(&blocked);
+        assert_eq!(body["error"], "rate_limited");
+        assert!(body.get("retry_after").is_some());
+    }
+
+    #[test]
+    fn rate_limit_config_override_raises_cap() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        // Config raises the per-window cap to 200; first 200 requests pass.
+        let make = || HttpInV1 {
+            method: "POST".into(),
+            path: "/v3/directline/tokens/generate".into(),
+            query: Some("env=default&tenant=default".into()),
+            headers: vec![Header {
+                name: "X-Forwarded-For".into(),
+                value: "203.0.113.99".into(),
+            }],
+            body_b64: String::new(),
+            route_hint: None,
+            binding_id: None,
+            config: Some(json!({ "rate_limit_requests": 200 })),
+        };
+
+        for _ in 0..200 {
+            assert_eq!(
+                handle_directline_request(&make(), &mut state, &secrets).status,
+                200
+            );
+        }
+        let blocked = handle_directline_request(&make(), &mut state, &secrets);
+        assert_eq!(blocked.status, 429);
+    }
+
+    #[test]
+    fn determine_subject_prefers_user_id_over_ip() {
+        let request = build_request(
+            "POST",
+            "/v3/directline/tokens/generate",
+            None,
+            Some(&json!({ "user": { "id": "guest-abc" } })),
+            vec![Header {
+                name: "X-Forwarded-For".into(),
+                value: "203.0.113.10".into(),
+            }],
+        );
+        let body = decode_json_body(&request).unwrap();
+        let subject = determine_rate_limit_subject(&request, &body);
+        assert_eq!(subject, RateLimitSubject::User("guest-abc".to_string()));
+    }
+
+    #[test]
+    fn determine_subject_falls_back_to_anonymous_without_ip() {
+        let request = build_request("POST", "/v3/directline/tokens/generate", None, None, vec![]);
+        let body = decode_json_body(&request).unwrap();
+        let subject = determine_rate_limit_subject(&request, &body);
+        assert_eq!(subject, RateLimitSubject::Anonymous);
+    }
+
+    #[test]
+    fn extract_client_ip_priority_order() {
+        let headers = vec![
+            Header {
+                name: "X-Forwarded-For".into(),
+                value: "1.1.1.1".into(),
+            },
+            Header {
+                name: "X-Real-IP".into(),
+                value: "2.2.2.2".into(),
+            },
+            Header {
+                name: "True-Client-IP".into(),
+                value: "3.3.3.3".into(),
+            },
+        ];
+        // True-Client-IP wins (highest priority — Cloudflare/Akamai trust
+        // boundary).
+        assert_eq!(extract_client_ip(&headers).as_deref(), Some("3.3.3.3"));
+    }
+
+    #[test]
+    fn empty_user_id_falls_through_to_ip_bucket() {
+        // Pre-fix bug: a body with `"user":{"id":""}` would be accepted as
+        // the literal user id "" → `webchat:rate:tokens:..::` shared
+        // bucket. Now we trim and treat empty as missing.
+        let request = build_request(
+            "POST",
+            "/v3/directline/tokens/generate",
+            None,
+            Some(&json!({ "user": { "id": "   " } })),
+            vec![Header {
+                name: "X-Real-IP".into(),
+                value: "203.0.113.77".into(),
+            }],
+        );
+        let body = decode_json_body(&request).unwrap();
+        match determine_rate_limit_subject(&request, &body) {
+            RateLimitSubject::Ip(_) => {}
+            other => panic!("expected Ip bucket, got {other:?}"),
+        }
     }
 }
