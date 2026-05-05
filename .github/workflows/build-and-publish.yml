@@ -774,6 +774,7 @@ jobs:
         env:
           VERSION: ${{ env.PUBLISH_VERSION }}
           PUBLISH_LATEST: "1"
+          PUBLISH_STABLE: "1"
           COMPONENT_FILTER: ${{ needs.detect-changes.outputs.affected_components_csv }}
         run: bash ./tools/publish_oci.sh
 
@@ -815,6 +816,7 @@ jobs:
         env:
           PACK_VERSION: ${{ env.PUBLISH_VERSION }}
           PUBLISH_LATEST: "1"
+          PUBLISH_STABLE: "1"
           PACK_FILTER: ${{ needs.detect-changes.outputs.affected_packs_csv }}
           TEMPLATES_IMAGE: ${{ env.TEMPLATES_IMAGE }}
           TEMPLATES_DIGEST: ${{ env.TEMPLATES_DIGEST }}
