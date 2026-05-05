@@ -1,3 +1,4 @@
+use base64::{Engine as _, engine::general_purpose};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -30,6 +31,8 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) tenant_channel_id: Option<String>,
     pub(crate) base_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jwt_signing_key_b64: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) oauth_providers: Option<String>,
@@ -51,6 +54,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         route: None,
         tenant_channel_id: None,
         base_url: None,
+        jwt_signing_key_b64: None,
         oauth_enabled: None,
         oauth_providers: None,
     }
@@ -93,6 +97,28 @@ fn parse_config_value(val: &Value) -> Result<ProviderConfig, String> {
     validate_provider_config(cfg)
 }
 
+fn decode_injected_config_field(input: &Value, key: &str) -> Option<Value> {
+    let encoded = input.get(format!("{key}_b64"))?.as_str()?.trim();
+    if encoded.is_empty() {
+        return None;
+    }
+    let decoded = general_purpose::STANDARD
+        .decode(encoded)
+        .or_else(|_| general_purpose::URL_SAFE.decode(encoded))
+        .or_else(|_| general_purpose::URL_SAFE_NO_PAD.decode(encoded))
+        .ok()?;
+    let decoded_str = String::from_utf8(decoded).ok()?;
+    let trimmed = decoded_str.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    match key {
+        "enabled" | "oauth_enabled" => trimmed.parse::<bool>().ok().map(Value::Bool),
+        _ => Some(Value::String(trimmed.to_string())),
+    }
+}
+
 pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
     if let Some(cfg) = input.get("config") {
         return parse_config_value(cfg);
@@ -110,6 +136,23 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
+        }
+    }
+    for key in [
+        "enabled",
+        "public_base_url",
+        "mode",
+        "route",
+        "tenant_channel_id",
+        "base_url",
+        "oauth_enabled",
+        "oauth_providers",
+    ] {
+        if partial.contains_key(key) {
+            continue;
+        }
+        if let Some(v) = decode_injected_config_field(input, key) {
+            partial.insert(key.to_string(), v);
         }
     }
     if !partial.is_empty() {
@@ -140,6 +183,7 @@ mod tests {
             route: Some("route-a".to_string()),
             tenant_channel_id: None,
             base_url: Some("https://base.example.com".to_string()),
+            jwt_signing_key_b64: None,
             oauth_enabled: None,
             oauth_providers: None,
         }
@@ -224,6 +268,16 @@ mod tests {
         }))
         .expect("top-level config");
         assert_eq!(top_level.route.as_deref(), Some("route-b"));
+
+        let injected = load_config(&serde_json::json!({
+            "public_base_url_b64": general_purpose::STANDARD.encode("https://example.com"),
+            "mode_b64": general_purpose::STANDARD.encode("websocket"),
+            "tenant_channel_id_b64": general_purpose::STANDARD.encode("demo:webchat")
+        }))
+        .expect("injected config");
+        assert_eq!(injected.mode, "websocket");
+        assert_eq!(injected.public_base_url, "https://example.com");
+        assert_eq!(injected.tenant_channel_id.as_deref(), Some("demo:webchat"));
     }
 
     #[test]

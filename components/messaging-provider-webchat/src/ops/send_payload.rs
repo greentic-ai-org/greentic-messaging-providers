@@ -161,13 +161,13 @@ fn append_bot_activity_to_conversation(
         tenant: tenant.unwrap_or("default").to_string(),
         team: team.map(str::to_string),
     };
-    let conv_key = conversation_key(&ctx, conversation_id);
     let mut store = HostStateStore;
 
-    let conv_bytes = match store.read(&conv_key) {
-        Ok(Some(bytes)) => bytes,
-        _ => return Ok(None), // conversation not found, skip silently
-    };
+    let (conv_key, conv_bytes) =
+        match find_existing_conversation_state(&mut store, &ctx, conversation_id)? {
+            Some(found) => found,
+            None => return Ok(None), // conversation not found, skip silently
+        };
 
     let mut conversation: crate::directline::state::ConversationState =
         serde_json::from_slice(&conv_bytes).map_err(|e| e.to_string())?;
@@ -193,6 +193,70 @@ fn append_bot_activity_to_conversation(
     let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
     store.write(&conv_key, &updated)?;
     Ok(Some(watermark))
+}
+
+/// Try to locate an existing conversation state under any plausible context
+/// variant. Walks `candidate_conversation_contexts` and returns the first key
+/// that resolves. Logs the keys tried when none match — silent misses here
+/// translate directly into "/activities is empty" symptoms in the SPA.
+fn find_existing_conversation_state<S: crate::directline::store::StateStore>(
+    store: &mut S,
+    ctx: &DirectLineContext,
+    conversation_id: &str,
+) -> Result<Option<(String, Vec<u8>)>, String> {
+    let mut tried_keys: Vec<String> = Vec::new();
+    for candidate_ctx in candidate_conversation_contexts(ctx) {
+        let key = conversation_key(&candidate_ctx, conversation_id);
+        if let Some(bytes) = store.read(&key)? {
+            return Ok(Some((key, bytes)));
+        }
+        tried_keys.push(key);
+    }
+    eprintln!(
+        "[webchat send_payload] conversation lookup miss conv={} ctx_env={} ctx_tenant={} ctx_team={:?} tried_keys=[{}]",
+        conversation_id,
+        ctx.env,
+        ctx.tenant,
+        ctx.team,
+        tried_keys.join(","),
+    );
+    Ok(None)
+}
+
+/// Generate plausible `DirectLineContext` candidates for a conversation
+/// lookup. Covers cases where the JWT-side ctx (used at conversation create)
+/// differs from the egress-side ctx (rebuilt from envelope metadata) on team
+/// only — operator-side path injection sometimes adds team="default" while
+/// the JWT context had team=None, or vice versa.
+fn candidate_conversation_contexts(ctx: &DirectLineContext) -> Vec<DirectLineContext> {
+    let mut contexts: Vec<DirectLineContext> = Vec::new();
+    contexts.push(ctx.clone());
+
+    contexts.push(DirectLineContext {
+        env: ctx.env.clone(),
+        tenant: ctx.tenant.clone(),
+        team: None,
+    });
+
+    contexts.push(DirectLineContext {
+        env: ctx.env.clone(),
+        tenant: ctx.tenant.clone(),
+        team: Some("default".to_string()),
+    });
+
+    if let Some(team) = ctx.team.as_deref() {
+        let trimmed = team.trim();
+        if !trimmed.is_empty() && trimmed != team {
+            contexts.push(DirectLineContext {
+                env: ctx.env.clone(),
+                tenant: ctx.tenant.clone(),
+                team: Some(trimmed.to_string()),
+            });
+        }
+    }
+
+    contexts.dedup();
+    contexts
 }
 
 /// Build the raw DirectLine activity JSON for a bot message, merging any
