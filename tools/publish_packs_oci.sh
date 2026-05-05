@@ -31,6 +31,7 @@ PACK_VERSION="${PACK_VERSION#v}"
 PACKS_DIR="${PACKS_DIR:-packs}"
 OUT_DIR="${OUT_DIR:-dist/packs}"
 DRY_RUN="${DRY_RUN:-0}"
+PUBLISH_STABLE="${PUBLISH_STABLE:-0}"
 PUBLISH_LATEST="${PUBLISH_LATEST:-0}"
 PACKC_BIN="${PACKC_BIN:-greentic-pack}"
 PACKC_BUILD_FLAGS="${PACKC_BUILD_FLAGS:-}"
@@ -677,6 +678,7 @@ PY
 
   oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:${PACK_VERSION}"
   latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:latest"
+  stable_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:stable"
   # Compute local content digest (used for dry-run and lockfile regardless of push).
   digest="$(python3 - <<'PY' "${pack_out}"
 import hashlib, sys
@@ -725,6 +727,19 @@ PY
           --annotation "org.opencontainers.image.title=${pack_title}" \
           --annotation "org.opencontainers.image.description=${pack_desc}" \
           "${latest_ref}" \
+          "${oras_files[@]}"
+      ) >/dev/null
+    fi
+    if [[ "${PUBLISH_STABLE}" =~ ^(1|true|TRUE|yes|YES)$ ]]; then
+      (
+        cd "${pack_dir}" && oras push \
+          --artifact-type "${MEDIA_TYPE}" \
+          --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
+          --annotation "org.opencontainers.image.revision=${git_sha}" \
+          --annotation "org.opencontainers.image.version=${PACK_VERSION}" \
+          --annotation "org.opencontainers.image.title=${pack_title}" \
+          --annotation "org.opencontainers.image.description=${pack_desc}" \
+          "${stable_ref}" \
           "${oras_files[@]}"
       ) >/dev/null
     fi
