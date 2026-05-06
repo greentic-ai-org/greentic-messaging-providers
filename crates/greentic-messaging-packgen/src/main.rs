@@ -929,7 +929,9 @@ impl VersionTriple {
         let mut parts = value.split('.');
         let major = parts.next()?.parse().ok()?;
         let minor = parts.next()?.parse().ok()?;
-        let patch = parts.next()?.parse().ok()?;
+        // Strip pre-release suffix from patch (e.g. "0-dev" → "0") so that
+        // `1.1.0-dev.{RUN_ID}` registry directories still rank.
+        let patch = parts.next()?.split('-').next()?.parse().ok()?;
         Some(Self(major, minor, patch))
     }
 }
