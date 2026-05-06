@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, anyhow};
-use provider_tests::flow_gen::generate_flow_via_cli;
+use provider_tests::flow_gen::{generate_flow_via_cli, greentic_flow_available};
 use serde_json::Value;
 
 fn workspace_root() -> PathBuf {
@@ -197,6 +197,10 @@ fn collect_strings(value: &Value, output: &mut Vec<String>) {
 
 #[test]
 fn pack_doctor_loads_validator() -> Result<()> {
+    if !greentic_flow_available() {
+        eprintln!("greentic-flow CLI unavailable; skipping pack-doctor validator test");
+        return Ok(());
+    }
     let root = workspace_root();
     let pack_src = root.join("packs").join("messaging-telegram");
     let temp_dir = std::env::temp_dir().join(format!(
@@ -273,6 +277,10 @@ fn pack_doctor_loads_validator() -> Result<()> {
 
 #[test]
 fn pack_doctor_skips_validator_without_extension() -> Result<()> {
+    if !greentic_flow_available() {
+        eprintln!("greentic-flow CLI unavailable; skipping pack-doctor validator test");
+        return Ok(());
+    }
     let root = workspace_root();
     let pack_src = root.join("packs").join("messaging-telegram");
     let temp_dir = std::env::temp_dir().join(format!(
