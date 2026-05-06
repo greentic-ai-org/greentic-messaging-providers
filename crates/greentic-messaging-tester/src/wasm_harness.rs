@@ -7,7 +7,10 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use greentic_interfaces_wasmtime::component_v0_5::exports::greentic::component::node as component_node_bindings_v05;
+// `component_v0_5` host bindings were removed from greentic-interfaces-wasmtime >=1.1
+// (cleanup: greentic-interfaces 8d91166). The legacy `node@0.5.0` invoke path is no
+// longer supported by this tester; the V05 enum variant + match arms below are
+// unreachable until the legacy webhook components are migrated to the 0.6.0 contract.
 use greentic_interfaces_wasmtime::host_helpers::v1::{
     HostFns, add_all_v1_to_linker, http_client, secrets_store, state_store,
 };
@@ -174,23 +177,9 @@ impl WasmHarness {
                         }
                     }
                 }
-                NodeWorldVersion::V05 => {
-                    let invoke = instance.get_typed_func::<
-                        (component_node_bindings_v05::ExecCtx, String, String),
-                        (component_node_bindings_v05::InvokeResult,),
-                    >(&mut *store, invoke_index)?;
-                    let ctx = build_exec_ctx_v05();
-                    let (result,) =
-                        invoke.call(&mut *store, (ctx, op.to_string(), input_str.clone()))?;
-                    match result {
-                        component_node_bindings_v05::InvokeResult::Ok(body) => {
-                            Ok(body.into_bytes())
-                        }
-                        component_node_bindings_v05::InvokeResult::Err(err) => {
-                            Err(anyhow!("{}", err.message))
-                        }
-                    }
-                }
+                NodeWorldVersion::V05 => Err(anyhow!(
+                    "node@0.5.0 invoke path is no longer supported on the 1.1 lane; component must export node@0.6.0",
+                )),
             }
         })
     }
@@ -284,23 +273,9 @@ impl ComponentHarness {
                         }
                     }
                 }
-                NodeWorldVersion::V05 => {
-                    let invoke = instance.get_typed_func::<
-                        (component_node_bindings_v05::ExecCtx, String, String),
-                        (component_node_bindings_v05::InvokeResult,),
-                    >(&mut *store, invoke_index)?;
-                    let ctx = build_exec_ctx_v05();
-                    let (result,) =
-                        invoke.call(&mut *store, (ctx, op.to_string(), input_json.clone()))?;
-                    match result {
-                        component_node_bindings_v05::InvokeResult::Ok(body) => {
-                            Ok(body.into_bytes())
-                        }
-                        component_node_bindings_v05::InvokeResult::Err(err) => {
-                            Err(anyhow!(err.message))
-                        }
-                    }
-                }
+                NodeWorldVersion::V05 => Err(anyhow!(
+                    "node@0.5.0 invoke path is no longer supported on the 1.1 lane; component must export node@0.6.0",
+                )),
             }
         })
     }
@@ -328,25 +303,6 @@ fn build_exec_ctx_v06() -> component_node_bindings::ExecCtx {
             attempt: 0,
             idempotency_key: None,
             impersonation: None,
-        },
-        i18n_id: None,
-        flow_id: "manual".into(),
-        node_id: None,
-    }
-}
-
-fn build_exec_ctx_v05() -> component_node_bindings_v05::ExecCtx {
-    component_node_bindings_v05::ExecCtx {
-        tenant: component_node_bindings_v05::TenantCtx {
-            tenant: "manual".into(),
-            team: None,
-            user: None,
-            trace_id: None,
-            i18n_id: None,
-            correlation_id: None,
-            deadline_unix_ms: None,
-            attempt: 0,
-            idempotency_key: None,
         },
         i18n_id: None,
         flow_id: "manual".into(),
@@ -1282,6 +1238,7 @@ mod tests {
             text: Some("plan input".to_string()),
             attachments: Vec::new(),
             metadata,
+            extensions: Default::default(),
         }
     }
 }
