@@ -209,6 +209,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         env:
           VERSION: ${{ env.PUBLISH_VERSION }}
+          PUBLISH_STABLE: "1"
           COMPONENT_FILTER: ${{ needs.resolve-provider.outputs.components_csv }}
         run: ./tools/publish_oci.sh
 
@@ -229,6 +230,7 @@ jobs:
           PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
           PACK_VERSION: ${{ env.PUBLISH_VERSION }}
           PUBLISH_LATEST: ${{ inputs.publish_latest && '1' || '0' }}
+          PUBLISH_STABLE: "1"
           TEMPLATES_IMAGE: ghcr.io/greenticai/components/templates:latest
         run: ./tools/publish_packs_oci.sh
 
