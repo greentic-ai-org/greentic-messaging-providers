@@ -1,9 +1,26 @@
 #![allow(dead_code)]
 
-use greentic_interfaces_guest::component::node::{InvokeResult, NodeError};
-use greentic_interfaces_guest::component_entrypoint;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+// Compat types matching the old greentic:component/node@0.5.0 shapes.
+// The published greentic-interfaces-guest >=1.1 removed the 0.5.0 surface
+// (component-node feature). Keeping local definitions until this webhook is
+// migrated to the 0.6.0 component contract; see TODO below.
+#[derive(Debug)]
+pub enum InvokeResult {
+    Ok(String),
+    Err(NodeError),
+}
+
+#[derive(Debug)]
+pub struct NodeError {
+    pub code: String,
+    pub message: String,
+    pub retryable: bool,
+    pub backoff_ms: Option<u64>,
+    pub details: Option<String>,
+}
 
 mod bindings {
     wit_bindgen::generate!({
@@ -67,11 +84,11 @@ struct WebhookSummary {
     status: Option<String>,
 }
 
-component_entrypoint!({
-    manifest: describe_manifest,
-    invoke: handle_message,
-    invoke_stream: false,
-});
+// TODO(force-jump-1.1): the old `component_entrypoint!` macro exporting
+// `greentic:component/node@0.5.0` was removed from greentic-interfaces-guest
+// >=1.1. The `node` world export glue must be re-implemented against the
+// 0.6.0 invoke contract before this webhook is deployable on the 1.1 lane.
+// `handle_message` / `describe_manifest` remain for host-side reuse.
 
 fn describe_manifest() -> String {
     include_str!("../component.manifest.json").to_string()
