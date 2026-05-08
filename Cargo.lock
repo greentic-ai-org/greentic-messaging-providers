@@ -2022,7 +2022,6 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "greentic-interfaces-wasmtime",
- "greentic-messaging-planned",
  "greentic-types",
  "hmac 0.12.1",
  "http",

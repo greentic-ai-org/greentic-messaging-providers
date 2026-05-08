@@ -13,7 +13,6 @@ greentic-interfaces-wasmtime = { workspace = true, features = ["control-helpers"
 greentic-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-greentic-messaging-planned = { workspace = true }
 thiserror = { workspace = true }
 ureq = { workspace = true }
 http = { workspace = true }
