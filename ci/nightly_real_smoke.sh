@@ -78,6 +78,9 @@ JSON
     "mode": "local_queue",
     "route": "nightly-webchat"
   },
+  "secrets": {
+    "jwt_signing_key": "dummy-jwt-secret"
+  },
   "http": "mock"
 }
 JSON
