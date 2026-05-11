@@ -837,6 +837,7 @@ mod tests {
                 text: text.map(|t| t.to_string()),
                 attachments: Vec::new(),
                 metadata,
+                extensions: Default::default(),
             },
             metadata: BTreeMap::new(),
         };
