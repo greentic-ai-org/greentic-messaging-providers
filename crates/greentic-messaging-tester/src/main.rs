@@ -25,7 +25,6 @@ use axum::{
 use base64::{Engine, engine::general_purpose::STANDARD};
 use clap::{ArgGroup, Parser, Subcommand};
 use greentic_interfaces_wasmtime::host_helpers::v1::http_client;
-use greentic_messaging_planned::encode_from_render_plan;
 use greentic_types::messaging::universal_dto::{
     Header, HttpInV1, HttpOutV1, ProviderPayloadV1, RenderPlanInV1, SendPayloadInV1,
     SendPayloadResultV1,
@@ -367,27 +366,40 @@ fn handle_send(
     let plan_value: Value =
         serde_json::from_slice(&plan_output).map_err(|err| CliError::ProviderOp(err.into()))?;
     ensure_ok(&plan_value, "render_plan")?;
-    let plan_json = plan_value
+    plan_value
         .get("plan")
         .and_then(|plan| plan.get("plan_json"))
         .and_then(|value| value.as_str())
         .ok_or_else(|| CliError::ProviderOp(anyhow!("render_plan missing plan_json")))?;
-    let encode_result = encode_from_render_plan(plan_json, &message, Some(harness.provider_type()));
-    if !encode_result.ok {
-        return Err(CliError::ProviderOp(anyhow!(
-            "encode_from_render_plan failed: {}",
-            encode_result.error.unwrap_or_else(|| "unknown".to_string())
-        )));
-    }
-    let provider_payload = encode_result
-        .payload
-        .as_ref()
-        .ok_or_else(|| CliError::ProviderOp(anyhow!("encode_from_render_plan missing payload")))?;
-    let payload = ProviderPayloadV1 {
-        content_type: provider_payload.content_type.clone(),
-        body_b64: provider_payload.body_b64.clone(),
-        metadata: provider_payload.metadata.clone().into_iter().collect(),
+
+    // Invoke WASM encode op rather than the host-side encoder. The host-side
+    // encoder in greentic-messaging-planned just JSON-serializes the envelope,
+    // which omits provider-specific top-level fields (e.g. webchat's `route`)
+    // that send_payload then requires.
+    let encode_input = serde_json::to_vec(&json!({ "message": &message }))
+        .map_err(|err| CliError::ProviderOp(err.into()))?;
+    let encode_output = match harness.invoke(
+        "encode",
+        encode_input,
+        &secrets,
+        http_mode,
+        history.clone(),
+        None,
+    ) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            log_http_history("encode", &history);
+            return Err(map_invoke_error(err));
+        }
     };
+    let encode_value: Value =
+        serde_json::from_slice(&encode_output).map_err(|err| CliError::ProviderOp(err.into()))?;
+    ensure_ok(&encode_value, "encode")?;
+    let payload_value = encode_value
+        .get("payload")
+        .ok_or_else(|| CliError::ProviderOp(anyhow!("encode missing payload")))?;
+    let payload: ProviderPayloadV1 = serde_json::from_value(payload_value.clone())
+        .map_err(|err| CliError::ProviderOp(err.into()))?;
 
     let send_in = SendPayloadInV1 {
         provider_type: harness.provider_type().to_string(),
@@ -429,7 +441,7 @@ fn handle_send(
         .unwrap_or_default();
     let output = json!({
         "plan": plan_value,
-        "encode_result": encode_result,
+        "encode_result": encode_value,
         "http_calls": http_calls,
         "result": send_result,
     });
