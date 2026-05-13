@@ -4,7 +4,10 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-pub const TTL_SECONDS: i64 = 1800;
+/// Direct Line token lifetime. Matches the Microsoft Direct Line 3.0 reference
+/// value of 24 hours — long enough that a chat session outlives a single token,
+/// with `/v3/directline/tokens/refresh` available to extend live conversations.
+pub const TTL_SECONDS: i64 = 24 * 60 * 60;
 const ISS: &str = "greentic.webchat";
 const AUD: &str = "directline";
 
