@@ -837,44 +837,6 @@ console.log('[runtime-bootstrap] loaded');
   // Fetch interceptor (tenant config + skin.json patching)
   // ---------------------------------------------------------------------------
 
-  // ---------------------------------------------------------------------------
-  // XHR interceptor — botframework-directlinejs (used by Bot Framework Webchat)
-  // dispatches its requests via XMLHttpRequest, not fetch. The picker's locale
-  // therefore never reaches the server's POST /v3/directline/conversations
-  // through the fetch wrapper below. We patch XHR open/send to inject the
-  // X-Greentic-Locale header on the conversation-create call so the autoStart
-  // envelope can pick the right language for the welcome card.
-  // ---------------------------------------------------------------------------
-  if (typeof window.XMLHttpRequest === 'function') {
-    var XHRProto = window.XMLHttpRequest.prototype;
-    var origOpen = XHRProto.open;
-    var origSend = XHRProto.send;
-    XHRProto.open = function (method, url) {
-      this.__gtcMethod = (method || '').toUpperCase();
-      this.__gtcUrl = url;
-      return origOpen.apply(this, arguments);
-    };
-    XHRProto.send = function (body) {
-      try {
-        if (selectedLocale && this.__gtcMethod === 'POST') {
-          var path = '';
-          try { path = new URL(this.__gtcUrl, window.location.href).pathname; } catch (_) {}
-          if (/\/v3\/directline\/conversations\/?$/i.test(path)) {
-            this.setRequestHeader('X-Greentic-Locale', selectedLocale);
-          }
-        }
-      } catch (_) {
-        // Header injection is best-effort; failure must not break the request.
-      }
-      return origSend.apply(this, arguments);
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Token cache + guest ID injection (from develop) — keeps POST /token off
-  // the rate-limit gate when the page reloads, and stamps a stable guest_id
-  // on the body so anonymous flows can correlate sessions across reloads.
-  // ---------------------------------------------------------------------------
   // Token cache: holds {token, expires_in, expires_at} keyed in localStorage.
   // We refresh BEFORE the server-side TTL elapses so a request never lands on
   // an expired token. The 60s buffer matches the rate-limit window — if the
@@ -929,6 +891,39 @@ console.log('[runtime-bootstrap] loaded');
     nextInit.body = JSON.stringify(existing);
     nextInit.method = nextInit.method || 'POST';
     return nextInit;
+  }
+
+  // ---------------------------------------------------------------------------
+  // XHR interceptor — botframework-directlinejs (used by Bot Framework Webchat)
+  // dispatches its requests via XMLHttpRequest, not fetch. The picker's locale
+  // therefore never reaches the server's POST /v3/directline/conversations
+  // through the fetch wrapper below. We patch XHR open/send to inject the
+  // X-Greentic-Locale header on the conversation-create call so the autoStart
+  // envelope can pick the right language for the welcome card.
+  // ---------------------------------------------------------------------------
+  if (typeof window.XMLHttpRequest === 'function') {
+    var XHRProto = window.XMLHttpRequest.prototype;
+    var origOpen = XHRProto.open;
+    var origSend = XHRProto.send;
+    XHRProto.open = function (method, url) {
+      this.__gtcMethod = (method || '').toUpperCase();
+      this.__gtcUrl = url;
+      return origOpen.apply(this, arguments);
+    };
+    XHRProto.send = function (body) {
+      try {
+        if (selectedLocale && this.__gtcMethod === 'POST') {
+          var path = '';
+          try { path = new URL(this.__gtcUrl, window.location.href).pathname; } catch (_) {}
+          if (/\/v3\/directline\/conversations\/?$/i.test(path)) {
+            this.setRequestHeader('X-Greentic-Locale', selectedLocale);
+          }
+        }
+      } catch (_) {
+        // Header injection is best-effort; failure must not break the request.
+      }
+      return origSend.apply(this, arguments);
+    };
   }
 
   var originalFetch = window.fetch.bind(window);

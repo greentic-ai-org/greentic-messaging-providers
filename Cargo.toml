@@ -21,7 +21,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.4.99"
+version = "1.1.0-dev.0"
 license = "MIT"
 
 
@@ -36,11 +36,11 @@ regex = "1"
 hmac = "0.12"
 sha2 = "0.10"
 urlencoding = "2"
-greentic-interfaces-wasmtime = "0.4"
-greentic-types = "0.4"
-greentic-interfaces = "0.4"
-greentic-interfaces-guest = { version = "0.4", default-features = false }
-greentic-runner-desktop = "0.4"
+greentic-interfaces-wasmtime = ">=1.1.0-dev, <1.2.0-0"
+greentic-types = ">=1.1.0-dev, <1.2.0-0"
+greentic-interfaces = ">=1.1.0-dev, <1.2.0-0"
+greentic-interfaces-guest = { version = ">=1.1.0-dev, <1.2.0-0", default-features = false }
+greentic-runner-desktop = ">=1.1.0-dev, <1.2.0-0"
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 tempfile = "3"

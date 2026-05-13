@@ -87,6 +87,19 @@ pub fn generate_flow_via_cli(pack_root: &Path, flow_name: &str, steps: &[StepSpe
     Ok(())
 }
 
+/// Returns true when `greentic-flow` can be invoked directly: either via the
+/// `GREENTIC_FLOW_BIN` env override or as an executable on `PATH`. Tests that
+/// require flow generation should call this first and skip when unavailable
+/// (mirroring the `greentic-pack` skip pattern in pack_doctor tests). The
+/// cargo-fallback in `flow_cmd()` only succeeds inside workspaces that ship a
+/// `greentic-flow` bin; this repo does not.
+pub fn greentic_flow_available() -> bool {
+    if env::var_os("GREENTIC_FLOW_BIN").is_some() {
+        return true;
+    }
+    find_in_path("greentic-flow").is_some()
+}
+
 fn flow_cmd() -> Result<Command> {
     if let Some(bin) = env::var_os("GREENTIC_FLOW_BIN") {
         return Ok(Command::new(bin));

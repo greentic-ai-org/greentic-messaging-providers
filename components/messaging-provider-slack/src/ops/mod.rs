@@ -76,6 +76,7 @@ pub(super) fn build_slack_envelope(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
+        extensions: Default::default(),
     }
 }
 
@@ -106,6 +107,7 @@ mod tests {
             text: Some("hello".to_string()),
             attachments: Vec::new(),
             metadata: MessageMetadata::new(),
+            extensions: Default::default(),
         })
         .expect("envelope")
     }
