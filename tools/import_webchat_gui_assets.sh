@@ -31,7 +31,7 @@ if [ -z "${js_bundle}" ] || [ -z "${css_bundle}" ]; then
 fi
 
 # Generate index.html with correct bundle filenames.
-# runtime-bootstrap.js is maintained in-repo and NOT overwritten here.
+# runtime-bootstrap.js and embed.js are maintained in-repo and NOT overwritten here.
 cat > "${DEST_DIR}/index.html" <<EOF
 <!doctype html>
 <html lang="en">

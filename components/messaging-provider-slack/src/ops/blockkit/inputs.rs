@@ -124,3 +124,76 @@ pub(super) fn inject_modal_metadata(actions: &mut [Value]) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collect_ac_input_fields_recurses_through_containers_and_columns() {
+        let elements = vec![json!({
+            "type": "Container",
+            "items": [
+                {
+                    "type": "Input.Text",
+                    "id": "comment",
+                    "label": "Comment",
+                    "placeholder": "Say more",
+                    "isRequired": true,
+                    "isMultiline": true
+                },
+                {
+                    "type": "ColumnSet",
+                    "columns": [{
+                        "items": [{
+                            "type": "Input.ChoiceSet",
+                            "id": "priority",
+                            "placeholder": "Priority",
+                            "isMultiSelect": true,
+                            "choices": [{"title": "High", "value": "high"}]
+                        }]
+                    }]
+                }
+            ]
+        })];
+        let mut inputs = Vec::new();
+
+        collect_ac_input_fields(&elements, &mut inputs);
+
+        assert_eq!(inputs.len(), 2);
+        assert_eq!(inputs[0]["input_type"], "text");
+        assert_eq!(inputs[0]["required"], true);
+        assert_eq!(inputs[0]["multiline"], true);
+        assert_eq!(inputs[1]["input_type"], "choice");
+        assert_eq!(inputs[1]["multi"], true);
+        assert_eq!(inputs[1]["choices"][0]["value"], "high");
+    }
+
+    #[test]
+    fn inject_modal_metadata_skips_url_buttons_and_marks_submit_buttons() {
+        let mut actions = vec![
+            json!({
+                "type": "button",
+                "url": "https://example.com",
+                "value": "{\"id\":\"open\"}"
+            }),
+            json!({
+                "type": "button",
+                "value": "{\"id\":\"save\"}"
+            }),
+            json!({
+                "type": "button",
+                "value": "not json"
+            }),
+        ];
+
+        inject_modal_metadata(&mut actions);
+
+        assert_eq!(actions[0]["value"], "{\"id\":\"open\"}");
+        let save: Value = serde_json::from_str(actions[1]["value"].as_str().unwrap()).unwrap();
+        assert_eq!(save["id"], "save");
+        assert_eq!(save["ac_modal"], true);
+        let fallback: Value = serde_json::from_str(actions[2]["value"].as_str().unwrap()).unwrap();
+        assert_eq!(fallback["ac_modal"], true);
+    }
+}

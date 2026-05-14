@@ -279,3 +279,122 @@ pub(crate) fn build_inline_keyboard_from_metadata(
     }
     rows
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::MessageMetadata;
+
+    #[test]
+    fn action_collection_keeps_urls_submit_data_and_unknown_labels() {
+        let mut actions = Vec::new();
+        collect_actions(
+            &[
+                json!({"type": "Action.OpenUrl", "title": "Open", "url": "https://example.com"}),
+                json!({"type": "Action.Submit", "title": "Save", "data": {"cardId": "c1"}}),
+                json!({"type": "Action.ToggleVisibility", "title": "More"}),
+                json!({"type": "Action.Submit"}),
+            ],
+            &mut actions,
+        );
+
+        assert_eq!(actions.len(), 3);
+        assert_eq!(actions[0]["url"], "https://example.com");
+        assert_eq!(actions[1]["data"]["cardId"], "c1");
+        assert_eq!(actions[2]["title"], "More");
+    }
+
+    #[test]
+    fn label_from_items_recurses_and_prefers_bolder_text() {
+        let items = vec![json!({
+            "type": "ColumnSet",
+            "columns": [{
+                "items": [
+                    {"type": "TextBlock", "text": "secondary"},
+                    {"type": "TextBlock", "text": "Primary", "weight": "Bolder"}
+                ]
+            }]
+        })];
+
+        assert_eq!(label_from_items(&items), "Primary");
+    }
+
+    #[test]
+    fn select_action_uses_nested_label_and_carries_data() {
+        let element = json!({
+            "type": "Container",
+            "items": [{"type": "TextBlock", "text": "Choose me"}],
+            "selectAction": {"type": "Action.Execute", "data": {"routeToCardId": "next"}}
+        });
+        let mut actions = Vec::new();
+
+        collect_select_action(&element, &mut actions);
+
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0]["title"], "Choose me");
+        assert_eq!(actions[0]["data"]["routeToCardId"], "next");
+    }
+
+    #[test]
+    fn html_escape_and_truncate_preserve_telegram_safety() {
+        assert_eq!(html_escape("a < b & c > d"), "a &lt; b &amp; c &gt; d");
+        assert_eq!(truncate_html("abcdef", 4), "abc\u{2026}");
+        assert_eq!(truncate_html("abc", 4), "abc");
+    }
+
+    #[test]
+    fn pending_input_metadata_detects_text_and_placeholder() {
+        let mut metadata = MessageMetadata::new();
+        metadata.insert(
+            "ac_pending_inputs".to_string(),
+            serde_json::to_string(&vec![
+                json!({
+                    "id": "choice",
+                    "label": "Choice",
+                    "placeholder": "",
+                    "kind": "choice",
+                    "choices": []
+                }),
+                json!({
+                    "id": "comment",
+                    "label": "Comment",
+                    "placeholder": "Type here",
+                    "kind": "text",
+                    "choices": []
+                }),
+            ])
+            .unwrap(),
+        );
+
+        assert!(has_pending_text_inputs(&metadata));
+        assert_eq!(first_input_placeholder(&metadata), "Type here");
+    }
+
+    #[test]
+    fn inline_keyboard_limits_rows_columns_and_compacts_callback_data() {
+        let mut actions = Vec::new();
+        for idx in 0..30 {
+            actions.push(json!({
+                "title": format!("Action {idx}"),
+                "data": {
+                    "routeToCardId": format!("route-{idx}"),
+                    "cardId": "card",
+                    "large": "x".repeat(100)
+                }
+            }));
+        }
+        let mut metadata = MessageMetadata::new();
+        metadata.insert(
+            "ac_actions".to_string(),
+            serde_json::to_string(&actions).unwrap(),
+        );
+
+        let rows = build_inline_keyboard_from_metadata(&metadata);
+
+        assert_eq!(rows.len(), 8);
+        assert!(rows.iter().all(|row| row.len() <= 3));
+        let callback = rows[0][0]["callback_data"].as_str().unwrap();
+        assert!(callback.len() <= 64);
+        assert!(callback.contains("\"r\""));
+    }
+}

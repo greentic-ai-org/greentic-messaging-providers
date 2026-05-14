@@ -3,7 +3,7 @@
 use bindings::greentic::http::http_client as client;
 #[cfg(not(test))]
 use bindings::greentic::telemetry::logger_api;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use provider_common::component_v0_6::{
     DescribePayload, I18nText, OperationDescriptor, QaQuestionSpec, QaSpec, RedactionRule,
     SchemaField, SchemaIr, canonical_cbor_bytes, decode_cbor, schema_hash,
@@ -623,7 +623,15 @@ fn section_md(text: &str) -> Value {
 fn payload_hash(value: &Value) -> String {
     let mut hasher = Sha256::new();
     hasher.update(serde_json::to_vec(value).unwrap_or_default());
-    format!("{:x}", hasher.finalize())
+    to_hex(hasher.finalize())
+}
+
+fn to_hex(bytes: impl AsRef<[u8]>) -> String {
+    bytes
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn default_enabled() -> bool {

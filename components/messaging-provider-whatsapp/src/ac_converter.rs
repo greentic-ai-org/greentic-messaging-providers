@@ -303,7 +303,7 @@ impl provider_common::AdaptiveCardConverter for WhatsAppConverter {
     fn convert(
         &self,
         adaptive_card: &Value,
-        _caps: &greentic_messaging_renderer::PlannerCapabilities,
+        _caps: &provider_common::render::PlannerCapabilities,
     ) -> Result<Self::Output, provider_common::ProviderError> {
         let ac_str = serde_json::to_string(adaptive_card).map_err(|e| {
             provider_common::ProviderError::Validation(format!("invalid adaptive card json: {e}"))
@@ -332,7 +332,7 @@ mod converter_tests {
 
     #[test]
     fn converter_empty_card_errors() {
-        let caps = greentic_messaging_renderer::capabilities_for("whatsapp").unwrap();
+        let caps = provider_common::render::capabilities_for("whatsapp").unwrap();
         let card = json!({"type": "AdaptiveCard", "body": []});
         let err = WhatsAppConverter.convert(&card, &caps).unwrap_err();
         assert!(matches!(err, provider_common::ProviderError::Validation(_)));
@@ -340,12 +340,80 @@ mod converter_tests {
 
     #[test]
     fn converter_extracts_text_block() {
-        let caps = greentic_messaging_renderer::capabilities_for("whatsapp").unwrap();
+        let caps = provider_common::render::capabilities_for("whatsapp").unwrap();
         let card = json!({
             "type": "AdaptiveCard",
             "body": [{"type": "TextBlock", "text": "hello whatsapp"}]
         });
         let content = WhatsAppConverter.convert(&card, &caps).unwrap();
         assert!(content.body.contains("hello whatsapp"));
+    }
+
+    #[test]
+    fn ac_to_whatsapp_extracts_heading_image_facts_and_buttons() {
+        let card = json!({
+            "type": "AdaptiveCard",
+            "body": [
+                {"type": "TextBlock", "text": "Incident 42", "weight": "Bolder"},
+                {"type": "FactSet", "facts": [
+                    {"title": "Severity", "value": "High"},
+                    {"title": "Owner", "value": "Ops"}
+                ]},
+                {"type": "Image", "url": "https://example.com/incident.png"},
+                {"type": "ActionSet", "actions": [
+                    {"type": "Action.Submit", "title": "Ack"},
+                    {"type": "Action.OpenUrl", "title": "Open"}
+                ]}
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Escalate"},
+                {"type": "Action.Submit", "title": "Ignored fourth"}
+            ]
+        });
+
+        let content = ac_to_whatsapp(&card.to_string()).expect("whatsapp content");
+
+        assert_eq!(content.header.as_deref(), Some("Incident 42"));
+        assert!(content.body.contains("*Severity:* High"));
+        assert!(content.body.contains("*Owner:* Ops"));
+        assert_eq!(
+            content.image_url.as_deref(),
+            Some("https://example.com/incident.png")
+        );
+        assert_eq!(content.buttons.len(), 3);
+        assert_eq!(content.buttons[0]["title"], "Ack");
+        assert_eq!(content.buttons[2]["title"], "Escalate");
+    }
+
+    #[test]
+    fn ac_to_whatsapp_formats_rich_text_columns_and_tables() {
+        let card = json!({
+            "type": "AdaptiveCard",
+            "body": [
+                {"type": "RichTextBlock", "inlines": [
+                    {"text": "bold", "fontWeight": "Bolder"},
+                    {"text": " italic", "italic": true},
+                    {"text": " code", "fontType": "Monospace"}
+                ]},
+                {"type": "ColumnSet", "columns": [
+                    {"items": [{"type": "TextBlock", "text": "left"}]},
+                    {"items": [{"type": "TextBlock", "text": "right"}]}
+                ]},
+                {"type": "Table", "rows": [{
+                    "cells": [
+                        {"items": [{"type": "TextBlock", "text": "A"}]},
+                        {"items": [{"type": "TextBlock", "text": "B"}]}
+                    ]
+                }]}
+            ]
+        });
+
+        let content = ac_to_whatsapp(&card.to_string()).expect("whatsapp content");
+
+        assert!(content.body.contains("*bold*"));
+        assert!(content.body.contains("_ italic_"));
+        assert!(content.body.contains("` code`"));
+        assert!(content.body.contains("left | right"));
+        assert!(content.body.contains("A | B"));
     }
 }

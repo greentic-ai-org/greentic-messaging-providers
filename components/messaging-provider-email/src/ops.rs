@@ -176,9 +176,9 @@ pub(crate) fn handle_reply(_input_json: &[u8]) -> Vec<u8> {
 }
 
 pub(crate) fn render_plan(input_json: &[u8]) -> Vec<u8> {
-    // Capability matrix is centralized in greentic-messaging-renderer.
-    // See: greentic_messaging_renderer::capabilities_for
-    let capabilities = greentic_messaging_renderer::capabilities_for("email")
+    // Capability matrix is centralized in provider-common.
+    // See: provider_common::render::capabilities_for
+    let capabilities = provider_common::render::capabilities_for("email")
         .expect("email capabilities must be registered");
     render_plan_common(
         input_json,
@@ -211,7 +211,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
         let fallback = ac_raw_str
             .as_deref()
             .and_then(|ac_raw| {
-                let caps = greentic_messaging_renderer::capabilities_for("email")
+                let caps = provider_common::render::capabilities_for("email")
                     .expect("email capabilities must be registered");
                 extract_ac_summary(ac_raw, &caps)
             })
@@ -502,4 +502,151 @@ fn default_env() -> EnvId {
 
 fn default_tenant() -> TenantId {
     TenantId::try_from("default").expect("default tenant id present")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::messaging::universal_dto::{ProviderPayloadV1, SendPayloadInV1};
+
+    fn config_json() -> Value {
+        json!({
+            "public_base_url": "https://mail.example.com",
+            "host": "smtp.example.com",
+            "username": "mailer",
+            "from_address": "bot@example.com",
+            "default_to_address": "fallback@example.com"
+        })
+    }
+
+    fn parse_json(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json")
+    }
+
+    #[test]
+    fn handle_send_builds_deterministic_payload_and_ids() {
+        let input = json!({
+            "config": config_json(),
+            "to": "user@example.com",
+            "subject": "Subject",
+            "body": "Hello"
+        });
+
+        let out = parse_json(handle_send(input.to_string().as_bytes()));
+
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["status"], "sent");
+        assert_eq!(out["payload"]["to"], "user@example.com");
+        assert_eq!(out["payload"]["subject"], "Subject");
+        assert!(out["message_id"].as_str().unwrap_or("").contains('-'));
+        assert!(
+            out["provider_message_id"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("smtp:")
+        );
+    }
+
+    #[test]
+    fn handle_send_rejects_unsupported_destination_kind() {
+        let env = ChannelMessageEnvelope {
+            id: "m1".to_string(),
+            tenant: TenantCtx::new(default_env(), default_tenant()),
+            channel: PROVIDER_TYPE.to_string(),
+            session_id: "s1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: vec![Destination {
+                id: "room-1".to_string(),
+                kind: Some("room".to_string()),
+            }],
+            correlation_id: None,
+            text: Some("Hello".to_string()),
+            attachments: Vec::new(),
+            metadata: MessageMetadata::new(),
+            extensions: Default::default(),
+        };
+
+        let out = parse_json(handle_send(&serde_json::to_vec(&env).expect("env")));
+
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["error"], "config required");
+    }
+
+    #[test]
+    fn handle_reply_requires_to_before_building_payload() {
+        let input = json!({
+            "config": config_json(),
+            "subject": "Re: Subject",
+            "body": "Reply"
+        });
+
+        let out = parse_json(handle_reply(input.to_string().as_bytes()));
+
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["error"], "to required");
+    }
+
+    #[test]
+    fn send_payload_rejects_provider_mismatch_and_missing_target_before_secrets() {
+        let mismatch = SendPayloadInV1 {
+            provider_type: "slack".to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: STANDARD.encode("{}"),
+                metadata: BTreeMap::new(),
+            },
+        };
+        let out = parse_json(send_payload(&serde_json::to_vec(&mismatch).expect("input")));
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["message"], "provider type mismatch");
+
+        let missing_to = SendPayloadInV1 {
+            provider_type: PROVIDER_TYPE.to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: STANDARD.encode(r#"{"subject":"Hello","body":"Body"}"#),
+                metadata: BTreeMap::new(),
+            },
+        };
+        let out = parse_json(send_payload(
+            &serde_json::to_vec(&missing_to).expect("input"),
+        ));
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["message"], "missing email target");
+    }
+
+    #[test]
+    fn hash_and_pseudo_uuid_are_stable() {
+        let hash = hex_sha256(b"hello");
+        assert_eq!(
+            hash,
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+        assert_eq!(
+            pseudo_uuid_from_hex("abc"),
+            "abc00000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            pseudo_uuid_from_hex(&hash),
+            "2cf24dba-5fb0-a30e-26e8-3b2ac5b9e29e"
+        );
+    }
+
+    #[test]
+    fn build_channel_envelope_uses_defaults_and_metadata() {
+        let cfg = load_config(&json!({"config": config_json()})).expect("config");
+        let env = build_channel_envelope(&json!({"body": "Hi"}), &cfg);
+
+        assert_eq!(env.to[0].id, "fallback@example.com");
+        assert_eq!(
+            env.metadata.get("subject").map(String::as_str),
+            Some("universal subject")
+        );
+        assert_eq!(env.text.as_deref(), Some("Hi"));
+    }
 }

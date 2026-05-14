@@ -1,3 +1,21 @@
+//! Shared API boundary for Greentic messaging providers.
+//!
+//! This crate is the publishable common layer for provider component crates. It
+//! contains stable DTOs, provider-core/component v0.6 schema helpers, QA bridge
+//! types, common error handling, render/encode/send helpers, HTTP compatibility
+//! shims, lifecycle key helpers, and test support that are reused across
+//! provider implementations.
+//!
+//! The Cargo package is named `greentic-messaging-provider-common` for crates.io.
+//! The Rust crate name remains `provider_common` so existing provider imports do
+//! not need to change while providers are migrated from workspace path
+//! dependencies to crates.io semver dependencies.
+//!
+//! Provider-specific API payload construction, provider-specific config fields,
+//! and external service quirks should remain in each provider crate. Cross-cutting
+//! behavior belongs here when at least two providers need it and the API can be
+//! documented with a stable contract.
+
 pub mod ac_converter;
 pub mod component_v0_6;
 pub mod helpers;
@@ -5,6 +23,7 @@ pub mod http_compat;
 pub mod lifecycle_keys;
 pub mod qa_helpers;
 pub mod qa_invoke_bridge;
+pub mod render;
 pub mod test_macros;
 
 pub use ac_converter::AdaptiveCardConverter;

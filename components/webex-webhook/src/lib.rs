@@ -3,25 +3,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-// Compat types matching the old greentic:component/node@0.5.0 shapes.
-// The published greentic-interfaces-guest >=1.1 removed the 0.5.0 surface
-// (component-node feature). Keeping local definitions until this webhook is
-// migrated to the 0.6.0 component contract; see TODO below.
-#[derive(Debug)]
-pub enum InvokeResult {
-    Ok(String),
-    Err(NodeError),
-}
-
-#[derive(Debug)]
-pub struct NodeError {
-    pub code: String,
-    pub message: String,
-    pub retryable: bool,
-    pub backoff_ms: Option<u64>,
-    pub details: Option<String>,
-}
-
 mod bindings {
     wit_bindgen::generate!({
         path: "wit/webex-webhook",
@@ -32,6 +13,7 @@ mod bindings {
 
 use bindings::greentic::http::http_client as client;
 use bindings::greentic::secrets_store::secrets_store;
+use bindings::{ExecCtx, Guest, InvokeResult, LifecycleStatus, NodeError, StreamEvent};
 
 const DEFAULT_API_BASE: &str = "https://webexapis.com/v1";
 const DEFAULT_RESOURCE: &str = "messages";
@@ -84,28 +66,44 @@ struct WebhookSummary {
     status: Option<String>,
 }
 
-// TODO(force-jump-1.1): the old `component_entrypoint!` macro exporting
-// `greentic:component/node@0.5.0` was removed from greentic-interfaces-guest
-// >=1.1. The `node` world export glue must be re-implemented against the
-// 0.6.0 invoke contract before this webhook is deployable on the 1.1 lane.
-// `handle_message` / `describe_manifest` remain for host-side reuse.
+struct Component;
 
 fn describe_manifest() -> String {
     include_str!("../component.manifest.json").to_string()
 }
 
-fn handle_message(operation: String, input: String) -> InvokeResult {
-    match operation.as_str() {
-        "reconcile_webhook" => invoke(reconcile_webhook(&input)),
-        _ => InvokeResult::Err(NodeError {
-            code: "UNKNOWN_OPERATION".to_string(),
-            message: format!("unsupported operation {operation}"),
-            retryable: false,
-            backoff_ms: None,
-            details: None,
-        }),
+impl Guest for Component {
+    fn get_manifest() -> String {
+        describe_manifest()
+    }
+
+    fn on_start(_ctx: ExecCtx) -> Result<LifecycleStatus, String> {
+        Ok(LifecycleStatus::Ok)
+    }
+
+    fn on_stop(_ctx: ExecCtx, _reason: String) -> Result<LifecycleStatus, String> {
+        Ok(LifecycleStatus::Ok)
+    }
+
+    fn invoke(_ctx: ExecCtx, operation: String, input: String) -> InvokeResult {
+        match operation.as_str() {
+            "reconcile_webhook" => invoke(reconcile_webhook(&input)),
+            _ => InvokeResult::Err(NodeError {
+                code: "UNKNOWN_OPERATION".to_string(),
+                message: format!("unsupported operation {operation}"),
+                retryable: false,
+                backoff_ms: None,
+                details: None,
+            }),
+        }
+    }
+
+    fn invoke_stream(_ctx: ExecCtx, _op: String, _input: String) -> Vec<StreamEvent> {
+        Vec::new()
     }
 }
+
+bindings::export!(Component with_types_in bindings);
 
 fn invoke(result: Result<String, String>) -> InvokeResult {
     match result {
@@ -285,6 +283,140 @@ fn first_non_empty<'a>(candidates: &'a [Option<&'a str>]) -> Option<&'a str> {
         .flatten()
         .find(|value| !value.trim().is_empty())
         .copied()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dry_run_reconcile_builds_scoped_webhook_plan_without_secrets() {
+        let out = reconcile_webhook(
+            r#"{
+              "public_base_url": "https://chat.example.com/webex",
+              "dry_run": true,
+              "secret_token": "shared-secret",
+              "env": "prod",
+              "tenant": "acme",
+              "team": "support"
+            }"#,
+        )
+        .expect("dry-run output");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["provider"], "webex");
+        assert_eq!(parsed["target_url"], "https://chat.example.com/webex");
+        assert_eq!(parsed["webhook_name"], "greentic:prod:acme:support:webex");
+        assert_eq!(parsed["actions"], json!(["dry-run"]));
+        assert_eq!(parsed["webhooks"][0]["status"], "planned");
+        assert!(
+            parsed["notes"][1]
+                .as_str()
+                .unwrap_or("")
+                .contains("X-Webex-Signature")
+        );
+    }
+
+    #[test]
+    fn build_webhook_name_falls_back_without_full_scope() {
+        let input: ReconcileInput = serde_json::from_value(json!({
+            "public_base_url": "https://chat.example.com/webex",
+            "env": "prod",
+            "tenant": "acme"
+        }))
+        .expect("input");
+
+        assert_eq!(build_webhook_name(&input), DEFAULT_WEBHOOK_NAME);
+    }
+
+    #[test]
+    fn first_non_empty_skips_blank_candidates() {
+        let first = first_non_empty(&[Some("   "), None, Some("tenant")]);
+
+        assert_eq!(first, Some("tenant"));
+    }
+
+    #[test]
+    fn find_primary_prefers_matching_name_before_matching_target_url() {
+        let webhooks = vec![
+            WebhookDetails {
+                id: "target-match".to_string(),
+                name: "other".to_string(),
+                resource: DEFAULT_RESOURCE.to_string(),
+                event: DEFAULT_EVENT.to_string(),
+                target_url: "https://chat.example.com/webex".to_string(),
+                status: None,
+            },
+            WebhookDetails {
+                id: "name-match".to_string(),
+                name: DEFAULT_WEBHOOK_NAME.to_string(),
+                resource: DEFAULT_RESOURCE.to_string(),
+                event: DEFAULT_EVENT.to_string(),
+                target_url: "https://old.example.com/webex".to_string(),
+                status: Some("active".to_string()),
+            },
+        ];
+
+        let index = find_primary_webhook_index(
+            &webhooks,
+            DEFAULT_WEBHOOK_NAME,
+            "https://chat.example.com/webex",
+        );
+
+        assert_eq!(index, Some(1));
+    }
+
+    #[test]
+    fn reconcile_validates_input_before_secret_lookup() {
+        assert!(
+            reconcile_webhook("{")
+                .expect_err("invalid json")
+                .contains("invalid input")
+        );
+        assert_eq!(
+            reconcile_webhook(r#"{"public_base_url":" "}"#).expect_err("missing base"),
+            "public_base_url is required"
+        );
+    }
+
+    #[test]
+    fn parse_webhooks_filters_malformed_items_and_applies_defaults() {
+        let parsed = parse_webhooks(&json!({
+            "items": [
+                {"name": "missing-id"},
+                {
+                    "id": "hook-1",
+                    "targetUrl": "https://chat.example.com/webex",
+                    "status": "active"
+                }
+            ]
+        }));
+
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].id, "hook-1");
+        assert_eq!(parsed[0].name, DEFAULT_WEBHOOK_NAME);
+        assert_eq!(parsed[0].resource, DEFAULT_RESOURCE);
+        assert_eq!(parsed[0].event, DEFAULT_EVENT);
+        assert_eq!(parsed[0].status.as_deref(), Some("active"));
+    }
+
+    #[test]
+    fn invoke_maps_success_and_errors_to_component_results() {
+        match invoke(Ok("{}".to_string())) {
+            InvokeResult::Ok(value) => assert_eq!(value, "{}"),
+            _ => panic!("expected ok result"),
+        }
+
+        match invoke(Err("bad input".to_string())) {
+            InvokeResult::Err(err) => {
+                assert_eq!(err.code, "INVALID_INPUT");
+                assert_eq!(err.message, "bad input");
+                assert!(!err.retryable);
+            }
+            _ => panic!("expected error result"),
+        }
+    }
 }
 
 fn find_primary_webhook_index(

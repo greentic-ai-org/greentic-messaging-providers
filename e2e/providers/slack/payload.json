@@ -1,0 +1,7 @@
+{
+  "text": "Greentic Slack provider e2e smoke",
+  "destination": {
+    "kind": "channel",
+    "id": "${E2E_SLACK_CHANNEL_ID}"
+  }
+}

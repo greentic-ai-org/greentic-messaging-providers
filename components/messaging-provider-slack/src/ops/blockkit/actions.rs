@@ -152,3 +152,66 @@ pub(super) fn collect_slack_actions(action_list: &[Value], actions: &mut Vec<Val
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn label_from_items_prefers_bold_then_nested_text() {
+        let items = vec![
+            json!({"type": "TextBlock", "text": "regular"}),
+            json!({"type": "TextBlock", "text": "Important", "weight": "Bolder"}),
+        ];
+        assert_eq!(label_from_items(&items), "Important");
+
+        let nested = vec![json!({
+            "type": "Container",
+            "items": [{"type": "TextBlock", "text": "Nested label"}]
+        })];
+        assert_eq!(label_from_items(&nested), "Nested label");
+    }
+
+    #[test]
+    fn collect_select_action_uses_route_fallback_and_data_value() {
+        let element = json!({
+            "type": "Container",
+            "items": [],
+            "selectAction": {
+                "type": "Action.Submit",
+                "data": {"routeToCardId": "details", "value": 7}
+            }
+        });
+        let mut actions = Vec::new();
+
+        collect_select_action(&element, &mut actions);
+
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0]["text"]["text"], "details");
+        assert_eq!(actions[0]["action_id"], "ac_action_0");
+        assert!(
+            actions[0]["value"]
+                .as_str()
+                .unwrap_or("")
+                .contains("routeToCardId")
+        );
+    }
+
+    #[test]
+    fn collect_slack_actions_handles_url_and_submit_buttons() {
+        let mut actions = Vec::new();
+        let action_list = vec![
+            json!({"type": "Action.OpenUrl", "title": "Open", "url": "https://example.com"}),
+            json!({"type": "Action.Submit", "title": "Save", "data": {"id": "save"}}),
+            json!({"type": "Action.Submit"}),
+        ];
+
+        collect_slack_actions(&action_list, &mut actions);
+
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["url"], "https://example.com");
+        assert_eq!(actions[0]["action_id"], "ac_url_0");
+        assert_eq!(actions[1]["text"]["text"], "Save");
+        assert!(actions[1].get("value").is_some());
+    }
+}

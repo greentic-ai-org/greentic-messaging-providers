@@ -700,7 +700,10 @@ jobs:
     permissions:
       contents: read
       packages: write
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    # Provider publishing is now orchestrated by provider-orchestrator.yml,
+    # which calls the reusable per-provider workflow with explicit provider
+    # selection. Keep this legacy workflow for validation until PR-08 cleanup.
+    if: ${{ false }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

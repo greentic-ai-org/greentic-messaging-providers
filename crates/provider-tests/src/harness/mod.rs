@@ -295,6 +295,19 @@ pub fn ensure_components_built() {
             .arg(&script)
             .env("SKIP_WASM_TOOLS_VALIDATION", "1")
             .current_dir(workspace_root());
+        // `cargo llvm-cov` injects coverage flags into child Cargo builds. The
+        // provider harness builds wasm32-wasip2 components as test fixtures,
+        // and that target cannot link the native profiler runtime. Keep the
+        // harness itself instrumented, but build fixture components normally.
+        for (key, _) in std::env::vars() {
+            if key.contains("RUSTFLAGS")
+                || key.contains("RUSTC_WRAPPER")
+                || key == "LLVM_PROFILE_FILE"
+                || key.starts_with("CARGO_LLVM_COV")
+            {
+                command.env_remove(key);
+            }
+        }
         if let Ok(target_dir) = std::env::var("TARGET_DIR") {
             command.env("TARGET_DIR", target_dir);
         }

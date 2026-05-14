@@ -1,0 +1,218 @@
+name: Nightly Provider E2E
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: One provider, comma-separated providers, or all
+        required: false
+        default: all
+        type: string
+      ref:
+        description: Optional git ref or GHCR tag/digest to test
+        required: false
+        type: string
+      use_published_gtpack:
+        description: Pull the provider gtpack from GHCR instead of building locally
+        required: false
+        default: false
+        type: boolean
+      publish_result_summary:
+        description: Write provider result details to the job summary
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: nightly-provider-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      providers: ${{ steps.matrix.outputs.providers }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build provider matrix
+        id: matrix
+        env:
+          PROVIDER_INPUT: ${{ inputs.provider || 'all' }}
+        run: |
+          set -euo pipefail
+          result="$(python3 ci/provider_matrix.py list-e2e-providers --provider "${PROVIDER_INPUT}")"
+          RESULT_JSON="${result}" python3 - <<'PY'
+          import json
+          import os
+
+          result = json.loads(os.environ["RESULT_JSON"])
+          providers = result["provider_names"]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+            handle.write(f"providers={json.dumps(providers)}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+            handle.write("## Nightly Provider E2E Matrix\n")
+            handle.write(f"- providers: {', '.join(providers) or '_none_'}\n")
+          PY
+
+  provider-e2e:
+    needs: matrix
+    if: ${{ needs.matrix.outputs.providers != '[]' }}
+    runs-on: ubuntu-latest
+    environment: e2e-live
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: ${{ fromJson(needs.matrix.outputs.providers) }}
+    env:
+      E2E_SLACK_BOT_TOKEN: ${{ secrets.E2E_SLACK_BOT_TOKEN }}
+      E2E_SLACK_CHANNEL_ID: ${{ secrets.E2E_SLACK_CHANNEL_ID }}
+      E2E_SLACK_SIGNING_SECRET: ${{ secrets.E2E_SLACK_SIGNING_SECRET }}
+      E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
+      E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
+      E2E_TEAMS_TENANT_ID: ${{ secrets.E2E_TEAMS_TENANT_ID }}
+      E2E_TEAMS_CLIENT_ID: ${{ secrets.E2E_TEAMS_CLIENT_ID }}
+      E2E_TEAMS_CLIENT_SECRET: ${{ secrets.E2E_TEAMS_CLIENT_SECRET }}
+      E2E_TEAMS_TEAM_ID: ${{ secrets.E2E_TEAMS_TEAM_ID }}
+      E2E_TEAMS_CHANNEL_ID: ${{ secrets.E2E_TEAMS_CHANNEL_ID }}
+      E2E_WEBEX_BOT_TOKEN: ${{ secrets.E2E_WEBEX_BOT_TOKEN }}
+      E2E_WEBEX_ROOM_ID: ${{ secrets.E2E_WEBEX_ROOM_ID }}
+      E2E_WHATSAPP_TOKEN: ${{ secrets.E2E_WHATSAPP_TOKEN }}
+      E2E_WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.E2E_WHATSAPP_PHONE_NUMBER_ID }}
+      E2E_WHATSAPP_TO: ${{ secrets.E2E_WHATSAPP_TO }}
+      E2E_WHATSAPP_VERIFY_TOKEN: ${{ secrets.E2E_WHATSAPP_VERIFY_TOKEN }}
+      E2E_EMAIL_SMTP_HOST: ${{ secrets.E2E_EMAIL_SMTP_HOST }}
+      E2E_EMAIL_SMTP_PORT: ${{ secrets.E2E_EMAIL_SMTP_PORT }}
+      E2E_EMAIL_SMTP_USERNAME: ${{ secrets.E2E_EMAIL_SMTP_USERNAME }}
+      E2E_EMAIL_SMTP_PASSWORD: ${{ secrets.E2E_EMAIL_SMTP_PASSWORD }}
+      E2E_EMAIL_FROM: ${{ secrets.E2E_EMAIL_FROM }}
+      E2E_EMAIL_TO: ${{ secrets.E2E_EMAIL_TO }}
+      E2E_WEBCHAT_ENDPOINT: ${{ secrets.E2E_WEBCHAT_ENDPOINT }}
+      E2E_WEBCHAT_BEARER_TOKEN: ${{ secrets.E2E_WEBCHAT_BEARER_TOKEN }}
+      E2E_WEBCHAT_ROOM_ID: ${{ secrets.E2E_WEBCHAT_ROOM_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.use_published_gtpack && github.sha || inputs.ref }}
+
+      - name: Resolve provider metadata
+        id: resolve
+        run: |
+          set -euo pipefail
+          result="$(python3 ci/provider_matrix.py resolve-e2e-provider "${{ matrix.provider }}")"
+          RESULT_JSON="${result}" python3 - <<'PY'
+          import json
+          import os
+
+          result = json.loads(os.environ["RESULT_JSON"])
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+            handle.write(f"pack={result['pack']}\n")
+            handle.write(f"version={result['version']}\n")
+            handle.write(f"components={json.dumps(result['components'])}\n")
+            handle.write(f"components_csv={','.join(result['components'])}\n")
+          PY
+
+      - name: Install Rust
+        if: ${{ !inputs.use_published_gtpack }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          targets: wasm32-wasip2
+
+      - name: Cache Rust
+        if: ${{ !inputs.use_published_gtpack }}
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: nightly-provider-e2e-${{ matrix.provider }}
+
+      - name: Install cargo tools
+        if: ${{ !inputs.use_published_gtpack }}
+        run: |
+          set -euo pipefail
+          cargo install cargo-binstall --locked || true
+          cargo binstall cargo-component --version 0.21.1 --force --no-confirm --locked
+          cargo binstall greentic-pack --force --no-confirm --locked || cargo install greentic-pack --force --locked
+
+      - name: Install oras
+        uses: oras-project/setup-oras@v1
+        with:
+          version: 1.2.0
+
+      - name: Build provider components locally
+        if: ${{ !inputs.use_published_gtpack }}
+        env:
+          COMPONENTS_JSON: ${{ steps.resolve.outputs.components }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | while IFS= read -r component; do bash "./tools/build_components/${component}.sh"; done
+          import json
+          import os
+          for component in json.loads(os.environ["COMPONENTS_JSON"]):
+              print(component)
+          PY
+
+      - name: Build local provider gtpack
+        if: ${{ !inputs.use_published_gtpack }}
+        env:
+          PACK_FILTER: ${{ steps.resolve.outputs.pack }}
+          PACK_VERSION: ${{ steps.resolve.outputs.version }}
+          RUN_PUBLISH_PACKS: "1"
+        run: ./ci/steps/11_build_packs.sh
+
+      - name: Pull published provider gtpack
+        if: ${{ inputs.use_published_gtpack }}
+        env:
+          PACK: ${{ steps.resolve.outputs.pack }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          REF_INPUT: ${{ inputs.ref }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/packs
+          ref="${REF_INPUT}"
+          if [ -z "${ref}" ]; then
+            ref="${VERSION}"
+          fi
+          case "${ref}" in
+            ghcr.io/*) oci_ref="${ref}" ;;
+            *@sha256:*) oci_ref="ghcr.io/${OWNER}/greentic-messaging-providers/packs/messaging/${PACK}${ref#*@}" ;;
+            *) oci_ref="ghcr.io/${OWNER}/greentic-messaging-providers/packs/messaging/${PACK}:${ref}" ;;
+          esac
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          oras pull "${oci_ref}" -o dist/packs
+          if [ ! -f "dist/packs/${PACK}.gtpack" ]; then
+            found="$(find dist/packs -maxdepth 1 -name '*.gtpack' | head -n1)"
+            test -n "${found}"
+            mv "${found}" "dist/packs/${PACK}.gtpack"
+          fi
+
+      - name: Run provider e2e
+        env:
+          PROVIDER: ${{ matrix.provider }}
+          PACK: ${{ steps.resolve.outputs.pack }}
+          SOURCE: ${{ inputs.use_published_gtpack && 'published-ghcr' || 'local-build' }}
+          CORRELATION_ID: ${{ github.run_id }}-${{ matrix.provider }}
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-results
+          python3 ci/e2e/provider_e2e.py run \
+            --provider "${PROVIDER}" \
+            --gtpack "dist/packs/${PACK}.gtpack" \
+            --gtpack-source "${SOURCE}" \
+            --correlation-id "${CORRELATION_ID}" \
+            --result-json "e2e-results/${PROVIDER}.json"
+
+      - name: Upload sanitized e2e result
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-e2e-${{ matrix.provider }}
+          path: e2e-results/${{ matrix.provider }}.json
+          if-no-files-found: error

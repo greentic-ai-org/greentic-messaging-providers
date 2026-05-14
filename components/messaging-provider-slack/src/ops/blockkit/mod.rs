@@ -111,7 +111,7 @@ impl provider_common::AdaptiveCardConverter for SlackBlockKitConverter {
     fn convert(
         &self,
         adaptive_card: &Value,
-        _caps: &greentic_messaging_renderer::PlannerCapabilities,
+        _caps: &provider_common::render::PlannerCapabilities,
     ) -> Result<Self::Output, provider_common::ProviderError> {
         // `ac_to_slack_blocks` currently takes a raw JSON string; adapt the
         // trait's `&Value` input by re-serialising. Cheap: the card is small
@@ -145,7 +145,7 @@ mod converter_tests {
             "version": "1.6",
             "body": [{"type": "TextBlock", "text": "hello"}]
         });
-        let caps = greentic_messaging_renderer::capabilities_for("slack")
+        let caps = provider_common::render::capabilities_for("slack")
             .expect("slack capabilities must be registered");
         let result = SlackBlockKitConverter.convert(&card, &caps);
         assert!(result.is_ok(), "converter should succeed on a simple card");
@@ -168,7 +168,7 @@ mod converter_tests {
             "version": "1.6",
             "body": []
         });
-        let caps = greentic_messaging_renderer::capabilities_for("slack")
+        let caps = provider_common::render::capabilities_for("slack")
             .expect("slack capabilities must be registered");
         let result = SlackBlockKitConverter.convert(&card, &caps);
         assert!(

@@ -24,3 +24,30 @@ impl Guest for Component {
 bindings::exports::provider::common::ingress::__export_provider_common_ingress_0_0_2_cabi!(
     Component with_types_in bindings::exports::provider::common::ingress
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webhook_wraps_update_json_in_normalized_event() {
+        let out = <Component as Guest>::handle_webhook(
+            "{}".to_string(),
+            r#"{"update_id":1,"message":{"text":"hello"}}"#.to_string(),
+        )
+        .expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["event"]["update_id"], 1);
+        assert_eq!(parsed["event"]["message"]["text"], "hello");
+    }
+
+    #[test]
+    fn webhook_rejects_invalid_json() {
+        let err = <Component as Guest>::handle_webhook("{}".to_string(), "{".to_string())
+            .expect_err("invalid body should fail");
+
+        assert!(err.contains("invalid body"), "{err}");
+    }
+}

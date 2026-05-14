@@ -1,0 +1,8 @@
+{
+  "text": "Greentic Teams provider e2e smoke",
+  "destination": {
+    "kind": "channel",
+    "team_id": "${E2E_TEAMS_TEAM_ID}",
+    "channel_id": "${E2E_TEAMS_CHANNEL_ID}"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "subject": "Greentic email provider e2e smoke",
+  "text": "Greentic email provider e2e smoke",
+  "to": "${E2E_EMAIL_TO}",
+  "from": "${E2E_EMAIL_FROM}"
+}

@@ -7,10 +7,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-// `component_v0_5` host bindings were removed from greentic-interfaces-wasmtime >=1.1
-// (cleanup: greentic-interfaces 8d91166). The legacy `node@0.5.0` invoke path is no
-// longer supported by this tester; the V05 enum variant + match arms below are
-// unreachable until the legacy webhook components are migrated to the 0.6.0 contract.
 use greentic_interfaces_wasmtime::host_helpers::v1::{
     HostFns, add_all_v1_to_linker, http_client, secrets_store, state_store,
 };
@@ -36,7 +32,6 @@ use crate::http_mock::{
 };
 
 const NODE_WORLD: &str = "greentic:component/node@0.6.0";
-const NODE_WORLD_LEGACY: &str = "greentic:component/node@0.5.0";
 const COMPONENT_DESCRIPTOR_WORLD: &str = "greentic:component/descriptor@0.6.0";
 const COMPONENT_RUNTIME_WORLD: &str = "greentic:component/runtime@0.6.0";
 
@@ -177,9 +172,6 @@ impl WasmHarness {
                         }
                     }
                 }
-                NodeWorldVersion::V05 => Err(anyhow!(
-                    "node@0.5.0 invoke path is no longer supported on the 1.1 lane; component must export node@0.6.0",
-                )),
             }
         })
     }
@@ -273,9 +265,6 @@ impl ComponentHarness {
                         }
                     }
                 }
-                NodeWorldVersion::V05 => Err(anyhow!(
-                    "node@0.5.0 invoke path is no longer supported on the 1.1 lane; component must export node@0.6.0",
-                )),
             }
         })
     }
@@ -616,10 +605,7 @@ fn node_world_export(
     store: &mut Store<TesterHostState>,
     instance: &Instance,
 ) -> Option<ComponentExportIndex> {
-    if let Some(index) = instance.get_export_index(&mut *store, None, NODE_WORLD) {
-        return Some(index);
-    }
-    instance.get_export_index(&mut *store, None, NODE_WORLD_LEGACY)
+    instance.get_export_index(&mut *store, None, NODE_WORLD)
 }
 
 fn node_world_version(
@@ -633,10 +619,13 @@ fn node_world_version(
         return Some(NodeWorldVersion::V06);
     }
     if instance
-        .get_export_index(&mut *store, None, NODE_WORLD_LEGACY)
+        .get_export_index(&mut *store, None, "invoke")
         .is_some()
+        || instance
+            .get_export_index(&mut *store, None, "greentic:component/node@0.6.0#invoke")
+            .is_some()
     {
-        return Some(NodeWorldVersion::V05);
+        return Some(NodeWorldVersion::V06);
     }
     None
 }
@@ -655,7 +644,6 @@ fn node_function_index(
     let candidates = [
         name.to_string(),
         format!("greentic:component/node@0.6.0#{name}"),
-        format!("greentic:component/node@0.5.0#{name}"),
     ];
     for candidate in candidates {
         if let Some(index) = instance.get_export_index(&mut *store, None, &candidate) {
@@ -1085,12 +1073,7 @@ mod tests {
     use serde_json::{Value, json};
     use std::{collections::BTreeMap, collections::HashMap, path::PathBuf, process::Command};
 
-    // TODO(force-jump-1.1): re-enable once telegram-webhook is migrated to the
-    // 0.6.0 invoke contract. The node@0.5.0 export glue (component_entrypoint!)
-    // was removed from greentic-interfaces-guest >=1.1; the webhook artifact is
-    // a stub with no node-world exports until migration lands.
     #[test]
-    #[ignore = "telegram-webhook on the 1.1 lane is a no-export stub pending 0.6.0 invoke migration"]
     fn node_world_strategy_detected() {
         let wasm = ensure_component_built("telegram-webhook");
         let harness = WasmHarness::new_with_path(&wasm).expect("instantiate node component");
@@ -1105,7 +1088,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "telegram-webhook on the 1.1 lane is a no-export stub pending 0.6.0 invoke migration"]
     fn node_world_can_invoke_reconcile_webhook() {
         let wasm = ensure_component_built("telegram-webhook");
         let harness = WasmHarness::new_with_path(&wasm).expect("instantiate node component");
@@ -1251,5 +1233,4 @@ mod tests {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum NodeWorldVersion {
     V06,
-    V05,
 }

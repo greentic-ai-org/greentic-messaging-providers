@@ -50,3 +50,74 @@ fn forward_send_payload(payload: &Value) -> Result<(), String> {
         Err(message)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::STANDARD;
+    use greentic_types::messaging::universal_dto::{ProviderPayloadV1, SendPayloadInV1};
+    use std::collections::BTreeMap;
+
+    fn parse_result(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json result")
+    }
+
+    fn send_payload_input(provider_type: &str, body_b64: String) -> SendPayloadInV1 {
+        SendPayloadInV1 {
+            provider_type: provider_type.to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64,
+                metadata: BTreeMap::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn send_payload_rejects_invalid_input_json() {
+        let body = parse_result(send_payload(b"{"));
+
+        assert_eq!(body["ok"], false);
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("invalid send_payload input")
+        );
+    }
+
+    #[test]
+    fn send_payload_rejects_wrong_provider_before_decoding_payload() {
+        let input = send_payload_input("other", "not base64".to_string());
+        let body = parse_result(send_payload(&serde_json::to_vec(&input).expect("input")));
+
+        assert_eq!(body["ok"], false);
+        assert_eq!(body["message"], "provider type mismatch");
+    }
+
+    #[test]
+    fn send_payload_rejects_invalid_base64() {
+        let input = send_payload_input(PROVIDER_TYPE, "not base64".to_string());
+        let body = parse_result(send_payload(&serde_json::to_vec(&input).expect("input")));
+
+        assert_eq!(body["ok"], false);
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("payload decode failed")
+        );
+    }
+
+    #[test]
+    fn send_payload_returns_send_error_for_missing_config_without_network() {
+        let input = send_payload_input(PROVIDER_TYPE, STANDARD.encode(br#"{"text":"hello"}"#));
+        let body = parse_result(send_payload(&serde_json::to_vec(&input).expect("input")));
+
+        assert_eq!(body["ok"], false);
+        assert_eq!(body["message"], "config required");
+        assert_eq!(body["retryable"], false);
+    }
+}

@@ -21,26 +21,26 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "1.1.0-dev.0"
+version = "1.1.0"
 license = "MIT"
 
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-wit-bindgen = "0.54"
+wit-bindgen = "0.57"
 serde_json = "1"
 serde_yaml = {package="serde_yaml_gtc", version="2.5.2"}
 serde_yaml_bw = {package="serde_yaml_gtc", version="2.5.2"}
 regex = "1"
-hmac = "0.12"
-sha2 = "0.10"
+hmac = "0.13"
+sha2 = "0.11"
 urlencoding = "2"
-greentic-interfaces-wasmtime = ">=1.1.0-dev, <1.2.0-0"
-greentic-types = ">=1.1.0-dev, <1.2.0-0"
-greentic-interfaces = ">=1.1.0-dev, <1.2.0-0"
-greentic-interfaces-guest = { version = ">=1.1.0-dev, <1.2.0-0", default-features = false }
-greentic-runner-desktop = ">=1.1.0-dev, <1.2.0-0"
+greentic-interfaces-wasmtime = "0.5"
+greentic-types = "0.5"
+greentic-interfaces = "0.5"
+greentic-interfaces-guest = { version = "0.5", default-features = false }
+greentic-runner-desktop = "0.5"
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 tempfile = "3"
@@ -59,7 +59,7 @@ rpassword = "7"
 htmlescape = "0.3"
 greentic-messaging-planned = { path = "crates/greentic-messaging-planned" }
 greentic-messaging-renderer = { path = "crates/greentic-messaging-renderer" }
-provider-common = { path = "crates/provider-common" }
+provider-common = { package = "greentic-messaging-provider-common", version = "0.4.99", path = "crates/provider-common" }
 webchat-directline-core = { path = "crates/webchat-directline-core" }
 ureq = "3"
 http = "1"
@@ -67,4 +67,4 @@ assert_cmd = "2"
 predicates = "3"
 wasmtime = { version = "43", features = ["component-model", "cache"] }
 wasmtime-wasi = "43"
-jsonschema = { version = "0.45", default-features = false }
+jsonschema = { version = "0.46", default-features = false }
