@@ -88,3 +88,44 @@ pub(super) fn extract_texts_from_items(items: &[Value]) -> Vec<String> {
     }
     texts
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn converts_bold_and_links_without_touching_plain_text() {
+        let converted =
+            ac_markdown_to_slack("Approve **Invoice 42** at [portal](https://example.test)");
+
+        assert_eq!(
+            converted,
+            "Approve *Invoice 42* at <https://example.test|portal>"
+        );
+    }
+
+    #[test]
+    fn malformed_markdown_is_preserved_instead_of_dropped() {
+        assert_eq!(
+            ac_markdown_to_slack("see [portal](missing"),
+            "see [portal](missing"
+        );
+        assert_eq!(ac_markdown_to_slack("**unclosed"), "**unclosed");
+    }
+
+    #[test]
+    fn extracts_nested_container_text_and_bolder_weight() {
+        let items = vec![json!({
+            "type": "Container",
+            "items": [
+                {"type": "TextBlock", "text": "  title  ", "weight": "Bolder"},
+                {"type": "TextBlock", "text": "[open](https://example.test)"}
+            ]
+        })];
+
+        let texts = extract_texts_from_items(&items);
+
+        assert_eq!(texts, vec!["*title*", "<https://example.test|open>"]);
+    }
+}

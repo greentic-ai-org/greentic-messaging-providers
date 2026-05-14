@@ -7,7 +7,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use greentic_interfaces_wasmtime::component_v0_5::exports::greentic::component::node as component_node_bindings_v05;
 use greentic_interfaces_wasmtime::host_helpers::v1::{
     HostFns, add_all_v1_to_linker, http_client, secrets_store, state_store,
 };
@@ -33,7 +32,6 @@ use crate::http_mock::{
 };
 
 const NODE_WORLD: &str = "greentic:component/node@0.6.0";
-const NODE_WORLD_LEGACY: &str = "greentic:component/node@0.5.0";
 const COMPONENT_DESCRIPTOR_WORLD: &str = "greentic:component/descriptor@0.6.0";
 const COMPONENT_RUNTIME_WORLD: &str = "greentic:component/runtime@0.6.0";
 
@@ -174,23 +172,6 @@ impl WasmHarness {
                         }
                     }
                 }
-                NodeWorldVersion::V05 => {
-                    let invoke = instance.get_typed_func::<
-                        (component_node_bindings_v05::ExecCtx, String, String),
-                        (component_node_bindings_v05::InvokeResult,),
-                    >(&mut *store, invoke_index)?;
-                    let ctx = build_exec_ctx_v05();
-                    let (result,) =
-                        invoke.call(&mut *store, (ctx, op.to_string(), input_str.clone()))?;
-                    match result {
-                        component_node_bindings_v05::InvokeResult::Ok(body) => {
-                            Ok(body.into_bytes())
-                        }
-                        component_node_bindings_v05::InvokeResult::Err(err) => {
-                            Err(anyhow!("{}", err.message))
-                        }
-                    }
-                }
             }
         })
     }
@@ -284,23 +265,6 @@ impl ComponentHarness {
                         }
                     }
                 }
-                NodeWorldVersion::V05 => {
-                    let invoke = instance.get_typed_func::<
-                        (component_node_bindings_v05::ExecCtx, String, String),
-                        (component_node_bindings_v05::InvokeResult,),
-                    >(&mut *store, invoke_index)?;
-                    let ctx = build_exec_ctx_v05();
-                    let (result,) =
-                        invoke.call(&mut *store, (ctx, op.to_string(), input_json.clone()))?;
-                    match result {
-                        component_node_bindings_v05::InvokeResult::Ok(body) => {
-                            Ok(body.into_bytes())
-                        }
-                        component_node_bindings_v05::InvokeResult::Err(err) => {
-                            Err(anyhow!(err.message))
-                        }
-                    }
-                }
             }
         })
     }
@@ -328,25 +292,6 @@ fn build_exec_ctx_v06() -> component_node_bindings::ExecCtx {
             attempt: 0,
             idempotency_key: None,
             impersonation: None,
-        },
-        i18n_id: None,
-        flow_id: "manual".into(),
-        node_id: None,
-    }
-}
-
-fn build_exec_ctx_v05() -> component_node_bindings_v05::ExecCtx {
-    component_node_bindings_v05::ExecCtx {
-        tenant: component_node_bindings_v05::TenantCtx {
-            tenant: "manual".into(),
-            team: None,
-            user: None,
-            trace_id: None,
-            i18n_id: None,
-            correlation_id: None,
-            deadline_unix_ms: None,
-            attempt: 0,
-            idempotency_key: None,
         },
         i18n_id: None,
         flow_id: "manual".into(),
@@ -660,10 +605,7 @@ fn node_world_export(
     store: &mut Store<TesterHostState>,
     instance: &Instance,
 ) -> Option<ComponentExportIndex> {
-    if let Some(index) = instance.get_export_index(&mut *store, None, NODE_WORLD) {
-        return Some(index);
-    }
-    instance.get_export_index(&mut *store, None, NODE_WORLD_LEGACY)
+    instance.get_export_index(&mut *store, None, NODE_WORLD)
 }
 
 fn node_world_version(
@@ -677,10 +619,13 @@ fn node_world_version(
         return Some(NodeWorldVersion::V06);
     }
     if instance
-        .get_export_index(&mut *store, None, NODE_WORLD_LEGACY)
+        .get_export_index(&mut *store, None, "invoke")
         .is_some()
+        || instance
+            .get_export_index(&mut *store, None, "greentic:component/node@0.6.0#invoke")
+            .is_some()
     {
-        return Some(NodeWorldVersion::V05);
+        return Some(NodeWorldVersion::V06);
     }
     None
 }
@@ -699,7 +644,6 @@ fn node_function_index(
     let candidates = [
         name.to_string(),
         format!("greentic:component/node@0.6.0#{name}"),
-        format!("greentic:component/node@0.5.0#{name}"),
     ];
     for candidate in candidates {
         if let Some(index) = instance.get_export_index(&mut *store, None, &candidate) {
@@ -1282,11 +1226,11 @@ mod tests {
             text: Some("plan input".to_string()),
             attachments: Vec::new(),
             metadata,
+            extensions: Default::default(),
         }
     }
 }
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum NodeWorldVersion {
     V06,
-    V05,
 }

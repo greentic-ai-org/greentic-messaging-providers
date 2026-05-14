@@ -224,3 +224,127 @@ fn handle_input_text_like(element: &Value, parts: &mut Vec<String>, inputs: &mut
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handles_text_input_with_escaped_label_and_placeholder() {
+        let mut parts = Vec::new();
+        let mut actions = Vec::new();
+        let mut inputs = Vec::new();
+
+        let handled = handle_ac_input(
+            "Input.Text",
+            &json!({
+                "id": "comment",
+                "label": "Comment <required>",
+                "placeholder": "Type & send",
+                "isMultiline": true
+            }),
+            &mut parts,
+            &mut actions,
+            &mut inputs,
+        );
+
+        assert!(handled);
+        assert_eq!(
+            parts[0],
+            "\u{270f}\u{fe0f} <b>Comment &lt;required&gt;</b> <i>(Type &amp; send)</i>"
+        );
+        assert!(actions.is_empty());
+        assert_eq!(inputs[0].id, "comment");
+        assert!(matches!(inputs[0].kind, AcInputKind::Text));
+    }
+
+    #[test]
+    fn choice_set_adds_buttons_and_choice_input() {
+        let mut parts = Vec::new();
+        let mut actions = Vec::new();
+        let mut inputs = Vec::new();
+
+        handle_ac_input(
+            "Input.ChoiceSet",
+            &json!({
+                "id": "priority",
+                "label": "Priority",
+                "choices": [
+                    {"title": "High", "value": "high"},
+                    {"title": "Low", "value": "low"},
+                    {"title": "Missing value"}
+                ]
+            }),
+            &mut parts,
+            &mut actions,
+            &mut inputs,
+        );
+
+        assert_eq!(parts[0], "<b>Priority</b>");
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["data"]["input_id"], "priority");
+        assert_eq!(inputs[0].choices.len(), 2);
+        assert!(matches!(inputs[0].kind, AcInputKind::Choice));
+    }
+
+    #[test]
+    fn toggle_adds_yes_no_buttons() {
+        let mut parts = Vec::new();
+        let mut actions = Vec::new();
+        let mut inputs = Vec::new();
+
+        handle_ac_input(
+            "Input.Toggle",
+            &json!({
+                "id": "confirm",
+                "title": "Confirm",
+                "valueOn": "yes",
+                "valueOff": "no"
+            }),
+            &mut parts,
+            &mut actions,
+            &mut inputs,
+        );
+
+        assert!(parts.is_empty());
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["data"]["input_value"], "yes");
+        assert_eq!(actions[1]["data"]["input_value"], "no");
+        assert!(matches!(inputs[0].kind, AcInputKind::Toggle));
+    }
+
+    #[test]
+    fn date_number_time_are_text_like_inputs() {
+        let mut parts = Vec::new();
+        let mut actions = Vec::new();
+        let mut inputs = Vec::new();
+
+        let handled = handle_ac_input(
+            "Input.Date",
+            &json!({"id": "due", "label": "Due date", "placeholder": "YYYY-MM-DD"}),
+            &mut parts,
+            &mut actions,
+            &mut inputs,
+        );
+
+        assert!(handled);
+        assert!(parts[0].contains("Due date"));
+        assert!(actions.is_empty());
+        assert!(matches!(inputs[0].kind, AcInputKind::Text));
+    }
+
+    #[test]
+    fn unknown_input_type_is_not_handled() {
+        let mut parts = Vec::new();
+        let mut actions = Vec::new();
+        let mut inputs = Vec::new();
+
+        assert!(!handle_ac_input(
+            "Input.Unknown",
+            &json!({}),
+            &mut parts,
+            &mut actions,
+            &mut inputs
+        ));
+    }
+}

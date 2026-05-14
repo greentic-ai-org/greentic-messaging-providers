@@ -36,6 +36,25 @@
       "type": "string",
       "format": "uri",
       "description": "Optional host base URL for push/websocket endpoints."
+    },
+    "presentation_mode": {
+      "type": "string",
+      "enum": ["standalone", "embed_webcomponent"],
+      "default": "standalone",
+      "description": "Choose standalone hosted page or framework-independent Web Component embed mode."
+    },
+    "skin": {
+      "type": "string",
+      "default": "default",
+      "description": "Visual theme folder under assets/webchat-gui/skins."
+    },
+    "nav_links": {
+      "type": "array",
+      "default": [],
+      "description": "Top-menu links used by standalone mode.",
+      "items": {
+        "type": "object"
+      }
     }
   }
 }

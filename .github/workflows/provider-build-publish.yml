@@ -1,0 +1,301 @@
+name: Provider Build, Test, and Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Provider name from ci/provider-matrix.json
+        required: true
+        type: string
+      provider_version:
+        description: Optional provider version override; defaults to provider metadata
+        required: false
+        type: string
+      shared_crate_version:
+        description: Optional shared crate version recorded in the run summary
+        required: false
+        type: string
+      publish:
+        description: Publish the provider components and gtpack to GHCR
+        required: false
+        default: false
+        type: boolean
+      publish_latest:
+        description: Also publish/update the latest tag
+        required: false
+        default: false
+        type: boolean
+      trigger_e2e_after_publish:
+        description: Optionally trigger the provider e2e workflow after publish
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      provider:
+        description: Provider name from ci/provider-matrix.json
+        required: true
+        type: string
+      provider_version:
+        description: Optional provider version override; defaults to provider metadata
+        required: false
+        type: string
+      shared_crate_version:
+        description: Optional shared crate version recorded in the run summary
+        required: false
+        type: string
+      publish:
+        description: Publish the provider components and gtpack to GHCR
+        required: false
+        default: false
+        type: boolean
+      publish_latest:
+        description: Also publish/update the latest tag
+        required: false
+        default: false
+        type: boolean
+      trigger_e2e_after_publish:
+        description: Optionally trigger the provider e2e workflow after publish
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      provider:
+        description: Provider name
+        value: ${{ jobs.resolve-provider.outputs.provider }}
+      provider_version:
+        description: Provider version used for pack/component tags
+        value: ${{ jobs.resolve-provider.outputs.version }}
+      pack:
+        description: Provider pack name
+        value: ${{ jobs.resolve-provider.outputs.pack }}
+
+concurrency:
+  group: provider-build-publish-${{ github.ref }}-${{ inputs.provider }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+env:
+  OCI_REGISTRY: ghcr.io
+  OCI_NAMESPACE: ${{ github.repository_owner }}/greentic-messaging-providers
+
+jobs:
+  resolve-provider:
+    runs-on: ubuntu-latest
+    outputs:
+      provider: ${{ steps.resolve.outputs.provider }}
+      pack: ${{ steps.resolve.outputs.pack }}
+      version: ${{ steps.resolve.outputs.version }}
+      ghcr_target: ${{ steps.resolve.outputs.ghcr_target }}
+      components: ${{ steps.resolve.outputs.components }}
+      components_csv: ${{ steps.resolve.outputs.components_csv }}
+      manifests: ${{ steps.resolve.outputs.manifests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve provider metadata
+        id: resolve
+        env:
+          PROVIDER_VERSION: ${{ inputs.provider_version }}
+          SHARED_CRATE_VERSION: ${{ inputs.shared_crate_version }}
+        run: |
+          set -euo pipefail
+          result="$(python3 ci/provider_matrix.py resolve-provider "${{ inputs.provider }}")"
+          RESULT_JSON="${result}" python3 - <<'PY'
+          import json
+          import os
+
+          result = json.loads(os.environ["RESULT_JSON"])
+          override = os.environ.get("PROVIDER_VERSION", "").strip()
+          if override:
+            result["version"] = override
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+            handle.write(f"provider={result['provider']}\n")
+            handle.write(f"pack={result['pack']}\n")
+            handle.write(f"version={result['version']}\n")
+            handle.write(f"ghcr_target={result['ghcr_target']}\n")
+            handle.write(f"components={json.dumps(result['components'])}\n")
+            handle.write(f"components_csv={','.join(result['components'])}\n")
+            handle.write(f"manifests={json.dumps(result['manifests'])}\n")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+            handle.write("## Provider Build/Publish\n")
+            handle.write(f"- provider: `{result['provider']}`\n")
+            handle.write(f"- version: `{result['version']}`\n")
+            handle.write(f"- pack: `{result['pack']}`\n")
+            handle.write(f"- GHCR target: `{result['ghcr_target']}`\n")
+            handle.write(f"- components: {', '.join(result['components'])}\n")
+            handle.write(f"- shared crate version: `{os.environ.get('SHARED_CRATE_VERSION', '') or 'metadata default'}`\n")
+          PY
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: resolve-provider
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: provider-build-publish-lint
+
+      - name: Targeted cargo fmt
+        env:
+          COMPONENT_MANIFESTS_JSON: ${{ needs.resolve-provider.outputs.manifests }}
+        run: ./ci/steps/01_fmt.sh
+
+      - name: Targeted cargo clippy
+        env:
+          COMPONENT_MANIFESTS_JSON: ${{ needs.resolve-provider.outputs.manifests }}
+        run: ./ci/steps/02_clippy.sh
+
+  build-components:
+    runs-on: ubuntu-latest
+    needs: resolve-provider
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJson(needs.resolve-provider.outputs.components) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          targets: wasm32-wasip2
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: provider-build-publish-components
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-component
+        run: cargo binstall cargo-component --version 0.21.1 --force --no-confirm --locked
+
+      - name: Build selected component
+        run: bash "./tools/build_components/${{ matrix.component }}.sh"
+
+      - name: Upload component artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: components-wasm-${{ matrix.component }}
+          path: target/components/${{ matrix.component }}.wasm
+          if-no-files-found: error
+
+  package-provider:
+    runs-on: ubuntu-latest
+    needs: [resolve-provider, lint, build-components]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install greentic-pack
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+        run: |
+          cargo binstall greentic-pack --force --no-confirm --locked
+          echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
+          greentic-pack --version
+
+      - name: Install oras
+        uses: oras-project/setup-oras@v1
+        with:
+          version: 1.2.0
+
+      - name: Download component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: components-wasm-*
+          path: target/components
+          merge-multiple: true
+
+      - name: Publish selected components
+        if: ${{ inputs.publish }}
+        env:
+          VERSION: ${{ needs.resolve-provider.outputs.version }}
+          PUBLISH_STABLE: "1"
+          COMPONENT_FILTER: ${{ needs.resolve-provider.outputs.components_csv }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          ./tools/publish_oci.sh
+
+      - name: Sync selected pack with OCI templates
+        env:
+          PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
+        run: ./ci/steps/07_sync_packs.sh
+
+      - name: Build and validate selected pack
+        env:
+          PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
+          PACK_VERSION: ${{ needs.resolve-provider.outputs.version }}
+          RUN_PUBLISH_PACKS: "1"
+        run: ./ci/steps/11_build_packs.sh
+
+      - name: Publish selected pack
+        if: ${{ inputs.publish }}
+        env:
+          PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
+          PACK_VERSION: ${{ needs.resolve-provider.outputs.version }}
+          PUBLISH_LATEST: ${{ inputs.publish_latest && '1' || '0' }}
+          PUBLISH_STABLE: "1"
+          TEMPLATES_IMAGE: ghcr.io/greenticai/components/templates:latest
+        run: ./tools/publish_packs_oci.sh
+
+      - name: Upload selected pack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtpack-${{ needs.resolve-provider.outputs.pack }}
+          path: dist/packs/${{ needs.resolve-provider.outputs.pack }}.gtpack
+          if-no-files-found: error
+
+      - name: Optional post-publish e2e hook
+        if: ${{ inputs.publish && inputs.trigger_e2e_after_publish }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROVIDER: ${{ needs.resolve-provider.outputs.provider }}
+          VERSION: ${{ needs.resolve-provider.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -f ".github/workflows/nightly-provider-e2e.yml" ]; then
+            gh workflow run nightly-provider-e2e.yml \
+              -f provider="${PROVIDER}" \
+              -f ref="${VERSION}" \
+              -f use_published_gtpack=true
+            echo "- e2e trigger: requested for \`${PROVIDER}\`" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "- e2e trigger: skipped; nightly-provider-e2e.yml is not present yet" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Workflow summary
+        run: |
+          {
+            echo "## Provider Artifact"
+            echo "- provider: \`${{ needs.resolve-provider.outputs.provider }}\`"
+            echo "- version: \`${{ needs.resolve-provider.outputs.version }}\`"
+            echo "- components: ${{ needs.resolve-provider.outputs.components_csv }}"
+            echo "- pack: \`${{ needs.resolve-provider.outputs.pack }}\`"
+            echo "- publish: \`${{ inputs.publish }}\`"
+            echo "- publish_latest: \`${{ inputs.publish_latest }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

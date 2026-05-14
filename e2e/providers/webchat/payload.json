@@ -1,0 +1,4 @@
+{
+  "text": "Greentic WebChat provider e2e smoke",
+  "room_id": "${E2E_WEBCHAT_ROOM_ID}"
+}

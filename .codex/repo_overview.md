@@ -14,9 +14,9 @@
   - **Key functionality:** Defines `Message` struct with `id` and `content` fields, serde serialize/deserialize derives, and a convenience constructor.
   - **Key dependencies / integration points:** Uses `serde` for data interchange.
 - **Path:** `crates/provider-common`
-  - **Role:** Common provider utilities.
-  - **Key functionality:** Defines `ProviderError` enum (`Validation`, `Transport`, `Other`) with `thiserror` display strings, serde serialization, and helper constructors.
-  - **Key dependencies / integration points:** Relies on `serde` and `thiserror`; intended for reuse across provider components.
+  - **Role:** Publishable shared provider crate (`greentic-messaging-provider-common`, Rust crate name `provider_common`).
+  - **Key functionality:** Defines provider errors, component v0.6/schema-core helpers, QA bridge helpers, render planning/capability helpers, HTTP compatibility shims, lifecycle key helpers, and provider test support.
+  - **Key dependencies / integration points:** Has independent semver in its own `Cargo.toml`; provider crates use path dependencies during the migration and later consume the crates.io version.
 - **Path:** `crates/provider-runtime-config`
   - **Role:** Runtime configuration model for provider components.
   - **Key functionality:** Defines `ProviderRuntimeConfig` (schema versioned JSON), telemetry/network/runtime settings, and validation helpers.
@@ -160,8 +160,17 @@
   - **Role:** CI convenience wrapper.
   - **Key functionality:** Runs `cargo fmt --check`, `cargo test --workspace`, and `tools/build_components.sh`.
 - **Path:** `.github/workflows/build-and-publish.yml`
-  - **Role:** CI workflow for pushes/PRs with pack build validation.
-  - **Key functionality:** Installs Rust toolchain and CLIs, runs fmt/test, builds components, syncs packs, validates flows/components, and builds packs in dry-run mode.
+  - **Role:** Legacy validation workflow for pushes while provider publishing is migrated.
+  - **Key functionality:** Installs Rust toolchain and CLIs, runs fmt/test, builds components, syncs packs, validates flows/components, and builds packs in dry-run mode. The previous monolithic publish job is disabled so provider-only changes cannot publish unrelated providers.
+- **Path:** `.github/workflows/publish-shared-crate.yml`
+  - **Role:** Dedicated shared crate release workflow.
+  - **Key functionality:** Validates `greentic-messaging-provider-common`, performs `cargo publish --dry-run`, checks crates.io for idempotency, publishes only when allowed, and uploads shared crate release metadata.
+- **Path:** `.github/workflows/provider-build-publish.yml`
+  - **Role:** Reusable/manual one-provider build/test/publish workflow.
+  - **Key functionality:** Resolves provider metadata, runs targeted fmt/clippy, builds only that provider's components, builds/validates one `.gtpack`, uploads dry-run artifacts, and publishes only the selected provider when requested.
+- **Path:** `.github/workflows/provider-orchestrator.yml`
+  - **Role:** Dependency-aware release orchestrator.
+  - **Key functionality:** Uses `ci/provider_matrix.py affected` to classify docs/tooling/provider/shared changes, skips publish for docs/tooling, calls the shared crate workflow before shared fanout, and calls the reusable provider workflow only for selected providers.
 - **Path:** `.github/workflows/publish-questions.yml`
   - **Role:** Publish workflow for the questions component.
   - **Key functionality:** Builds components and publishes `questions.wasm` to GHCR using `tools/publish_questions_oci.sh` on tags.
@@ -174,6 +183,9 @@
 - **Path:** `tools/publish_packs_oci.sh`
   - **Role:** Build and optionally publish pack `.gtpack` artifacts.
   - **Key functionality:** Uses `packc` to build packs in `packs/`, stages component artifacts, writes `packs.lock.json`, and (optionally) pushes to OCI when not in dry-run mode.
+- **Path:** `tools/provider_versions.py`
+  - **Role:** Version inspection/update helper.
+  - **Key functionality:** Reads shared crate and provider versions, validates that provider component manifests and pack metadata match matrix versions, and can update provider/shared versions for releases.
 - **Path:** `tests/provider_conformance.rs` and `crates/provider-tests/tests/provider_core_dummy.rs`
   - **Role:** Conformance/integration checks across components.
   - **Key functionality:** Ensure manifests carry `secret_requirements`, expected WIT exports exist, env vars are unused; provider-core dummy test builds/loads the dummy WASM, validates pack metadata, and smokes `invoke("send")` via Wasmtime.
@@ -181,6 +193,7 @@
 ## 3. Work In Progress, TODOs, and Stubs
 - Migrating all messaging providers to the universal ops surface (`ingest_http`, `render_plan`, `encode`, `send_payload`) per PR-MP-01, starting with Slack and now Webex so the operator-facing harness can rely on a consistent DTO flow; Webex now decodes/encodes the universal DTOs with base64 payloads, builds HTTP metadata, and sends via `grid-http` client before the remaining providers are refactored.
 - Making sure the new harness/instantiation tests were added and that the `greentic:http/client@1.1.0` import identity is enforced through the CI lint step added to the workflow.
+- Provider migration to crates.io shared crate dependencies is intentionally blocked until `greentic-messaging-provider-common` is published at the selected version.
 
 ## 4. Broken, Failing, or Conflicting Areas
 - `ci/local_check.sh` passes (fmt + component builds + workspace tests). `cargo-component` still emits nested `wasm32-wasip1` dirs during builds, but the script cleans them.

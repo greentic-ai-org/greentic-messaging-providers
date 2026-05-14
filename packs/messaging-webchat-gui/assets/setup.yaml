@@ -236,6 +236,18 @@ questions:
     help: "Visual skin/theme. Must match a skins/<name>/ folder shipped in the messaging-webchat-gui pack. Use 'default' for the Greentic look or '3aigent' for the 3Point Training brand."
     group: Branding
 
+  - name: presentation_mode
+    title: Presentation mode
+    kind: string
+    required: false
+    default: "standalone"
+    placeholder: "standalone | embed_webcomponent"
+    help: "Choose standalone to host a full WebChat page, or embed_webcomponent to expose a framework-independent Web Component for an existing website."
+    group: Branding
+    enum:
+      - standalone
+      - embed_webcomponent
+
   - name: nav_links
     title: "Top-menu nav links"
     kind: table
@@ -252,6 +264,9 @@ questions:
       <strong>/<em>/<br> markup.
     min_rows: 0
     max_rows: 8
+    visible_if:
+      field: presentation_mode
+      eq: "standalone"
     columns:
       - key: label
         title: "Label"

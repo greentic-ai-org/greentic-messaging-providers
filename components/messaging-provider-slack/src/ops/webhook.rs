@@ -366,4 +366,47 @@ mod tests {
         assert_eq!(urlencoding("a=b&c=d"), "a%3Db%26c%3Dd");
         assert_eq!(urlencoding("token+value"), "token%2Bvalue");
     }
+
+    #[test]
+    fn setup_webhook_validates_input_before_network() {
+        let invalid: Value = serde_json::from_slice(&setup_webhook(b"{")).expect("json");
+        assert_eq!(invalid["ok"], false);
+        assert!(
+            invalid["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("invalid json")
+        );
+    }
+
+    #[test]
+    fn update_manifest_urls_creates_event_and_interactivity_settings() {
+        let mut manifest = json!({});
+
+        update_manifest_urls(&mut manifest, "https://chat.example.com/hook");
+
+        assert_eq!(
+            manifest["settings"]["event_subscriptions"]["request_url"],
+            "https://chat.example.com/hook"
+        );
+        assert_eq!(
+            manifest["settings"]["interactivity"]["request_url"],
+            "https://chat.example.com/hook"
+        );
+        assert_eq!(manifest["settings"]["interactivity"]["is_enabled"], true);
+    }
+
+    #[test]
+    fn try_refresh_token_reports_missing_refresh_without_network() {
+        let err = try_refresh_token("expired", None).expect_err("missing refresh token");
+        let body: Value = serde_json::from_slice(&err).expect("json");
+
+        assert_eq!(body["ok"], false);
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("no refresh token available")
+        );
+    }
 }

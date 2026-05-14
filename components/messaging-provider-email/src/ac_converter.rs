@@ -436,7 +436,7 @@ impl provider_common::AdaptiveCardConverter for EmailHtmlConverter {
     fn convert(
         &self,
         adaptive_card: &Value,
-        _caps: &greentic_messaging_renderer::PlannerCapabilities,
+        _caps: &provider_common::render::PlannerCapabilities,
     ) -> Result<Self::Output, provider_common::ProviderError> {
         let ac_str = serde_json::to_string(adaptive_card).map_err(|e| {
             provider_common::ProviderError::Validation(format!("invalid adaptive card json: {e}"))
@@ -465,7 +465,7 @@ mod converter_tests {
 
     #[test]
     fn converter_empty_card_errors() {
-        let caps = greentic_messaging_renderer::capabilities_for("email").unwrap();
+        let caps = provider_common::render::capabilities_for("email").unwrap();
         let card = serde_json::json!({"type": "AdaptiveCard", "body": []});
         let err = EmailHtmlConverter.convert(&card, &caps).unwrap_err();
         assert!(matches!(err, provider_common::ProviderError::Validation(_)));
@@ -473,7 +473,7 @@ mod converter_tests {
 
     #[test]
     fn converter_renders_text_block() {
-        let caps = greentic_messaging_renderer::capabilities_for("email").unwrap();
+        let caps = provider_common::render::capabilities_for("email").unwrap();
         let card = serde_json::json!({
             "type": "AdaptiveCard",
             "body": [{"type": "TextBlock", "text": "hello world"}]
@@ -481,5 +481,122 @@ mod converter_tests {
         let html = EmailHtmlConverter.convert(&card, &caps).unwrap();
         assert!(html.contains("hello world"));
         assert!(html.contains("<div"));
+    }
+
+    #[test]
+    fn renders_rich_email_elements_and_escapes_html() {
+        let html = ac_to_email_html(
+            &serde_json::json!({
+                "type": "AdaptiveCard",
+                "body": [
+                    {"type": "TextBlock", "text": "<Welcome>", "style": "heading"},
+                    {"type": "TextBlock", "text": "Small print", "isSubtle": true},
+                    {
+                        "type": "RichTextBlock",
+                        "inlines": [
+                            {"text": "Bold", "fontWeight": "bolder"},
+                            {"text": " and link", "italic": true, "underline": true,
+                             "selectAction": {"type": "Action.OpenUrl", "url": "https://example.com?a=1&b=2"}},
+                            {"text": " code", "fontType": "monospace", "strikethrough": true}
+                        ]
+                    },
+                    {"type": "Image", "url": "https://cdn.example/image.png", "altText": "Logo"},
+                    {
+                        "type": "ImageSet",
+                        "images": [
+                            {"url": "https://cdn.example/one.png", "altText": "One"},
+                            {"url": "https://cdn.example/two.png"}
+                        ]
+                    },
+                    {
+                        "type": "FactSet",
+                        "facts": [{"title": "Status", "value": "Ready"}]
+                    }
+                ],
+                "actions": [
+                    {"type": "Action.OpenUrl", "title": "Open", "url": "https://example.com"},
+                    {"type": "Action.Submit", "title": "Submit"}
+                ]
+            })
+            .to_string(),
+        )
+        .expect("email html");
+
+        assert!(html.contains("&lt;Welcome&gt;"));
+        assert!(html.contains("<h1"));
+        assert!(html.contains("Small print"));
+        assert!(html.contains("<strong>Bold</strong>"));
+        assert!(html.contains("href=\"https://example.com?a=1&amp;b=2\""));
+        assert!(html.contains("<em>"));
+        assert!(html.contains("<u>"));
+        assert!(html.contains("<del>"));
+        assert!(html.contains("<code"));
+        assert!(html.contains("https://cdn.example/image.png"));
+        assert!(html.contains("https://cdn.example/one.png"));
+        assert!(html.contains("<table"));
+        assert!(html.contains("Status"));
+        assert!(html.contains(">Open</a>"));
+        assert!(html.contains(">Submit</span>"));
+    }
+
+    #[test]
+    fn renders_nested_layouts_actionsets_and_tables() {
+        let html = ac_to_email_html(
+            &serde_json::json!({
+                "type": "AdaptiveCard",
+                "body": [
+                    {
+                        "type": "ColumnSet",
+                        "columns": [
+                            {"items": [{"type": "TextBlock", "text": "Left"}]},
+                            {"items": [{"type": "TextBlock", "text": "Right"}]}
+                        ]
+                    },
+                    {
+                        "type": "Container",
+                        "items": [{"type": "TextBlock", "text": "Inside"}]
+                    },
+                    {
+                        "type": "ActionSet",
+                        "actions": [{"type": "Action.OpenUrl", "title": "Docs", "url": "https://docs.example"}]
+                    },
+                    {
+                        "type": "Table",
+                        "columns": [{"title": "Name"}, {"header": "Value"}],
+                        "rows": [
+                            {"cells": [
+                                {"items": [{"type": "TextBlock", "text": "Priority"}]},
+                                {"items": [{"type": "TextBlock", "text": "High"}]}
+                            ]}
+                        ]
+                    }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("email html");
+
+        assert!(html.contains("Left"));
+        assert!(html.contains("Right"));
+        assert!(html.contains("Inside"));
+        assert!(html.contains("https://docs.example"));
+        assert!(html.contains("<th"));
+        assert!(html.contains("Priority"));
+        assert!(html.contains("High"));
+    }
+
+    #[test]
+    fn invalid_or_empty_cards_return_none() {
+        assert!(ac_to_email_html("{").is_none());
+        assert!(
+            ac_to_email_html(
+                &serde_json::json!({
+                    "type": "AdaptiveCard",
+                    "body": [{"type": "TextBlock", "text": "   "}, {"type": "Unknown"}]
+                })
+                .to_string()
+            )
+            .is_none()
+        );
     }
 }

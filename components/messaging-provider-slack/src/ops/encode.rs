@@ -36,8 +36,8 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
 
     let text = if ac_result.is_some() {
         // Blocks present — text is the plain-text fallback for notifications.
-        // Capability matrix is centralized in greentic-messaging-renderer.
-        let caps = greentic_messaging_renderer::capabilities_for("slack")
+        // Capability matrix is centralized in provider-common.
+        let caps = provider_common::render::capabilities_for("slack")
             .expect("slack capabilities must be registered");
         ac_raw_str
             .as_deref()
@@ -106,4 +106,124 @@ pub(crate) fn metadata_string(metadata: &BTreeMap<String, Value>, key: &str) -> 
     metadata
         .get(key)
         .and_then(|value| value.as_str().map(|s| s.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::STANDARD;
+    use greentic_types::{
+        ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
+    };
+
+    fn envelope(text: Option<&str>, metadata: MessageMetadata) -> ChannelMessageEnvelope {
+        ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("dev").expect("env"),
+                TenantId::try_from("tenant").expect("tenant"),
+            ),
+            channel: "slack".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: vec![Destination {
+                id: "C123".to_string(),
+                kind: Some("channel".to_string()),
+            }],
+            correlation_id: None,
+            text: text.map(str::to_string),
+            attachments: Vec::new(),
+            metadata,
+            extensions: Default::default(),
+        }
+    }
+
+    fn encoded_body(input: Value) -> Value {
+        let result: Value = serde_json::from_slice(&encode_op(input.to_string().as_bytes()))
+            .expect("encode result");
+        assert_eq!(result["ok"], true);
+        let body_b64 = result["payload"]["body_b64"].as_str().expect("body_b64");
+        let body = STANDARD.decode(body_b64).expect("payload body");
+        serde_json::from_slice(&body).expect("body json")
+    }
+
+    #[test]
+    fn encode_requires_destination_channel() {
+        let mut env = envelope(Some("hello"), MessageMetadata::new());
+        env.to.clear();
+
+        let result: Value =
+            serde_json::from_slice(&encode_op(json!({ "message": env }).to_string().as_bytes()))
+                .expect("result");
+
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["error"], "destination (to) required");
+    }
+
+    #[test]
+    fn encode_text_message_builds_slack_post_payload() {
+        let result: Value = serde_json::from_slice(&encode_op(
+            json!({ "message": envelope(Some("  hello  "), MessageMetadata::new()) })
+                .to_string()
+                .as_bytes(),
+        ))
+        .expect("result");
+
+        assert_eq!(result["ok"], true);
+        assert_eq!(
+            result["payload"]["metadata"]["url"],
+            format!("{DEFAULT_API_BASE}/chat.postMessage")
+        );
+        assert_eq!(result["payload"]["metadata"]["method"], "POST");
+        assert_eq!(result["payload"]["metadata"]["channel"], "C123");
+
+        let body_b64 = result["payload"]["body_b64"].as_str().expect("body_b64");
+        let body = STANDARD.decode(body_b64).expect("payload body");
+        let body: Value = serde_json::from_slice(&body).expect("body");
+        assert_eq!(body["channel"], "C123");
+        assert_eq!(body["text"], "  hello  ");
+    }
+
+    #[test]
+    fn encode_adaptive_card_adds_blocks_and_fallback_text() {
+        let mut metadata = MessageMetadata::new();
+        metadata.insert(
+            "adaptive_card".to_string(),
+            json!({
+                "type": "AdaptiveCard",
+                "body": [{"type": "TextBlock", "text": "Card summary"}],
+                "actions": [{"type": "Action.OpenUrl", "title": "Open", "url": "https://example.com"}]
+            })
+            .to_string(),
+        );
+
+        let body = encoded_body(json!({ "message": envelope(None, metadata) }));
+
+        assert_eq!(body["channel"], "C123");
+        let text = body["text"].as_str().expect("fallback text");
+        assert!(text.contains("Card summary"));
+        assert!(text.contains("[Open](https://example.com)"));
+        assert!(
+            body["blocks"]
+                .as_array()
+                .is_some_and(|blocks| !blocks.is_empty())
+        );
+    }
+
+    #[test]
+    fn parse_blocks_and_metadata_string_ignore_wrong_shapes() {
+        let (format, blocks) = parse_blocks(&json!({"rich": {"format": "slack", "blocks": []}}));
+        assert_eq!(format.as_deref(), Some("slack"));
+        assert_eq!(blocks, Some(json!([])));
+
+        let mut metadata = BTreeMap::new();
+        metadata.insert("url".to_string(), json!("https://example.com"));
+        metadata.insert("retries".to_string(), json!(3));
+        assert_eq!(
+            metadata_string(&metadata, "url").as_deref(),
+            Some("https://example.com")
+        );
+        assert!(metadata_string(&metadata, "retries").is_none());
+    }
 }

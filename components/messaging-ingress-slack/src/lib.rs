@@ -8,7 +8,7 @@ mod bindings {
 
 use bindings::exports::provider::common::ingress::Guest;
 use bindings::greentic::secrets_store::secrets_store;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde_json::{Map, Value, json};
 use sha2::Sha256;
 
@@ -26,14 +26,7 @@ impl Guest for Component {
             verify_signature(&headers, &body_json, &signing_secret)?;
         }
 
-        let body_val: Value = serde_json::from_str(&body_json)
-            .map_err(|_| "validation error: invalid body json".to_string())?;
-        let normalized = json!({
-            "ok": true,
-            "event": body_val,
-        });
-        serde_json::to_string(&normalized)
-            .map_err(|_| "other error: serialization failed".to_string())
+        normalize_body(&body_json)
     }
 }
 
@@ -71,6 +64,16 @@ fn verify_signature(headers: &Map<String, Value>, body: &str, secret: &str) -> R
     }
 }
 
+fn normalize_body(body_json: &str) -> Result<String, String> {
+    let body_val: Value = serde_json::from_str(body_json)
+        .map_err(|_| "validation error: invalid body json".to_string())?;
+    let normalized = json!({
+        "ok": true,
+        "event": body_val,
+    });
+    serde_json::to_string(&normalized).map_err(|_| "other error: serialization failed".to_string())
+}
+
 fn header_value(headers: &Map<String, Value>, key: &str) -> Option<String> {
     headers
         .get(key)
@@ -91,4 +94,60 @@ fn hex_encode(bytes: &[u8]) -> String {
         out.push_str(&format!("{:02x}", b));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_lookup_is_case_insensitive() {
+        let mut headers = Map::new();
+        headers.insert("X-Slack-Signature".to_string(), Value::String("sig".into()));
+
+        assert_eq!(
+            header_value(&headers, "x-slack-signature").as_deref(),
+            Some("sig")
+        );
+    }
+
+    #[test]
+    fn signature_verification_accepts_expected_hmac() {
+        let body = r#"{"type":"event_callback"}"#;
+        let timestamp = "1700000000";
+        let secret = "signing-secret";
+        let basestring = format!("v0:{timestamp}:{body}");
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("hmac");
+        mac.update(basestring.as_bytes());
+        let signature = format!("v0={}", hex_encode(&mac.finalize().into_bytes()));
+        let mut headers = Map::new();
+        headers.insert(
+            "x-slack-signature".to_string(),
+            Value::String(signature.clone()),
+        );
+        headers.insert(
+            "x-slack-request-timestamp".to_string(),
+            Value::String(timestamp.into()),
+        );
+
+        verify_signature(&headers, body, secret).expect("valid signature");
+
+        headers.insert(
+            "x-slack-signature".to_string(),
+            Value::String(format!("{signature}bad")),
+        );
+        let err = verify_signature(&headers, body, secret).expect_err("bad signature");
+        assert!(err.contains("invalid signature"), "{err}");
+    }
+
+    #[test]
+    fn webhook_normalizes_valid_json_without_signing_secret() {
+        let body = r#"{"type":"event_callback","event":{"text":"hi"}}"#;
+
+        let out = normalize_body(body).expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["event"]["event"]["text"], "hi");
+    }
 }

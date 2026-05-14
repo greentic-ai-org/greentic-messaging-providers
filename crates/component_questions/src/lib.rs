@@ -650,3 +650,177 @@ fn type_error(path: &str, expected: &str) -> ValidationError {
         message: format!("expected {expected}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn question(name: &str, kind: QuestionKind) -> QuestionSpecItem {
+        QuestionSpecItem {
+            name: name.to_string(),
+            title: name.to_string(),
+            kind,
+            required: false,
+            default: None,
+            help: None,
+            choices: Vec::new(),
+            validate: None,
+            secret: false,
+            skip_if: None,
+        }
+    }
+
+    #[test]
+    fn skip_conditions_handle_empty_not_empty_equals_and_compounds() {
+        let mut answers = Map::new();
+        answers.insert("mode".to_string(), json!("standalone"));
+        answers.insert("token".to_string(), json!(""));
+
+        assert!(evaluate_skip_expression(
+            &SkipExpression::Condition(SkipCondition {
+                field: "mode".to_string(),
+                equals: Some(json!("standalone")),
+                not_equals: None,
+                is_empty: false,
+                is_not_empty: false,
+            }),
+            &answers
+        ));
+        assert!(evaluate_skip_expression(
+            &SkipExpression::Condition(SkipCondition {
+                field: "token".to_string(),
+                equals: None,
+                not_equals: None,
+                is_empty: true,
+                is_not_empty: false,
+            }),
+            &answers
+        ));
+        assert!(!evaluate_skip_expression(
+            &SkipExpression::Compound(SkipCompound {
+                and: Some(vec![
+                    SkipExpression::Condition(SkipCondition {
+                        field: "mode".to_string(),
+                        equals: Some(json!("standalone")),
+                        not_equals: None,
+                        is_empty: false,
+                        is_not_empty: false,
+                    }),
+                    SkipExpression::Condition(SkipCondition {
+                        field: "missing".to_string(),
+                        equals: None,
+                        not_equals: None,
+                        is_empty: false,
+                        is_not_empty: true,
+                    }),
+                ]),
+                or: None,
+                not: None,
+            }),
+            &answers
+        ));
+    }
+
+    #[test]
+    fn validate_answers_reports_types_bounds_choices_and_json_schema() {
+        let mut number = question("count", QuestionKind::Number);
+        number.validate = Some(spec::QuestionValidate {
+            regex: None,
+            min: Some(2.0),
+            max: Some(5.0),
+            json_schema: None,
+            file_types: Vec::new(),
+            base_path: None,
+            check_exists: false,
+        });
+        let mut choice = question("mode", QuestionKind::Choice);
+        choice.choices = vec![json!("standalone"), json!("embed")];
+        let mut inline = question("payload", QuestionKind::InlineJson);
+        inline.validate = Some(spec::QuestionValidate {
+            regex: None,
+            min: None,
+            max: None,
+            json_schema: Some(json!({
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}}
+            })),
+            file_types: Vec::new(),
+            base_path: None,
+            check_exists: false,
+        });
+        let questions = vec![
+            question("title", QuestionKind::String),
+            number,
+            choice,
+            inline,
+        ];
+        let answers = serde_json::from_value::<Map<String, Value>>(json!({
+            "title": 42,
+            "count": 1,
+            "mode": "other",
+            "payload": {"missing": true}
+        }))
+        .expect("answers");
+
+        let errors = validate_answers_for_spec(&questions, &answers);
+        let messages: Vec<_> = errors
+            .iter()
+            .map(|err| (err.path.as_str(), err.message.as_str()))
+            .collect();
+
+        assert!(messages.contains(&("title", "expected string")));
+        assert!(messages.contains(&("count", "min")));
+        assert!(messages.contains(&("mode", "choice")));
+        assert!(errors.iter().any(|err| err.path.starts_with("payload.")));
+    }
+
+    #[test]
+    fn skipped_required_question_is_not_validated() {
+        let mut skipped = question("secret", QuestionKind::String);
+        skipped.required = true;
+        skipped.skip_if = Some(SkipExpression::Condition(SkipCondition {
+            field: "enabled".to_string(),
+            equals: Some(json!(false)),
+            not_equals: None,
+            is_empty: false,
+            is_not_empty: false,
+        }));
+        let answers = serde_json::from_value::<Map<String, Value>>(json!({"enabled": false}))
+            .expect("answers");
+
+        assert!(validate_answers_for_spec(&[skipped], &answers).is_empty());
+    }
+
+    #[test]
+    fn example_answers_cover_all_question_kinds() {
+        let mut choice = question("choice", QuestionKind::Choice);
+        choice.choices = vec![json!("first"), json!("second")];
+        let mut with_default = question("defaulted", QuestionKind::String);
+        with_default.default = Some(json!("value"));
+
+        let examples = example_answers_for_spec(&[
+            question("string", QuestionKind::String),
+            question("bool", QuestionKind::Bool),
+            question("number", QuestionKind::Number),
+            choice,
+            question("inline", QuestionKind::InlineJson),
+            question("asset", QuestionKind::AssetRef),
+            with_default,
+        ]);
+
+        assert_eq!(examples["string"], "");
+        assert_eq!(examples["bool"], false);
+        assert_eq!(examples["number"], 0);
+        assert_eq!(examples["choice"], "first");
+        assert_eq!(examples["asset"], "./assets/example.json");
+        assert_eq!(examples["defaulted"], "value");
+        assert!(
+            examples["inline"]
+                .as_str()
+                .unwrap()
+                .contains("AdaptiveCard")
+        );
+    }
+}

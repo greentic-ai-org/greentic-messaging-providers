@@ -854,7 +854,15 @@ fn validate_provider_config(cfg: &ProviderConfig) -> Result<(), String> {
 fn payload_hash(value: &Value) -> String {
     let mut hasher = Sha256::new();
     hasher.update(serde_json::to_vec(value).unwrap_or_default());
-    format!("{:x}", hasher.finalize())
+    to_hex(hasher.finalize())
+}
+
+fn to_hex(bytes: impl AsRef<[u8]>) -> String {
+    bytes
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn get_secret_string(key: &str) -> Result<String, String> {

@@ -80,3 +80,62 @@ fn secret_questions_not_inlined_in_titles() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn webchat_gui_setup_has_presentation_mode_and_standalone_nav_links() -> Result<()> {
+    let root = workspace_root();
+    let setup_path = root
+        .join("packs")
+        .join("messaging-webchat-gui")
+        .join("assets")
+        .join("setup.yaml");
+    let value: Value = serde_yaml_bw::from_str(&fs::read_to_string(&setup_path)?)?;
+    let questions = value
+        .get("questions")
+        .and_then(Value::as_sequence)
+        .ok_or_else(|| anyhow!("webchat-gui setup.yaml missing questions"))?;
+
+    let presentation_mode = questions
+        .iter()
+        .find(|question| {
+            question
+                .get("name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| name == "presentation_mode")
+        })
+        .ok_or_else(|| anyhow!("webchat-gui setup.yaml missing presentation_mode"))?;
+    assert_eq!(
+        presentation_mode.get("default").and_then(Value::as_str),
+        Some("standalone")
+    );
+    assert_eq!(
+        presentation_mode.get("group").and_then(Value::as_str),
+        Some("Branding")
+    );
+
+    let nav_links = questions
+        .iter()
+        .find(|question| {
+            question
+                .get("name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| name == "nav_links")
+        })
+        .ok_or_else(|| anyhow!("webchat-gui setup.yaml missing nav_links"))?;
+    assert_eq!(
+        nav_links
+            .get("visible_if")
+            .and_then(|visible| visible.get("field"))
+            .and_then(Value::as_str),
+        Some("presentation_mode")
+    );
+    assert_eq!(
+        nav_links
+            .get("visible_if")
+            .and_then(|visible| visible.get("eq"))
+            .and_then(Value::as_str),
+        Some("standalone")
+    );
+
+    Ok(())
+}

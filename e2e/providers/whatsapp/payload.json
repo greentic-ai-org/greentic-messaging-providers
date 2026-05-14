@@ -1,0 +1,7 @@
+{
+  "text": "Greentic WhatsApp provider e2e smoke",
+  "destination": {
+    "kind": "phone",
+    "id": "${E2E_WHATSAPP_TO}"
+  }
+}

@@ -2,6 +2,24 @@
 
 WASM-based messaging provider components for the Greentic platform. Each provider is a self-contained WebAssembly component (WASI Preview 2) that bridges the Greentic operator to an external messaging service.
 
+## Documentation
+
+Start with [docs/README.md](docs/README.md) for the documentation map.
+
+For provider selection, setup, features, secrets, and focused test commands, use the [provider catalog](docs/providers/README.md):
+
+- [Dummy](docs/providers/dummy.md)
+- [Email](docs/providers/email.md)
+- [Slack](docs/providers/slack.md)
+- [Microsoft Teams](docs/providers/teams.md)
+- [Telegram](docs/providers/telegram.md)
+- [WebChat](docs/providers/webchat.md)
+- [WebChat GUI](docs/providers/webchat-gui.md)
+- [Webex](docs/providers/webex.md)
+- [WhatsApp](docs/providers/whatsapp.md)
+
+These docs are written for non-technical developers and for coding agents. Each provider page names the provider-owned files, secrets, message features, and focused checks.
+
 ## Providers
 
 | Provider | Channel | Adaptive Card Tier | External API | Secret Keys |
@@ -402,12 +420,16 @@ The `provider-common` crate provides shared utilities used by all providers:
 
 ```
 crates/provider-common/src/
-├── lib.rs              # Shared types (ProviderError, RenderTier, ProviderPayload, etc.)
+├── lib.rs              # Shared package boundary for greentic-messaging-provider-common
 ├── helpers.rs          # Utility functions, CBOR-JSON bridge, schema builders, QA/I18N helpers
+├── render.rs           # Provider capabilities and render-planning helpers
 ├── qa_helpers.rs       # Generic ApplyAnswersResult<C>, RemovePlan, result builders
 ├── qa_invoke_bridge.rs # JSON bridge for QA ops via schema-core-api invoke()
 └── test_macros.rs      # standard_provider_tests! macro for shared test generation
 ```
+
+The crates.io package name is `greentic-messaging-provider-common`; Rust imports
+remain `provider_common`.
 
 ## Building
 
@@ -760,26 +782,49 @@ i18n-keys) are handled natively by the provider WASM component.
 
 ## Publishing
 
+Provider publishing is dependency-aware:
+
+- Shared provider code changes publish `greentic-messaging-provider-common`
+  first, then intentionally fan out to provider rebuilds.
+- Provider-local changes rebuild/publish only that provider.
+- Docs-only and tooling-only changes do not publish providers by default.
+
+Useful workflow entrypoints:
+
+- `Publish Shared Provider Crate`: validates and publishes the shared crate.
+- `Provider Build, Test, and Publish`: reusable/manual one-provider workflow.
+- `Provider Release Orchestrator`: main dependency-aware release entrypoint.
+- `Build, Test, and Publish Packs`: validation-only legacy workflow during the
+  migration; its monolithic publish job is disabled.
+
 ### OCI (Components)
 
-Tag releases (`v*`) trigger the publish workflow. Components are pushed to `ghcr.io/<owner>/greentic-messaging-providers/<component>:<tag>`.
+Provider component releases use the provider version from
+`ci/provider-matrix.json`, not the workspace version. Components are pushed to
+`ghcr.io/<owner>/greentic-messaging-providers/<component>:<provider-version>`.
 
 ```bash
 # Manual
-OCI_REGISTRY=ghcr.io OCI_NAMESPACE=<org> VERSION=<tag> ./tools/publish_oci.sh
+OCI_REGISTRY=ghcr.io OCI_NAMESPACE=<org> VERSION=<provider-version> COMPONENT_FILTER=messaging-provider-slack ./tools/publish_oci.sh
 ```
 
 ### OCI (Packs)
 
-Pack releases push `.gtpack` to `ghcr.io/<org>/greentic-packs/<pack>:<version>` with media type `application/vnd.greentic.gtpack.v1+zip`.
+Pack releases push `.gtpack` to
+`ghcr.io/<org>/greentic-messaging-providers/packs/messaging/<pack>:<provider-version>`
+with media type `application/vnd.greentic.gtpack.v1+zip`.
 
 ```bash
-# Dry run
-DRY_RUN=1 tools/publish_packs_oci.sh
+# Dry run for one provider pack
+PACK_FILTER=messaging-slack PACK_VERSION=$(python3 tools/provider_versions.py provider slack) DRY_RUN=1 tools/publish_packs_oci.sh
 
 # Pull
-oras pull ghcr.io/<org>/greentic-packs/messaging-telegram:<version>
+oras pull ghcr.io/<org>/greentic-messaging-providers/packs/messaging/messaging-slack:<version>
 ```
+
+See `docs/release-policy.md`, `docs/shared-crate-release.md`, and
+`docs/provider-release-operations.md` for versioning, GHCR tags, and recovery
+procedures.
 
 ## Secrets Workflow
 

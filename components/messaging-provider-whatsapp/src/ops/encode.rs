@@ -23,7 +23,7 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     let text = if let Some(ref content) = wa_content {
         content.body.clone()
     } else {
-        let caps = greentic_messaging_renderer::capabilities_for("whatsapp")
+        let caps = provider_common::render::capabilities_for("whatsapp")
             .expect("whatsapp capabilities must be registered");
         ac_raw_str
             .as_deref()

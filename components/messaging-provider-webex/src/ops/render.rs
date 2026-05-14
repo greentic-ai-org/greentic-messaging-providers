@@ -2,15 +2,15 @@
 //!
 //! Webex is a TierB provider (native Adaptive Card attachments with a text
 //! fallback). The capability matrix is centralised in
-//! `greentic-messaging-renderer` so this module is a thin wrapper over the
+//! `provider-common` so this module is a thin wrapper over the
 //! common helper.
 
 use provider_common::helpers::{RenderPlanConfig, render_plan_common};
 
 pub(crate) fn render_plan(input_json: &[u8]) -> Vec<u8> {
-    // Capability matrix is centralized in greentic-messaging-renderer.
-    // See: greentic_messaging_renderer::capabilities_for
-    let capabilities = greentic_messaging_renderer::capabilities_for("webex")
+    // Capability matrix is centralized in provider-common.
+    // See: provider_common::render::capabilities_for
+    let capabilities = provider_common::render::capabilities_for("webex")
         .expect("webex capabilities must be registered");
     render_plan_common(
         input_json,

@@ -1,0 +1,196 @@
+name: Provider Release Orchestrator
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: One provider, comma-separated providers, all, or shared+all
+        required: false
+        default: "affected"
+        type: string
+      publish:
+        description: Publish selected providers to GHCR
+        required: false
+        default: false
+        type: boolean
+      publish_latest:
+        description: Also update latest tags when publishing
+        required: false
+        default: false
+        type: boolean
+      trigger_e2e_after_publish:
+        description: Optionally trigger provider e2e after publish
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: provider-release-orchestrator-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      providers: ${{ steps.plan.outputs.providers }}
+      shared_crate_changed: ${{ steps.plan.outputs.shared_crate_changed }}
+      publish: ${{ steps.plan.outputs.publish }}
+      publish_latest: ${{ steps.plan.outputs.publish_latest }}
+      trigger_e2e_after_publish: ${{ steps.plan.outputs.trigger_e2e_after_publish }}
+      reason: ${{ steps.plan.outputs.reason }}
+      classification: ${{ steps.plan.outputs.classification }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Plan provider release
+        id: plan
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_SHA: ${{ github.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PROVIDERS_INPUT: ${{ inputs.providers }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+          PUBLISH_LATEST_INPUT: ${{ inputs.publish_latest }}
+          TRIGGER_E2E_INPUT: ${{ inputs.trigger_e2e_after_publish }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          matrix = json.loads(Path("ci/provider-matrix.json").read_text())
+          all_providers = sorted(matrix["providers"].keys())
+          event_name = os.environ["GITHUB_EVENT_NAME"]
+          providers_input = (os.environ.get("PROVIDERS_INPUT") or "affected").strip()
+          publish = event_name == "push" and os.environ["GITHUB_REF"] == "refs/heads/main"
+          publish_latest = False
+          trigger_e2e = False
+          shared_crate_changed = False
+          classification = "manual"
+          reason = ""
+          changed_files = []
+
+          if event_name == "workflow_dispatch":
+            publish = os.environ.get("PUBLISH_INPUT", "false").lower() == "true"
+            publish_latest = os.environ.get("PUBLISH_LATEST_INPUT", "false").lower() == "true"
+            trigger_e2e = os.environ.get("TRIGGER_E2E_INPUT", "false").lower() == "true"
+            lowered = providers_input.lower()
+            if lowered in {"all", "shared+all", "shared"}:
+              selected = all_providers
+              shared_crate_changed = lowered in {"shared+all", "shared"}
+              classification = "manual-shared" if shared_crate_changed else "manual-all"
+              reason = f"manual selection: {providers_input}"
+            elif lowered == "affected":
+              selected = all_providers
+              classification = "manual-all"
+              reason = "manual affected selection has no diff context; selecting all providers"
+            else:
+              requested = [
+                item.strip().lower().removeprefix("messaging-")
+                for item in providers_input.split(",")
+                if item.strip()
+              ]
+              unknown = [name for name in requested if name not in matrix["providers"]]
+              if unknown:
+                raise SystemExit(f"unknown provider(s): {', '.join(unknown)}")
+              selected = sorted(dict.fromkeys(requested))
+              classification = "manual-provider"
+              reason = f"manual provider selection: {providers_input}"
+          else:
+            before = os.environ.get("PUSH_BEFORE", "")
+            head = os.environ["GITHUB_SHA"]
+            if not before or before == "0000000000000000000000000000000000000000":
+              selected = all_providers
+              classification = "initial-main-push"
+              reason = "no push base SHA available; selecting all providers"
+            else:
+              raw = subprocess.check_output(
+                ["python3", "ci/provider_matrix.py", "affected", "--base", before, "--head", head],
+                text=True,
+              )
+              result = json.loads(raw)
+              changed_files = result.get("changed_files", [])
+              classification = result.get("change_class", "unknown")
+              reason = result.get("reason", "")
+              shared_crate_changed = bool(result.get("shared_changed"))
+              selected = all_providers if shared_crate_changed else result.get("affected_providers", [])
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+            handle.write(f"providers={json.dumps(selected)}\n")
+            handle.write(f"shared_crate_changed={'true' if shared_crate_changed else 'false'}\n")
+            handle.write(f"publish={'true' if publish else 'false'}\n")
+            handle.write(f"publish_latest={'true' if publish_latest else 'false'}\n")
+            handle.write(f"trigger_e2e_after_publish={'true' if trigger_e2e else 'false'}\n")
+            handle.write(f"classification={classification}\n")
+            handle.write(f"reason={reason}\n")
+
+          selected_set = set(selected)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+            handle.write("## Provider Release Plan\n")
+            handle.write(f"- classification: `{classification}`\n")
+            handle.write(f"- reason: `{reason}`\n")
+            handle.write(f"- publish: `{str(publish).lower()}`\n")
+            handle.write(f"- shared crate first: `{str(shared_crate_changed).lower()}`\n")
+            handle.write(f"- selected providers: {', '.join(selected) or '_none_'}\n\n")
+            handle.write("### Provider Selection\n")
+            for provider in all_providers:
+              state = "selected" if provider in selected_set else "skipped"
+              detail = "shared fanout" if shared_crate_changed and provider in selected_set else classification
+              handle.write(f"- `{provider}`: {state} ({detail})\n")
+            if changed_files:
+              handle.write("\n### Changed Files\n")
+              for path in changed_files:
+                handle.write(f"- `{path}`\n")
+          PY
+
+  publish-shared-crate:
+    needs: plan
+    if: ${{ needs.plan.outputs.shared_crate_changed == 'true' }}
+    uses: ./.github/workflows/publish-shared-crate.yml
+    with:
+      publish: ${{ needs.plan.outputs.publish == 'true' }}
+    secrets: inherit
+
+  provider-direct:
+    needs: plan
+    if: ${{ needs.plan.outputs.shared_crate_changed != 'true' && needs.plan.outputs.providers != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: ${{ fromJson(needs.plan.outputs.providers) }}
+    uses: ./.github/workflows/provider-build-publish.yml
+    with:
+      provider: ${{ matrix.provider }}
+      publish: ${{ needs.plan.outputs.publish == 'true' }}
+      publish_latest: ${{ needs.plan.outputs.publish_latest == 'true' }}
+      trigger_e2e_after_publish: ${{ needs.plan.outputs.trigger_e2e_after_publish == 'true' }}
+    secrets: inherit
+
+  provider-after-shared:
+    needs: [plan, publish-shared-crate]
+    if: ${{ needs.plan.outputs.shared_crate_changed == 'true' && needs.plan.outputs.providers != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: ${{ fromJson(needs.plan.outputs.providers) }}
+    uses: ./.github/workflows/provider-build-publish.yml
+    with:
+      provider: ${{ matrix.provider }}
+      shared_crate_version: ${{ needs.publish-shared-crate.outputs.version }}
+      publish: ${{ needs.plan.outputs.publish == 'true' }}
+      publish_latest: ${{ needs.plan.outputs.publish_latest == 'true' }}
+      trigger_e2e_after_publish: ${{ needs.plan.outputs.trigger_e2e_after_publish == 'true' }}
+    secrets: inherit

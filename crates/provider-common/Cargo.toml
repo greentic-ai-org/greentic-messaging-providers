@@ -1,8 +1,24 @@
 [package]
-name = "provider-common"
+name = "greentic-messaging-provider-common"
 edition.workspace = true
-version.workspace = true
+version = "0.4.99"
 license.workspace = true
+description = "Shared provider DTOs, helpers, errors, QA bridges, and compatibility utilities for Greentic messaging providers"
+repository = "https://github.com/greenticai/greentic-messaging-providers"
+readme = "README.md"
+keywords = ["greentic", "messaging", "provider", "webassembly", "wasm"]
+categories = ["api-bindings", "wasm"]
+include = [
+    "Cargo.toml",
+    "README.md",
+    "CHANGELOG.md",
+    "MIGRATION.md",
+    "src/**",
+    "tests/**",
+]
+
+[lib]
+name = "provider_common"
 
 [dependencies]
 serde.workspace = true
@@ -12,7 +28,6 @@ schemars = { workspace = true, optional = true }
 sha2.workspace = true
 ciborium.workspace = true
 greentic-types.workspace = true
-greentic-messaging-renderer.workspace = true
 base64.workspace = true
 greentic-runner-desktop = { workspace = true, optional = true }
 

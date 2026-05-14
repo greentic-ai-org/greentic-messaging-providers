@@ -235,6 +235,7 @@ pub(super) fn build_webhook_envelope(
         text: Some(text),
         attachments,
         metadata,
+        extensions: Default::default(),
     }
 }
 
@@ -255,4 +256,88 @@ pub(super) fn pick_sender(
         });
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn build_metadata_records_fetch_failures_and_locale() {
+        let message_id = "msg-1".to_string();
+        let room_id = "room-1".to_string();
+        let error = "not found".to_string();
+        let locale = "fr".to_string();
+
+        let metadata = build_webhook_metadata(
+            "messages",
+            "created",
+            Some(&message_id),
+            Some(&room_id),
+            None,
+            None,
+            Some(&error),
+            Some("application/vnd.microsoft.card.adaptive".to_string()),
+            Some(&locale),
+            Some(404),
+        );
+
+        assert_eq!(
+            metadata.get("webex.messageId").map(String::as_str),
+            Some("msg-1")
+        );
+        assert_eq!(
+            metadata.get("webex.fetchStatus").map(String::as_str),
+            Some("404")
+        );
+        assert_eq!(
+            metadata.get("webex.ingestError").map(String::as_str),
+            Some("not found")
+        );
+        assert_eq!(
+            metadata.get("webex.hasAttachments").map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(metadata.get("locale").map(String::as_str), Some("fr"));
+    }
+
+    #[test]
+    fn webhook_envelope_uses_message_id_when_available() {
+        let message_id = "abc".to_string();
+        let envelope = build_webhook_envelope(
+            "hello".to_string(),
+            "room-1".to_string(),
+            pick_sender(&Some("person@example.com".to_string()), &None),
+            MessageMetadata::new(),
+            Vec::new(),
+            Some(&message_id),
+        );
+
+        assert_eq!(envelope.id, "webex-abc");
+        assert_eq!(envelope.session_id, "room-1");
+        assert_eq!(
+            envelope.from.as_ref().map(|actor| actor.id.as_str()),
+            Some("person@example.com")
+        );
+        assert_eq!(envelope.to[0].id, "room-1");
+    }
+
+    #[test]
+    fn attachment_conversion_prefers_content_url_but_falls_back_to_stable_id() {
+        let data = json!({
+            "attachments": [
+                {"contentType": "image/png", "contentUrl": "https://cdn.example/a.png", "name": "a"},
+                {"contentType": "application/json", "content": {"url": "https://cdn.example/card.json"}},
+                {"contentType": "text/plain"}
+            ]
+        });
+
+        let attachments = convert_webex_attachments("msg-1", &data);
+
+        assert_eq!(attachments.len(), 3);
+        assert_eq!(attachments[0].url, "https://cdn.example/a.png");
+        assert_eq!(attachments[1].url, "https://cdn.example/card.json");
+        assert_eq!(attachments[2].url, "webex:msg-1:attachment:2");
+    }
 }
