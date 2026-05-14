@@ -305,5 +305,95 @@ fn build_synthetic_envelope(
         text,
         attachments: Vec::new(),
         metadata,
+        extensions: Default::default(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn parse_result(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json result")
+    }
+
+    fn config(default_channel: Option<&str>) -> ProviderConfig {
+        ProviderConfig {
+            enabled: true,
+            default_channel: default_channel.map(str::to_string),
+            public_base_url: "https://chat.example.com".to_string(),
+            api_base_url: None,
+            bot_token: "xoxb".to_string(),
+        }
+    }
+
+    #[test]
+    fn send_payload_validates_input_provider_and_payload_before_secret_lookup() {
+        let invalid = parse_result(send_payload(b"{"));
+        assert_eq!(invalid["ok"], false);
+        assert!(
+            invalid["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("invalid send_payload input")
+        );
+
+        let wrong_provider = SendPayloadInV1 {
+            provider_type: "other".to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: "not base64".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        };
+        let out = parse_result(send_payload(
+            &serde_json::to_vec(&wrong_provider).expect("input"),
+        ));
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["message"], "provider type mismatch");
+
+        let bad_payload = SendPayloadInV1 {
+            provider_type: PROVIDER_TYPE.to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: "not base64".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        };
+        let out = parse_result(send_payload(
+            &serde_json::to_vec(&bad_payload).expect("input"),
+        ));
+        assert_eq!(out["ok"], false);
+        assert!(
+            out["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("payload decode failed")
+        );
+    }
+
+    #[test]
+    fn build_synthetic_envelope_uses_default_channel_and_preserves_kind() {
+        let env = build_synthetic_envelope(&json!({"text": "hello"}), &config(Some("C-default")))
+            .expect("synthetic envelope");
+
+        assert_eq!(env.to[0].id, "C-default");
+        assert_eq!(env.to[0].kind.as_deref(), Some("channel"));
+        assert_eq!(env.metadata["channel"], "C-default");
+        assert_eq!(env.text.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn build_synthetic_envelope_requires_channel() {
+        assert_eq!(
+            build_synthetic_envelope(&json!({"text": "hello"}), &config(None))
+                .expect_err("channel required"),
+            "channel required"
+        );
+    }
 }

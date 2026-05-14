@@ -20,9 +20,9 @@ pub(crate) fn render_plan(input_json: &[u8]) -> Vec<u8> {
 }
 
 fn render_plan_inner(input_json: &[u8]) -> Vec<u8> {
-    // Capability matrix is centralized in greentic-messaging-renderer.
-    // See: greentic_messaging_renderer::capabilities_for
-    let capabilities = greentic_messaging_renderer::capabilities_for("telegram")
+    // Capability matrix is centralized in provider-common.
+    // See: provider_common::render::capabilities_for
+    let capabilities = provider_common::render::capabilities_for("telegram")
         .expect("telegram capabilities must be registered");
     render_plan_common(
         input_json,

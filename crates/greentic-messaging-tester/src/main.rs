@@ -45,7 +45,7 @@ use crate::values::Values;
 use crate::wasm_harness::{
     ComponentHarness, InvokeOptions, SharedStateStore, WasmHarness, find_component_wasm_path,
 };
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 #[derive(Parser)]
@@ -960,6 +960,7 @@ fn build_echo_envelope(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
+        extensions: Default::default(),
     })
 }
 
@@ -1339,6 +1340,7 @@ fn build_message_envelope(
         text,
         attachments: Vec::new(),
         metadata: message_metadata,
+        extensions: Default::default(),
     }
 }
 

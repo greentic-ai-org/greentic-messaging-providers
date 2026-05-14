@@ -1,5 +1,9 @@
 # Live E2E CI (manual + nightly)
 
+Provider-specific live e2e is now documented in `docs/provider-e2e.md` and
+implemented by `.github/workflows/nightly-provider-e2e.yml`. This page is kept
+as migration context for the older monolithic live workflow.
+
 Workflow: `.github/workflows/e2e-live.yml`
 - Triggers: `workflow_dispatch` and nightly cron (`0 3 * * *`).
 - Uses GitHub Environment `e2e-live` (configure approvals/secrets there).

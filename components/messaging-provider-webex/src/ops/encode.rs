@@ -24,3 +24,67 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     };
     json_bytes(&json!({"ok": true, "payload": payload}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::STANDARD;
+    use greentic_types::{
+        ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
+    };
+    use serde_json::Value;
+
+    fn envelope() -> ChannelMessageEnvelope {
+        ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("dev").expect("env"),
+                TenantId::try_from("tenant").expect("tenant"),
+            ),
+            channel: "webex".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: vec![Destination {
+                id: "room-1".to_string(),
+                kind: Some("room".to_string()),
+            }],
+            correlation_id: None,
+            text: Some("hello".to_string()),
+            attachments: Vec::new(),
+            metadata: MessageMetadata::new(),
+            extensions: Default::default(),
+        }
+    }
+
+    #[test]
+    fn encode_serializes_envelope_for_send_payload() {
+        let result: Value = serde_json::from_slice(&encode_op(
+            json!({ "message": envelope() }).to_string().as_bytes(),
+        ))
+        .expect("result");
+
+        assert_eq!(result["ok"], true);
+        assert_eq!(result["payload"]["content_type"], "application/json");
+        let body_b64 = result["payload"]["body_b64"].as_str().expect("body_b64");
+        let body = STANDARD.decode(body_b64).expect("payload body");
+        let body: Value = serde_json::from_slice(&body).expect("body json");
+        assert_eq!(body["channel"], "webex");
+        assert_eq!(body["to"][0]["id"], "room-1");
+        assert_eq!(body["text"], "hello");
+    }
+
+    #[test]
+    fn encode_reports_invalid_input() {
+        let result: Value =
+            serde_json::from_slice(&encode_op(br#"{"message":{"bad":true}}"#)).expect("result");
+
+        assert_eq!(result["ok"], false);
+        assert!(
+            result["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("invalid encode input")
+        );
+    }
+}

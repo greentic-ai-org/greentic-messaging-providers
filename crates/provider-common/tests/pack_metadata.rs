@@ -327,9 +327,17 @@ fn packs_lock_has_digest() -> Result<()> {
     let bytes = std::fs::read(&gtpack_path)?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
-    let hex = format!("{:x}", hasher.finalize());
+    let hex = to_hex(hasher.finalize());
     assert_eq!(digest, format!("sha256:{hex}"));
     Ok(())
+}
+
+fn to_hex(bytes: impl AsRef<[u8]>) -> String {
+    bytes
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[test]
@@ -430,6 +438,20 @@ fn webchat_gui_pack_declares_provider_routes_and_static_assets() -> Result<()> {
         Some("index.html")
     );
 
+    let assets = manifest
+        .get("assets")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("webchat-gui manifest missing assets"))?;
+    assert!(
+        assets.iter().any(|asset| {
+            asset
+                .get("path")
+                .and_then(Value::as_str)
+                .is_some_and(|path| path == "assets/webchat-gui/embed.js")
+        }),
+        "pack.manifest.json should include embed.js"
+    );
+
     let staged_component = pack_dir.join("components/messaging-provider-webchat-gui.wasm");
     assert!(
         staged_component.exists(),
@@ -452,6 +474,7 @@ fn webchat_gui_pack_contains_runtime_bootstrap_and_bundled_assets() -> Result<()
         "index.html",
         "404.html",
         "runtime-bootstrap.js",
+        "embed.js",
         "config/product.json",
     ] {
         let path = asset_root.join(rel);
@@ -472,6 +495,26 @@ fn webchat_gui_pack_contains_runtime_bootstrap_and_bundled_assets() -> Result<()
         "runtime bootstrap should expose the backend base"
     );
 
+    let embed = fs::read_to_string(asset_root.join("embed.js"))?;
+    assert!(
+        embed.contains("customElements.define(\"greentic-webchat\""),
+        "embed.js should define the greentic-webchat custom element"
+    );
+    assert!(
+        embed.contains("presentation_mode\", \"embed_webcomponent\""),
+        "embed.js should request embedded presentation mode"
+    );
+
+    let pack_yaml = fs::read_to_string(
+        root.join("packs")
+            .join("messaging-webchat-gui")
+            .join("pack.yaml"),
+    )?;
+    assert!(
+        pack_yaml.contains("assets/webchat-gui/embed.js"),
+        "pack.yaml should include embed.js as a static asset"
+    );
+
     let mut has_js_bundle = false;
     let mut has_css_bundle = false;
     for entry in fs::read_dir(asset_root.join("assets"))? {
@@ -483,6 +526,57 @@ fn webchat_gui_pack_contains_runtime_bootstrap_and_bundled_assets() -> Result<()
     }
     assert!(has_js_bundle, "expected packaged JS bundle");
     assert!(has_css_bundle, "expected packaged CSS bundle");
+
+    Ok(())
+}
+
+#[test]
+fn webchat_gui_config_schema_declares_presentation_mode() -> Result<()> {
+    let root = workspace_root();
+    let schema_path = root
+        .join("packs")
+        .join("messaging-webchat-gui")
+        .join("schemas")
+        .join("messaging")
+        .join("webchat-gui")
+        .join("public.config.schema.json");
+    let schema: Value = serde_json::from_slice(&fs::read(schema_path)?)?;
+    let properties = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("webchat-gui public config schema missing properties"))?;
+    let presentation_mode = properties
+        .get("presentation_mode")
+        .ok_or_else(|| anyhow!("webchat-gui public config schema missing presentation_mode"))?;
+
+    assert_eq!(
+        presentation_mode.get("default").and_then(Value::as_str),
+        Some("standalone")
+    );
+    let allowed = presentation_mode
+        .get("enum")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("presentation_mode missing enum"))?;
+    assert!(
+        allowed
+            .iter()
+            .any(|value| value.as_str() == Some("standalone")),
+        "presentation_mode schema should allow standalone"
+    );
+    assert!(
+        allowed
+            .iter()
+            .any(|value| value.as_str() == Some("embed_webcomponent")),
+        "presentation_mode schema should allow embed_webcomponent"
+    );
+    assert!(
+        properties.contains_key("skin"),
+        "webchat-gui schema should keep skin as visual theme"
+    );
+    assert!(
+        properties.contains_key("nav_links"),
+        "webchat-gui schema should keep nav_links for standalone mode"
+    );
 
     Ok(())
 }

@@ -434,3 +434,119 @@ fn get_secret(key: &str) -> Result<String, String> {
         Err(e) => Err(format!("secret store error: {e:?}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_config_applies_optional_defaults_later() {
+        let cfg = parse_config(r#"{"tenant_id":"tenant","client_id":"client"}"#).expect("config");
+
+        assert_eq!(cfg.tenant_id, "tenant");
+        assert_eq!(cfg.client_id, "client");
+        assert!(cfg.graph_base_url.is_none());
+    }
+
+    #[test]
+    fn parse_desired_subscriptions_defaults_change_type() {
+        let state = json!({
+            "desired_subscriptions": [
+                {"resource": "teams/team-1/channels/channel-1/messages", "expiration_datetime": "2026-01-01T00:00:00Z"}
+            ]
+        });
+
+        let desired = parse_desired_subscriptions(&state).expect("desired");
+
+        assert_eq!(desired.len(), 1);
+        assert_eq!(desired[0].change_type, "created");
+        assert_eq!(
+            desired[0].resource,
+            "teams/team-1/channels/channel-1/messages"
+        );
+    }
+
+    #[test]
+    fn parse_state_accepts_empty_and_rejects_invalid_json() {
+        assert_eq!(parse_state("").expect("empty state"), json!({}));
+        assert_eq!(
+            parse_state("{").expect_err("invalid state"),
+            "invalid state_json"
+        );
+    }
+
+    #[test]
+    fn parse_desired_subscriptions_requires_resource() {
+        let state = json!({
+            "desired_subscriptions": [
+                {"change_type": "updated"}
+            ]
+        });
+
+        assert_eq!(
+            parse_desired_subscriptions(&state).expect_err("resource required"),
+            "desired_subscriptions.resource required"
+        );
+    }
+
+    #[test]
+    fn find_matching_requires_same_resource_change_type_and_webhook() {
+        let desired = SubscriptionSpec {
+            resource: "users/me/messages".to_string(),
+            change_type: "created".to_string(),
+            expiration_datetime: None,
+            client_state: None,
+        };
+        let existing = vec![
+            ExistingSubscription {
+                id: "wrong-url".to_string(),
+                resource: desired.resource.clone(),
+                change_type: desired.change_type.clone(),
+                expiration_datetime: None,
+                notification_url: Some("https://old.example/hook".to_string()),
+            },
+            ExistingSubscription {
+                id: "match".to_string(),
+                resource: desired.resource.clone(),
+                change_type: desired.change_type.clone(),
+                expiration_datetime: None,
+                notification_url: Some("https://new.example/hook".to_string()),
+            },
+        ];
+
+        let found = find_matching(&existing, &desired, "https://new.example/hook")
+            .expect("matching subscription");
+
+        assert_eq!(found.id, "match");
+    }
+
+    #[test]
+    fn existing_subscriptions_to_json_preserves_graph_fields() {
+        let subscriptions = vec![ExistingSubscription {
+            id: "sub-1".to_string(),
+            resource: "teams/t/channels/c/messages".to_string(),
+            change_type: "created".to_string(),
+            expiration_datetime: Some("2026-01-01T00:00:00Z".to_string()),
+            notification_url: Some("https://chat.example.com/hook".to_string()),
+        }];
+
+        let out = existing_subscriptions_to_json(&subscriptions);
+
+        assert_eq!(out[0]["id"], "sub-1");
+        assert_eq!(out[0]["resource"], "teams/t/channels/c/messages");
+        assert_eq!(out[0]["notification_url"], "https://chat.example.com/hook");
+    }
+
+    #[test]
+    fn webhook_normalizes_bot_activity() {
+        let out = <Component as IngressGuest>::handle_webhook(
+            "{}".to_string(),
+            r#"{"type":"message","text":"hello"}"#.to_string(),
+        )
+        .expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["event"]["text"], "hello");
+    }
+}

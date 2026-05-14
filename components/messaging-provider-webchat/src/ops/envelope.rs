@@ -65,6 +65,7 @@ pub(super) fn build_webchat_envelope_with_ctx(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
+        extensions,
     }
 }
 
@@ -103,6 +104,7 @@ pub(super) fn build_webchat_envelope(
         text: Some(text),
         attachments: Vec::new(),
         metadata,
+        extensions: Default::default(),
     }
 }
 

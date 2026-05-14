@@ -1,0 +1,7 @@
+{
+  "text": "Greentic Webex provider e2e smoke",
+  "destination": {
+    "kind": "room",
+    "id": "${E2E_WEBEX_ROOM_ID}"
+  }
+}

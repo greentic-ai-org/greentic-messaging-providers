@@ -7,11 +7,10 @@ use crate::component_v0_6::{
     DescribePayload, I18nText, OperationDescriptor, QaQuestionSpec, QaSpec, SchemaField, SchemaIr,
     canonical_cbor_bytes, decode_cbor, default_en_i18n_messages,
 };
-// Re-export so providers can write `use provider_common::helpers::PlannerCapabilities`.
 use base64::Engine as _;
-pub use greentic_messaging_renderer::PlannerAction;
-pub use greentic_messaging_renderer::PlannerCapabilities;
-use greentic_messaging_renderer::{RenderItem, extract_planner_card, plan_render};
+// Re-export so providers can write `use provider_common::helpers::PlannerCapabilities`.
+pub use crate::render::{PlannerAction, PlannerCapabilities};
+use crate::render::{PlannerCard, RenderItem, RenderTier, extract_planner_card, plan_render};
 use greentic_types::ChannelMessageEnvelope;
 use greentic_types::messaging::universal_dto::{
     RenderPlanInV1, RenderPlanOutV1, SendPayloadInV1, SendPayloadResultV1,
@@ -297,7 +296,7 @@ pub fn schema_core_healthcheck() -> Vec<u8> {
 
 /// Configuration for the shared [`render_plan_common`] function.
 ///
-/// Uses [`PlannerCapabilities`] from the renderer crate to drive tier selection,
+/// Uses [`PlannerCapabilities`] to drive tier selection,
 /// text truncation, HTML/markdown sanitization, and AC element extraction.
 pub struct RenderPlanConfig<'a> {
     /// Channel capabilities that drive tier selection and text processing.
@@ -385,7 +384,7 @@ pub fn render_plan_common(input_json: &[u8], config: &RenderPlanConfig) -> Vec<u
         }
         None => {
             // No AC — build a simple text-only plan through the planner
-            let card = greentic_messaging_renderer::PlannerCard {
+            let card = PlannerCard {
                 title: None,
                 text: plan_in
                     .message
@@ -413,10 +412,10 @@ pub fn render_plan_common(input_json: &[u8], config: &RenderPlanConfig) -> Vec<u
         .unwrap_or_else(|| config.default_summary.to_string());
 
     let tier_str = match render_plan.tier {
-        greentic_messaging_renderer::RenderTier::TierA => "TierA",
-        greentic_messaging_renderer::RenderTier::TierB => "TierB",
-        greentic_messaging_renderer::RenderTier::TierC => "TierC",
-        greentic_messaging_renderer::RenderTier::TierD => "TierD",
+        RenderTier::TierA => "TierA",
+        RenderTier::TierB => "TierB",
+        RenderTier::TierC => "TierC",
+        RenderTier::TierD => "TierD",
     };
 
     // Collect actions from the planner items (action labels)
@@ -837,6 +836,7 @@ mod tests {
                 text: text.map(|t| t.to_string()),
                 attachments: Vec::new(),
                 metadata,
+                extensions: Default::default(),
             },
             metadata: BTreeMap::new(),
         };

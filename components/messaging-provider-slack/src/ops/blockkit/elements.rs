@@ -446,3 +446,134 @@ pub(super) fn ac_element_to_blocks(
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn convert(element: Value, has_modal: bool) -> (Vec<Value>, Vec<Value>) {
+        let mut blocks = Vec::new();
+        let mut actions = Vec::new();
+        ac_element_to_blocks(&element, &mut blocks, &mut actions, has_modal);
+        (blocks, actions)
+    }
+
+    #[test]
+    fn textblock_maps_headings_subtle_and_bold_to_distinct_block_types() {
+        let (blocks, _) = convert(
+            json!({"type": "TextBlock", "text": "**Launch**", "style": "heading"}),
+            false,
+        );
+        assert_eq!(blocks[0]["type"], "header");
+        assert_eq!(blocks[0]["text"]["text"], "Launch");
+
+        let (blocks, _) = convert(
+            json!({"type": "TextBlock", "text": "Small", "isSubtle": true}),
+            false,
+        );
+        assert_eq!(blocks[0]["type"], "context");
+
+        let (blocks, _) = convert(
+            json!({"type": "TextBlock", "text": "Bold", "weight": "Bolder"}),
+            false,
+        );
+        assert_eq!(blocks[0]["text"]["text"], "*Bold*");
+    }
+
+    #[test]
+    fn rich_text_image_factset_and_table_are_rendered() {
+        let (blocks, _) = convert(
+            json!({"type": "RichTextBlock", "inlines": [
+                {"text": "bold", "fontWeight": "Bolder"},
+                {"text": " link", "selectAction": {"type": "Action.OpenUrl", "url": "https://example.com"}}
+            ]}),
+            false,
+        );
+        assert!(
+            blocks[0]["text"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("*bold*")
+        );
+        assert!(
+            blocks[0]["text"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("<https://example.com| link>")
+        );
+
+        let (blocks, _) = convert(
+            json!({"type": "Image", "url": "https://example.com/a.png", "altText": "A"}),
+            false,
+        );
+        assert_eq!(blocks[0]["type"], "image");
+
+        let (blocks, _) = convert(
+            json!({"type": "FactSet", "facts": [{"title": "Status", "value": "Open"}]}),
+            false,
+        );
+        assert_eq!(blocks[0]["fields"][0]["text"], "*Status*\nOpen");
+
+        let (blocks, _) = convert(
+            json!({
+                "type": "Table",
+                "columns": [{"title": "A"}, {"title": "B"}],
+                "rows": [{"cells": [
+                    {"items": [{"type": "TextBlock", "text": "1"}]},
+                    {"items": [{"type": "TextBlock", "text": "2"}]}
+                ]}]
+            }),
+            false,
+        );
+        assert!(
+            blocks[0]["text"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("*A* | *B*")
+        );
+    }
+
+    #[test]
+    fn columnset_merges_icon_text_and_collects_select_actions() {
+        let (blocks, actions) = convert(
+            json!({
+                "type": "ColumnSet",
+                "columns": [
+                    {"items": [{"type": "TextBlock", "text": "!"}]},
+                    {"items": [{"type": "TextBlock", "text": "Investigate"}],
+                     "selectAction": {"type": "Action.Submit", "title": "Pick"}}
+                ],
+                "selectAction": {"type": "Action.Submit", "title": "Whole row"}
+            }),
+            false,
+        );
+
+        assert_eq!(blocks[0]["type"], "section");
+        assert!(
+            blocks[0]["text"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Investigate")
+        );
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["text"]["text"], "Pick");
+        assert_eq!(actions[1]["text"]["text"], "Whole row");
+    }
+
+    #[test]
+    fn inputs_skip_inline_rendering_when_modal_is_active() {
+        let (blocks, _) = convert(
+            json!({"type": "Input.Text", "id": "comment", "label": "Comment"}),
+            true,
+        );
+        assert!(blocks.is_empty());
+
+        let (blocks, _) = convert(
+            json!({"type": "Input.ChoiceSet", "id": "priority", "label": "Priority", "choices": [
+                {"title": "High", "value": "high"}
+            ]}),
+            false,
+        );
+        assert_eq!(blocks[0]["accessory"]["type"], "static_select");
+    }
+}

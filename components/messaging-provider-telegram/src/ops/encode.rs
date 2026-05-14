@@ -173,3 +173,121 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     };
     json_bytes(&json!({"ok": true, "payload": payload}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::STANDARD;
+    use greentic_types::{
+        Attachment, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx,
+        TenantId,
+    };
+    use serde_json::Value;
+
+    fn envelope(metadata: MessageMetadata, attachments: Vec<Attachment>) -> ChannelMessageEnvelope {
+        ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("dev").expect("env"),
+                TenantId::try_from("tenant").expect("tenant"),
+            ),
+            channel: "telegram".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: vec![Destination {
+                id: "12345".to_string(),
+                kind: Some("chat".to_string()),
+            }],
+            correlation_id: None,
+            text: None,
+            attachments,
+            metadata,
+            extensions: Default::default(),
+        }
+    }
+
+    fn encoded_envelope(input: Value) -> ChannelMessageEnvelope {
+        let result: Value = serde_json::from_slice(&encode_op(input.to_string().as_bytes()))
+            .expect("encode result");
+        assert_eq!(result["ok"], true);
+        let payload = result["payload"].as_object().expect("payload");
+        let body_b64 = payload
+            .get("body_b64")
+            .and_then(Value::as_str)
+            .expect("body_b64");
+        let body = STANDARD.decode(body_b64).expect("payload body");
+        serde_json::from_slice(&body).expect("encoded envelope")
+    }
+
+    #[test]
+    fn encode_normalizes_telegram_metadata_and_location() {
+        let mut metadata = MessageMetadata::new();
+        metadata.insert(
+            "tg_photo_url".to_string(),
+            "\"https://cdn/photo.jpg\"".to_string(),
+        );
+        metadata.insert("tg_location_latitude".to_string(), "51.5".to_string());
+        metadata.insert("tg_location_longitude".to_string(), "-0.12".to_string());
+        metadata.insert("tg_location_name".to_string(), "Office".to_string());
+
+        let out = encoded_envelope(json!({ "message": envelope(metadata, vec![]) }));
+
+        assert_eq!(out.metadata["tg_photo_url"], "https://cdn/photo.jpg");
+        assert_eq!(out.metadata["tg_photo"], "https://cdn/photo.jpg");
+        let location: Value = serde_json::from_str(&out.metadata["tg_location"]).expect("location");
+        assert_eq!(location["latitude"], "51.5");
+        assert_eq!(location["longitude"], "-0.12");
+        assert_eq!(location["name"], "Office");
+    }
+
+    #[test]
+    fn encode_classifies_attachments_without_overriding_metadata() {
+        let mut metadata = MessageMetadata::new();
+        metadata.insert(
+            "tg_photo".to_string(),
+            "https://existing/photo.jpg".to_string(),
+        );
+        let attachments = vec![
+            Attachment {
+                mime_type: "image/png".to_string(),
+                url: "https://cdn/new.png".to_string(),
+                name: None,
+                size_bytes: None,
+            },
+            Attachment {
+                mime_type: "audio/ogg".to_string(),
+                url: "https://cdn/voice.ogg".to_string(),
+                name: None,
+                size_bytes: None,
+            },
+            Attachment {
+                mime_type: "application/pdf".to_string(),
+                url: "https://cdn/file.pdf".to_string(),
+                name: None,
+                size_bytes: None,
+            },
+        ];
+
+        let out = encoded_envelope(json!(envelope(metadata, attachments)));
+
+        assert_eq!(out.metadata["tg_photo"], "https://existing/photo.jpg");
+        assert_eq!(out.metadata["tg_voice"], "https://cdn/voice.ogg");
+        assert_eq!(out.metadata["tg_document"], "https://cdn/file.pdf");
+        assert_eq!(out.text.as_deref(), Some("universal telegram payload"));
+    }
+
+    #[test]
+    fn encode_reports_invalid_input_shape() {
+        let result: Value = serde_json::from_slice(&encode_op(br#"{"message":{"bad":true}}"#))
+            .expect("encode result");
+
+        assert_eq!(result["ok"], false);
+        assert!(
+            result["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("invalid encode input")
+        );
+    }
+}

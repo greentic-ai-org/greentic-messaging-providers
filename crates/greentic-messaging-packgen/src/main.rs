@@ -2904,7 +2904,15 @@ fn hash_files(paths: &[PathBuf]) -> Result<String> {
         hasher.update(&data);
         hasher.update([0u8]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(to_hex(hasher.finalize()))
+}
+
+fn to_hex(bytes: impl AsRef<[u8]>) -> String {
+    bytes
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn stamp_generated_header(flow_path: &Path, meta: &GeneratedFlowMetadata) -> Result<()> {

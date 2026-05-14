@@ -191,6 +191,8 @@ pub(crate) fn extract_bearer_token(auth_header: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use serde_json::json;
 
     #[test]
     fn extract_bearer_token_works() {
@@ -220,5 +222,84 @@ mod tests {
     #[test]
     fn valid_issuers_are_defined() {
         assert!(VALID_ISSUERS.iter().all(|iss| iss.starts_with("https://")));
+    }
+
+    fn unsigned_token(claims: Value) -> String {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).expect("claims"));
+        format!("{header}.{payload}.")
+    }
+
+    #[test]
+    fn validate_jwt_accepts_expected_botframework_claims() {
+        let token = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "bot-app-id",
+            "exp": 4_102_444_800_u64,
+            "iat": 1_u64,
+            "serviceurl": "https://smba.trafficmanager.net/amer/"
+        }));
+
+        let claims = validate_jwt(&token, "bot-app-id").expect("valid claims");
+
+        assert_eq!(claims.aud.as_deref(), Some("bot-app-id"));
+        assert_eq!(
+            claims.service_url.as_deref(),
+            Some("https://smba.trafficmanager.net/amer/")
+        );
+    }
+
+    #[test]
+    fn validate_jwt_rejects_wrong_audience_expired_and_issuer() {
+        let valid_exp = 4_102_444_800_u64;
+        let wrong_audience = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "other",
+            "exp": valid_exp
+        }));
+        assert!(
+            validate_jwt(&wrong_audience, "bot-app-id")
+                .expect_err("audience")
+                .contains("invalid audience")
+        );
+
+        let expired = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "bot-app-id",
+            "exp": 1_u64
+        }));
+        assert_eq!(
+            validate_jwt(&expired, "bot-app-id").expect_err("expired"),
+            "token expired"
+        );
+
+        let bad_issuer = unsigned_token(json!({
+            "iss": "https://evil.example",
+            "aud": "bot-app-id",
+            "exp": valid_exp
+        }));
+        assert!(
+            validate_jwt(&bad_issuer, "bot-app-id")
+                .expect_err("issuer")
+                .contains("invalid issuer")
+        );
+    }
+
+    #[test]
+    fn acquire_bot_token_validates_local_config_before_secret_lookup() {
+        let cfg = ProviderConfig {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            ms_bot_app_id: " ".to_string(),
+            ms_bot_app_password: Some("secret".to_string()),
+            default_service_url: None,
+            team_id: None,
+            channel_id: None,
+        };
+
+        assert_eq!(
+            acquire_bot_token(&cfg).expect_err("missing app id"),
+            "ms_bot_app_id is required"
+        );
     }
 }

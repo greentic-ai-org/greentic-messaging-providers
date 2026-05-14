@@ -14,7 +14,6 @@ mod bindings {
     });
 }
 
-#[path = "../../messaging-provider-webchat/src/config.rs"]
 pub(crate) mod config;
 #[path = "../../messaging-provider-webchat/src/describe.rs"]
 mod describe;
@@ -26,7 +25,10 @@ pub(crate) const PROVIDER_ID: &str = "messaging-provider-webchat-gui";
 pub(crate) const PROVIDER_TYPE: &str = "messaging.webchat-gui";
 pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
 
-use config::{ProviderConfigOut, default_config_out, default_mode, validate_config_out};
+use config::{
+    PresentationMode, ProviderConfig, ProviderConfigOut, default_config_out, default_mode,
+    normalize_nav_links, validate_config_out, validate_provider_config,
+};
 use describe::{
     DEFAULT_KEYS, I18N_KEYS, I18N_PAIRS, SETUP_QUESTIONS, build_describe_payload, build_qa_spec,
 };
@@ -86,8 +88,14 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
         serde_json::to_vec(&build_describe_payload()).unwrap_or_default()
     }
 
-    fn validate_config(_config_json: Vec<u8>) -> Vec<u8> {
-        json_bytes(&json!({"ok": true}))
+    fn validate_config(config_json: Vec<u8>) -> Vec<u8> {
+        match serde_json::from_slice::<ProviderConfig>(&config_json)
+            .map_err(|err| format!("invalid config: {err}"))
+            .and_then(validate_provider_config)
+        {
+            Ok(_) => json_bytes(&json!({"ok": true})),
+            Err(error) => json_bytes(&json!({"ok": false, "error": error})),
+        }
     }
 
     fn healthcheck() -> Vec<u8> {
@@ -215,6 +223,22 @@ fn apply_answers_impl(
             .or(merged.oauth_enabled);
         merged.oauth_providers =
             compose_oauth_providers(&answers).or(merged.oauth_providers.clone());
+        if let Some(presentation_mode) = presentation_mode_from_answers(&answers) {
+            match presentation_mode {
+                Ok(value) => merged.presentation_mode = value,
+                Err(error) => {
+                    return canonical_cbor_bytes(&ApplyAnswersResult {
+                        ok: false,
+                        config: None,
+                        remove: None,
+                        diagnostics: Vec::new(),
+                        error: Some(error),
+                    });
+                }
+            }
+        }
+        merged.skin = string_or_default(&answers, "skin", &merged.skin);
+        merged.nav_links = nav_links_from_answers(&answers).unwrap_or(merged.nav_links);
     }
 
     if mode == Mode::Upgrade {
@@ -257,7 +281,30 @@ fn apply_answers_impl(
         {
             merged.oauth_providers = compose_oauth_providers(&answers);
         }
+        if has("presentation_mode") {
+            match presentation_mode_from_answers(&answers) {
+                Some(Ok(value)) => merged.presentation_mode = value,
+                Some(Err(error)) => {
+                    return canonical_cbor_bytes(&ApplyAnswersResult {
+                        ok: false,
+                        config: None,
+                        remove: None,
+                        diagnostics: Vec::new(),
+                        error: Some(error),
+                    });
+                }
+                None => {}
+            }
+        }
+        if has("skin") {
+            merged.skin = string_or_default(&answers, "skin", &merged.skin);
+        }
+        if has("nav_links") {
+            merged.nav_links = nav_links_from_answers(&answers).unwrap_or_default();
+        }
     }
+
+    normalize_nav_links(&mut merged);
 
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
@@ -302,6 +349,24 @@ fn optional_string_from(answers: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn presentation_mode_from_answers(answers: &Value) -> Option<Result<PresentationMode, String>> {
+    let value = optional_string_from(answers, "presentation_mode")?;
+    Some(match value.as_str() {
+        "standalone" => Ok(PresentationMode::Standalone),
+        "embed_webcomponent" => Ok(PresentationMode::EmbedWebcomponent),
+        _ => Err(format!(
+            "config validation failed: presentation_mode must be standalone|embed_webcomponent, got {value}"
+        )),
+    })
+}
+
+fn nav_links_from_answers(answers: &Value) -> Option<Vec<Value>> {
+    answers.get("nav_links").and_then(|value| match value {
+        Value::Array(items) => Some(items.clone()),
+        _ => None,
+    })
 }
 
 fn is_truthy(answers: &Value, key: &str) -> bool {
@@ -395,4 +460,83 @@ fn compose_oauth_providers(answers: &Value) -> Option<String> {
         Value::Array(_) => Some(val.to_string()),
         _ => None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
+    use serde_json::json;
+
+    fn apply_setup(answers: Value) -> Value {
+        let cbor = canonical_cbor_bytes(&answers);
+        let out = apply_answers_impl(
+            bindings::exports::greentic::component::qa::Mode::Setup,
+            cbor,
+        );
+        decode_cbor(&out).expect("decode apply answers")
+    }
+
+    fn error_text(value: &Value) -> String {
+        value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    #[test]
+    fn apply_answers_defaults_to_standalone() {
+        let value = apply_setup(json!({
+            "public_base_url": "https://chat.example.com",
+            "mode": "local_queue",
+            "route": "webchat",
+            "skin": "default"
+        }));
+        assert_eq!(value["ok"], true);
+        assert_eq!(value["config"]["presentation_mode"], "standalone");
+        assert_eq!(value["config"]["skin"], "default");
+    }
+
+    #[test]
+    fn apply_answers_embed_mode_does_not_require_nav_links() {
+        let value = apply_setup(json!({
+            "public_base_url": "https://chat.example.com",
+            "mode": "local_queue",
+            "route": "webchat",
+            "presentation_mode": "embed_webcomponent",
+            "skin": "default"
+        }));
+        assert_eq!(value["ok"], true);
+        assert_eq!(value["config"]["presentation_mode"], "embed_webcomponent");
+        assert!(value["config"].get("nav_links").is_none());
+    }
+
+    #[test]
+    fn validate_config_rejects_unknown_presentation_mode() {
+        let out = <Component as bindings::exports::greentic::provider_schema_core::schema_core_api::Guest>::validate_config(
+            serde_json::to_vec(&json!({
+                "enabled": true,
+                "public_base_url": "https://chat.example.com",
+                "mode": "local_queue",
+                "route": "webchat",
+                "presentation_mode": "modal"
+            }))
+            .unwrap(),
+        );
+        let value: Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(value["ok"], false);
+    }
+
+    #[test]
+    fn apply_answers_rejects_unknown_presentation_mode() {
+        let value = apply_setup(json!({
+            "public_base_url": "https://chat.example.com",
+            "mode": "local_queue",
+            "route": "webchat",
+            "presentation_mode": "skin"
+        }));
+        assert_eq!(value["ok"], false);
+        assert!(error_text(&value).contains("presentation_mode"));
+    }
 }

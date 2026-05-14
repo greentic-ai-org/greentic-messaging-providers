@@ -63,3 +63,89 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     };
     json_bytes(&json!({"ok": true, "payload": payload}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::STANDARD;
+    use greentic_types::{ChannelMessageEnvelope, EnvId, MessageMetadata, TenantCtx, TenantId};
+
+    fn envelope(metadata: MessageMetadata) -> ChannelMessageEnvelope {
+        ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("dev").expect("env"),
+                TenantId::try_from("tenant").expect("tenant"),
+            ),
+            channel: "teams".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: Vec::new(),
+            correlation_id: None,
+            text: Some("hello".to_string()),
+            attachments: Vec::new(),
+            metadata,
+            extensions: Default::default(),
+        }
+    }
+
+    fn encoded_body(input: Value) -> Value {
+        let result: Value = serde_json::from_slice(&encode_op(input.to_string().as_bytes()))
+            .expect("encode result");
+        assert_eq!(result["ok"], true);
+        assert_eq!(result["payload"]["metadata"]["method"], "POST");
+        let body_b64 = result["payload"]["body_b64"].as_str().expect("body_b64");
+        let body = STANDARD.decode(body_b64).expect("payload body");
+        serde_json::from_slice(&body).expect("body json")
+    }
+
+    #[test]
+    fn encode_forwards_reply_and_bot_framework_routing_metadata() {
+        let mut metadata = MessageMetadata::new();
+        metadata.insert("reply_to_id".to_string(), "\"reply-1\"".to_string());
+        metadata.insert(
+            "serviceUrl".to_string(),
+            "https://smba.example/".to_string(),
+        );
+        metadata.insert("conversationId".to_string(), "conv-1".to_string());
+
+        let body = encoded_body(json!({ "message": envelope(metadata) }));
+
+        assert_eq!(body["reply_to_id"], "reply-1");
+        assert_eq!(body["metadata"]["serviceUrl"], "https://smba.example/");
+        assert_eq!(body["metadata"]["conversationId"], "conv-1");
+        assert_eq!(body["text"], "hello");
+    }
+
+    #[test]
+    fn encode_adds_adaptive_card_json_for_send_payload() {
+        let mut metadata = MessageMetadata::new();
+        metadata.insert(
+            "adaptive_card".to_string(),
+            json!({"type": "AdaptiveCard", "body": []}).to_string(),
+        );
+
+        let body = encoded_body(json!(envelope(metadata)));
+
+        assert_eq!(
+            body["_ac_json"]
+                .as_str()
+                .and_then(|s| serde_json::from_str::<Value>(s).ok()),
+            Some(json!({"type": "AdaptiveCard", "body": []}))
+        );
+    }
+
+    #[test]
+    fn encode_reports_invalid_input_shape() {
+        let result: Value = serde_json::from_slice(&encode_op(b"{")).expect("result");
+
+        assert_eq!(result["ok"], false);
+        assert!(
+            result["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("invalid encode input")
+        );
+    }
+}

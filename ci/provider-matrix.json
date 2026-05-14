@@ -83,6 +83,18 @@
   "providers": {
     "dummy": {
       "pack": "messaging-dummy",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-dummy",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "dummy",
+        "required_secrets": [],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/dummy",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider dummy",
+        "operation": "deterministic local smoke",
+        "readback": "local result validation"
+      },
       "components": [
         "messaging-provider-dummy"
       ],
@@ -98,6 +110,25 @@
     },
     "email": {
       "pack": "messaging-email",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-email",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "smtp",
+        "required_secrets": [
+          "E2E_EMAIL_SMTP_HOST",
+          "E2E_EMAIL_SMTP_PORT",
+          "E2E_EMAIL_SMTP_USERNAME",
+          "E2E_EMAIL_SMTP_PASSWORD",
+          "E2E_EMAIL_FROM",
+          "E2E_EMAIL_TO"
+        ],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/email",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider email",
+        "operation": "send test email",
+        "readback": "SMTP acceptance; mailbox read-back not required"
+      },
       "components": [
         "messaging-provider-email"
       ],
@@ -114,6 +145,23 @@
     },
     "slack": {
       "pack": "messaging-slack",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-slack",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "slack",
+        "required_secrets": [
+          "E2E_SLACK_BOT_TOKEN",
+          "E2E_SLACK_CHANNEL_ID"
+        ],
+        "optional_secrets": [
+          "E2E_SLACK_SIGNING_SECRET"
+        ],
+        "fixture_path": "e2e/providers/slack",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider slack",
+        "operation": "chat.postMessage to dedicated test channel",
+        "readback": "Slack API response plus optional conversations.history correlation check"
+      },
       "components": [
         "slack",
         "messaging-ingress-slack",
@@ -135,6 +183,24 @@
     },
     "teams": {
       "pack": "messaging-teams",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-teams",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "microsoft-teams",
+        "required_secrets": [
+          "E2E_TEAMS_TENANT_ID",
+          "E2E_TEAMS_CLIENT_ID",
+          "E2E_TEAMS_CLIENT_SECRET",
+          "E2E_TEAMS_TEAM_ID",
+          "E2E_TEAMS_CHANNEL_ID"
+        ],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/teams",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider teams",
+        "operation": "Graph channel message send",
+        "readback": "Graph send response id; read-back where enabled"
+      },
       "components": [
         "teams",
         "messaging-ingress-teams",
@@ -156,6 +222,21 @@
     },
     "telegram": {
       "pack": "messaging-telegram",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-telegram",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "telegram",
+        "required_secrets": [
+          "E2E_TELEGRAM_BOT_TOKEN",
+          "E2E_TELEGRAM_CHAT_ID"
+        ],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/telegram",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider telegram",
+        "operation": "sendMessage to dedicated chat",
+        "readback": "Telegram send API response validation"
+      },
       "components": [
         "telegram",
         "telegram-webhook",
@@ -180,6 +261,23 @@
     },
     "webchat": {
       "pack": "messaging-webchat",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-webchat",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "webchat",
+        "required_secrets": [
+          "E2E_WEBCHAT_ENDPOINT"
+        ],
+        "optional_secrets": [
+          "E2E_WEBCHAT_BEARER_TOKEN",
+          "E2E_WEBCHAT_ROOM_ID"
+        ],
+        "fixture_path": "e2e/providers/webchat",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider webchat",
+        "operation": "send deterministic webchat test payload",
+        "readback": "endpoint response validation"
+      },
       "components": [
         "webchat",
         "messaging-provider-webchat"
@@ -199,6 +297,18 @@
     },
     "webchat-gui": {
       "pack": "messaging-webchat-gui",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-webchat-gui",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "webchat-gui",
+        "required_secrets": [],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/webchat",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider webchat-gui",
+        "operation": "pack load and asset smoke",
+        "readback": "local artifact validation"
+      },
       "components": [
         "messaging-provider-webchat-gui"
       ],
@@ -213,6 +323,21 @@
     },
     "webex": {
       "pack": "messaging-webex",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-webex",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "webex",
+        "required_secrets": [
+          "E2E_WEBEX_BOT_TOKEN",
+          "E2E_WEBEX_ROOM_ID"
+        ],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/webex",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider webex",
+        "operation": "messages API send to dedicated room",
+        "readback": "message id response plus optional GET /messages/{id}"
+      },
       "components": [
         "webex",
         "webex-webhook",
@@ -234,6 +359,24 @@
     },
     "whatsapp": {
       "pack": "messaging-whatsapp",
+      "version": "1.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-whatsapp",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "e2e": {
+        "external_service": "whatsapp",
+        "required_secrets": [
+          "E2E_WHATSAPP_TOKEN",
+          "E2E_WHATSAPP_PHONE_NUMBER_ID",
+          "E2E_WHATSAPP_TO"
+        ],
+        "optional_secrets": [
+          "E2E_WHATSAPP_VERIFY_TOKEN"
+        ],
+        "fixture_path": "e2e/providers/whatsapp",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider whatsapp",
+        "operation": "Cloud API text send to dedicated test number",
+        "readback": "messages API response id validation"
+      },
       "components": [
         "whatsapp",
         "messaging-ingress-whatsapp",

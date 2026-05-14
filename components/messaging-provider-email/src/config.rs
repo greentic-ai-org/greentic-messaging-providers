@@ -215,3 +215,68 @@ pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
         graph_refresh_token,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_config() -> Value {
+        json!({
+            "public_base_url": "https://mail.example",
+            "host": "smtp.example",
+            "username": "mailer",
+            "from_address": "bot@example.com"
+        })
+    }
+
+    #[test]
+    fn load_config_accepts_top_level_shape_with_defaults() {
+        let cfg = load_config(&valid_config()).expect("config");
+
+        assert!(cfg.enabled);
+        assert_eq!(cfg.port, 587);
+        assert_eq!(cfg.tls_mode, "starttls");
+        assert_eq!(cfg.public_base_url, "https://mail.example");
+    }
+
+    #[test]
+    fn nested_config_rejects_unknown_fields() {
+        let value = json!({
+            "config": {
+                "public_base_url": "https://mail.example",
+                "host": "smtp.example",
+                "username": "mailer",
+                "from_address": "bot@example.com",
+                "surprise": true
+            }
+        });
+
+        let err = load_config(&value).expect_err("unknown fields should fail");
+
+        assert!(err.contains("unknown field"), "{err}");
+    }
+
+    #[test]
+    fn validate_config_out_rejects_relative_public_base_url() {
+        let mut cfg = default_config_out();
+        cfg.public_base_url = "/relative".to_string();
+        cfg.host = "smtp.example".to_string();
+        cfg.username = "mailer".to_string();
+        cfg.from_address = "bot@example.com".to_string();
+
+        let err = validate_config_out(&cfg).expect_err("relative urls should fail");
+
+        assert!(err.contains("absolute URL"), "{err}");
+    }
+
+    #[test]
+    fn load_config_requires_real_smtp_identity() {
+        let mut value = valid_config();
+        value["from_address"] = json!(" ");
+
+        let err = load_config(&value).expect_err("blank sender should fail");
+
+        assert!(err.contains("from_address"), "{err}");
+    }
+}

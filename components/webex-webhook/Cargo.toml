@@ -1,7 +1,7 @@
 [package]
 name = "webex-webhook"
 edition.workspace = true
-version.workspace = true
+version = "1.1.0"
 license.workspace = true
 publish = false
 
@@ -12,8 +12,6 @@ crate-type = ["cdylib"]
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 wit-bindgen.workspace = true
-greentic-interfaces.workspace = true
-greentic-interfaces-guest = { workspace = true, features = ["component-node"], default-features = false }
 
 [package.metadata.component]
 package = "greentic:webex-webhook"

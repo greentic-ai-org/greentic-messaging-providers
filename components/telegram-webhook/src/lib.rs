@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use greentic_interfaces_guest::component::node::{InvokeResult, NodeError};
-use greentic_interfaces_guest::component_entrypoint;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -15,6 +13,7 @@ mod bindings {
 
 use bindings::greentic::http::http_client as client;
 use bindings::greentic::secrets_store::secrets_store;
+use bindings::{ExecCtx, Guest, InvokeResult, LifecycleStatus, NodeError, StreamEvent};
 
 const DEFAULT_API_BASE: &str = "https://api.telegram.org";
 const DEFAULT_WEBHOOK_PATH: &str = "";
@@ -46,28 +45,44 @@ struct ReconcileOutput {
     webhook_info: Value,
 }
 
-component_entrypoint!({
-    manifest: describe_manifest,
-    invoke: handle_message,
-    invoke_stream: false,
-});
+struct Component;
 
 fn describe_manifest() -> String {
     include_str!("../component.manifest.json").to_string()
 }
 
-fn handle_message(operation: String, input: String) -> InvokeResult {
-    match operation.as_str() {
-        "reconcile_webhook" => invoke(reconcile_webhook(&input)),
-        _ => InvokeResult::Err(NodeError {
-            code: "UNKNOWN_OPERATION".to_string(),
-            message: format!("unsupported operation {operation}"),
-            retryable: false,
-            backoff_ms: None,
-            details: None,
-        }),
+impl Guest for Component {
+    fn get_manifest() -> String {
+        describe_manifest()
+    }
+
+    fn on_start(_ctx: ExecCtx) -> Result<LifecycleStatus, String> {
+        Ok(LifecycleStatus::Ok)
+    }
+
+    fn on_stop(_ctx: ExecCtx, _reason: String) -> Result<LifecycleStatus, String> {
+        Ok(LifecycleStatus::Ok)
+    }
+
+    fn invoke(_ctx: ExecCtx, operation: String, input: String) -> InvokeResult {
+        match operation.as_str() {
+            "reconcile_webhook" => invoke(reconcile_webhook(&input)),
+            _ => InvokeResult::Err(NodeError {
+                code: "UNKNOWN_OPERATION".to_string(),
+                message: format!("unsupported operation {operation}"),
+                retryable: false,
+                backoff_ms: None,
+                details: None,
+            }),
+        }
+    }
+
+    fn invoke_stream(_ctx: ExecCtx, _op: String, _input: String) -> Vec<StreamEvent> {
+        Vec::new()
     }
 }
+
+bindings::export!(Component with_types_in bindings);
 
 fn invoke(result: Result<String, String>) -> InvokeResult {
     match result {
@@ -224,4 +239,76 @@ fn extract_url(body: &Value) -> Option<String> {
         .and_then(|result| result.get("url"))
         .and_then(|url| url.as_str())
         .map(|s| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn join_url_handles_optional_slashes() {
+        assert_eq!(
+            join_url("https://chat.example.com/", "/telegram"),
+            "https://chat.example.com/telegram"
+        );
+        assert_eq!(
+            join_url("https://chat.example.com", "telegram"),
+            "https://chat.example.com/telegram"
+        );
+        assert_eq!(
+            join_url("https://chat.example.com/", ""),
+            "https://chat.example.com"
+        );
+    }
+
+    #[test]
+    fn ensure_ok_reports_telegram_description() {
+        ensure_ok(&json!({"ok": true}), "getWebhookInfo").expect("ok response");
+
+        let err = ensure_ok(
+            &json!({"ok": false, "description": "bad token"}),
+            "getWebhookInfo",
+        )
+        .unwrap_err();
+        assert_eq!(err, "getWebhookInfo failed: bad token");
+    }
+
+    #[test]
+    fn extract_url_reads_nested_result_url_only() {
+        assert_eq!(
+            extract_url(&json!({"result": {"url": "https://chat.example.com/hook"}})),
+            Some("https://chat.example.com/hook".to_string())
+        );
+        assert_eq!(extract_url(&json!({"result": {}})), None);
+    }
+
+    #[test]
+    fn reconcile_validates_input_before_secret_lookup() {
+        assert!(
+            reconcile_webhook("{")
+                .expect_err("invalid json")
+                .contains("invalid input")
+        );
+        assert_eq!(
+            reconcile_webhook(r#"{"public_base_url":" "}"#).expect_err("missing base"),
+            "public_base_url is required"
+        );
+    }
+
+    #[test]
+    fn invoke_maps_success_and_errors_to_component_results() {
+        match invoke(Ok("{}".to_string())) {
+            InvokeResult::Ok(value) => assert_eq!(value, "{}"),
+            _ => panic!("expected ok result"),
+        }
+
+        match invoke(Err("bad input".to_string())) {
+            InvokeResult::Err(err) => {
+                assert_eq!(err.code, "INVALID_INPUT");
+                assert_eq!(err.message, "bad input");
+                assert!(!err.retryable);
+            }
+            _ => panic!("expected error result"),
+        }
+    }
 }

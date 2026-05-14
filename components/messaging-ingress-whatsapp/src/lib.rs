@@ -50,3 +50,33 @@ fn get_secret(key: &str) -> Result<String, String> {
         Err(e) => Err(format!("secret store error: {e:?}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webhook_normalizes_message_payload_without_verify_token() {
+        let out = <Component as Guest>::handle_webhook(
+            "{}".to_string(),
+            r#"{"entry":[{"changes":[{"value":{"messages":[{"text":{"body":"hi"}}]}}]}]}"#
+                .to_string(),
+        )
+        .expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(
+            parsed["event"]["entry"][0]["changes"][0]["value"]["messages"][0]["text"]["body"],
+            "hi"
+        );
+    }
+
+    #[test]
+    fn webhook_rejects_invalid_headers_before_body_processing() {
+        let err = <Component as Guest>::handle_webhook("{".to_string(), "{}".to_string())
+            .expect_err("invalid headers should fail");
+
+        assert!(err.contains("invalid headers"), "{err}");
+    }
+}
