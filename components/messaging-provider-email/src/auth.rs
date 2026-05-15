@@ -163,3 +163,64 @@ fn request_token(url: &str, body: &[u8]) -> Result<String, String> {
         .map(|token| token.to_string())
         .ok_or_else(|| "token response missing access_token".to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config() -> ProviderConfig {
+        serde_json::from_value(serde_json::json!({
+            "public_base_url": "https://mail.example.com",
+            "host": "smtp.example.com",
+            "username": "mailer",
+            "from_address": "bot@example.com",
+            "graph_tenant_id": "tenant-default"
+        }))
+        .expect("config")
+    }
+
+    fn user() -> AuthUserRefV1 {
+        AuthUserRefV1 {
+            user_id: "user-1".to_string(),
+            token_key: "REFRESH_TOKEN".to_string(),
+            tenant_id: None,
+            email: Some("user@example.com".to_string()),
+            display_name: None,
+        }
+    }
+
+    #[test]
+    fn graph_token_endpoint_prefers_explicit_config_endpoint() {
+        let mut cfg = config();
+        cfg.graph_token_endpoint = Some("https://idp.example.com/token".to_string());
+
+        let endpoint = graph_token_endpoint(&cfg, &user()).expect("endpoint");
+
+        assert_eq!(endpoint, "https://idp.example.com/token");
+    }
+
+    #[test]
+    fn graph_token_endpoint_uses_user_tenant_before_config_tenant() {
+        let mut user = user();
+        user.tenant_id = Some("/tenant-user/".to_string());
+        let mut cfg = config();
+        cfg.graph_authority = Some("https://login.example.com/".to_string());
+
+        let endpoint = graph_token_endpoint(&cfg, &user).expect("endpoint");
+
+        assert_eq!(
+            endpoint,
+            "https://login.example.com/tenant-user/oauth2/v2.0/token"
+        );
+    }
+
+    #[test]
+    fn graph_token_endpoint_requires_some_tenant() {
+        let mut cfg = config();
+        cfg.graph_tenant_id = None;
+
+        let err = graph_token_endpoint(&cfg, &user()).unwrap_err();
+
+        assert_eq!(err, "missing Graph tenant id");
+    }
+}

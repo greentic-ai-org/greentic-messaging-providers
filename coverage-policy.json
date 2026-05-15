@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "global": {
+    "line_coverage_min": 60.0
+  },
+  "defaults": {
+    "per_file_line_coverage_min": 60.0
+  },
+  "exclusions": {
+    "files": [
+      "components/*/src/bindings.rs",
+      "components/messaging-provider-slack/src/ops/render.rs",
+      "components/messaging-provider-teams/src/ops/render.rs",
+      "components/messaging-provider-telegram/src/ops/render.rs",
+      "components/messaging-provider-webchat/src/ops/render.rs",
+      "components/messaging-provider-webex/src/ops/render.rs",
+      "components/messaging-provider-whatsapp/src/ops/render.rs",
+      "components/messaging-provider-webchat/src/directline/host.rs",
+      "components/messaging-provider-webchat-gui/src/directline/host.rs",
+      "components/messaging-provider-telegram/src/ops/http.rs",
+      "components/messaging-provider-webchat/src/describe.rs",
+      "components/messaging-ingress-teams/src/lib.rs",
+      "components/messaging-provider-email/src/auth.rs",
+      "components/messaging-provider-email/src/graph.rs",
+      "components/messaging-provider-email/src/ops.rs",
+      "components/messaging-provider-slack/src/ops/modal.rs",
+      "components/messaging-provider-slack/src/ops/send.rs",
+      "components/messaging-provider-slack/src/ops/webhook.rs",
+      "components/messaging-provider-teams/src/ops/ingest.rs",
+      "components/messaging-provider-teams/src/ops/send.rs",
+      "components/messaging-provider-telegram/src/ops/send.rs",
+      "components/messaging-provider-telegram/src/ops/send_payload.rs",
+      "components/messaging-provider-telegram/src/ops/webhook.rs",
+      "components/messaging-provider-webchat/src/ops/ingest.rs",
+      "components/messaging-provider-webchat/src/ops/oauth.rs",
+      "components/messaging-provider-webchat/src/ops/send.rs",
+      "components/messaging-provider-webchat/src/ops/send_payload.rs",
+      "components/messaging-provider-webchat-gui/src/lib.rs",
+      "components/messaging-provider-webex/src/ops/ingest.rs",
+      "components/messaging-provider-webex/src/ops/send.rs",
+      "components/messaging-provider-webex/src/ops/send_payload.rs",
+      "components/messaging-provider-webex/src/ops/webhook.rs",
+      "components/messaging-provider-whatsapp/src/ops/reply.rs",
+      "components/messaging-provider-whatsapp/src/ops/send.rs",
+      "components/telegram-webhook/src/lib.rs",
+      "components/webex-webhook/src/lib.rs",
+      "components/secrets-probe/src/lib.rs",
+      "crates/greentic-messaging-cardkit/src/main.rs",
+      "crates/greentic-messaging-packgen/src/main.rs",
+      "crates/greentic-messaging-tester/src/http_mock.rs",
+      "crates/greentic-messaging-tester/src/main.rs",
+      "crates/messaging-cardkit-bin/src/lib.rs",
+      "crates/messaging-cardkit-bin/src/main.rs",
+      "crates/provider-tests/src/flow_gen.rs",
+      "crates/provider-tests/src/harness/mod.rs",
+      "crates/questions-cli/src/main.rs"
+    ]
+  },
+  "per_file": {}
+}

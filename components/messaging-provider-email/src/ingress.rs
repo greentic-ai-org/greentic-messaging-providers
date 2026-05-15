@@ -248,3 +248,123 @@ fn default_env() -> EnvId {
 fn default_tenant() -> TenantId {
     TenantId::try_from("default").expect("default tenant id present")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn http(method: &str, query: Option<&str>, body_b64: String) -> HttpInV1 {
+        HttpInV1 {
+            method: method.to_string(),
+            path: "/webhook".to_string(),
+            query: query.map(str::to_string),
+            headers: Vec::new(),
+            body_b64,
+            config: None,
+            binding_id: None,
+            route_hint: None,
+        }
+    }
+
+    #[test]
+    fn validation_echoes_url_decoded_token_as_plain_text() {
+        let out = handle_validation(&http(
+            "GET",
+            Some("validationToken=hello%20graph"),
+            String::new(),
+        ));
+        let parsed: HttpOutV1 = serde_json::from_slice(&out).expect("http out");
+        let body = STANDARD.decode(parsed.body_b64).expect("body");
+
+        assert_eq!(parsed.status, 200);
+        assert_eq!(String::from_utf8(body).unwrap(), "hello graph");
+        assert_eq!(parsed.headers[0].name, "Content-Type");
+        assert_eq!(parsed.headers[0].value, "text/plain");
+    }
+
+    #[test]
+    fn validation_rejects_missing_token() {
+        let out = handle_validation(&http("GET", Some("x=1"), String::new()));
+        let parsed: HttpOutV1 = serde_json::from_slice(&out).expect("http out");
+
+        assert_eq!(parsed.status, 400);
+    }
+
+    #[test]
+    fn binding_to_user_splits_user_id_and_token_key() {
+        let binding = "user@example.com|refresh-token-key".to_string();
+        let user = binding_to_user(Some(&binding)).expect("user");
+
+        assert_eq!(user.user_id, "user@example.com");
+        assert_eq!(user.token_key, "refresh-token-key");
+
+        let simple = "same-key".to_string();
+        let user = binding_to_user(Some(&simple)).expect("user");
+        assert_eq!(user.user_id, "same-key");
+        assert_eq!(user.token_key, "same-key");
+    }
+
+    #[test]
+    fn binding_to_user_requires_binding_id() {
+        let err = binding_to_user(None).unwrap_err();
+
+        assert_eq!(err, "binding_id required");
+    }
+
+    #[test]
+    fn notification_parser_accepts_id_and_odata_id() {
+        let payload = json!({
+            "value": [
+                {"resource": "me/messages/a", "resourceData": {"id": "a"}},
+                {"resource": "me/messages/b", "resourceData": {"@odata.id": "b"}}
+            ]
+        });
+        let encoded = STANDARD.encode(payload.to_string());
+
+        let parsed = parse_graph_notifications(&encoded).expect("notifications");
+
+        assert_eq!(parsed[0], ("me/messages/a".to_string(), "a".to_string()));
+        assert_eq!(parsed[1], ("me/messages/b".to_string(), "b".to_string()));
+    }
+
+    #[test]
+    fn notification_parser_reports_missing_message_id() {
+        let encoded = STANDARD.encode(r#"{"value":[{"resourceData":{}}]}"#);
+
+        let err = parse_graph_notifications(&encoded).unwrap_err();
+
+        assert_eq!(err, "notification missing resourceData.id");
+    }
+
+    #[test]
+    fn channel_message_envelope_maps_graph_message_fields() {
+        let user = AuthUserRefV1 {
+            user_id: "u1".to_string(),
+            token_key: "token".to_string(),
+            tenant_id: None,
+            email: None,
+            display_name: None,
+        };
+        let message = json!({
+            "subject": "Hello",
+            "bodyPreview": "Preview",
+            "receivedDateTime": "2026-01-02T03:04:05Z",
+            "from": {"emailAddress": {"address": "sender@example.com"}}
+        });
+
+        let env = channel_message_envelope(&message, &user, "msg-1", "me/messages/msg-1");
+
+        assert_eq!(env.id, "email-msg-1");
+        assert_eq!(env.text.as_deref(), Some("Hello"));
+        assert_eq!(env.to[0].id, "sender@example.com");
+        assert_eq!(
+            env.metadata.get("body_preview").map(String::as_str),
+            Some("Preview")
+        );
+        assert_eq!(
+            env.metadata.get("resource").map(String::as_str),
+            Some("me/messages/msg-1")
+        );
+    }
+}

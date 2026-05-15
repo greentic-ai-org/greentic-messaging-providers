@@ -1,0 +1,7 @@
+{
+  "text": "Greentic Telegram provider e2e smoke",
+  "destination": {
+    "kind": "chat",
+    "id": "${E2E_TELEGRAM_CHAT_ID}"
+  }
+}

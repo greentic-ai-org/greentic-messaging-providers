@@ -139,3 +139,98 @@ impl CardRenderer for DownsampleCardRenderer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::{ChannelMessageEnvelope, EnvId, MessageMetadata, TenantCtx, TenantId};
+
+    fn envelope(text: Option<&str>, adaptive_card: Option<Value>) -> ChannelMessageEnvelope {
+        let mut metadata = MessageMetadata::new();
+        if let Some(card) = adaptive_card {
+            metadata.insert("adaptive_card".to_string(), card.to_string());
+        }
+        ChannelMessageEnvelope {
+            id: "msg-1".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("dev").expect("env"),
+                TenantId::try_from("tenant").expect("tenant"),
+            ),
+            channel: "test".to_string(),
+            session_id: "session-1".to_string(),
+            reply_scope: None,
+            from: None,
+            to: Vec::new(),
+            correlation_id: None,
+            text: text.map(str::to_string),
+            attachments: Vec::new(),
+            metadata,
+            extensions: Default::default(),
+        }
+    }
+
+    #[test]
+    fn noop_renderer_passes_trimmed_text_and_adaptive_card() {
+        let card = json!({
+            "type": "AdaptiveCard",
+            "body": [{"type": "TextBlock", "text": "Card text"}]
+        });
+        let context = RenderContext::new(Some("telegram".to_string()));
+        let plan = NoopCardRenderer.render_plan(
+            &envelope(Some("  hello  "), Some(card.clone())),
+            &context,
+            RendererMode::Passthrough,
+        );
+
+        assert_eq!(plan.tier, RenderTier::TierA);
+        assert_eq!(plan.summary_text.as_deref(), Some("hello"));
+        assert!(matches!(&plan.items[0], RenderItem::Text(text) if text == "hello"));
+        assert!(matches!(&plan.items[1], RenderItem::AdaptiveCard(value) if value == &card));
+        assert_eq!(plan.debug.as_ref().unwrap()["target"], "telegram");
+    }
+
+    #[test]
+    fn downsample_renderer_without_card_returns_text_only_tier_d() {
+        let renderer = DownsampleCardRenderer {
+            capabilities: PlannerCapabilities::default(),
+        };
+        let plan = renderer.render_plan(
+            &envelope(Some(" fallback "), None),
+            &RenderContext::default(),
+            RendererMode::Downsample,
+        );
+
+        assert_eq!(plan.tier, RenderTier::TierD);
+        assert_eq!(plan.summary_text.as_deref(), Some("fallback"));
+        assert_eq!(plan.items, vec![RenderItem::Text("fallback".to_string())]);
+        assert!(plan.debug.is_none());
+    }
+
+    #[test]
+    fn downsample_renderer_passthrough_mode_uses_noop_behavior() {
+        let card = json!({"type": "AdaptiveCard", "body": []});
+        let renderer = DownsampleCardRenderer {
+            capabilities: PlannerCapabilities::default(),
+        };
+        let plan = renderer.render_plan(
+            &envelope(None, Some(card.clone())),
+            &RenderContext::default(),
+            RendererMode::Passthrough,
+        );
+
+        assert_eq!(plan.tier, RenderTier::TierA);
+        assert!(matches!(&plan.items[0], RenderItem::AdaptiveCard(value) if value == &card));
+    }
+
+    #[test]
+    fn helper_uses_noop_renderer() {
+        let plan = render_plan_from_envelope(
+            &envelope(Some("hello"), None),
+            &RenderContext::default(),
+            RendererMode::Passthrough,
+        );
+
+        assert_eq!(plan.tier, RenderTier::TierA);
+        assert_eq!(plan.summary_text.as_deref(), Some("hello"));
+    }
+}

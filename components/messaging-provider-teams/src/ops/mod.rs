@@ -186,4 +186,43 @@ mod tests {
         assert_eq!(extract_channel_id(&value).as_deref(), Some("channel-1"));
         assert_eq!(extract_sender(&value).as_deref(), Some("user-1"));
     }
+
+    #[test]
+    fn build_team_envelope_sets_metadata_sender_and_destinations() {
+        let envelope = build_team_envelope(
+            "hello".to_string(),
+            Some("user-1".to_string()),
+            Some("team-1".to_string()),
+            Some("channel-1".to_string()),
+        );
+
+        assert_eq!(envelope.id, "teams-channel-1");
+        assert_eq!(envelope.channel, "channel-1");
+        assert_eq!(envelope.session_id, "channel-1");
+        assert_eq!(
+            envelope.from.as_ref().map(|actor| actor.id.as_str()),
+            Some("user-1")
+        );
+        assert_eq!(envelope.to.len(), 1);
+        assert_eq!(envelope.to[0].id, "team-1:channel-1");
+        assert_eq!(envelope.to[0].kind.as_deref(), Some("channel"));
+        assert_eq!(envelope.metadata["universal"], "true");
+        assert_eq!(envelope.metadata["team_id"], "team-1");
+        assert_eq!(envelope.metadata["channel_id"], "channel-1");
+        assert_eq!(envelope.metadata["from"], "user-1");
+    }
+
+    #[test]
+    fn build_team_envelope_falls_back_to_team_or_provider_channel() {
+        let team_only =
+            build_team_envelope("hello".to_string(), None, Some("team-1".to_string()), None);
+        assert_eq!(team_only.channel, "team-1");
+        assert!(team_only.to.is_empty());
+
+        let no_scope = build_team_envelope("hello".to_string(), None, None, None);
+        assert_eq!(no_scope.channel, "teams");
+        assert_eq!(no_scope.session_id, "teams");
+        assert!(no_scope.from.is_none());
+        assert!(no_scope.to.is_empty());
+    }
 }

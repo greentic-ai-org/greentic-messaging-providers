@@ -281,3 +281,92 @@ pub(crate) fn extract_ids(body: &Value) -> (String, String) {
     let provider_message_id = format!("tg:{message_id}");
     (message_id, provider_message_id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::messaging::universal_dto::{HttpInV1, HttpOutV1};
+    use serde_json::json;
+
+    fn ingest_body(body: Value) -> HttpOutV1 {
+        let request = HttpInV1 {
+            method: "POST".to_string(),
+            path: "/telegram".to_string(),
+            query: None,
+            headers: Vec::new(),
+            body_b64: STANDARD.encode(serde_json::to_vec(&body).expect("body json")),
+            binding_id: None,
+            route_hint: None,
+            config: None,
+        };
+        let bytes = ingest_http(&serde_json::to_vec(&request).expect("request json"));
+        serde_json::from_slice(&bytes).expect("http out")
+    }
+
+    #[test]
+    fn callback_query_accepts_compact_card_routing_fields() {
+        let out = ingest_body(json!({
+            "callback_query": {
+                "id": "cb-1",
+                "from": {"id": 42, "language_code": "nl"},
+                "message": {"chat": {"id": 99}},
+                "data": "{\"r\":\"card-route\",\"c\":\"button-1\"}"
+            }
+        }));
+
+        assert_eq!(out.status, 200);
+        assert_eq!(out.events.len(), 1);
+        let event = &out.events[0];
+        assert_eq!(event.session_id, "99");
+        assert_eq!(event.text.as_deref(), Some("[card:card-route]"));
+        assert_eq!(
+            event.metadata.get("routeToCardId").map(String::as_str),
+            Some("card-route")
+        );
+        assert_eq!(
+            event.metadata.get("cardId").map(String::as_str),
+            Some("button-1")
+        );
+        assert_eq!(event.metadata.get("locale").map(String::as_str), Some("nl"));
+    }
+
+    #[test]
+    fn reply_to_bot_marks_form_reply_context() {
+        let out = ingest_body(json!({
+            "message": {
+                "message_id": 12,
+                "text": "Blue",
+                "chat": {"id": 99},
+                "from": {"id": 42, "language_code": "en"},
+                "reply_to_message": {
+                    "message_id": 11,
+                    "from": {"is_bot": true}
+                }
+            }
+        }));
+
+        assert_eq!(out.status, 200);
+        let event = &out.events[0];
+        assert_eq!(event.text.as_deref(), Some("Blue"));
+        assert_eq!(
+            event.metadata.get("is_form_reply").map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            event
+                .metadata
+                .get("reply_to_bot_message_id")
+                .map(String::as_str),
+            Some("11")
+        );
+    }
+
+    #[test]
+    fn extract_ids_preserves_string_message_ids() {
+        let (message_id, provider_message_id) =
+            extract_ids(&json!({"result": {"message_id": "abc-123"}}));
+
+        assert_eq!(message_id, "abc-123");
+        assert_eq!(provider_message_id, "tg:abc-123");
+    }
+}

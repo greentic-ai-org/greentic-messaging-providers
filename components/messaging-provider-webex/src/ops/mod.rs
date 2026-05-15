@@ -109,3 +109,71 @@ pub(super) fn format_webex_error(status: u16, body: &[u8]) -> String {
         format!("webex returned status {} body={}", status, trimmed)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn summarize_card_text_prefers_top_level_text_then_body_segments() {
+        assert_eq!(
+            summarize_card_text(&json!({"text": "  Summary  ", "body": [{"text": "Body"}]}))
+                .as_deref(),
+            Some("Summary")
+        );
+        assert_eq!(
+            summarize_card_text(&json!({
+                "body": [
+                    {"text": " First "},
+                    {"text": ""},
+                    {"type": "Image"},
+                    {"text": "Second"}
+                ]
+            }))
+            .as_deref(),
+            Some("First Second")
+        );
+        assert!(summarize_card_text(&json!({"body": []})).is_none());
+    }
+
+    #[test]
+    fn build_webex_body_caps_card_version_and_strips_unsupported_fields() {
+        let body = build_webex_body(
+            Some(&json!({
+                "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.5",
+                "speak": "ignored"
+            })),
+            None,
+            "fallback",
+        );
+
+        assert_eq!(body["text"], "fallback");
+        assert_eq!(body["markdown"], "fallback");
+        let content = &body["attachments"][0]["content"];
+        assert_eq!(content["version"], "1.3");
+        assert!(content.get("$schema").is_none());
+        assert!(content.get("speak").is_none());
+    }
+
+    #[test]
+    fn build_webex_body_uses_text_when_no_card() {
+        let text = "hello".to_string();
+        let body = build_webex_body(None, Some(&text), "hello");
+
+        assert_eq!(body["text"], "hello");
+        assert_eq!(body["markdown"], "hello");
+        assert!(body.get("attachments").is_none());
+    }
+
+    #[test]
+    fn format_webex_error_includes_body_when_present() {
+        assert_eq!(format_webex_error(500, b""), "webex returned status 500");
+        assert_eq!(
+            format_webex_error(400, br#"{"message":"bad room"}"#),
+            r#"webex returned status 400 body={"message":"bad room"}"#
+        );
+    }
+}

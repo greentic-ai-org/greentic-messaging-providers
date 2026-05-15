@@ -363,3 +363,117 @@ pub(super) fn urldecode(input: &str) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(body: &[u8], headers: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "method": "POST",
+            "path": "/slack",
+            "query": [],
+            "headers": headers,
+            "body_b64": STANDARD.encode(body)
+        }))
+        .expect("request")
+    }
+
+    fn parse_out(bytes: Vec<u8>) -> HttpOutV1 {
+        serde_json::from_slice(&bytes).expect("http out")
+    }
+
+    fn decoded_body(out: &HttpOutV1) -> Value {
+        let body = STANDARD.decode(&out.body_b64).expect("body");
+        serde_json::from_slice(&body).unwrap_or_else(|_| json!(String::from_utf8_lossy(&body)))
+    }
+
+    #[test]
+    fn ingest_rejects_bad_http_and_bad_body_encoding() {
+        let bad_http = parse_out(ingest_http(b"{"));
+        assert_eq!(bad_http.status, 400);
+
+        let bad_body = parse_out(ingest_http(
+            json!({
+                "method": "POST",
+                "path": "/slack",
+                "query": [],
+                "headers": [],
+                "body_b64": "not base64"
+            })
+            .to_string()
+            .as_bytes(),
+        ));
+        assert_eq!(bad_body.status, 400);
+    }
+
+    #[test]
+    fn ingest_drops_retries_and_bot_messages_without_events() {
+        let retry = parse_out(ingest_http(&request(
+            br#"{"event":{"text":"hello","channel":"C1","user":"U1"}}"#,
+            json!([{"name":"X-Slack-Retry-Num","value":"1"}]),
+        )));
+        assert_eq!(retry.status, 200);
+        assert!(retry.events.is_empty());
+        assert_eq!(decoded_body(&retry), json!("ok"));
+
+        let bot = parse_out(ingest_http(&request(
+            br#"{"event":{"text":"hello","channel":"C1","bot_id":"B1"}}"#,
+            json!([]),
+        )));
+        assert_eq!(bot.status, 200);
+        assert!(bot.events.is_empty());
+        assert_eq!(decoded_body(&bot), json!("ok"));
+    }
+
+    #[test]
+    fn ingest_event_callback_produces_envelope() {
+        let out = parse_out(ingest_http(&request(
+            br#"{"type":"event_callback","event":{"text":"hello","channel":"C1","user":"U1"}}"#,
+            json!([]),
+        )));
+        let body = decoded_body(&out);
+
+        assert_eq!(out.status, 200);
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["channel"], "C1");
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(out.events[0].text.as_deref(), Some("hello"));
+        assert_eq!(out.events[0].metadata["channel"], "C1");
+    }
+
+    #[test]
+    fn block_actions_forward_submit_data_to_metadata() {
+        let payload = json!({
+            "type": "block_actions",
+            "channel": {"id": "C1"},
+            "user": {"id": "U1"},
+            "actions": [{
+                "action_id": "approve",
+                "value": serde_json::to_string(&json!({
+                    "routeToCardId": "card-1",
+                    "decision": "approve",
+                    "count": 2
+                })).expect("action value")
+            }]
+        });
+
+        let out = parse_out(ingest_http(&request(
+            payload.to_string().as_bytes(),
+            json!([]),
+        )));
+
+        assert_eq!(out.status, 200);
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(out.events[0].text.as_deref(), Some("[card:card-1]"));
+        assert_eq!(out.events[0].metadata["decision"], "approve");
+        assert_eq!(out.events[0].metadata["count"], "2");
+        assert_eq!(out.events[0].metadata["slack.action_id"], "approve");
+    }
+
+    #[test]
+    fn urldecode_handles_plus_valid_and_invalid_escapes() {
+        assert_eq!(urldecode("hello+world%21"), "hello world!");
+        assert_eq!(urldecode("bad%zz"), "bad%zz");
+    }
+}

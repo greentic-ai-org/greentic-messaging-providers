@@ -339,7 +339,7 @@ impl provider_common::AdaptiveCardConverter for TelegramHtmlConverter {
     fn convert(
         &self,
         adaptive_card: &Value,
-        _caps: &greentic_messaging_renderer::PlannerCapabilities,
+        _caps: &provider_common::render::PlannerCapabilities,
     ) -> Result<Self::Output, provider_common::ProviderError> {
         // The existing pure entry point takes a JSON string — re-serialise the
         // caller's Value so that we share a single parsing code path and don't
@@ -431,7 +431,7 @@ mod converter_tests {
             "version": "1.6",
             "body": [{"type": "TextBlock", "text": "hello"}]
         });
-        let caps = greentic_messaging_renderer::capabilities_for("telegram")
+        let caps = provider_common::render::capabilities_for("telegram")
             .expect("telegram capabilities must be registered");
         let result = TelegramHtmlConverter.convert(&card, &caps);
         assert!(result.is_ok(), "expected Ok converting simple card");
@@ -451,12 +451,80 @@ mod converter_tests {
             "version": "1.6",
             "body": []
         });
-        let caps = greentic_messaging_renderer::capabilities_for("telegram")
+        let caps = provider_common::render::capabilities_for("telegram")
             .expect("telegram capabilities must be registered");
         let result = TelegramHtmlConverter.convert(&card, &caps);
         assert!(matches!(
             result,
             Err(provider_common::ProviderError::Validation(_))
         ));
+    }
+
+    #[test]
+    fn ac_to_telegram_renders_core_elements_actions_images_and_inputs() {
+        let card = serde_json::json!({
+            "type": "AdaptiveCard",
+            "body": [
+                {"type": "TextBlock", "text": "Title <unsafe>", "weight": "Bolder"},
+                {"type": "RichTextBlock", "inlines": [
+                    {"text": "bold", "fontWeight": "Bolder"},
+                    {"text": " link", "selectAction": {"type": "Action.OpenUrl", "url": "https://example.com?a=1&b=2"}}
+                ]},
+                {"type": "FactSet", "facts": [{"title": "Status", "value": "Open"}]},
+                {"type": "ImageSet", "images": [{"url": "https://example.com/a.png"}]},
+                {"type": "Input.Text", "id": "comment", "label": "Comment"}
+            ],
+            "actions": [{"type": "Action.Submit", "title": "Save", "data": {"cardId": "c1"}}]
+        });
+
+        let content = ac_to_telegram(&card.to_string()).expect("telegram content");
+
+        assert!(content.html.contains("<b>Title &lt;unsafe&gt;</b>"));
+        assert!(content.html.contains("<b>bold</b>"));
+        assert!(
+            content
+                .html
+                .contains("<a href=\"https://example.com?a=1&amp;b=2\"> link</a>")
+        );
+        assert!(content.html.contains("<b>Status:</b> Open"));
+        assert_eq!(content.images, vec!["https://example.com/a.png"]);
+        assert_eq!(content.actions[0]["title"], "Save");
+        assert_eq!(content.inputs[0].id, "comment");
+    }
+
+    #[test]
+    fn ac_to_telegram_renders_columns_containers_select_actions_and_table() {
+        let card = serde_json::json!({
+            "type": "AdaptiveCard",
+            "body": [
+                {
+                    "type": "ColumnSet",
+                    "columns": [
+                        {"items": [{"type": "TextBlock", "text": "Left"}],
+                         "selectAction": {"type": "Action.Submit", "data": {"routeToCardId": "left"}}},
+                        {"items": [{"type": "Container", "items": [{"type": "TextBlock", "text": "Right", "weight": "Bolder"}],
+                         "selectAction": {"type": "Action.Execute", "data": {"routeToCardId": "right"}}}]}
+                    ],
+                    "selectAction": {"type": "Action.Submit", "data": {"routeToCardId": "whole"}}
+                },
+                {
+                    "type": "Table",
+                    "columns": [{"title": "A"}, {"title": "B"}],
+                    "rows": [{"cells": [
+                        {"items": [{"type": "TextBlock", "text": "1"}]},
+                        {"items": [{"type": "TextBlock", "text": "2"}]}
+                    ]}]
+                }
+            ]
+        });
+
+        let content = ac_to_telegram(&card.to_string()).expect("telegram content");
+
+        assert!(content.html.contains("Left │ <b>Right</b>"));
+        assert!(content.html.contains("<pre>A │ B"));
+        assert_eq!(content.actions.len(), 3);
+        assert_eq!(content.actions[0]["title"], "Left");
+        assert_eq!(content.actions[1]["title"], "Right");
+        assert_eq!(content.actions[2]["title"], "Right");
     }
 }

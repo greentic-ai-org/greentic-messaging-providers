@@ -162,3 +162,80 @@ pub(crate) fn handle_reply(input_json: &[u8]) -> Vec<u8> {
         "response": body_json
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use greentic_types::messaging::universal_dto::{ProviderPayloadV1, SendPayloadInV1};
+    use std::collections::BTreeMap;
+
+    fn parse_result(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json result")
+    }
+
+    fn send_payload_input(provider_type: &str, body_b64: String) -> SendPayloadInV1 {
+        SendPayloadInV1 {
+            provider_type: provider_type.to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64,
+                metadata: BTreeMap::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn send_payload_rejects_invalid_input_json() {
+        let body = parse_result(send_payload(b"{"));
+
+        assert_eq!(body["ok"], false);
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("invalid send_payload input")
+        );
+    }
+
+    #[test]
+    fn send_payload_rejects_provider_mismatch_before_external_call() {
+        let input = send_payload_input("other", STANDARD.encode(b"{}"));
+        let body = parse_result(send_payload(&serde_json::to_vec(&input).expect("input")));
+
+        assert_eq!(body["ok"], false);
+        assert_eq!(body["message"], "provider type mismatch");
+    }
+
+    #[test]
+    fn send_payload_rejects_invalid_base64_before_external_call() {
+        let input = send_payload_input(PROVIDER_TYPE, "not base64".to_string());
+        let body = parse_result(send_payload(&serde_json::to_vec(&input).expect("input")));
+
+        assert_eq!(body["ok"], false);
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("payload decode failed")
+        );
+    }
+
+    #[test]
+    fn handle_reply_validates_required_text_before_secret_lookup() {
+        let input = json!({
+            "config": {
+                "enabled": true,
+                "public_base_url": "https://example.com",
+                "default_chat_id": "123"
+            },
+            "reply_to_id": "456"
+        });
+
+        let body = parse_result(handle_reply(input.to_string().as_bytes()));
+
+        assert_eq!(body["ok"], false);
+        assert_eq!(body["error"], "text required");
+    }
+}

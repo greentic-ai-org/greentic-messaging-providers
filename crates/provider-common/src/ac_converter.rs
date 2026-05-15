@@ -7,10 +7,9 @@
 //! responsibility — the rendering pipeline (`render_plan_common`) and the
 //! encode step can stay generic over `AdaptiveCardConverter`.
 
-use greentic_messaging_renderer::PlannerCapabilities;
 use serde_json::Value;
 
-use crate::ProviderError;
+use crate::{ProviderError, render::PlannerCapabilities};
 
 /// Converts an Adaptive Card JSON value into a provider-native payload.
 ///
