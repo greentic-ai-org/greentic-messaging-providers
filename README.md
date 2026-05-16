@@ -1,6 +1,29 @@
 # Greentic Messaging Providers
 
-WASM-based messaging provider components for the Greentic platform. Each provider is a self-contained WebAssembly component (WASI Preview 2) that bridges the Greentic operator to an external messaging service.
+Greentic Messaging Providers are ready-to-ship channel packs for Slack, Teams,
+Telegram, Webex, WhatsApp, Email, WebChat, and the browser-based WebChat GUI.
+
+For web developers, this repo gives you the pieces to add Greentic conversations
+to real customer surfaces: chat widgets, full-page assistants, popup support
+panels, and provider connections.
+
+For coding agents, it gives a clear operating map: each provider has owned
+files, focused build commands, local preview scripts, and release workflows.
+
+The WebChat GUI is the most visual example:
+
+```html
+<script type="module" src="https://chat.example.com/v1/web/webchat/default/embed.js"></script>
+
+<greentic-webchat
+  tenant="default"
+  mode="inline"
+  render="native">
+</greentic-webchat>
+```
+
+Use `render="iframe"` for safe drop-in isolation, or `render="native"` when the
+host website should style the chat directly.
 
 ## Documentation
 
@@ -18,7 +41,31 @@ For provider selection, setup, features, secrets, and focused test commands, use
 - [Webex](docs/providers/webex.md)
 - [WhatsApp](docs/providers/whatsapp.md)
 
-These docs are written for non-technical developers and for coding agents. Each provider page names the provider-owned files, secrets, message features, and focused checks.
+These docs are written for non-technical web developers and for coding agents.
+Each provider page names the provider-owned files, secrets, message features,
+copy-paste checks, and safe edit boundaries.
+
+## Fastest Visual Test
+
+Preview the packaged WebChat GUI with a mocked local backend:
+
+```bash
+scripts/test_webchat_gui.sh default
+scripts/test_webchat_gui.sh 3aigent
+```
+
+See every website embed style on one page:
+
+```bash
+scripts/test_webchat_gui.sh 3aigent --embedded
+```
+
+That page shows:
+
+- inline web component with iframe isolation
+- inline web component with native host-page styling
+- popup web component
+- direct full-page chat with no iframe wrapper
 
 ## Providers
 
@@ -29,9 +76,33 @@ These docs are written for non-technical developers and for coding agents. Each 
 | **Telegram** | Telegram | TierD (plain text) | Telegram Bot API | `TELEGRAM_BOT_TOKEN` |
 | **Webex** | Cisco Webex | TierB (AC attachment) | Webex REST API | `WEBEX_BOT_TOKEN` |
 | **WebChat** | BotFramework WebChat | TierA (native AC) | Direct Line / local in-process state | None |
+| **WebChat GUI** | Browser chat UI | TierA (native AC) | WebChat GUI + Direct Line | `jwt_signing_key` |
 | **WhatsApp** | WhatsApp Business | TierD (plain text) | WhatsApp Cloud API | `WHATSAPP_TOKEN` |
 | **Email** | Email (Graph API) | TierD (HTML) | MS Graph `/me/sendMail` | `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_REFRESH_TOKEN`, `FROM_ADDRESS`, `GRAPH_TENANT_ID` |
 | **Dummy** | Test only | N/A | None | None |
+
+## WebChat GUI For Websites
+
+WebChat GUI is the fastest way to see a Greentic provider come alive in a
+browser. It supports four practical website shapes:
+
+| Shape | Use |
+| --- | --- |
+| Full-page assistant | Link directly to `/v1/web/webchat/{tenant}/`. |
+| Floating launcher | Add `<greentic-webchat mode="launcher" render="iframe">`. |
+| Embedded panel | Add `<greentic-webchat mode="inline" render="iframe">`. |
+| Host-styled panel | Add `<greentic-webchat mode="inline" render="native">`. |
+
+For non-technical web teams, this means one script tag and one custom element.
+For coding agents, it means a stable API with small, meaningful attributes:
+`tenant`, `mode`, `render`, `skin`, `locale`, and `text-input`.
+
+```bash
+scripts/test_webchat_gui.sh 3aigent --embedded
+```
+
+That command opens a local preview with iframe, native, popup, and full-page
+modes side by side.
 
 ## How It Works
 
@@ -794,12 +865,11 @@ Provider validation is dependency-aware:
 Useful workflow entrypoints:
 
 - `Publish Shared Provider Crate`: validates and publishes the shared crate.
-- `Provider Build, Test, and Publish`: reusable/manual one-provider workflow.
+- `Provider Build, Test, and Publish`: reusable/manual one-provider workflow;
+  use this directly for a focused provider release.
 - `Provider Release Orchestrator`: manual dependency-aware provider release
   entrypoint; use `providers=all` for a core-change fanout or one provider name
   for a focused release.
-- `Build, Test, and Publish Packs`: manual validation-only legacy workflow
-  during the migration; its monolithic publish job is disabled.
 
 The local fast path for one provider is:
 
@@ -822,10 +892,13 @@ Provider component releases use the provider version from
 # Bump one provider version, validate metadata, and build the provider locally
 scripts/change_provider_version.sh slack <provider-version>
 
-# Open the packaged WebChat GUI with a local mocked backend
+# Open the packaged WebChat GUI directly, with a local mocked backend
 scripts/test_webchat_gui.sh default
 
-# Include top-bar links in the WebChat GUI harness
+# Compare iframe, native, popup, and full-page modes side by side
+scripts/test_webchat_gui.sh 3aigent --embedded
+
+# Include top-bar links in the standalone WebChat GUI harness
 scripts/test_webchat_gui.sh 3aigent --demo-links
 scripts/test_webchat_gui.sh 3aigent --nav-link 'M1|Playground|https://example.com'
 
@@ -909,6 +982,14 @@ Workspace tests ensure each provider:
 - **Imports**: `secrets-store` (state is stored in-process)
 - **AC**: TierA — native rendering in BotFramework-WebChat
 - **Modes**: `local_queue` (operator in-memory) or `directline` (Microsoft service)
+
+### WebChat GUI
+
+- **Experience**: hosted full-page assistant or `<greentic-webchat>` Web Component
+- **Routes**: `/v1/web/webchat/{tenant}/` and `/v1/web/webchat/{tenant}/embed.js`
+- **Embed modes**: `launcher`, `popup`, `inline`
+- **Render modes**: `iframe` for isolation, `native` for host-page styling
+- **Local preview**: `scripts/test_webchat_gui.sh 3aigent --embedded`
 
 ### WhatsApp
 

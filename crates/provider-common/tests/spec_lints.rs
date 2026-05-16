@@ -113,6 +113,34 @@ fn webchat_gui_setup_has_presentation_mode_and_standalone_nav_links() -> Result<
         Some("Branding")
     );
 
+    let text_input = questions
+        .iter()
+        .find(|question| {
+            question
+                .get("name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| name == "text_input_enabled")
+        })
+        .ok_or_else(|| anyhow!("webchat-gui setup.yaml missing text_input_enabled"))?;
+    assert_eq!(
+        text_input.get("default").and_then(Value::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        text_input
+            .get("visible_if")
+            .and_then(|visible| visible.get("field"))
+            .and_then(Value::as_str),
+        Some("presentation_mode")
+    );
+    assert_eq!(
+        text_input
+            .get("visible_if")
+            .and_then(|visible| visible.get("eq"))
+            .and_then(Value::as_str),
+        Some("embed_webcomponent")
+    );
+
     let nav_links = questions
         .iter()
         .find(|question| {

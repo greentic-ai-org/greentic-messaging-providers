@@ -2,8 +2,10 @@
 
 This folder documents the Greentic messaging provider packs for two audiences:
 
-- Non-technical developers and operators who need to choose, configure, and test a provider.
-- Coding agents and maintainers who need stable file paths, commands, and implementation boundaries.
+- Web developers and operators who want to choose, configure, preview, and ship
+  a provider without spelunking through Rust internals.
+- Coding agents and maintainers who need stable file paths, commands, and
+  implementation boundaries.
 
 ## Start Here
 
@@ -12,6 +14,7 @@ This folder documents the Greentic messaging provider packs for two audiences:
 | Choose a provider | [Provider catalog](providers/README.md) |
 | Understand one provider's features | Provider files under [docs/providers](providers/) |
 | Embed WebChat GUI in an existing website | [WebChat GUI Web Component guide](guides/webchat-gui-embed-webcomponent.md) |
+| Preview iframe/native/popup WebChat GUI modes | `scripts/test_webchat_gui.sh 3aigent --embedded` |
 | Run provider tests locally | [Messaging tester guide](guides/testing/guide-messaging-tester.md) |
 | Configure nightly live tests | [Provider nightly e2e](provider-e2e.md) |
 | Release one provider | [Provider release operations](provider-release-operations.md) |
@@ -31,6 +34,11 @@ A component is the compiled WebAssembly code that performs one job, such as send
 **Pack**
 
 A `.gtpack` is the deployable bundle for a provider. It contains components, setup questions, schemas, flows, and metadata.
+
+**WebChat GUI**
+
+The browser chat experience. It can be a direct full-page app or a
+`<greentic-webchat>` Web Component with `mode` and `render` attributes.
 
 **Secret**
 
@@ -60,4 +68,3 @@ PACK_FILTER=messaging-slack ./ci/steps/11_build_packs.sh
 ```
 
 Replace `slack` and `messaging-slack` with the provider you are working on.
-

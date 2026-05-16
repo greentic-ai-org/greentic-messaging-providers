@@ -573,6 +573,13 @@ fn webchat_gui_config_schema_declares_presentation_mode() -> Result<()> {
         properties.contains_key("skin"),
         "webchat-gui schema should keep skin as visual theme"
     );
+    assert_eq!(
+        properties
+            .get("text_input_enabled")
+            .and_then(|property| property.get("default"))
+            .and_then(Value::as_bool),
+        Some(true)
+    );
     assert!(
         properties.contains_key("nav_links"),
         "webchat-gui schema should keep nav_links for standalone mode"
