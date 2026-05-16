@@ -9,6 +9,7 @@ use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -27,7 +28,9 @@ pub(crate) const PROVIDER_TYPE: &str = "messaging.slack.api";
 pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
 pub(crate) const DEFAULT_API_BASE: &str = "https://slack.com/api";
 pub(crate) const DEFAULT_BOT_TOKEN_KEY: &str = "SLACK_BOT_TOKEN";
-pub(crate) const DEFAULT_CONFIG_TOKEN_KEY: &str = "SLACK_CONFIGURATION_TOKEN";
+pub(crate) const DEFAULT_APP_ID_KEY: &str = "SLACK_APP_ID";
+pub(crate) const DEFAULT_CONFIG_ACCESS_TOKEN_KEY: &str = "SLACK_CONFIGURATION_ACCESS_TOKEN";
+pub(crate) const LEGACY_CONFIG_TOKEN_KEY: &str = "SLACK_CONFIGURATION_TOKEN";
 pub(crate) const DEFAULT_CONFIG_REFRESH_TOKEN_KEY: &str = "SLACK_CONFIGURATION_REFRESH_TOKEN";
 
 use config::{ProviderConfigOut, default_config_out, validate_config_out};
@@ -157,9 +160,17 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
 struct ApplyAnswersResult {
     ok: bool,
     config: Option<ProviderConfigOut>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    secrets_patch: Option<SecretsPatch>,
     remove: Option<RemovePlan>,
     diagnostics: Vec<String>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SecretsPatch {
+    set: BTreeMap<String, String>,
+    delete: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,6 +191,7 @@ fn apply_answers_impl(
             return canonical_cbor_bytes(&ApplyAnswersResult {
                 ok: false,
                 config: None,
+                secrets_patch: None,
                 remove: None,
                 diagnostics: Vec::new(),
                 error: Some(format!("invalid answers cbor: {err}")),
@@ -191,6 +203,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
             config: None,
+            secrets_patch: None,
             remove: Some(RemovePlan {
                 remove_all: true,
                 cleanup: vec![
@@ -208,6 +221,7 @@ fn apply_answers_impl(
     }
 
     let mut merged = existing_config_from_answers(&answers).unwrap_or_else(default_config_out);
+    let mut secrets_set = BTreeMap::new();
     let answer_obj = answers.as_object();
     let has = |key: &str| answer_obj.is_some_and(|obj| obj.contains_key(key));
 
@@ -224,7 +238,31 @@ fn apply_answers_impl(
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();
         }
-        merged.bot_token = string_or_default(&answers, "bot_token", &merged.bot_token);
+        collect_secret_answer(
+            &answers,
+            "bot_token",
+            DEFAULT_BOT_TOKEN_KEY,
+            &mut secrets_set,
+        );
+        collect_secret_answer(
+            &answers,
+            "slack_app_id",
+            DEFAULT_APP_ID_KEY,
+            &mut secrets_set,
+        );
+        collect_secret_answer(
+            &answers,
+            "slack_configuration_access_token",
+            DEFAULT_CONFIG_ACCESS_TOKEN_KEY,
+            &mut secrets_set,
+        );
+        collect_secret_answer(
+            &answers,
+            "slack_configuration_refresh_token",
+            DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
+            &mut secrets_set,
+        );
+        merged.bot_token.clear();
     }
 
     if mode == Mode::Upgrade {
@@ -245,17 +283,55 @@ fn apply_answers_impl(
             merged.api_base_url = string_or_default(&answers, "api_base_url", &merged.api_base_url);
         }
         if has("bot_token") {
-            merged.bot_token = string_or_default(&answers, "bot_token", &merged.bot_token);
+            collect_secret_answer(
+                &answers,
+                "bot_token",
+                DEFAULT_BOT_TOKEN_KEY,
+                &mut secrets_set,
+            );
+            merged.bot_token.clear();
+        }
+        if has("slack_app_id") {
+            collect_secret_answer(
+                &answers,
+                "slack_app_id",
+                DEFAULT_APP_ID_KEY,
+                &mut secrets_set,
+            );
+        }
+        if has("slack_configuration_access_token") {
+            collect_secret_answer(
+                &answers,
+                "slack_configuration_access_token",
+                DEFAULT_CONFIG_ACCESS_TOKEN_KEY,
+                &mut secrets_set,
+            );
+        }
+        if has("slack_configuration_refresh_token") {
+            collect_secret_answer(
+                &answers,
+                "slack_configuration_refresh_token",
+                DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
+                &mut secrets_set,
+            );
         }
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();
         }
     }
 
+    if !merged.bot_token.trim().is_empty() {
+        secrets_set
+            .entry(DEFAULT_BOT_TOKEN_KEY.to_string())
+            .or_insert_with(|| merged.bot_token.trim().to_string());
+        merged.bot_token.clear();
+    }
+
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,
             config: None,
+            secrets_patch: None,
             remove: None,
             diagnostics: Vec::new(),
             error: Some(error),
@@ -265,6 +341,10 @@ fn apply_answers_impl(
     canonical_cbor_bytes(&ApplyAnswersResult {
         ok: true,
         config: Some(merged),
+        secrets_patch: (!secrets_set.is_empty()).then_some(SecretsPatch {
+            set: secrets_set,
+            delete: Vec::new(),
+        }),
         remove: None,
         diagnostics: Vec::new(),
         error: None,
@@ -305,6 +385,17 @@ fn string_or_default(answers: &Value, key: &str, default: &str) -> String {
         .unwrap_or_else(|| default.to_string())
 }
 
+fn collect_secret_answer(
+    answers: &Value,
+    answer_key: &str,
+    secret_key: &str,
+    secrets_set: &mut BTreeMap<String, String>,
+) {
+    if let Some(value) = optional_string_from(answers, answer_key) {
+        secrets_set.insert(secret_key.to_string(), value);
+    }
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -319,7 +410,7 @@ mod tests {
         let describe = build_describe_payload();
         assert_eq!(
             describe.schema_hash,
-            "ecb2497fe6d0c6c9151b326f4f975b91f1c3508422edb7a7b7f4ce5a64f6ee57"
+            "b1691171bdea022a0f7690779d9aa0ea5eafc62fbb9cc06dd0b7ce2679614f2d"
         );
     }
 
@@ -387,13 +478,47 @@ mod tests {
         let out_json: Value = decode_cbor(&out).expect("decode apply output");
         assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
         let config = out_json.get("config").expect("config object");
-        assert_eq!(
-            config.get("bot_token"),
-            Some(&Value::String("xoxb-token".to_string()))
-        );
+        assert!(config.get("bot_token").is_none());
         assert_eq!(
             config.get("default_channel"),
             Some(&Value::String("random".to_string()))
+        );
+        assert_eq!(
+            out_json["secrets_patch"]["set"][DEFAULT_BOT_TOKEN_KEY],
+            "xoxb-token"
+        );
+    }
+
+    #[test]
+    fn apply_answers_returns_secret_patch_for_setup_secrets() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "public_base_url": "https://example.com",
+            "api_base_url": "https://slack.com/api",
+            "bot_token": "xoxb-token",
+            "slack_app_id": "A123",
+            "slack_configuration_access_token": "xoxe-access",
+            "slack_configuration_refresh_token": "xoxe-refresh"
+        });
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Setup, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        assert!(out_json["config"].get("bot_token").is_none());
+        assert_eq!(
+            out_json["secrets_patch"]["set"][DEFAULT_BOT_TOKEN_KEY],
+            "xoxb-token"
+        );
+        assert_eq!(out_json["secrets_patch"]["set"][DEFAULT_APP_ID_KEY], "A123");
+        assert_eq!(
+            out_json["secrets_patch"]["set"][DEFAULT_CONFIG_ACCESS_TOKEN_KEY],
+            "xoxe-access"
+        );
+        assert_eq!(
+            out_json["secrets_patch"]["set"][DEFAULT_CONFIG_REFRESH_TOKEN_KEY],
+            "xoxe-refresh"
         );
     }
 

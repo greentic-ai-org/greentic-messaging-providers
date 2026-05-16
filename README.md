@@ -782,20 +782,35 @@ i18n-keys) are handled natively by the provider WASM component.
 
 ## Publishing
 
-Provider publishing is dependency-aware:
+Provider validation is dependency-aware:
 
-- Shared provider code changes publish `greentic-messaging-provider-common`
-  first, then intentionally fan out to provider rebuilds.
-- Provider-local changes rebuild/publish only that provider.
+- Pushes to `main` do not run provider release jobs automatically.
+- Shared provider code changes validate `greentic-messaging-provider-common`
+  first, then intentionally fan out to provider rebuilds only when a maintainer
+  starts the orchestrator.
+- Provider-local changes rebuild only that provider.
 - Docs-only and tooling-only changes do not publish providers by default.
 
 Useful workflow entrypoints:
 
 - `Publish Shared Provider Crate`: validates and publishes the shared crate.
 - `Provider Build, Test, and Publish`: reusable/manual one-provider workflow.
-- `Provider Release Orchestrator`: main dependency-aware release entrypoint.
-- `Build, Test, and Publish Packs`: validation-only legacy workflow during the
-  migration; its monolithic publish job is disabled.
+- `Provider Release Orchestrator`: manual dependency-aware provider release
+  entrypoint; use `providers=all` for a core-change fanout or one provider name
+  for a focused release.
+- `Build, Test, and Publish Packs`: manual validation-only legacy workflow
+  during the migration; its monolithic publish job is disabled.
+
+The local fast path for one provider is:
+
+```bash
+scripts/publish_provider.sh webchat-gui 0.4.99
+```
+
+That command updates the provider version, validates metadata, builds the
+provider locally, runs targeted checks, and dispatches the one-provider publish
+workflow. Commit and push the version/build fixes first; GitHub Actions runs
+from the pushed branch.
 
 ### OCI (Components)
 
@@ -804,6 +819,16 @@ Provider component releases use the provider version from
 `ghcr.io/<owner>/greentic-messaging-providers/<component>:<provider-version>`.
 
 ```bash
+# Bump one provider version, validate metadata, and build the provider locally
+scripts/change_provider_version.sh slack <provider-version>
+
+# Open the packaged WebChat GUI with a local mocked backend
+scripts/test_webchat_gui.sh default
+
+# Include top-bar links in the WebChat GUI harness
+scripts/test_webchat_gui.sh 3aigent --demo-links
+scripts/test_webchat_gui.sh 3aigent --nav-link 'M1|Playground|https://example.com'
+
 # Manual
 OCI_REGISTRY=ghcr.io OCI_NAMESPACE=<org> VERSION=<provider-version> COMPONENT_FILTER=messaging-provider-slack ./tools/publish_oci.sh
 ```
@@ -816,7 +841,7 @@ with media type `application/vnd.greentic.gtpack.v1+zip`.
 
 ```bash
 # Dry run for one provider pack
-PACK_FILTER=messaging-slack PACK_VERSION=$(python3 tools/provider_versions.py provider slack) DRY_RUN=1 tools/publish_packs_oci.sh
+scripts/build_providers.sh slack
 
 # Pull
 oras pull ghcr.io/<org>/greentic-messaging-providers/packs/messaging/messaging-slack:<version>

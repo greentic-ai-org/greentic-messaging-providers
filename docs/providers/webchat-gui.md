@@ -55,11 +55,32 @@ Common setup values include:
 cargo test -p messaging-provider-webchat-gui
 cargo test -p greentic-messaging-provider-common webchat_gui_config_schema_declares_presentation_mode
 PACK_FILTER=messaging-webchat-gui ./ci/steps/11_build_packs.sh
+scripts/test_webchat_gui.sh default
 ```
+
+`scripts/build_providers.sh webchat-gui` builds the provider component and pack
+from the assets currently checked into `packs/messaging-webchat-gui`. To replace
+those browser assets from a freshly built WebChat SPA, pass
+`GREENTIC_WEBCHAT_SITE_DIR=/path/to/site/app scripts/build_providers.sh webchat-gui`.
+
+`scripts/test_webchat_gui.sh [skin]` builds the current `messaging-webchat-gui`
+pack, extracts the packaged browser assets, serves them under the expected
+`/v1/web/webchat/<tenant>/` route, and opens a local browser harness with a
+mocked Direct Line backend. Pass a skin folder such as `3aigent`, `cisco`, or
+`default` to validate theme-specific assets.
+
+Add top-bar navigation links with one or more `--nav-link` options:
+
+```bash
+scripts/test_webchat_gui.sh 3aigent --nav-link 'M1|Playground|https://example.com'
+```
+
+Use `--demo-links` for the 3aigent demo module links, or pass exact link JSON
+with `--nav-links-json '[{"num":"M1","label":"Playground","url":"https://example.com"}]'`.
+Use `--nav-links-json @links.json` to read the same JSON from a file.
 
 ## Agent Notes
 
 Do not overload `skin` with behavior. `skin` is visual theme only. Use `presentation_mode` for standalone versus embedded behavior.
 
 See [WebChat GUI Web Component guide](../guides/webchat-gui-embed-webcomponent.md).
-

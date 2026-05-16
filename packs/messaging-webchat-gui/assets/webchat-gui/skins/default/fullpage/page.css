@@ -57,7 +57,7 @@ body {
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 1rem;
   height: 64px;
   padding: 0 1.25rem;
   background: var(--surface);
@@ -69,6 +69,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .topbar__avatar {
@@ -115,6 +116,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.625rem;
+  flex-shrink: 0;
 }
 
 /* ── Control dividers ───────────────────────────────────── */
@@ -821,33 +823,136 @@ button[data-action="logout"]:hover,
 
 /* ── Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links) ── */
 .topbar-nav {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0 0.5rem;
+  justify-content: center;
+  gap: 0.625rem;
+  margin: 0;
 }
 .topbar-nav:empty { display: none; }
 .topbar-nav__link {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 0.4rem 0.8rem;
+  gap: 0.45rem;
+  padding: 0.42rem 0.8rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  border-radius: 999px;
+  background: var(--bg);
   color: var(--text);
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.78rem;
+  font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 .topbar-nav__link:hover {
   border-color: var(--brand);
   color: var(--brand);
   background: var(--brand-light);
+  box-shadow: 0 0 0 1px rgba(5, 150, 105, 0.12);
 }
 .topbar-nav__link:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+.topbar-nav__num {
+  color: var(--brand);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.topbar-nav__label {
+  color: inherit;
+}
+.topbar-nav__tooltip {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  width: min(360px, calc(100vw - 2rem));
+  padding: 0.95rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+  z-index: 50;
+}
+.topbar-nav__link--has-tooltip:hover .topbar-nav__tooltip,
+.topbar-nav__link--has-tooltip:focus-within .topbar-nav__tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0s;
+}
+.topbar-nav__tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 8px 8px 8px;
+  border-style: solid;
+  border-color: transparent transparent var(--border) transparent;
+}
+.topbar-nav__tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 7px 7px 7px;
+  border-style: solid;
+  border-color: transparent transparent var(--surface) transparent;
+}
+.topbar-nav__tooltip-eyebrow {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--brand);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.topbar-nav__tooltip-title {
+  margin: 0 0 0.45rem;
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.topbar-nav__tooltip-lede {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.topbar-nav__tooltip-lede strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .topbar-nav {
+    justify-content: flex-start;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 0.25rem 0;
+    scrollbar-width: none;
+  }
+
+  .topbar-nav::-webkit-scrollbar {
+    display: none;
+  }
 }

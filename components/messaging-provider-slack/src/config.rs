@@ -14,20 +14,31 @@ pub(crate) struct ProviderConfig {
     pub(crate) public_base_url: String,
     #[serde(default)]
     pub(crate) api_base_url: Option<String>,
+    #[serde(default)]
     pub(crate) bot_token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ProviderConfigOut {
+    #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
+    #[serde(default)]
     pub(crate) default_channel: Option<String>,
+    #[serde(default)]
     pub(crate) public_base_url: String,
+    #[serde(default = "default_api_base_url")]
     pub(crate) api_base_url: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
     pub(crate) bot_token: String,
 }
 
 fn default_enabled() -> bool {
     true
+}
+
+fn default_api_base_url() -> String {
+    DEFAULT_API_BASE.to_string()
 }
 
 pub(crate) fn default_config_out() -> ProviderConfigOut {
@@ -48,9 +59,6 @@ pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), Stri
         || config.public_base_url.starts_with("https://"))
     {
         return Err("invalid config: public_base_url must be an absolute URL".to_string());
-    }
-    if config.bot_token.trim().is_empty() {
-        return Err("invalid config: bot_token cannot be empty".to_string());
     }
     if config.api_base_url.trim().is_empty() {
         return Err("invalid config: api_base_url cannot be empty".to_string());
@@ -180,18 +188,15 @@ mod tests {
         );
 
         let mut config = valid_config_out();
-        config.bot_token = "   ".to_string();
-        assert_eq!(
-            validate_config_out(&config),
-            Err("invalid config: bot_token cannot be empty".to_string())
-        );
-
-        let mut config = valid_config_out();
         config.api_base_url = "slack".to_string();
         assert_eq!(
             validate_config_out(&config),
             Err("invalid config: api_base_url must be an absolute URL".to_string())
         );
+
+        let mut config = valid_config_out();
+        config.bot_token.clear();
+        assert_eq!(validate_config_out(&config), Ok(()));
     }
 
     #[test]

@@ -21,7 +21,7 @@ Common setup values include:
 - Default Slack channel.
 - Bot token secret.
 - Optional signing secret.
-- Optional app/configuration token for webhook registration support.
+- Optional Slack app ID plus configuration access/refresh token pair for webhook registration support.
 
 ## Secrets
 
@@ -30,7 +30,9 @@ Common setup values include:
 | `SLACK_BOT_TOKEN` | Yes | Bot token used for `chat.postMessage`. |
 | `SLACK_SIGNING_SECRET` | Optional, recommended for ingress | Verifies Slack webhook signatures. |
 | `SLACK_APP_ID` | Optional | Supports manifest or webhook registration flows. |
-| `SLACK_CONFIGURATION_TOKEN` | Optional | Supports Slack app configuration updates. |
+| `SLACK_CONFIGURATION_ACCESS_TOKEN` | Optional | Supports Slack app configuration updates. Automatically refreshed when expired. |
+| `SLACK_CONFIGURATION_REFRESH_TOKEN` | Optional | Used to rotate expired Slack configuration access tokens. |
+| `SLACK_CONFIGURATION_TOKEN` | Optional, legacy | Legacy configuration token key accepted for existing installs. |
 
 Nightly e2e uses `E2E_SLACK_BOT_TOKEN` and `E2E_SLACK_CHANNEL_ID`.
 
@@ -63,4 +65,3 @@ PACK_FILTER=messaging-slack ./ci/steps/11_build_packs.sh
 ## Agent Notes
 
 Slack has both provider-core and ingress components. Keep send-path changes in `messaging-provider-slack` and webhook parsing changes in `messaging-ingress-slack` unless shared behavior is intended.
-

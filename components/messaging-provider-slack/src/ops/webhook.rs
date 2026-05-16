@@ -10,21 +10,17 @@ use serde_json::{Value, json};
 
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::{get_secret_string, put_secret_string};
-use crate::{DEFAULT_CONFIG_REFRESH_TOKEN_KEY, DEFAULT_CONFIG_TOKEN_KEY};
+use crate::{
+    DEFAULT_APP_ID_KEY, DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
+    LEGACY_CONFIG_TOKEN_KEY,
+};
 
 /// Rotate an expired Slack configuration token using the refresh token.
 ///
 /// Calls `tooling.tokens.rotate` with form-urlencoded body. Returns
 /// `(new_config_token, new_refresh_token)` on success.
-fn rotate_config_token(
-    config_token: &str,
-    refresh_token: &str,
-) -> Result<(String, String), String> {
-    let body = format!(
-        "configuration_token={}&refresh_token={}",
-        urlencoding(config_token),
-        urlencoding(refresh_token),
-    );
+fn rotate_config_token(refresh_token: &str) -> Result<(String, String), String> {
+    let body = format!("refresh_token={}", urlencoding(refresh_token));
     let resp = client::send(
         &client::Request {
             method: "POST".to_string(),
@@ -88,7 +84,7 @@ const HEX: [u8; 16] = *b"0123456789ABCDEF";
 /// ```json
 /// {
 ///   "slack_app_id": "A07XXXXXX",
-///   "slack_configuration_token": "xoxe.xoxp-...",
+///   "slack_configuration_access_token": "xoxe.xoxp-...",
 ///   "slack_configuration_refresh_token": "xoxe-...",
 ///   "public_base_url": "https://example.ngrok-free.app",
 ///   "provider_id": "messaging-slack",
@@ -110,18 +106,29 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         .get("slack_app_id")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|s| !s.is_empty());
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .or_else(|| get_secret_string(DEFAULT_APP_ID_KEY).ok());
 
-    // Resolve config token: input field → secrets store fallback
+    // Resolve config access token: new input/secret first, then legacy names.
     let config_token_input = parsed
-        .get("slack_configuration_token")
+        .get("slack_configuration_access_token")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(String::from)
-        .or_else(|| get_secret_string(DEFAULT_CONFIG_TOKEN_KEY).ok());
+        .or_else(|| {
+            parsed
+                .get("slack_configuration_token")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+        })
+        .or_else(|| get_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY).ok())
+        .or_else(|| get_secret_string(LEGACY_CONFIG_TOKEN_KEY).ok());
 
-    // Resolve refresh token: input field → secrets store fallback
+    // Resolve refresh token: input field → secrets store fallback.
     let refresh_token = parsed
         .get("slack_configuration_refresh_token")
         .and_then(Value::as_str)
@@ -130,12 +137,12 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         .map(String::from)
         .or_else(|| get_secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY).ok());
 
-    let (app_id, config_token_input) = match (app_id, config_token_input) {
+    let (app_id, config_token_input) = match (app_id.as_deref(), config_token_input) {
         (Some(a), Some(t)) => (a, t),
         _ => {
             return json_bytes(&json!({
                 "ok": false,
-                "error": "slack_app_id and slack_configuration_token required"
+                "error": "slack_app_id and slack_configuration_access_token required"
             }));
         }
     };
@@ -302,7 +309,7 @@ fn export_manifest(app_id: &str, config_token: &str) -> ExportResult {
 /// Attempt to refresh the configuration token and persist the new tokens.
 ///
 /// Returns the new config token on success, or a serialized error response.
-fn try_refresh_token(config_token: &str, refresh_token: Option<&str>) -> Result<String, Vec<u8>> {
+fn try_refresh_token(_config_token: &str, refresh_token: Option<&str>) -> Result<String, Vec<u8>> {
     let refresh_token = refresh_token.ok_or_else(|| {
         json_bytes(&json!({
             "ok": false,
@@ -310,9 +317,10 @@ fn try_refresh_token(config_token: &str, refresh_token: Option<&str>) -> Result<
                       generate a new token pair at api.slack.com/apps"
         }))
     })?;
-    match rotate_config_token(config_token, refresh_token) {
+    match rotate_config_token(refresh_token) {
         Ok((new_token, new_refresh)) => {
-            put_secret_string(DEFAULT_CONFIG_TOKEN_KEY, &new_token);
+            put_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY, &new_token);
+            put_secret_string(LEGACY_CONFIG_TOKEN_KEY, &new_token);
             put_secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY, &new_refresh);
             Ok(new_token)
         }
@@ -407,6 +415,27 @@ mod tests {
                 .as_str()
                 .unwrap_or_default()
                 .contains("no refresh token available")
+        );
+    }
+
+    #[test]
+    fn setup_webhook_accepts_access_token_field_name() {
+        let invalid_url: Value = serde_json::from_slice(&setup_webhook(
+            br#"{
+                "slack_app_id": "A123",
+                "slack_configuration_access_token": "xoxe-access",
+                "slack_configuration_refresh_token": "xoxe-refresh",
+                "public_base_url": "http://example.com"
+            }"#,
+        ))
+        .expect("json");
+
+        assert_eq!(invalid_url["ok"], false);
+        assert!(
+            invalid_url["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("public_base_url")
         );
     }
 }

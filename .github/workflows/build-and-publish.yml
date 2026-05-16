@@ -2,9 +2,6 @@ name: Build, Test, and Publish Packs
 # pull_request removed per plans/binary-bifurcation.md Phase A heavy-job sweep
 
 on:
-  push:
-    branches: ["**"]
-    tags: ["v*"]
   workflow_dispatch:
 
 concurrency:
