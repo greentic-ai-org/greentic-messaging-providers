@@ -13,8 +13,6 @@ Inputs:
   `use_published_gtpack=true`.
 - `use_published_gtpack`: pull the `.gtpack` from GHCR instead of building it
   locally.
-- `publish_result_summary`: reserved for summary behavior; result JSON artifacts
-  are always uploaded.
 
 Examples:
 

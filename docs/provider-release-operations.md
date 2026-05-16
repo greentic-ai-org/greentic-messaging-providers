@@ -60,7 +60,7 @@ scripts/publish_provider.sh slack 0.5.0
 ```
 
 The publish helper runs the same version update, validation, focused local
-build, and targeted local checks before dispatching `publish-provider.yml`.
+build, and targeted local checks before dispatching `provider-build-publish.yml`.
 Pass `--dry-run` to upload the workflow artifact without pushing to GHCR, or
 `--publish-latest` when the release should also move `latest`.
 

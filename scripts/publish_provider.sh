@@ -2,8 +2,9 @@
 # Publish a single provider fast-path end-to-end.
 #
 # Optionally updates the provider version, builds that provider locally, runs
-# targeted local checks, then dispatches the `publish-provider.yml` workflow on
-# the current branch and tails the run to completion.
+# targeted local checks, then dispatches the reusable
+# `provider-build-publish.yml` workflow on the current branch and tails the run
+# to completion.
 #
 # Usage:
 #   scripts/publish_provider.sh <provider> [version] [--skip-build] [--skip-local-check] [--dry-run]
@@ -131,12 +132,18 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 echo
-echo "-- dispatching publish-provider.yml --"
-echo "  ref=${BRANCH} provider=${RESOLVED_PROVIDER} dry_run=${DRY_RUN} publish_latest=${PUBLISH_LATEST}"
-gh workflow run publish-provider.yml \
+if [ "${DRY_RUN}" = "true" ]; then
+  PUBLISH=false
+else
+  PUBLISH=true
+fi
+
+echo "-- dispatching provider-build-publish.yml --"
+echo "  ref=${BRANCH} provider=${RESOLVED_PROVIDER} publish=${PUBLISH} publish_latest=${PUBLISH_LATEST}"
+gh workflow run provider-build-publish.yml \
   --ref "${BRANCH}" \
   -f "provider=${RESOLVED_PROVIDER}" \
-  -f "dry_run=${DRY_RUN}" \
+  -f "publish=${PUBLISH}" \
   -f "publish_latest=${PUBLISH_LATEST}"
 
 # Poll for the run that was just created — `gh workflow run` doesn't print
@@ -144,7 +151,7 @@ gh workflow run publish-provider.yml \
 # branch. A short sleep lets GitHub register the dispatch before we query.
 sleep 5
 RUN_ID="$(gh run list \
-  --workflow publish-provider.yml \
+  --workflow provider-build-publish.yml \
   --branch "${BRANCH}" \
   --limit 1 \
   --json databaseId \

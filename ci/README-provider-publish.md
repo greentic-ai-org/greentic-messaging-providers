@@ -43,16 +43,10 @@ cargo check -p messaging-provider-slack
 PACK_FILTER=messaging-slack ./ci/steps/11_build_packs.sh
 ```
 
-To manually run the fast path in GitHub Actions:
-
-1. Open `Publish Provider Fast Path`
-2. Enter a provider such as `telegram`
-3. Optionally enable `dry_run`
-
-The fast path builds and lints only the mapped provider components, pulls templates from OCI during pack sync, validates only the mapped pack, and publishes only that provider's components and pack when `dry_run` is disabled.
-
-`Provider Build, Test, and Publish` is the reusable workflow for new provider
-orchestration. It supports both `workflow_call` and `workflow_dispatch` with:
+To manually run a focused provider release in GitHub Actions, open
+`Provider Build, Test, and Publish`. It is the single reusable/direct workflow
+for one-provider builds and supports both `workflow_call` and
+`workflow_dispatch` with:
 
 - `provider`: one provider from `ci/provider-matrix.json`.
 - `shared_crate_version`: optional summary metadata for rebuilds after a shared
@@ -65,8 +59,8 @@ orchestration. It supports both `workflow_call` and `workflow_dispatch` with:
   provider e2e workflow. It defaults to disabled because live external services
   can be flaky or rate-limited.
 
-Dry-run runs upload `gtpack-<pack>` as an artifact. Publish runs push only the
-selected provider's components and pack to GHCR.
+Validation-only runs upload `gtpack-<pack>` as an artifact. Publish runs push
+only the selected provider's components and pack to GHCR.
 
 For a local one-command fast path, use:
 
@@ -91,7 +85,3 @@ It uses `ci/provider_matrix.py affected` to classify changes:
 - provider-only: call the reusable workflow for only the changed provider(s).
 - shared crate: call `Publish Shared Provider Crate` first, then fan out to all
   providers when the maintainer explicitly selects that mode.
-
-The legacy `Build, Test, and Publish Packs` workflow is retained as a manual
-validation workflow during migration, but its monolithic publish job is disabled
-so it no longer publishes every provider for broad shared/tooling changes.

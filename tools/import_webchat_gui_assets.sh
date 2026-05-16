@@ -18,9 +18,40 @@ rsync -a --delete "${SRC_DIR}/config/" "${DEST_DIR}/config/"
 rsync -a --delete "${SRC_DIR}/i18n/" "${DEST_DIR}/i18n/"
 rsync -a --delete "${SRC_DIR}/js/" "${DEST_DIR}/js/"
 
-# Import skins from SPA without --delete to preserve pack-specific
-# customizations (e.g. _template/fullpage/page.css, _template/skin.json).
+# Import skins from SPA without --delete to preserve pack-specific customizations.
 rsync -a "${SRC_DIR}/skins/" "${DEST_DIR}/skins/"
+
+# The provider pack intentionally exposes only the production Greentic default
+# skin and the 3AIgent skin. The upstream SPA still carries template/demo skins
+# for development; prune them after import so they cannot be selected by URL.
+find "${DEST_DIR}/skins" -mindepth 1 -maxdepth 1 -type d \
+  ! -name default \
+  ! -name 3aigent \
+  -exec rm -rf {} +
+
+# Keep only tenant configs that are valid entry points for this pack.
+find "${DEST_DIR}/config/tenants" -mindepth 1 -maxdepth 1 -type f \
+  ! -name greentic.json \
+  -exec rm -f {} +
+
+python3 - "${DEST_DIR}/config/tenants/greentic.json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit(0)
+data = json.loads(path.read_text(encoding="utf-8"))
+data["skin"] = "default"
+data["legacy_skin"] = "default"
+branding = data.setdefault("branding", {})
+if isinstance(branding, dict):
+    branding["logo"] = "/skins/default/assets/logo.svg"
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
 
 js_bundle="$(basename "$(find "${DEST_DIR}/assets" -maxdepth 1 -type f -name 'index-*.js' | sort | head -n 1)")"
 css_bundle="$(basename "$(find "${DEST_DIR}/assets" -maxdepth 1 -type f -name 'index-*.css' | sort | head -n 1)")"

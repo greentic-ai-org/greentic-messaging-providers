@@ -238,6 +238,10 @@ fn apply_answers_impl(
             }
         }
         merged.skin = string_or_default(&answers, "skin", &merged.skin);
+        merged.text_input_enabled = answers
+            .get("text_input_enabled")
+            .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
+            .unwrap_or(merged.text_input_enabled);
         merged.nav_links = nav_links_from_answers(&answers).unwrap_or(merged.nav_links);
     }
 
@@ -298,6 +302,12 @@ fn apply_answers_impl(
         }
         if has("skin") {
             merged.skin = string_or_default(&answers, "skin", &merged.skin);
+        }
+        if has("text_input_enabled") {
+            merged.text_input_enabled = answers
+                .get("text_input_enabled")
+                .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
+                .unwrap_or(merged.text_input_enabled);
         }
         if has("nav_links") {
             merged.nav_links = nav_links_from_answers(&answers).unwrap_or_default();
@@ -496,6 +506,7 @@ mod tests {
         assert_eq!(value["ok"], true);
         assert_eq!(value["config"]["presentation_mode"], "standalone");
         assert_eq!(value["config"]["skin"], "default");
+        assert_eq!(value["config"]["text_input_enabled"], true);
     }
 
     #[test]
@@ -505,10 +516,12 @@ mod tests {
             "mode": "local_queue",
             "route": "webchat",
             "presentation_mode": "embed_webcomponent",
-            "skin": "default"
+            "skin": "default",
+            "text_input_enabled": false
         }));
         assert_eq!(value["ok"], true);
         assert_eq!(value["config"]["presentation_mode"], "embed_webcomponent");
+        assert_eq!(value["config"]["text_input_enabled"], false);
         assert!(value["config"].get("nav_links").is_none());
     }
 

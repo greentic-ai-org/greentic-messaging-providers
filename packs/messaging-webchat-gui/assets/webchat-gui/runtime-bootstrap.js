@@ -1024,7 +1024,7 @@ console.log('[runtime-bootstrap] loaded');
           // Fallback: generate minimal config if file doesn't exist
           payload = {
             tenant_id: tenantId,
-            legacy_skin: '_template',
+            legacy_skin: 'default',
             branding: { company_name: tenantId },
             auth: {
               providers: [
@@ -1039,6 +1039,11 @@ console.log('[runtime-bootstrap] loaded');
         payload.webchat.directline.token_url = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/token';
         payload.webchat.directline.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/v3/directline';
         payload.webchat.locale = locale;
+        var textInput = (new URLSearchParams(window.location.search).get('textInput') || '').trim().toLowerCase();
+        if (textInput === 'false' || textInput === '0' || textInput === 'off' || textInput === 'no' || textInput === 'disabled') {
+          payload.webchat.style_options = payload.webchat.style_options || {};
+          payload.webchat.style_options.hideSendBox = true;
+        }
         console.log('[bootstrap] tenant config patched:', tenantId, 'auth providers:', (payload.auth && payload.auth.providers || []).length);
         return new Response(JSON.stringify(payload), {
           status: 200,

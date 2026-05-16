@@ -19,12 +19,6 @@ on:
         required: false
         default: false
         type: boolean
-      publish_result_summary:
-        description: Write provider result details to the job summary
-        required: false
-        default: true
-        type: boolean
-
 concurrency:
   group: nightly-provider-e2e-${{ github.ref }}
   cancel-in-progress: false
