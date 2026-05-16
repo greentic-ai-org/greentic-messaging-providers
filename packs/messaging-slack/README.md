@@ -18,7 +18,6 @@ Slack messaging provider — Bot API with Events API ingress.
 - `SLACK_APP_ID` — Slack app ID for manifest webhook registration
 - `SLACK_CONFIGURATION_ACCESS_TOKEN` — short-lived Slack configuration access token
 - `SLACK_CONFIGURATION_REFRESH_TOKEN` — refresh token used to rotate expired configuration access tokens
-- `SLACK_CONFIGURATION_TOKEN` — legacy configuration token key accepted for existing installs
 
 ## Flows
 - `setup_default` — configures provider via `messaging.configure` op

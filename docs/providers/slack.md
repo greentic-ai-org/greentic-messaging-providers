@@ -32,7 +32,6 @@ Common setup values include:
 | `SLACK_APP_ID` | Optional | Supports manifest or webhook registration flows. |
 | `SLACK_CONFIGURATION_ACCESS_TOKEN` | Optional | Supports Slack app configuration updates. Automatically refreshed when expired. |
 | `SLACK_CONFIGURATION_REFRESH_TOKEN` | Optional | Used to rotate expired Slack configuration access tokens. |
-| `SLACK_CONFIGURATION_TOKEN` | Optional, legacy | Legacy configuration token key accepted for existing installs. |
 
 Nightly e2e uses `E2E_SLACK_BOT_TOKEN` and `E2E_SLACK_CHANNEL_ID`.
 

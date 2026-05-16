@@ -135,10 +135,6 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 strategy: "replace".to_string(),
             },
             RedactionRule {
-                path: "$.slack_configuration_token".to_string(),
-                strategy: "replace".to_string(),
-            },
-            RedactionRule {
                 path: "$.slack_configuration_refresh_token".to_string(),
                 strategy: "replace".to_string(),
             },
