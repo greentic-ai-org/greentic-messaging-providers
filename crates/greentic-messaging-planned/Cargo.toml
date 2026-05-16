@@ -1,6 +1,6 @@
 [package]
 name = "greentic-messaging-planned"
-version = "0.4.27"
+version = "1.1.0"
 edition = "2024"
 
 [dependencies]
