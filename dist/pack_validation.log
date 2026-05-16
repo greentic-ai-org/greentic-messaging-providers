@@ -13,8 +13,6 @@ Skipping filtered-out pack messaging-webchat
 Skipping filtered-out pack messaging-webchat-gui
 Skipping filtered-out pack messaging-webex
 Skipping filtered-out pack messaging-whatsapp
-Skipping filtered-out pack state-memory
-Skipping filtered-out pack state-redis
 Pack sync complete.
 Using templates image: ghcr.io/greenticai/components/templates:latest
 Using greentic-pack: greentic-pack 0.4.111
@@ -43,7 +41,5 @@ Skipping filtered-out pack messaging-webchat
 Skipping filtered-out pack messaging-webchat-gui
 Skipping filtered-out pack messaging-webex
 Skipping filtered-out pack messaging-whatsapp
-Skipping filtered-out pack state-memory
-Skipping filtered-out pack state-redis
 warning: ignored legacy helper doctor diagnostics for /projects/ai/greentic-ng/greentic-messaging-providers/dist/packs/messaging-dummy.gtpack
 Wrote packs.lock.json

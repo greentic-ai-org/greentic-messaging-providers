@@ -26,6 +26,26 @@
       "name": "SLACK_SIGNING_SECRET",
       "scope": "tenant",
       "description": "Slack signing secret (optional for future webhook validation)."
+    },
+    {
+      "name": "SLACK_APP_ID",
+      "scope": "tenant",
+      "description": "Slack app ID for manifest updates during webhook registration."
+    },
+    {
+      "name": "SLACK_CONFIGURATION_ACCESS_TOKEN",
+      "scope": "tenant",
+      "description": "Slack configuration access token for manifest updates during webhook registration."
+    },
+    {
+      "name": "SLACK_CONFIGURATION_REFRESH_TOKEN",
+      "scope": "tenant",
+      "description": "Slack configuration refresh token used to rotate expired configuration access tokens."
+    },
+    {
+      "name": "SLACK_CONFIGURATION_TOKEN",
+      "scope": "tenant",
+      "description": "Legacy Slack configuration token secret. Use SLACK_CONFIGURATION_ACCESS_TOKEN for new installs."
     }
   ],
   "operations": [

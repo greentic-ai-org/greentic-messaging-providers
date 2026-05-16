@@ -18,9 +18,15 @@ python3 tools/provider_versions.py list
 python3 tools/provider_versions.py shared
 python3 tools/provider_versions.py provider slack
 python3 tools/provider_versions.py validate
-python3 tools/provider_versions.py set-provider slack 0.5.0
+scripts/change_provider_version.sh slack 0.5.0
 python3 tools/provider_versions.py set-shared 0.5.0
 ```
+
+`scripts/change_provider_version.sh <provider> <version>` is the preferred
+provider bump entrypoint. It wraps `tools/provider_versions.py set-provider`,
+validates that the matrix, component manifests, and pack metadata agree, and
+builds that provider locally. Pass `--no-build` when only metadata should be
+updated.
 
 The current policy uses explicit manual version bumps. We are not deriving
 release versions from commit messages, workspace version, or hidden changeset
@@ -56,9 +62,7 @@ A provider release version must match:
 Example one-provider release:
 
 ```bash
-python3 tools/provider_versions.py set-provider slack 0.5.0
-python3 tools/provider_versions.py validate --provider slack
-PACK_FILTER=messaging-slack PACK_VERSION=0.5.0 ./ci/steps/11_build_packs.sh
+scripts/change_provider_version.sh slack 0.5.0
 ```
 
 The reusable provider workflow passes the provider version as both component
@@ -67,9 +71,12 @@ provider version, not the workspace version.
 
 ## Shared-Crate Fanout
 
-When shared code changes, `Provider Release Orchestrator` publishes the shared
-crate first, then rebuilds all providers against the selected ref. Provider
-tags remain deterministic:
+When shared code changes, push the merge to `main` first, then decide whether
+to run a focused provider release or an all-provider fanout. `Provider Release
+Orchestrator` is manual-only; it does not start provider jobs from a `main`
+push. Publishing providers requires an explicit manual dispatch with
+`publish=true`, or the one-provider `scripts/publish_provider.sh` helper.
+Provider tags remain deterministic:
 
 - If a provider version is bumped, publish the new exact semver tag.
 - If maintainers intentionally rebuild without bumping a provider version, the

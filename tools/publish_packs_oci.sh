@@ -442,6 +442,18 @@ read_components() {
   jq -c '(.component_sources // .components // [])[] | if type=="string" then {id: ., wasm: ("components/" + . + ".wasm"), manifest: "", oci: {}} else {id: .id, wasm: (.wasm // ("components/" + .id + ".wasm")), manifest: (.manifest // ""), oci: (.oci // {})} end' "${manifest}"
 }
 
+target_component_wasm_name() {
+  local comp_id="$1"
+  local wasm_path="$2"
+  local fname
+  fname="$(basename "${wasm_path}")"
+  if [ "${fname}" = "component.wasm" ]; then
+    printf '%s.wasm\n' "${comp_id}"
+  else
+    printf '%s\n' "${fname}"
+  fi
+}
+
 for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
   [ -d "${dir}" ] || continue
   pack_name="$(basename "${dir}")"
@@ -476,6 +488,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
     comp_id="$(jq -r '.id' <<<"${comp_json}")"
     wasm_path="$(jq -r '.wasm' <<<"${comp_json}")"
     fname="$(basename "${wasm_path}")"
+    target_fname="$(target_component_wasm_name "${comp_id}" "${wasm_path}")"
     is_templates_component=0
     if [ "${comp_id}" = "templates" ] || [ "${comp_id}" = "ai.greentic.component-templates" ] || [ "${fname}" = "templates.wasm" ]; then
       is_templates_component=1
@@ -483,7 +496,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
     if [ -z "${oci_image}" ] && [ "${is_templates_component}" -eq 1 ]; then
       oci_image="${DEFAULT_TEMPLATES_IMAGE}"
     fi
-    if [ -z "${oci_image}" ] && [ ! -f "${TARGET_COMPONENTS}/${fname}" ]; then
+    if [ -z "${oci_image}" ] && [ ! -f "${TARGET_COMPONENTS}/${target_fname}" ]; then
       missing_local=1
       break
     fi
@@ -499,6 +512,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
     comp_id="$(jq -r '.id' <<<"${comp_json}")"
     wasm_path="$(jq -r '.wasm' <<<"${comp_json}")"
     fname="$(basename "${wasm_path}")"
+    target_fname="$(target_component_wasm_name "${comp_id}" "${wasm_path}")"
     oci_image="$(jq -r '.oci.image // empty' <<<"${comp_json}")"
     oci_digest="$(jq -r '.oci.digest // empty' <<<"${comp_json}")"
     oci_artifact="$(jq -r '.oci.artifact // empty' <<<"${comp_json}")"
@@ -534,7 +548,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
       root_manifest_src="${ROOT_DIR}/components/${comp_id}/component.manifest.json"
     fi
 
-    src="${TARGET_COMPONENTS}/${fname}"
+    src="${TARGET_COMPONENTS}/${target_fname}"
     dest="${dir}/${wasm_path}"
     if [ ! -f "${src}" ] || { [ -n "${manifest_rel}" ] && [ ! -f "${manifest_src}" ]; }; then
       if [ -n "${oci_image}" ] && [ -n "${oci_artifact}" ]; then

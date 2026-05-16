@@ -42,11 +42,19 @@ questions:
     placeholder: "A0XXXXXXXXX"
     group: Authentication
     docs_url: "https://api.slack.com/apps"
-  - name: slack_configuration_token
-    title: Slack Configuration Token
+  - name: slack_configuration_access_token
+    title: Slack Configuration Access Token
     kind: string
     required: true
     secret: true
-    help: "Generate at api.slack.com → Your Apps → App Configuration Tokens"
+    help: "Short-lived access token generated at api.slack.com → Your Apps → App Configuration Tokens"
+    group: Authentication
+    docs_url: "https://api.slack.com/apps"
+  - name: slack_configuration_refresh_token
+    title: Slack Configuration Refresh Token
+    kind: string
+    required: true
+    secret: true
+    help: "Refresh token generated alongside the Slack configuration access token. Used to rotate expired access tokens automatically."
     group: Authentication
     docs_url: "https://api.slack.com/apps"

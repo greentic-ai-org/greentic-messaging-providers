@@ -27,6 +27,8 @@ pub(crate) const PROVIDER_TYPE: &str = "messaging.webex.bot";
 pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
 pub(crate) const DEFAULT_API_BASE: &str = "https://webexapis.com/v1";
 pub(crate) const DEFAULT_TOKEN_KEY: &str = "WEBEX_BOT_TOKEN";
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) const DEFAULT_WEBHOOK_SECRET_KEY: &str = "WEBEX_WEBHOOK_SECRET";
 
 use config::{default_config_out, validate_config_out};
 use describe::{
@@ -55,6 +57,8 @@ pub(crate) struct ProviderConfig {
     #[serde(default)]
     pub bot_token: Option<String>,
     #[serde(default)]
+    pub webhook_secret: Option<String>,
+    #[serde(default)]
     pub default_locale: Option<String>,
 }
 
@@ -66,6 +70,8 @@ pub(crate) struct ProviderConfigOut {
     pub default_to_person_email: Option<String>,
     pub api_base_url: String,
     pub bot_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhook_secret: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_locale: Option<String>,
 }
@@ -259,7 +265,11 @@ fn apply_answers_impl(
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();
         }
-        merged.bot_token = optional_string_from(&answers, "bot_token").or(merged.bot_token.clone());
+        merged.bot_token = optional_string_from(&answers, "bot_token")
+            .or_else(|| optional_string_from(&answers, "webex_bot_token"))
+            .or(merged.bot_token.clone());
+        merged.webhook_secret =
+            optional_string_from(&answers, "webhook_secret").or(merged.webhook_secret.clone());
     }
 
     if mode == Mode::Upgrade {
@@ -283,8 +293,12 @@ fn apply_answers_impl(
         if has("api_base_url") {
             merged.api_base_url = string_or_default(&answers, "api_base_url", &merged.api_base_url);
         }
-        if has("bot_token") {
-            merged.bot_token = optional_string_from(&answers, "bot_token");
+        if has("bot_token") || has("webex_bot_token") {
+            merged.bot_token = optional_string_from(&answers, "bot_token")
+                .or_else(|| optional_string_from(&answers, "webex_bot_token"));
+        }
+        if has("webhook_secret") {
+            merged.webhook_secret = optional_string_from(&answers, "webhook_secret");
         }
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();

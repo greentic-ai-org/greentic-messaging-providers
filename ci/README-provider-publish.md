@@ -55,7 +55,6 @@ The fast path builds and lints only the mapped provider components, pulls templa
 orchestration. It supports both `workflow_call` and `workflow_dispatch` with:
 
 - `provider`: one provider from `ci/provider-matrix.json`.
-- `provider_version`: optional override; otherwise uses matrix metadata.
 - `shared_crate_version`: optional summary metadata for rebuilds after a shared
   crate release.
 - `publish`: when `false`, builds, validates, and uploads one `.gtpack` artifact
@@ -69,15 +68,30 @@ orchestration. It supports both `workflow_call` and `workflow_dispatch` with:
 Dry-run runs upload `gtpack-<pack>` as an artifact. Publish runs push only the
 selected provider's components and pack to GHCR.
 
-`Provider Release Orchestrator` is the dependency-aware entrypoint for `main`.
+For a local one-command fast path, use:
+
+```bash
+scripts/publish_provider.sh <provider> [version]
+```
+
+The helper optionally bumps the provider version, validates metadata, builds the
+selected provider locally, runs targeted checks, and dispatches this workflow on
+the current branch. Local-only changes are not visible to GitHub Actions, so
+commit and push release fixes before using it for a real publish.
+
+`Provider Release Orchestrator` is the manual dependency-aware provider release
+entrypoint. Pushes to `main` do not start it. After merging, a maintainer can
+start it with one provider, `providers=all`, or `providers=shared+all`, and can
+choose whether that run is validation-only or publishes with `publish=true`.
+
 It uses `ci/provider_matrix.py affected` to classify changes:
 
 - docs-only: select no providers and publish nothing.
 - tooling/CI-only: select no providers by default.
 - provider-only: call the reusable workflow for only the changed provider(s).
 - shared crate: call `Publish Shared Provider Crate` first, then fan out to all
-  providers with the published shared crate version in the downstream summary.
+  providers when the maintainer explicitly selects that mode.
 
-The legacy `Build, Test, and Publish Packs` workflow is retained for validation
-coverage during migration, but its monolithic publish job is disabled so it no
-longer publishes every provider for broad shared/tooling changes.
+The legacy `Build, Test, and Publish Packs` workflow is retained as a manual
+validation workflow during migration, but its monolithic publish job is disabled
+so it no longer publishes every provider for broad shared/tooling changes.

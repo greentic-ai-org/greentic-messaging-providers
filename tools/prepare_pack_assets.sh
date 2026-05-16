@@ -4,7 +4,23 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKS_DIR="${ROOT_DIR}/packs"
 
-if [ -x "${ROOT_DIR}/tools/import_webchat_gui_assets.sh" ]; then
+pack_selected() {
+  local pack_name="$1"
+  local raw="${PACK_FILTER:-}"
+  if [ -z "${raw}" ]; then
+    return 0
+  fi
+  python3 - <<'PY' "${raw}" "${pack_name}"
+import sys
+
+raw = sys.argv[1]
+name = sys.argv[2]
+items = [part.strip() for chunk in raw.split(",") for part in chunk.split() if part.strip()]
+raise SystemExit(0 if name in items else 1)
+PY
+}
+
+if [ -x "${ROOT_DIR}/tools/import_webchat_gui_assets.sh" ] && pack_selected "messaging-webchat-gui"; then
   "${ROOT_DIR}/tools/import_webchat_gui_assets.sh"
 fi
 
