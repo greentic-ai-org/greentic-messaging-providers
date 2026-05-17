@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebChat GUI Host Fixture</title>
+    <script type="module" src="/v1/web/webchat/default/embed.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background: #f3f6fa;
+        color: #172033;
+      }
+      main {
+        width: min(1120px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 18px 0 28px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 0 18px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+      .host-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .host-button {
+        min-height: 40px;
+        border: 1px solid #c6d0dc;
+        border-radius: 8px;
+        background: #fff;
+        color: #172033;
+        padding: 0 14px;
+        font: inherit;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 18px;
+      }
+      .content {
+        min-height: 520px;
+        border: 1px solid #d6dee9;
+        border-radius: 10px;
+        background: #fff;
+        padding: 18px;
+      }
+      .inline-shell {
+        height: min(680px, calc(100vh - 160px));
+        min-height: 380px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+      }
+      greentic-webchat {
+        display: block;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+      }
+      @media (max-width: 760px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .inline-shell {
+          height: calc(100vh - 190px);
+          min-height: 340px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 data-testid="host-title">Customer host page</h1>
+        <div class="host-actions">
+          <button class="host-button" data-testid="host-focus-button" type="button">Focusable host action</button>
+          <button class="host-button" data-testid="host-open-button" type="button">Open chat</button>
+          <button class="host-button" data-testid="host-close-button" type="button">Close chat</button>
+        </div>
+      </header>
+      <section class="layout">
+        <div class="inline-shell" data-testid="inline-container"></div>
+        <article class="content" data-testid="host-content">
+          <p>This content must remain visible when inline WebChat modes are used.</p>
+        </article>
+      </section>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get('mode') || 'inline';
+      const render = params.get('render') || 'iframe';
+      const skin = params.get('skin') || 'default';
+      const nav = params.get('nav') === '1' ? 'nav' : 'plain';
+      const login = params.get('login') === '1' ? 'login' : 'anon';
+      const tenant = `${skin}-${nav}-${login}`;
+      const chat = document.createElement('greentic-webchat');
+      chat.dataset.testid = 'embedded-webchat';
+      chat.setAttribute('tenant', tenant);
+      chat.setAttribute('public-base-url', window.location.origin);
+      chat.setAttribute('mode', mode);
+      chat.setAttribute('render', render);
+      chat.setAttribute('title', `${skin} ${render} ${mode} WebChat`);
+      if (mode === 'launcher' || mode === 'popup') {
+        document.body.append(chat);
+      } else {
+        document.querySelector('[data-testid="inline-container"]').append(chat);
+      }
+      document.querySelector('[data-testid="host-open-button"]').addEventListener('click', () => chat.openChat());
+      document.querySelector('[data-testid="host-close-button"]').addEventListener('click', () => chat.close());
+    </script>
+  </body>
+</html>

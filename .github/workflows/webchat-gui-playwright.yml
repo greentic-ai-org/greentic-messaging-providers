@@ -1,0 +1,84 @@
+name: WebChat GUI Playwright
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/webchat-gui-playwright.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/test_webchat_gui_playwright.sh"
+      - "scripts/test_webchat_gui.sh"
+      - "packs/messaging-webchat-gui/**"
+      - "components/messaging-provider-webchat-gui/**"
+      - "components/messaging-provider-webchat/**"
+      - "tests/webchat-gui/**"
+      - "tools/build_components/messaging-provider-webchat-gui.sh"
+      - "tools/build_packs.sh"
+      - "scripts/build_providers.sh"
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: webchat-gui-playwright-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  webchat-gui-playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          targets: wasm32-wasip2
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: webchat-gui-playwright
+
+      - name: Install cargo tools
+        run: |
+          set -euo pipefail
+          cargo install cargo-binstall --locked || true
+          cargo binstall cargo-component --version 0.21.1 --force --no-confirm --locked
+          cargo binstall greentic-pack --force --no-confirm --locked || cargo install greentic-pack --force --locked
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run WebChat GUI Playwright suite
+        run: scripts/test_webchat_gui_playwright.sh
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webchat-gui-playwright-report
+          path: tests/webchat-gui/playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webchat-gui-playwright-test-results
+          path: tests/webchat-gui/test-results
+          if-no-files-found: ignore
