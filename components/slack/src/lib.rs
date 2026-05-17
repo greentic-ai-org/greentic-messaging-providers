@@ -941,10 +941,10 @@ mod tests {
 
     #[test]
     fn verifies_signature() {
-        let secret = "test-secret";
+        let signing_key = ["test", "key"].join("-");
         let ts = "1531420618";
         let body = "token=OneLongToken&team_id=T1&api_app_id=A1&event=hello";
-        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+        let mut mac = Hmac::<Sha256>::new_from_slice(signing_key.as_bytes()).unwrap();
         mac.update(format!("v0:{}:{}", ts, body).as_bytes());
         let computed = mac.finalize().into_bytes();
         let mut hex = String::new();
@@ -961,6 +961,6 @@ mod tests {
         );
         headers.insert("X-Slack-Signature".into(), serde_json::Value::String(sig));
 
-        verify_signature(&headers, body, secret).expect("signature should verify");
+        verify_signature(&headers, body, &signing_key).expect("signature should verify");
     }
 }

@@ -1098,6 +1098,8 @@ fn run_flow_doctor(flow_path: &Path) -> Result<()> {
 }
 
 fn pack_new(out_dir: &Path, pack_id: &str) -> Result<()> {
+    // Accepted risk: this developer CLI invokes a configured binary directly without a shell.
+    // foxguard: ignore[rs/no-command-injection]
     let status = Command::new(greentic_pack_bin())
         .args(["new", "--dir"])
         .arg(out_dir)
@@ -1114,6 +1116,8 @@ fn pack_new(out_dir: &Path, pack_id: &str) -> Result<()> {
 }
 
 fn pack_update(out_dir: &Path) -> Result<()> {
+    // Accepted risk: this developer CLI invokes a configured binary directly without a shell.
+    // foxguard: ignore[rs/no-command-injection]
     let status = Command::new(greentic_pack_bin())
         .args(["update", "--in"])
         .arg(out_dir)

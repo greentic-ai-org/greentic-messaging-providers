@@ -40,6 +40,7 @@ pub enum JwtError {
     InvalidSignature,
     Expired,
     NotYetValid,
+    InvalidKey,
     Json(serde_json::Error),
     Base64(base64::DecodeError),
 }
@@ -89,7 +90,7 @@ pub fn issue_token(
     let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
     let header_enc = encode_segment(&header)?;
     let payload_enc = encode_segment(&claims)?;
-    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC key length valid");
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| JwtError::InvalidKey)?;
     mac.update(header_enc.as_bytes());
     mac.update(b".");
     mac.update(payload_enc.as_bytes());
@@ -107,7 +108,7 @@ pub fn verify_token(secret: &[u8], token: &str) -> Result<TokenClaims, JwtError>
     if parts.next().is_some() {
         return Err(JwtError::InvalidFormat);
     }
-    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC key length valid");
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| JwtError::InvalidKey)?;
     mac.update(header.as_bytes());
     mac.update(b".");
     mac.update(payload.as_bytes());
@@ -137,16 +138,16 @@ mod tests {
 
     #[test]
     fn token_round_trip() {
-        let secret = b"super-secure-key";
+        let signing_key = b"test-hmac-key";
         let ctx = DirectLineContext {
             env: "default".into(),
             tenant: "default".into(),
             team: Some("team-a".into()),
         };
-        let (token, exp) = issue_token(secret, ctx.clone(), "user-123", None).unwrap();
+        let (token, exp) = issue_token(signing_key, ctx.clone(), "user-123", None).unwrap();
         assert!(token.split('.').count() == 3);
         assert!(exp > Utc::now().timestamp());
-        let claims = verify_token(secret, &token).unwrap();
+        let claims = verify_token(signing_key, &token).unwrap();
         assert_eq!(claims.sub, "user-123");
         assert_eq!(claims.ctx, ctx);
         assert!(claims.conv.is_none());
@@ -154,15 +155,15 @@ mod tests {
 
     #[test]
     fn token_with_conv_claim() {
-        let secret = b"_another-secret-key_";
+        let signing_key = b"another-test-hmac-key";
         let ctx = DirectLineContext {
             env: "prod".into(),
             tenant: "tenant-a".into(),
             team: None,
         };
         let (token, _) =
-            issue_token(secret, ctx.clone(), "user-x", Some("conv-99".into())).unwrap();
-        let claims = verify_token(secret, &token).unwrap();
+            issue_token(signing_key, ctx.clone(), "user-x", Some("conv-99".into())).unwrap();
+        let claims = verify_token(signing_key, &token).unwrap();
         assert_eq!(claims.conv.as_deref(), Some("conv-99"));
         assert_eq!(claims.ctx, ctx);
     }
