@@ -45,10 +45,12 @@ jobs:
         with:
           key: webchat-gui-playwright
 
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
       - name: Install cargo tools
         run: |
           set -euo pipefail
-          cargo install cargo-binstall --locked || true
           cargo binstall cargo-component --version 0.21.1 --force --no-confirm --locked
           cargo binstall greentic-pack --force --no-confirm --locked || cargo install greentic-pack --force --locked
 
