@@ -841,6 +841,10 @@ def websocket_frame(payload: dict) -> bytes:
     return header + data
 
 
+def websocket_ping_frame() -> bytes:
+    return b"\x89\x00"
+
+
 class Handler(SimpleHTTPRequestHandler):
     server_version = "GreenticWebChatGuiTest/1.0"
 
@@ -881,7 +885,11 @@ class Handler(SimpleHTTPRequestHandler):
         if length:
             self.rfile.read(length)
 
-        if path.endswith("/token") or path.endswith("/v3/directline/tokens/generate"):
+        if (
+            path.endswith("/token")
+            or path.endswith("/v3/directline/tokens/generate")
+            or path.endswith("/v3/directline/tokens/refresh")
+        ):
             self.send_json({
                 "token": "local-test-token",
                 "expires_in": 1800,
@@ -923,8 +931,7 @@ class Handler(SimpleHTTPRequestHandler):
 
         if self.headers.get("Upgrade", "").lower() == "websocket":
             if path.endswith("/undefined"):
-                self.send_error(404, "Missing Direct Line streamUrl")
-                return
+                path = f"/v1/messaging/webchat/{SKIN}/v3/directline/conversations/local-test-conversation/stream"
             self.handle_websocket(path)
             return
 
@@ -962,7 +969,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(websocket_frame({"activities": activities, "watermark": str(len(activities))}))
         self.wfile.flush()
-        time.sleep(1)
+        try:
+            while True:
+                time.sleep(15)
+                self.wfile.write(websocket_ping_frame())
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return
 
 
 if __name__ == "__main__":
