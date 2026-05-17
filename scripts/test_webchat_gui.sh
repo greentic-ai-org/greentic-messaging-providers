@@ -922,6 +922,9 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
 
         if self.headers.get("Upgrade", "").lower() == "websocket":
+            if path.endswith("/undefined"):
+                self.send_error(404, "Missing Direct Line streamUrl")
+                return
             self.handle_websocket(path)
             return
 

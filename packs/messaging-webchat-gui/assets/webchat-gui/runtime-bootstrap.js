@@ -1037,12 +1037,15 @@ console.log('[runtime-bootstrap] loaded');
       if (savedConv) {
         try {
           var conv = JSON.parse(savedConv);
-          if (conv.conversationId && conv.timestamp && (Date.now() - conv.timestamp) < 1800000) {
+          if (conv.conversationId && conv.streamUrl && conv.timestamp && (Date.now() - conv.timestamp) < 1800000) {
             console.log('[bootstrap] reusing saved conversation:', conv.conversationId);
             return Promise.resolve(new Response(JSON.stringify(conv), {
               status: 200,
               headers: { 'Content-Type': 'application/json' }
             }));
+          } else if (conv.conversationId && !conv.streamUrl) {
+            try { localStorage.removeItem('greentic_dl_conversation'); } catch (_) {}
+            console.log('[bootstrap] ignoring saved conversation without streamUrl:', conv.conversationId);
           }
         } catch (_) {}
       }
