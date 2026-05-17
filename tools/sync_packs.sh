@@ -57,7 +57,6 @@ PY
 
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
-command -v oras >/dev/null 2>&1 || { echo "oras is required for fetching OCI components" >&2; exit 1; }
 
 if [ -x "${ROOT_DIR}/tools/prepare_pack_assets.sh" ]; then
   "${ROOT_DIR}/tools/prepare_pack_assets.sh"
@@ -389,6 +388,8 @@ fetch_locked_component() {
 oras_pull() {
   local ref="$1"
   local out_dir="$2"
+
+  command -v oras >/dev/null 2>&1 || { echo "oras is required for fetching OCI components" >&2; exit 1; }
 
   if [ -n "${GHCR_TOKEN:-}" ]; then
     local ghcr_user="${GHCR_USERNAME:-${GHCR_USER:-${USER:-}}}"

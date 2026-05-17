@@ -725,30 +725,36 @@ console.log('[runtime-bootstrap] loaded');
     fetch(authConfigUrl)
       .then(function (response) {
         if (!response.ok) {
-          console.log('[oauth] auth/config not available, falling back to tenant config');
-          return loadAuthFromTenantConfig();
+          if (shouldUseTenantAuthFallback()) {
+            console.log('[oauth] auth/config not available, falling back to tenant config for local login test');
+            return loadAuthFromTenantConfig();
+          }
+          console.log('[oauth] auth/config not available, skipping auth gate');
+          return { enabled: false };
         }
         return response.json();
       })
       .then(function (authConfig) {
         if (!authConfig) return;
-        // If backend returned empty config, fall back to tenant config
-        if (!authConfig.enabled && (!authConfig.providers || authConfig.providers.length === 0)) {
-          console.log('[oauth] backend auth/config empty, falling back to tenant config');
-          return loadAuthFromTenantConfig().then(function (fallback) {
-            if (fallback) return applyAuthConfig(fallback);
-          });
-        }
         return applyAuthConfig(authConfig);
       })
       .catch(function (err) {
-        console.warn('[oauth] failed to fetch auth config, trying tenant config:', err);
-        return loadAuthFromTenantConfig().then(function (fallback) {
-          if (fallback) return applyAuthConfig(fallback);
-          window.__OAUTH_CONFIG__ = { enabled: false };
-          window.__OAUTH_CHECKED__ = true;
-        });
+        if (shouldUseTenantAuthFallback()) {
+          console.warn('[oauth] failed to fetch auth config, trying tenant config for local login test:', err);
+          return loadAuthFromTenantConfig().then(function (fallback) {
+            if (fallback) return applyAuthConfig(fallback);
+            window.__OAUTH_CONFIG__ = { enabled: false };
+            window.__OAUTH_CHECKED__ = true;
+          });
+        }
+        console.warn('[oauth] failed to fetch auth config, proceeding without auth:', err);
+        window.__OAUTH_CONFIG__ = { enabled: false };
+        window.__OAUTH_CHECKED__ = true;
       });
+  }
+
+  function shouldUseTenantAuthFallback() {
+    return new URLSearchParams(window.location.search).has('loginRequired');
   }
 
   function loadAuthFromTenantConfig() {
@@ -767,7 +773,7 @@ console.log('[runtime-bootstrap] loaded');
         // Has real OIDC providers (not just dummy)?
         var hasOidc = enabledProviders.some(function (p) { return p.type === 'oidc'; });
         return {
-          enabled: hasOidc,
+          enabled: hasOidc || new URLSearchParams(window.location.search).has('loginRequired'),
           providers: data.auth.providers
         };
       })
