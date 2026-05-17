@@ -70,6 +70,7 @@ body {
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
+  margin-right: auto;
 }
 
 .topbar__avatar {
@@ -116,6 +117,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.625rem;
+  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -823,7 +825,7 @@ button[data-action="logout"]:hover,
 
 /* ── Topbar tenant nav (rendered from tenants/<tenant>.json::nav_links) ── */
 .topbar-nav {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
