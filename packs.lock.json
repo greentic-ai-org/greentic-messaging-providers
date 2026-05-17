@@ -46,8 +46,8 @@
       "name": "messaging-webchat-gui",
       "file": "dist/packs/messaging-webchat-gui.gtpack",
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:0.4.104",
-      "digest": "sha256:9cf4e4f202aca6f662a66ef40372de046ac52cd922ee55a1aba0cc4326b95904",
-      "built_at": "2026-05-17T15:58:09Z"
+      "digest": "sha256:b9cb8237d24f7554f1fa26b90d2513d3bad6e129c9b377b2c502cfd399a4f7bc",
+      "built_at": "2026-05-17T16:10:12Z"
     },
     {
       "name": "messaging-webex",

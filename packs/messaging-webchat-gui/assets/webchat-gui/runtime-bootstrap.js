@@ -737,10 +737,30 @@ console.log('[runtime-bootstrap] loaded');
    */
   // Flag: should inject logout when locale picker mounts
   window.__OAUTH_SHOW_LOGOUT__ = false;
+  var logoutObserverStarted = false;
+  var logoutObserverTimer = null;
 
   function injectLogoutButton() {
     window.__OAUTH_SHOW_LOGOUT__ = true;
+    startLogoutObserver();
     tryInjectLogout();
+  }
+
+  function startLogoutObserver() {
+    if (logoutObserverStarted || typeof MutationObserver === 'undefined') return;
+    if (!document.body) {
+      window.addEventListener('DOMContentLoaded', startLogoutObserver, { once: true });
+      return;
+    }
+    logoutObserverStarted = true;
+    new MutationObserver(function () {
+      if (!window.__OAUTH_SHOW_LOGOUT__) return;
+      if (logoutObserverTimer) return;
+      logoutObserverTimer = setTimeout(function () {
+        logoutObserverTimer = null;
+        tryInjectLogout();
+      }, 50);
+    }).observe(document.body, { childList: true, subtree: true });
   }
 
   function tryInjectLogout() {
@@ -758,28 +778,6 @@ console.log('[runtime-bootstrap] loaded');
       }
       appendLogoutToContainer(container);
       return;
-    }
-    // Element not in DOM yet — observe for it
-    if (typeof MutationObserver !== 'undefined') {
-      var observer = new MutationObserver(function () {
-        if (document.getElementById('greentic-logout-btn')) {
-          observer.disconnect();
-          return;
-        }
-        var c = document.getElementById('greentic-header-controls')
-          || document.getElementById('locale-picker-mount');
-        if (c && hasAnyAuthSession()) {
-          if (c.id === 'greentic-header-controls') {
-            var d = document.createElement('span');
-            d.className = 'topbar__divider';
-            c.appendChild(d);
-          }
-          appendLogoutToContainer(c);
-          observer.disconnect();
-        }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-      setTimeout(function () { observer.disconnect(); }, 10000);
     }
   }
 
@@ -835,12 +833,10 @@ console.log('[runtime-bootstrap] loaded');
     fetch(authConfigUrl)
       .then(function (response) {
         if (!response.ok) {
-          if (shouldUseTenantAuthFallback()) {
-            console.log('[oauth] auth/config not available, falling back to tenant config for local login test');
-            return loadAuthFromTenantConfig();
-          }
-          console.log('[oauth] auth/config not available, skipping auth gate');
-          return { enabled: false };
+          console.log('[oauth] auth/config not available, falling back to tenant config');
+          return loadAuthFromTenantConfig().then(function (fallback) {
+            return fallback || { enabled: false };
+          });
         }
         return response.json();
       })
@@ -849,17 +845,12 @@ console.log('[runtime-bootstrap] loaded');
         return applyAuthConfig(authConfig);
       })
       .catch(function (err) {
-        if (shouldUseTenantAuthFallback()) {
-          console.warn('[oauth] failed to fetch auth config, trying tenant config for local login test:', err);
-          return loadAuthFromTenantConfig().then(function (fallback) {
-            if (fallback) return applyAuthConfig(fallback);
-            window.__OAUTH_CONFIG__ = { enabled: false };
-            window.__OAUTH_CHECKED__ = true;
-          });
-        }
-        console.warn('[oauth] failed to fetch auth config, proceeding without auth:', err);
-        window.__OAUTH_CONFIG__ = { enabled: false };
-        window.__OAUTH_CHECKED__ = true;
+        console.warn('[oauth] failed to fetch auth config, trying tenant config:', err);
+        return loadAuthFromTenantConfig().then(function (fallback) {
+          if (fallback) return applyAuthConfig(fallback);
+          window.__OAUTH_CONFIG__ = { enabled: false };
+          window.__OAUTH_CHECKED__ = true;
+        });
       });
   }
 
@@ -880,10 +871,8 @@ console.log('[runtime-bootstrap] loaded');
         if (!data || !data.auth) return null;
         var enabledProviders = (data.auth.providers || []).filter(function (p) { return p.enabled; });
         if (enabledProviders.length === 0) return null;
-        // Has real OIDC providers (not just dummy)?
-        var hasOidc = enabledProviders.some(function (p) { return p.type === 'oidc'; });
         return {
-          enabled: hasOidc || new URLSearchParams(window.location.search).has('loginRequired'),
+          enabled: enabledProviders.length > 0,
           providers: data.auth.providers,
           source: 'tenant-config'
         };
