@@ -159,6 +159,10 @@ const server = http.createServer((req, res) => {
   }
   const tenantConfigMatch = urlPath.match(/^\/v1\/web\/webchat\/([^/]+)\/config\/tenants\/([^/]+)\.json$/);
   if (tenantConfigMatch) {
+    if (tenantConfigMatch[2].includes('missing-config')) {
+      sendJson(res, 404, { error: 'tenant config not found' });
+      return;
+    }
     sendJson(res, 200, tenantConfig(tenantConfigMatch[2]));
     return;
   }

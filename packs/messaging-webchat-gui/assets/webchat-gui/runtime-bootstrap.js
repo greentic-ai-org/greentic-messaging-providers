@@ -1031,12 +1031,7 @@ console.log('[runtime-bootstrap] loaded');
           payload = {
             tenant_id: tenantId,
             legacy_skin: 'default',
-            branding: { company_name: tenantId },
-            auth: {
-              providers: [
-                { id: tenantId + '-demo', label: 'Demo Login', type: 'dummy', enabled: true }
-              ]
-            }
+            branding: { company_name: tenantId }
           };
         }
         // Ensure directline config is set
