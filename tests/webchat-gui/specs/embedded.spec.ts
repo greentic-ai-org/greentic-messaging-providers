@@ -55,6 +55,20 @@ test.describe('embedded WebChat modes', () => {
     })).toBeCloseTo(0.55, 1);
   });
 
+  test('web component defaults adaptive cards to 70 percent width', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await webchat.openHost({ skin: 'default', render: 'iframe', mode: 'inline', nav: false, login: false });
+
+    const frame = webchat.iframeChat();
+    await webchat.expectChatReady(frame);
+    await expect(frame.getByTestId('adaptive-card')).toBeVisible();
+    await expect.poll(async () => frame.getByTestId('adaptive-card').evaluate((card) => {
+      const parent = card.parentElement;
+      if (!parent) return 0;
+      return card.getBoundingClientRect().width / parent.getBoundingClientRect().width;
+    })).toBeCloseTo(0.7, 1);
+  });
+
   test('iframe launcher opens and does not take over the host page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openHost({ skin: '3aigent', render: 'iframe', mode: 'launcher', nav: true, login: false });
