@@ -79,7 +79,6 @@ echo "Using templates image: ${DEFAULT_TEMPLATES_IMAGE}"
 
 command -v jq >/dev/null 2>&1 || { echo "jq is required"; exit 1; }
 command -v zip >/dev/null 2>&1 || { echo "zip is required"; exit 1; }
-command -v oras >/dev/null 2>&1 || { echo "oras is required"; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
 if ! command -v "${PACKC_BIN}" >/dev/null 2>&1; then
   echo "greentic-pack is required for building gtpack artifacts" >&2
@@ -410,6 +409,8 @@ fetch_oci_component() {
   local manifest_name="$5"
   local dest_manifest="$6"
 
+  command -v oras >/dev/null 2>&1 || { echo "oras is required for fetching OCI components" >&2; exit 1; }
+
   local ref="${image}"
   if [ -n "${digest}" ]; then
     ref="${image}@${digest}"
@@ -706,6 +707,7 @@ PY
 )"
 
   if [ "${DRY_RUN}" -eq 0 ]; then
+    command -v oras >/dev/null 2>&1 || { echo "oras is required for publishing pack artifacts" >&2; exit 1; }
     readme_path="${dir}/README.md"
     pack_desc="$(jq -r '.description // empty' "${dir}/pack.manifest.json")"
     pack_title="$(jq -r '.name // empty' "${dir}/pack.manifest.json")"
