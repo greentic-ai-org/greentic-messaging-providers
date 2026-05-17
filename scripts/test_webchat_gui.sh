@@ -726,9 +726,12 @@ EOF
 cat > "${WORK_DIR}/server.py" <<'PY'
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import posixpath
+import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -815,6 +818,29 @@ def json_bytes(value: dict) -> bytes:
     return json.dumps(value).encode("utf-8")
 
 
+def websocket_frame(payload: dict) -> bytes:
+    data = json_bytes(payload)
+    length = len(data)
+    if length < 126:
+        header = bytes([0x81, length])
+    elif length < 65536:
+        header = bytes([0x81, 126, (length >> 8) & 0xFF, length & 0xFF])
+    else:
+        header = bytes([
+            0x81,
+            127,
+            (length >> 56) & 0xFF,
+            (length >> 48) & 0xFF,
+            (length >> 40) & 0xFF,
+            (length >> 32) & 0xFF,
+            (length >> 24) & 0xFF,
+            (length >> 16) & 0xFF,
+            (length >> 8) & 0xFF,
+            length & 0xFF,
+        ])
+    return header + data
+
+
 class Handler(SimpleHTTPRequestHandler):
     server_version = "GreenticWebChatGuiTest/1.0"
 
@@ -866,9 +892,11 @@ class Handler(SimpleHTTPRequestHandler):
         if path.endswith("/v3/directline/conversations"):
             conversation_id = "local-test-conversation"
             CONVERSATIONS.setdefault(conversation_id, initial_activities())
+            host = self.headers.get("Host", "127.0.0.1")
             self.send_json({
                 "conversationId": conversation_id,
                 "token": "local-test-token",
+                "streamUrl": f"ws://{host}/v1/messaging/webchat/{SKIN}/v3/directline/conversations/{conversation_id}/stream",
                 "expires_in": 1800,
             })
             return
@@ -893,6 +921,10 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        if self.headers.get("Upgrade", "").lower() == "websocket":
+            self.handle_websocket(path)
+            return
+
         if path.endswith("/undefined"):
             self.send_response(204)
             self.end_headers()
@@ -911,6 +943,23 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         super().do_GET()
+
+    def handle_websocket(self, path: str) -> None:
+        conversation_id = conversation_id_from_path(path) or "local-test-conversation"
+        key = self.headers.get("Sec-WebSocket-Key")
+        if not key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return
+        accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+        activities = CONVERSATIONS.setdefault(conversation_id, initial_activities())
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.wfile.write(websocket_frame({"activities": activities, "watermark": str(len(activities))}))
+        self.wfile.flush()
+        time.sleep(1)
 
 
 if __name__ == "__main__":
