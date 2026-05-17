@@ -376,6 +376,27 @@ console.log('[runtime-bootstrap] loaded');
     } catch (_) { /* sessionStorage unavailable */ }
   }
 
+  function getAppAuthSession() {
+    try {
+      var raw = localStorage.getItem('webchat_auth_session');
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      return parsed && parsed.isAuthenticated ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function clearAppAuthSession() {
+    try {
+      localStorage.setItem('webchat_auth_session', JSON.stringify({ isAuthenticated: false }));
+    } catch (_) { /* localStorage unavailable */ }
+  }
+
+  function hasAnyAuthSession() {
+    return !!(getOAuthSession() || getAppAuthSession());
+  }
+
   /**
    * Check URL for OAuth callback params (?code=...&state=...).
    * If found, exchange code for tokens via PKCE, save session, clean URL.
@@ -632,6 +653,7 @@ console.log('[runtime-bootstrap] loaded');
 
   function performLogout() {
     clearOAuthSession();
+    clearAppAuthSession();
     window.location.reload();
   }
 
@@ -723,6 +745,7 @@ console.log('[runtime-bootstrap] loaded');
 
   function tryInjectLogout() {
     if (document.getElementById('greentic-logout-btn')) return;
+    if (!hasAnyAuthSession()) return;
 
     // Prefer greentic-header-controls (built by locale picker), fallback to raw mount point
     var container = document.getElementById('greentic-header-controls')
@@ -745,7 +768,7 @@ console.log('[runtime-bootstrap] loaded');
         }
         var c = document.getElementById('greentic-header-controls')
           || document.getElementById('locale-picker-mount');
-        if (c) {
+        if (c && hasAnyAuthSession()) {
           if (c.id === 'greentic-header-controls') {
             var d = document.createElement('span');
             d.className = 'topbar__divider';
@@ -861,7 +884,8 @@ console.log('[runtime-bootstrap] loaded');
         var hasOidc = enabledProviders.some(function (p) { return p.type === 'oidc'; });
         return {
           enabled: hasOidc || new URLSearchParams(window.location.search).has('loginRequired'),
-          providers: data.auth.providers
+          providers: data.auth.providers,
+          source: 'tenant-config'
         };
       })
       .catch(function () { return null; });
@@ -893,6 +917,14 @@ console.log('[runtime-bootstrap] loaded');
 
         if (!authConfig.enabled) {
           return; // No auth required, SPA proceeds normally
+        }
+
+        if (authConfig.source === 'tenant-config') {
+          // The React app renders the skin-aware login page from tenant
+          // config. Do not stack the legacy runtime OAuth overlay on top.
+          window.__OAUTH_SHOW_LOGOUT__ = true;
+          tryInjectLogout();
+          return;
         }
 
         // Step 1: Check if returning from OAuth callback (?code=...&state=...)
