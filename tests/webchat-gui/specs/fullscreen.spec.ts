@@ -81,11 +81,20 @@ test.describe('full-screen WebChat', () => {
 
   test('missing tenant config does not invent a login page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
+    const tokenRequests: string[] = [];
+    page.on('request', request => {
+      const url = request.url();
+      if (url.includes('/v1/messaging/webchat/') && url.includes('/token')) {
+        tokenRequests.push(url);
+      }
+    });
     await page.goto('/v1/web/webchat/missing-config-anon/?tenant=missing-config-anon');
 
     await expect(page.getByText('Sign in to start chatting')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /sign in/i })).toHaveCount(0);
     await webchat.expectChatReady();
+    expect(tokenRequests.some(url => url.includes('/v1/messaging/webchat/missing-config-anon/token'))).toBe(true);
+    expect(tokenRequests.some(url => url.includes('/v1/messaging/webchat/greentic/token'))).toBe(false);
   });
 
   test('login callback error shows a clear failure state', async ({ page }) => {
