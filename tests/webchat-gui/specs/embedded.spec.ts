@@ -49,9 +49,10 @@ test.describe('embedded WebChat modes', () => {
     await webchat.expectChatReady(frame);
     await expect(frame.getByTestId('adaptive-card')).toBeVisible();
     await expect.poll(async () => frame.getByTestId('adaptive-card').evaluate((card) => {
-      const parent = card.parentElement;
-      if (!parent) return 0;
-      return card.getBoundingClientRect().width / parent.getBoundingClientRect().width;
+      const bubble = card.closest('.webchat__bubble__content');
+      const transcript = card.closest('[data-testid="webchat-transcript"]');
+      if (!bubble || !transcript) return 0;
+      return bubble.getBoundingClientRect().width / transcript.getBoundingClientRect().width;
     })).toBeCloseTo(0.55, 1);
   });
 
@@ -63,9 +64,10 @@ test.describe('embedded WebChat modes', () => {
     await webchat.expectChatReady(frame);
     await expect(frame.getByTestId('adaptive-card')).toBeVisible();
     await expect.poll(async () => frame.getByTestId('adaptive-card').evaluate((card) => {
-      const parent = card.parentElement;
-      if (!parent) return 0;
-      return card.getBoundingClientRect().width / parent.getBoundingClientRect().width;
+      const bubble = card.closest('.webchat__bubble__content');
+      const transcript = card.closest('[data-testid="webchat-transcript"]');
+      if (!bubble || !transcript) return 0;
+      return bubble.getBoundingClientRect().width / transcript.getBoundingClientRect().width;
     })).toBeCloseTo(0.7, 1);
   });
 

@@ -137,9 +137,52 @@ console.log('[runtime-bootstrap] loaded');
       '.tenant-widget-surface .webchat__bubble__content, .embed-webchat-surface .webchat__bubble__content, .widget-surface .webchat__bubble__content, .chat-panel__surface .webchat__bubble__content {',
       '  max-width: 100% !important;',
       '  box-sizing: border-box !important;',
+      '}',
+      '.greentic-adaptive-card-bubble {',
+      '  width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  max-width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  box-sizing: border-box !important;',
+      '}',
+      '.greentic-adaptive-card-bubble .ac-adaptiveCard {',
+      '  width: 100% !important;',
+      '  max-width: 100% !important;',
+      '  box-sizing: border-box !important;',
       '}'
     ].join('\n');
     document.head.appendChild(style);
+  }
+
+  function markAdaptiveCardBubbles(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var cards = scope.querySelectorAll('.ac-adaptiveCard');
+    for (var i = 0; i < cards.length; i++) {
+      var bubble = cards[i].closest && cards[i].closest('.webchat__bubble__content');
+      if (bubble) {
+        var width = 'min(100%, var(--greentic-adaptive-card-width, 70%))';
+        bubble.classList.add('greentic-adaptive-card-bubble');
+        bubble.style.setProperty('width', width, 'important');
+        bubble.style.setProperty('max-width', width, 'important');
+        bubble.style.setProperty('box-sizing', 'border-box', 'important');
+        cards[i].style.setProperty('width', '100%', 'important');
+        cards[i].style.setProperty('max-width', '100%', 'important');
+        cards[i].style.setProperty('box-sizing', 'border-box', 'important');
+      }
+    }
+  }
+
+  function ensureAdaptiveCardWidthObserver() {
+    markAdaptiveCardBubbles(document);
+    if (window.__GREENTIC_ADAPTIVE_CARD_WIDTH_OBSERVER__) return;
+    window.__GREENTIC_ADAPTIVE_CARD_WIDTH_OBSERVER__ = true;
+    if (typeof MutationObserver === 'undefined') return;
+    new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+          var node = mutations[i].addedNodes[j];
+          if (node && node.nodeType === 1) markAdaptiveCardBubbles(node);
+        }
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
   }
 
   var tenant = resolveTenant();
@@ -148,7 +191,10 @@ console.log('[runtime-bootstrap] loaded');
   var guiBase = resolveGuiBase(tenant);
   console.log('[runtime-bootstrap] tenant:', tenant, 'env:', env, 'locale:', selectedLocale || '(default)');
   document.documentElement.style.setProperty('--greentic-adaptive-card-width', resolveAdaptiveCardWidth());
-  setTimeout(ensureAdaptiveCardWidthStyle, 0);
+  setTimeout(function () {
+    ensureAdaptiveCardWidthStyle();
+    ensureAdaptiveCardWidthObserver();
+  }, 0);
 
   // Detect OAuth completion redirect (?oauth_done=true)
   var oauthDone = new URLSearchParams(window.location.search).get('oauth_done') === 'true';
