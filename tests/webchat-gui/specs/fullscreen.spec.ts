@@ -79,6 +79,19 @@ test.describe('full-screen WebChat', () => {
     await webchat.expectChatReady();
   });
 
+  test('adaptive cards default to 70 percent width', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
+    await webchat.expectChatReady();
+
+    await expect(page.getByTestId('adaptive-card')).toBeVisible();
+    await expect.poll(async () => page.getByTestId('adaptive-card').evaluate((card) => {
+      const parent = card.parentElement;
+      if (!parent) return 0;
+      return card.getBoundingClientRect().width / parent.getBoundingClientRect().width;
+    })).toBeCloseTo(0.7, 1);
+  });
+
   test('missing tenant config does not invent a login page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     const tokenRequests: string[] = [];

@@ -18,6 +18,26 @@
     transcript.scrollTop = transcript.scrollHeight;
   }
 
+  function appendAdaptiveCard(transcript) {
+    var bubble = createElement('div', {
+      class: 'webchat__bubble webchat-test-message webchat-test-message--bot',
+      'data-testid': 'webchat-adaptive-card-message',
+    });
+    var content = createElement('div', {
+      class: 'webchat__bubble__content',
+    });
+    var card = createElement('div', {
+      class: 'ac-adaptiveCard',
+      'data-testid': 'adaptive-card',
+    });
+    card.textContent = 'Adaptive card preview';
+    card.style.cssText = 'display:block;padding:16px;border:1px solid #d1d5db;background:#fff;';
+    content.appendChild(card);
+    bubble.appendChild(content);
+    transcript.appendChild(bubble);
+    transcript.scrollTop = transcript.scrollHeight;
+  }
+
   function renderWebChat(_config, element) {
     element.innerHTML = '';
     element.setAttribute('data-testid', 'webchat-surface');
@@ -61,6 +81,7 @@
     root.append(transcript, form);
     element.appendChild(root);
     appendMessage(transcript, 'bot', 'Hello from Greentic');
+    appendAdaptiveCard(transcript);
 
     form.addEventListener('submit', function (event) {
       event.preventDefault();

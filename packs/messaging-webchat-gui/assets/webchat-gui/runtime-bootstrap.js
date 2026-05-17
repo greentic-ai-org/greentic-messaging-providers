@@ -103,11 +103,52 @@ console.log('[runtime-bootstrap] loaded');
     return window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant);
   }
 
+  function normalizeAdaptiveCardWidth(value) {
+    var raw = value == null ? '' : String(value).trim();
+    if (!raw) return '70%';
+    if (/^\d+(?:\.\d+)?$/.test(raw)) return raw + '%';
+    if (/^\d+(?:\.\d+)?(?:%|px|rem|em|vw|vh)$/.test(raw)) return raw;
+    if (raw.toLowerCase() === 'auto') return 'auto';
+    return '70%';
+  }
+
+  function resolveAdaptiveCardWidth() {
+    var params = new URLSearchParams(window.location.search);
+    return normalizeAdaptiveCardWidth(
+      window.__GREENTIC_WEBCHAT_ADAPTIVE_CARD_WIDTH__ ||
+      params.get('adaptiveCardWidth') ||
+      params.get('adaptive_card_width')
+    );
+  }
+
+  function ensureAdaptiveCardWidthStyle() {
+    var width = resolveAdaptiveCardWidth();
+    document.documentElement.style.setProperty('--greentic-adaptive-card-width', width);
+    var existing = document.getElementById('greentic-adaptive-card-width-style');
+    if (existing) return;
+    var style = document.createElement('style');
+    style.id = 'greentic-adaptive-card-width-style';
+    style.textContent = [
+      '.tenant-widget-surface .ac-adaptiveCard, .embed-webchat-surface .ac-adaptiveCard, .widget-surface .ac-adaptiveCard, .chat-panel__surface .ac-adaptiveCard {',
+      '  width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  max-width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  box-sizing: border-box !important;',
+      '}',
+      '.tenant-widget-surface .webchat__bubble__content, .embed-webchat-surface .webchat__bubble__content, .widget-surface .webchat__bubble__content, .chat-panel__surface .webchat__bubble__content {',
+      '  max-width: 100% !important;',
+      '  box-sizing: border-box !important;',
+      '}'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
   var tenant = resolveTenant();
   var env = resolveEnv();
   var selectedLocale = resolveLocale();
   var guiBase = resolveGuiBase(tenant);
   console.log('[runtime-bootstrap] tenant:', tenant, 'env:', env, 'locale:', selectedLocale || '(default)');
+  document.documentElement.style.setProperty('--greentic-adaptive-card-width', resolveAdaptiveCardWidth());
+  setTimeout(ensureAdaptiveCardWidthStyle, 0);
 
   // Detect OAuth completion redirect (?oauth_done=true)
   var oauthDone = new URLSearchParams(window.location.search).get('oauth_done') === 'true';

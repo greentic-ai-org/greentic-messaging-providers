@@ -139,6 +139,15 @@ function boolAttr(value, fallback = false) {
   return value === "" || value === "true" || value === "1";
 }
 
+function normalizeAdaptiveCardWidth(value) {
+  const raw = value == null ? "" : String(value).trim();
+  if (!raw) return "70%";
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return `${raw}%`;
+  if (/^\d+(?:\.\d+)?(?:%|px|rem|em|vw|vh)$/.test(raw)) return raw;
+  if (raw.toLowerCase() === "auto") return "auto";
+  return "70%";
+}
+
 function scriptPublicBaseUrl() {
   const current = import.meta.url || (document.currentScript && document.currentScript.src);
   if (!current) return window.location.origin;
@@ -296,6 +305,7 @@ class GreenticWebchatElement extends HTMLElement {
       "locale",
       "text-input",
       "disable-text-input",
+      "adaptive-card-width",
       "title",
     ];
   }
@@ -375,6 +385,10 @@ class GreenticWebchatElement extends HTMLElement {
       return false;
     }
     return boolAttr(this.getAttribute("text-input"), true);
+  }
+
+  get adaptiveCardWidth() {
+    return normalizeAdaptiveCardWidth(this.getAttribute("adaptive-card-width"));
   }
 
   set launcher(value) {
@@ -486,6 +500,8 @@ class GreenticWebchatElement extends HTMLElement {
     }
     const token = ++this._nativeToken;
     window.__GREENTIC_WEBCHAT_TEXT_INPUT_ENABLED__ = this.textInputEnabled;
+    window.__GREENTIC_WEBCHAT_ADAPTIVE_CARD_WIDTH__ = this.adaptiveCardWidth;
+    document.documentElement.style.setProperty("--greentic-adaptive-card-width", this.adaptiveCardWidth);
     loadNativeApp(this.appBaseUrl(), this.tenant)
       .then((app) => {
         if (token !== this._nativeToken || !this.isConnected || !this._native) return;
@@ -521,6 +537,7 @@ class GreenticWebchatElement extends HTMLElement {
     if (this.renderMode === "iframe") {
       url.searchParams.set("presentation_mode", "embed_webcomponent");
     }
+    url.searchParams.set("adaptiveCardWidth", this.adaptiveCardWidth);
     if (!this.textInputEnabled) url.searchParams.set("textInput", "false");
     return url.toString();
   }
@@ -547,6 +564,9 @@ if (legacyConfig && !document.querySelector("greentic-webchat[data-greentic-lega
   if (legacyConfig.locale) element.setAttribute("locale", legacyConfig.locale);
   if (legacyConfig.textInput === false || legacyConfig.text_input_enabled === false) {
     element.setAttribute("text-input", "false");
+  }
+  if (legacyConfig.adaptiveCardWidth || legacyConfig.adaptive_card_width) {
+    element.setAttribute("adaptive-card-width", legacyConfig.adaptiveCardWidth || legacyConfig.adaptive_card_width);
   }
   if (legacyConfig.openOnLoad) element.setAttribute("open", "");
   const appendLegacyElement = () => document.body.append(element);
