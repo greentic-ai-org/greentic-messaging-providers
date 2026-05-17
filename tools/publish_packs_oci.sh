@@ -41,6 +41,11 @@ MEDIA_TYPE="${MEDIA_TYPE:-application/vnd.greentic.gtpack.v1+zip}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_COMPONENTS="${TARGET_COMPONENTS:-${ROOT_DIR}/target/components}"
 mkdir -p "${ROOT_DIR}/${OUT_DIR}"
+PACKS_LOCK_PATH="${ROOT_DIR}/packs.lock.json"
+PACKS_LOCK_BASE_JSON=""
+if [ -n "${PACK_FILTER}" ] && [ -f "${PACKS_LOCK_PATH}" ]; then
+  PACKS_LOCK_BASE_JSON="$(cat "${PACKS_LOCK_PATH}")"
+fi
 
 if [ -f "${ROOT_DIR}/.env" ]; then
   set -a
@@ -848,5 +853,44 @@ if compgen -G "${ROOT_DIR}/${OUT_DIR}/messaging-*.gtpack" >/dev/null; then
   done
 fi
 
-echo "${packs_json}" | jq '{ packs: . }' > "${ROOT_DIR}/packs.lock.json"
+if [ -n "${PACK_FILTER}" ] && [ -n "${PACKS_LOCK_BASE_JSON}" ]; then
+  python3 - <<'PY' "${PACKS_LOCK_PATH}" "${PACKS_LOCK_BASE_JSON}" "${packs_json}"
+import json
+import sys
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+lock = json.loads(sys.argv[2])
+updates = json.loads(sys.argv[3])
+packs = lock.get("packs")
+if not isinstance(packs, list):
+    packs = []
+
+updates_by_name = {
+    entry["name"]: entry
+    for entry in updates
+    if isinstance(entry, dict) and entry.get("name")
+}
+seen = set()
+merged = []
+for entry in packs:
+    name = entry.get("name") if isinstance(entry, dict) else None
+    if name in updates_by_name:
+        merged.append(updates_by_name[name])
+        seen.add(name)
+    else:
+        merged.append(entry)
+
+for entry in updates:
+    name = entry.get("name") if isinstance(entry, dict) else None
+    if name and name not in seen:
+        merged.append(entry)
+        seen.add(name)
+
+lock["packs"] = merged
+lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+PY
+else
+  echo "${packs_json}" | jq '{ packs: . }' > "${ROOT_DIR}/packs.lock.json"
+fi
 echo "Wrote packs.lock.json"
