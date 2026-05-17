@@ -40,6 +40,8 @@ fn packgen_generates_pack_and_doctor_passes() {
     let dist_dir = out_dir.join("dist");
     fs::create_dir_all(&dist_dir).expect("create dist dir");
 
+    // Accepted risk: test invokes Cargo's compile-time test binary path without a shell.
+    // foxguard: ignore[rs/no-command-injection]
     let status = Command::new(env!("CARGO_BIN_EXE_greentic-messaging-packgen"))
         .current_dir(&root)
         .args(["generate-all", "--spec-dir"])

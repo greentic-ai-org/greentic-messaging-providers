@@ -19,6 +19,8 @@ fn gtc_bin() -> String {
 }
 
 fn run_gtc(args: &[String], bundle: &Path) -> Result<String> {
+    // Accepted risk: interactive test helper invokes an explicit CLI binary without a shell.
+    // foxguard: ignore[rs/no-command-injection]
     let output = Command::new(gtc_bin())
         .args(args)
         .current_dir(workspace_root())
@@ -336,6 +338,8 @@ fn interactive_webchat_gui_manual_session() -> Result<()> {
     );
 
     let args = start_demo_args(&bundle);
+    // Accepted risk: interactive test helper invokes an explicit CLI binary without a shell.
+    // foxguard: ignore[rs/no-command-injection]
     let mut child = Command::new(gtc_bin())
         .args(&args)
         .current_dir(workspace_root())

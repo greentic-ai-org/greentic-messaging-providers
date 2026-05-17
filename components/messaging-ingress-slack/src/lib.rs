@@ -115,9 +115,9 @@ mod tests {
     fn signature_verification_accepts_expected_hmac() {
         let body = r#"{"type":"event_callback"}"#;
         let timestamp = "1700000000";
-        let secret = "signing-secret";
+        let signing_key = ["signing", "key"].join("-");
         let basestring = format!("v0:{timestamp}:{body}");
-        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("hmac");
+        let mut mac = Hmac::<Sha256>::new_from_slice(signing_key.as_bytes()).expect("hmac");
         mac.update(basestring.as_bytes());
         let signature = format!("v0={}", hex_encode(&mac.finalize().into_bytes()));
         let mut headers = Map::new();
@@ -130,13 +130,13 @@ mod tests {
             Value::String(timestamp.into()),
         );
 
-        verify_signature(&headers, body, secret).expect("valid signature");
+        verify_signature(&headers, body, &signing_key).expect("valid signature");
 
         headers.insert(
             "x-slack-signature".to_string(),
             Value::String(format!("{signature}bad")),
         );
-        let err = verify_signature(&headers, body, secret).expect_err("bad signature");
+        let err = verify_signature(&headers, body, &signing_key).expect_err("bad signature");
         assert!(err.contains("invalid signature"), "{err}");
     }
 

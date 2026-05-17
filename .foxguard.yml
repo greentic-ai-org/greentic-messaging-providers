@@ -1,0 +1,152 @@
+scan:
+  ignore_rules:
+    - path: tests/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/unsafe-block
+    - path: benches/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/unsafe-block
+    - path: docs/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/unsafe-block
+    - path: examples/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/unsafe-block
+    - path: fixtures/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/unsafe-block
+    - path: testdata/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/unsafe-block
+    - path: generated/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/unsafe-block
+    - path: crates/provider-tests/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+        - rs/no-hardcoded-secret
+        - rs/unsafe-block
+    - path: crates/greentic-messaging-packgen/tests/
+      rules:
+        - rs/no-command-injection
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+    - path: crates/component_questions/tests/
+      rules:
+        - rs/no-path-traversal
+        - rs/no-unwrap-in-lib
+    - path: components/messaging-ingress-slack/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-ingress-teams/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-ingress-telegram/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-ingress-whatsapp/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-dummy/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-email/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-slack/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-teams/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-telegram/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-webchat-gui/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-webchat/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-webex/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/messaging-provider-whatsapp/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/secrets-probe/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/slack/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/teams/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/telegram-webhook/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/telegram/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/webchat/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/webex-webhook/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/webex/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: components/whatsapp/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
+    - path: crates/component_questions/src/bindings.rs
+      rules:
+        - rs/transmute-usage
+        - rs/unsafe-block
