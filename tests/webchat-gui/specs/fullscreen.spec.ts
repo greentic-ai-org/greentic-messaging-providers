@@ -79,6 +79,15 @@ test.describe('full-screen WebChat', () => {
     await webchat.expectChatReady();
   });
 
+  test('missing tenant config does not invent a login page', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await page.goto('/v1/web/webchat/missing-config-anon/?tenant=missing-config-anon');
+
+    await expect(page.getByText('Sign in to start chatting')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /sign in/i })).toHaveCount(0);
+    await webchat.expectChatReady();
+  });
+
   test('login callback error shows a clear failure state', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: true });

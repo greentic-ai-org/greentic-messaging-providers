@@ -61,27 +61,5 @@
     },
     "locale": "en-US"
   },
-  "auth": {
-    "providers": [
-      {
-        "id": "greentic-demo",
-        "label": "Greentic Demo",
-        "type": "dummy",
-        "enabled": true
-      },
-      {
-        "id": "greentic-microsoft",
-        "label": "Microsoft",
-        "type": "oidc",
-        "enabled": true,
-        "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-        "clientId": "greentic-webchat-demo",
-        "redirectUri": "https://example.com/auth/callback/greentic-microsoft",
-        "scope": "openid profile email",
-        "responseType": "code",
-        "prompt": "login"
-      }
-    ]
-  },
   "skin": "default"
 }
