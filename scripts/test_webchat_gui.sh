@@ -739,6 +739,16 @@ SKIN = os.environ.get("WEBCHAT_TEST_SKIN", "default")
 CONVERSATIONS: dict[str, list[dict]] = {}
 
 
+def conversation_id_from_path(path: str) -> str | None:
+    marker = "/v3/directline/conversations/"
+    if marker not in path:
+        return None
+    tail = path.split(marker, 1)[1].strip("/")
+    if not tail:
+        return None
+    return tail.split("/", 1)[0]
+
+
 def sample_adaptive_card_activity() -> dict:
     return {
         "type": "message",
@@ -863,8 +873,8 @@ class Handler(SimpleHTTPRequestHandler):
             })
             return
 
-        if "/v3/directline/conversations/" in path and path.endswith("/activities"):
-            conversation_id = path.split("/v3/directline/conversations/", 1)[1].split("/", 1)[0]
+        conversation_id = conversation_id_from_path(path)
+        if conversation_id and path.endswith("/activities"):
             activities = CONVERSATIONS.setdefault(conversation_id, [])
             activity_id = f"activity-{len(activities) + 1}"
             activities.append({
@@ -883,15 +893,20 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        if path.endswith("/undefined"):
+            self.send_response(204)
+            self.end_headers()
+            return
+
         if path == "/":
             self.send_response(302)
             self.send_header("Location", "/test.html")
             self.end_headers()
             return
 
-        if "/v3/directline/conversations/" in path and path.endswith("/activities"):
-            conversation_id = path.split("/v3/directline/conversations/", 1)[1].split("/", 1)[0]
-            activities = CONVERSATIONS.setdefault(conversation_id, [])
+        conversation_id = conversation_id_from_path(path)
+        if conversation_id:
+            activities = CONVERSATIONS.setdefault(conversation_id, initial_activities())
             self.send_json({"activities": activities, "watermark": str(len(activities))})
             return
 
