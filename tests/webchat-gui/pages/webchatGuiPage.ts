@@ -32,7 +32,7 @@ export class WebChatGuiPage {
     return `/v1/web/webchat/${tenant}/?tenant=${tenant}`;
   }
 
-  hostUrl(options: { skin: Skin; render: 'native' | 'iframe'; mode: 'inline' | 'launcher' | 'popup'; nav?: boolean; login?: boolean }) {
+  hostUrl(options: { skin: Skin; render: 'native' | 'iframe'; mode: 'inline' | 'launcher' | 'popup'; nav?: boolean; login?: boolean; adaptiveCardWidth?: string }) {
     const params = new URLSearchParams({
       skin: options.skin,
       render: options.render,
@@ -40,6 +40,9 @@ export class WebChatGuiPage {
       nav: options.nav ? '1' : '0',
       login: options.login ? '1' : '0',
     });
+    if (options.adaptiveCardWidth) {
+      params.set('adaptiveCardWidth', options.adaptiveCardWidth);
+    }
     return `/test-pages/host.html?${params.toString()}`;
   }
 
@@ -47,7 +50,7 @@ export class WebChatGuiPage {
     await this.page.goto(this.fullscreenUrl(options));
   }
 
-  async openHost(options: { skin: Skin; render: 'native' | 'iframe'; mode: 'inline' | 'launcher' | 'popup'; nav?: boolean; login?: boolean }) {
+  async openHost(options: { skin: Skin; render: 'native' | 'iframe'; mode: 'inline' | 'launcher' | 'popup'; nav?: boolean; login?: boolean; adaptiveCardWidth?: string }) {
     await this.page.goto(this.hostUrl(options));
     await expect(this.page.getByTestId('host-title')).toBeVisible();
   }

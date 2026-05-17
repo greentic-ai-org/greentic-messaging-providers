@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build/extract the current webchat-gui pack and open a local browser harness.
+# Build/extract the current webchat-gui pack and open a local browser harness
+# with a mocked Direct Line backend and sample Adaptive Card activity.
 #
 # Usage:
 #   scripts/test_webchat_gui.sh [skin] [--embedded] [--login] [--no-text-input] [--no-build] [--no-open] [--port <port>] [--nav-link <spec>] [--nav-links-json <json|@file>] [--demo-links]
@@ -502,7 +503,7 @@ if [ "${EMBEDDED}" -eq 1 ]; then
         <h1>Embedded webchat-gui ${VERSION}</h1>
         <p>
           A host-page preview for the <code>${SKIN}</code> skin. Native mode should feel like part of the page;
-          iframe mode stays isolated for safer drop-in installs.
+          iframe mode stays isolated for safer drop-in installs. The mocked backend sends a sample Adaptive Card.
         </p>
       </header>
       <section class="mode-bar" aria-label="Other modes">
@@ -725,20 +726,123 @@ EOF
 cat > "${WORK_DIR}/server.py" <<'PY'
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import posixpath
+import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 
 ROOT = Path(os.environ["WEBCHAT_TEST_ROOT"]).resolve()
+SKIN = os.environ.get("WEBCHAT_TEST_SKIN", "default")
 CONVERSATIONS: dict[str, list[dict]] = {}
+
+
+def conversation_id_from_path(path: str) -> str | None:
+    marker = "/v3/directline/conversations/"
+    if marker not in path:
+        return None
+    tail = path.split(marker, 1)[1].strip("/")
+    if not tail:
+        return None
+    return tail.split("/", 1)[0]
+
+
+def sample_adaptive_card_activity() -> dict:
+    return {
+        "type": "message",
+        "id": "sample-adaptive-card",
+        "timestamp": "2026-01-01T00:00:00.500Z",
+        "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.5",
+                    "body": [
+                        {
+                            "type": "TextBlock",
+                            "text": "Sample Adaptive Card",
+                            "weight": "Bolder",
+                            "size": "Medium",
+                            "wrap": True,
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Rendered by the local WebChat GUI test harness.",
+                            "isSubtle": True,
+                            "wrap": True,
+                        },
+                        {
+                            "type": "FactSet",
+                            "facts": [
+                                {"title": "Skin", "value": SKIN},
+                                {"title": "Width", "value": "Default adaptive card width"},
+                                {"title": "Backend", "value": "Local mock Direct Line"},
+                            ],
+                        },
+                    ],
+                    "actions": [
+                        {
+                            "type": "Action.OpenUrl",
+                            "title": "Adaptive Cards docs",
+                            "url": "https://adaptivecards.io/",
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+
+def initial_activities() -> list[dict]:
+    return [
+        {
+            "type": "message",
+            "id": "welcome",
+            "timestamp": "2026-01-01T00:00:00.000Z",
+            "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
+            "text": "Local webchat-gui test backend is connected.",
+        },
+        sample_adaptive_card_activity(),
+    ]
 
 
 def json_bytes(value: dict) -> bytes:
     return json.dumps(value).encode("utf-8")
+
+
+def websocket_frame(payload: dict) -> bytes:
+    data = json_bytes(payload)
+    length = len(data)
+    if length < 126:
+        header = bytes([0x81, length])
+    elif length < 65536:
+        header = bytes([0x81, 126, (length >> 8) & 0xFF, length & 0xFF])
+    else:
+        header = bytes([
+            0x81,
+            127,
+            (length >> 56) & 0xFF,
+            (length >> 48) & 0xFF,
+            (length >> 40) & 0xFF,
+            (length >> 32) & 0xFF,
+            (length >> 24) & 0xFF,
+            (length >> 16) & 0xFF,
+            (length >> 8) & 0xFF,
+            length & 0xFF,
+        ])
+    return header + data
+
+
+def websocket_ping_frame() -> bytes:
+    return b"\x89\x00"
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -781,32 +885,31 @@ class Handler(SimpleHTTPRequestHandler):
         if length:
             self.rfile.read(length)
 
-        if path.endswith("/token") or path.endswith("/v3/directline/tokens/generate"):
+        if (
+            path.endswith("/token")
+            or path.endswith("/v3/directline/tokens/generate")
+            or path.endswith("/v3/directline/tokens/refresh")
+        ):
             self.send_json({
                 "token": "local-test-token",
                 "expires_in": 1800,
-                "conversationId": "local-test-conversation",
             })
             return
 
         if path.endswith("/v3/directline/conversations"):
             conversation_id = "local-test-conversation"
-            CONVERSATIONS.setdefault(conversation_id, [{
-                "type": "message",
-                "id": "welcome",
-                "timestamp": "2026-01-01T00:00:00.000Z",
-                "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
-                "text": "Local webchat-gui test backend is connected.",
-            }])
+            CONVERSATIONS.setdefault(conversation_id, initial_activities())
+            host = self.headers.get("Host", "127.0.0.1")
             self.send_json({
                 "conversationId": conversation_id,
                 "token": "local-test-token",
+                "streamUrl": f"ws://{host}/v1/messaging/webchat/{SKIN}/v3/directline/conversations/{conversation_id}/stream",
                 "expires_in": 1800,
             })
             return
 
-        if "/v3/directline/conversations/" in path and path.endswith("/activities"):
-            conversation_id = path.split("/v3/directline/conversations/", 1)[1].split("/", 1)[0]
+        conversation_id = conversation_id_from_path(path)
+        if conversation_id and path.endswith("/activities"):
             activities = CONVERSATIONS.setdefault(conversation_id, [])
             activity_id = f"activity-{len(activities) + 1}"
             activities.append({
@@ -825,19 +928,53 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        if self.headers.get("Upgrade", "").lower() == "websocket":
+            if path.endswith("/undefined"):
+                path = f"/v1/messaging/webchat/{SKIN}/v3/directline/conversations/local-test-conversation/stream"
+            self.handle_websocket(path)
+            return
+
+        if path.endswith("/undefined"):
+            self.send_response(204)
+            self.end_headers()
+            return
+
         if path == "/":
             self.send_response(302)
             self.send_header("Location", "/test.html")
             self.end_headers()
             return
 
-        if "/v3/directline/conversations/" in path and path.endswith("/activities"):
-            conversation_id = path.split("/v3/directline/conversations/", 1)[1].split("/", 1)[0]
-            activities = CONVERSATIONS.setdefault(conversation_id, [])
+        conversation_id = conversation_id_from_path(path)
+        if conversation_id:
+            activities = CONVERSATIONS.setdefault(conversation_id, initial_activities())
             self.send_json({"activities": activities, "watermark": str(len(activities))})
             return
 
         super().do_GET()
+
+    def handle_websocket(self, path: str) -> None:
+        conversation_id = conversation_id_from_path(path) or "local-test-conversation"
+        key = self.headers.get("Sec-WebSocket-Key")
+        if not key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return
+        accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+        activities = CONVERSATIONS.setdefault(conversation_id, initial_activities())
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.wfile.write(websocket_frame({"activities": activities, "watermark": str(len(activities))}))
+        self.wfile.flush()
+        try:
+            while True:
+                time.sleep(15)
+                self.wfile.write(websocket_ping_frame())
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return
 
 
 if __name__ == "__main__":
@@ -855,7 +992,7 @@ else
   URL="http://127.0.0.1:${PORT}/v1/web/webchat/${SKIN}/?tenant=${SKIN}"
 fi
 
-WEBCHAT_TEST_ROOT="${WWW_DIR}" WEBCHAT_TEST_PORT="${PORT}" python3 "${WORK_DIR}/server.py" &
+WEBCHAT_TEST_ROOT="${WWW_DIR}" WEBCHAT_TEST_PORT="${PORT}" WEBCHAT_TEST_SKIN="${SKIN}" python3 "${WORK_DIR}/server.py" &
 SERVER_PID="$!"
 trap 'kill "${SERVER_PID}" 2>/dev/null || true' EXIT
 

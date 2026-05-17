@@ -191,6 +191,7 @@ body {
   align-items: center;
   gap: 0.875rem;
   min-width: 0;
+  margin-right: auto;
 }
 .topbar__brand {
   width: 64px;
@@ -221,7 +222,7 @@ body {
   line-height: 1.2;
 }
 .topbar-nav {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -353,6 +354,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 /* SPA's runtime-bootstrap injects a `.theme-toggle` button into
    #locale-picker-mount; style it to match the brand palette. */

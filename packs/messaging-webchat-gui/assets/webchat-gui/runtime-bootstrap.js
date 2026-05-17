@@ -103,11 +103,98 @@ console.log('[runtime-bootstrap] loaded');
     return window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant);
   }
 
+  function normalizeAdaptiveCardWidth(value) {
+    var raw = value == null ? '' : String(value).trim();
+    if (!raw) return '70%';
+    if (/^\d+(?:\.\d+)?$/.test(raw)) return raw + '%';
+    if (/^\d+(?:\.\d+)?(?:%|px|rem|em|vw|vh)$/.test(raw)) return raw;
+    if (raw.toLowerCase() === 'auto') return 'auto';
+    return '70%';
+  }
+
+  function resolveAdaptiveCardWidth() {
+    var params = new URLSearchParams(window.location.search);
+    return normalizeAdaptiveCardWidth(
+      window.__GREENTIC_WEBCHAT_ADAPTIVE_CARD_WIDTH__ ||
+      params.get('adaptiveCardWidth') ||
+      params.get('adaptive_card_width')
+    );
+  }
+
+  function ensureAdaptiveCardWidthStyle() {
+    var width = resolveAdaptiveCardWidth();
+    document.documentElement.style.setProperty('--greentic-adaptive-card-width', width);
+    var existing = document.getElementById('greentic-adaptive-card-width-style');
+    if (existing) return;
+    var style = document.createElement('style');
+    style.id = 'greentic-adaptive-card-width-style';
+    style.textContent = [
+      '.tenant-widget-surface .ac-adaptiveCard, .embed-webchat-surface .ac-adaptiveCard, .widget-surface .ac-adaptiveCard, .chat-panel__surface .ac-adaptiveCard {',
+      '  width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  max-width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  box-sizing: border-box !important;',
+      '}',
+      '.tenant-widget-surface .webchat__bubble__content, .embed-webchat-surface .webchat__bubble__content, .widget-surface .webchat__bubble__content, .chat-panel__surface .webchat__bubble__content {',
+      '  max-width: 100% !important;',
+      '  box-sizing: border-box !important;',
+      '}',
+      '.greentic-adaptive-card-bubble {',
+      '  width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  max-width: min(100%, var(--greentic-adaptive-card-width, 70%)) !important;',
+      '  box-sizing: border-box !important;',
+      '}',
+      '.greentic-adaptive-card-bubble .ac-adaptiveCard {',
+      '  width: 100% !important;',
+      '  max-width: 100% !important;',
+      '  box-sizing: border-box !important;',
+      '}'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  function markAdaptiveCardBubbles(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var cards = scope.querySelectorAll('.ac-adaptiveCard');
+    for (var i = 0; i < cards.length; i++) {
+      var bubble = cards[i].closest && cards[i].closest('.webchat__bubble__content');
+      if (bubble) {
+        var width = 'min(100%, var(--greentic-adaptive-card-width, 70%))';
+        bubble.classList.add('greentic-adaptive-card-bubble');
+        bubble.style.setProperty('width', width, 'important');
+        bubble.style.setProperty('max-width', width, 'important');
+        bubble.style.setProperty('box-sizing', 'border-box', 'important');
+        cards[i].style.setProperty('width', '100%', 'important');
+        cards[i].style.setProperty('max-width', '100%', 'important');
+        cards[i].style.setProperty('box-sizing', 'border-box', 'important');
+      }
+    }
+  }
+
+  function ensureAdaptiveCardWidthObserver() {
+    markAdaptiveCardBubbles(document);
+    if (window.__GREENTIC_ADAPTIVE_CARD_WIDTH_OBSERVER__) return;
+    window.__GREENTIC_ADAPTIVE_CARD_WIDTH_OBSERVER__ = true;
+    if (typeof MutationObserver === 'undefined') return;
+    new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+          var node = mutations[i].addedNodes[j];
+          if (node && node.nodeType === 1) markAdaptiveCardBubbles(node);
+        }
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   var tenant = resolveTenant();
   var env = resolveEnv();
   var selectedLocale = resolveLocale();
   var guiBase = resolveGuiBase(tenant);
   console.log('[runtime-bootstrap] tenant:', tenant, 'env:', env, 'locale:', selectedLocale || '(default)');
+  document.documentElement.style.setProperty('--greentic-adaptive-card-width', resolveAdaptiveCardWidth());
+  setTimeout(function () {
+    ensureAdaptiveCardWidthStyle();
+    ensureAdaptiveCardWidthObserver();
+  }, 0);
 
   // Detect OAuth completion redirect (?oauth_done=true)
   var oauthDone = new URLSearchParams(window.location.search).get('oauth_done') === 'true';
@@ -287,6 +374,27 @@ console.log('[runtime-bootstrap] loaded');
       sessionStorage.removeItem(oauthStorageKey('user_picture'));
       sessionStorage.removeItem(oauthStorageKey('provider'));
     } catch (_) { /* sessionStorage unavailable */ }
+  }
+
+  function getAppAuthSession() {
+    try {
+      var raw = localStorage.getItem('webchat_auth_session');
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      return parsed && parsed.isAuthenticated ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function clearAppAuthSession() {
+    try {
+      localStorage.setItem('webchat_auth_session', JSON.stringify({ isAuthenticated: false }));
+    } catch (_) { /* localStorage unavailable */ }
+  }
+
+  function hasAnyAuthSession() {
+    return !!(getOAuthSession() || getAppAuthSession());
   }
 
   /**
@@ -545,6 +653,7 @@ console.log('[runtime-bootstrap] loaded');
 
   function performLogout() {
     clearOAuthSession();
+    clearAppAuthSession();
     window.location.reload();
   }
 
@@ -628,14 +737,35 @@ console.log('[runtime-bootstrap] loaded');
    */
   // Flag: should inject logout when locale picker mounts
   window.__OAUTH_SHOW_LOGOUT__ = false;
+  var logoutObserverStarted = false;
+  var logoutObserverTimer = null;
 
   function injectLogoutButton() {
     window.__OAUTH_SHOW_LOGOUT__ = true;
+    startLogoutObserver();
     tryInjectLogout();
+  }
+
+  function startLogoutObserver() {
+    if (logoutObserverStarted || typeof MutationObserver === 'undefined') return;
+    if (!document.body) {
+      window.addEventListener('DOMContentLoaded', startLogoutObserver, { once: true });
+      return;
+    }
+    logoutObserverStarted = true;
+    new MutationObserver(function () {
+      if (!window.__OAUTH_SHOW_LOGOUT__) return;
+      if (logoutObserverTimer) return;
+      logoutObserverTimer = setTimeout(function () {
+        logoutObserverTimer = null;
+        tryInjectLogout();
+      }, 50);
+    }).observe(document.body, { childList: true, subtree: true });
   }
 
   function tryInjectLogout() {
     if (document.getElementById('greentic-logout-btn')) return;
+    if (!hasAnyAuthSession()) return;
 
     // Prefer greentic-header-controls (built by locale picker), fallback to raw mount point
     var container = document.getElementById('greentic-header-controls')
@@ -648,28 +778,6 @@ console.log('[runtime-bootstrap] loaded');
       }
       appendLogoutToContainer(container);
       return;
-    }
-    // Element not in DOM yet — observe for it
-    if (typeof MutationObserver !== 'undefined') {
-      var observer = new MutationObserver(function () {
-        if (document.getElementById('greentic-logout-btn')) {
-          observer.disconnect();
-          return;
-        }
-        var c = document.getElementById('greentic-header-controls')
-          || document.getElementById('locale-picker-mount');
-        if (c) {
-          if (c.id === 'greentic-header-controls') {
-            var d = document.createElement('span');
-            d.className = 'topbar__divider';
-            c.appendChild(d);
-          }
-          appendLogoutToContainer(c);
-          observer.disconnect();
-        }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-      setTimeout(function () { observer.disconnect(); }, 10000);
     }
   }
 
@@ -725,12 +833,10 @@ console.log('[runtime-bootstrap] loaded');
     fetch(authConfigUrl)
       .then(function (response) {
         if (!response.ok) {
-          if (shouldUseTenantAuthFallback()) {
-            console.log('[oauth] auth/config not available, falling back to tenant config for local login test');
-            return loadAuthFromTenantConfig();
-          }
-          console.log('[oauth] auth/config not available, skipping auth gate');
-          return { enabled: false };
+          console.log('[oauth] auth/config not available, falling back to tenant config');
+          return loadAuthFromTenantConfig().then(function (fallback) {
+            return fallback || { enabled: false };
+          });
         }
         return response.json();
       })
@@ -739,17 +845,12 @@ console.log('[runtime-bootstrap] loaded');
         return applyAuthConfig(authConfig);
       })
       .catch(function (err) {
-        if (shouldUseTenantAuthFallback()) {
-          console.warn('[oauth] failed to fetch auth config, trying tenant config for local login test:', err);
-          return loadAuthFromTenantConfig().then(function (fallback) {
-            if (fallback) return applyAuthConfig(fallback);
-            window.__OAUTH_CONFIG__ = { enabled: false };
-            window.__OAUTH_CHECKED__ = true;
-          });
-        }
-        console.warn('[oauth] failed to fetch auth config, proceeding without auth:', err);
-        window.__OAUTH_CONFIG__ = { enabled: false };
-        window.__OAUTH_CHECKED__ = true;
+        console.warn('[oauth] failed to fetch auth config, trying tenant config:', err);
+        return loadAuthFromTenantConfig().then(function (fallback) {
+          if (fallback) return applyAuthConfig(fallback);
+          window.__OAUTH_CONFIG__ = { enabled: false };
+          window.__OAUTH_CHECKED__ = true;
+        });
       });
   }
 
@@ -770,11 +871,10 @@ console.log('[runtime-bootstrap] loaded');
         if (!data || !data.auth) return null;
         var enabledProviders = (data.auth.providers || []).filter(function (p) { return p.enabled; });
         if (enabledProviders.length === 0) return null;
-        // Has real OIDC providers (not just dummy)?
-        var hasOidc = enabledProviders.some(function (p) { return p.type === 'oidc'; });
         return {
-          enabled: hasOidc || new URLSearchParams(window.location.search).has('loginRequired'),
-          providers: data.auth.providers
+          enabled: enabledProviders.length > 0,
+          providers: data.auth.providers,
+          source: 'tenant-config'
         };
       })
       .catch(function () { return null; });
@@ -806,6 +906,14 @@ console.log('[runtime-bootstrap] loaded');
 
         if (!authConfig.enabled) {
           return; // No auth required, SPA proceeds normally
+        }
+
+        if (authConfig.source === 'tenant-config') {
+          // The React app renders the skin-aware login page from tenant
+          // config. Do not stack the legacy runtime OAuth overlay on top.
+          window.__OAUTH_SHOW_LOGOUT__ = true;
+          tryInjectLogout();
+          return;
         }
 
         // Step 1: Check if returning from OAuth callback (?code=...&state=...)
@@ -871,7 +979,6 @@ console.log('[runtime-bootstrap] loaded');
       var record = {
         token: payload.token,
         expires_in: payload.expires_in,
-        conversationId: payload.conversationId || null,
         expires_at: Date.now() + ttlMs,
       };
       localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(record));
@@ -950,7 +1057,6 @@ console.log('[runtime-bootstrap] loaded');
         return Promise.resolve(new Response(JSON.stringify({
           token: cached.token,
           expires_in: cached.expires_in,
-          conversationId: cached.conversationId,
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -996,12 +1102,15 @@ console.log('[runtime-bootstrap] loaded');
       if (savedConv) {
         try {
           var conv = JSON.parse(savedConv);
-          if (conv.conversationId && conv.timestamp && (Date.now() - conv.timestamp) < 1800000) {
+          if (conv.conversationId && conv.streamUrl && conv.timestamp && (Date.now() - conv.timestamp) < 1800000) {
             console.log('[bootstrap] reusing saved conversation:', conv.conversationId);
             return Promise.resolve(new Response(JSON.stringify(conv), {
               status: 200,
               headers: { 'Content-Type': 'application/json' }
             }));
+          } else if (conv.conversationId && !conv.streamUrl) {
+            try { localStorage.removeItem('greentic_dl_conversation'); } catch (_) {}
+            console.log('[bootstrap] ignoring saved conversation without streamUrl:', conv.conversationId);
           }
         } catch (_) {}
       }
