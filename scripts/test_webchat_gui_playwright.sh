@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build the webchat-gui pack inputs and run the Playwright E2E suite.
+# Build the webchat-gui pack inputs and run the Playwright E2E suite,
+# including the mocked sample Adaptive Card coverage.
 
 set -euo pipefail
 

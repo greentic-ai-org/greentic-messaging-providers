@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build/extract the current webchat-gui pack and open a local browser harness.
+# Build/extract the current webchat-gui pack and open a local browser harness
+# with a mocked Direct Line backend and sample Adaptive Card activity.
 #
 # Usage:
 #   scripts/test_webchat_gui.sh [skin] [--embedded] [--login] [--no-text-input] [--no-build] [--no-open] [--port <port>] [--nav-link <spec>] [--nav-links-json <json|@file>] [--demo-links]
@@ -502,7 +503,7 @@ if [ "${EMBEDDED}" -eq 1 ]; then
         <h1>Embedded webchat-gui ${VERSION}</h1>
         <p>
           A host-page preview for the <code>${SKIN}</code> skin. Native mode should feel like part of the page;
-          iframe mode stays isolated for safer drop-in installs.
+          iframe mode stays isolated for safer drop-in installs. The mocked backend sends a sample Adaptive Card.
         </p>
       </header>
       <section class="mode-bar" aria-label="Other modes">
@@ -734,7 +735,70 @@ from urllib.parse import unquote, urlparse
 
 
 ROOT = Path(os.environ["WEBCHAT_TEST_ROOT"]).resolve()
+SKIN = os.environ.get("WEBCHAT_TEST_SKIN", "default")
 CONVERSATIONS: dict[str, list[dict]] = {}
+
+
+def sample_adaptive_card_activity() -> dict:
+    return {
+        "type": "message",
+        "id": "sample-adaptive-card",
+        "timestamp": "2026-01-01T00:00:00.500Z",
+        "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.5",
+                    "body": [
+                        {
+                            "type": "TextBlock",
+                            "text": "Sample Adaptive Card",
+                            "weight": "Bolder",
+                            "size": "Medium",
+                            "wrap": True,
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Rendered by the local WebChat GUI test harness.",
+                            "isSubtle": True,
+                            "wrap": True,
+                        },
+                        {
+                            "type": "FactSet",
+                            "facts": [
+                                {"title": "Skin", "value": SKIN},
+                                {"title": "Width", "value": "Default adaptive card width"},
+                                {"title": "Backend", "value": "Local mock Direct Line"},
+                            ],
+                        },
+                    ],
+                    "actions": [
+                        {
+                            "type": "Action.OpenUrl",
+                            "title": "Adaptive Cards docs",
+                            "url": "https://adaptivecards.io/",
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+
+def initial_activities() -> list[dict]:
+    return [
+        {
+            "type": "message",
+            "id": "welcome",
+            "timestamp": "2026-01-01T00:00:00.000Z",
+            "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
+            "text": "Local webchat-gui test backend is connected.",
+        },
+        sample_adaptive_card_activity(),
+    ]
 
 
 def json_bytes(value: dict) -> bytes:
@@ -791,13 +855,7 @@ class Handler(SimpleHTTPRequestHandler):
 
         if path.endswith("/v3/directline/conversations"):
             conversation_id = "local-test-conversation"
-            CONVERSATIONS.setdefault(conversation_id, [{
-                "type": "message",
-                "id": "welcome",
-                "timestamp": "2026-01-01T00:00:00.000Z",
-                "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
-                "text": "Local webchat-gui test backend is connected.",
-            }])
+            CONVERSATIONS.setdefault(conversation_id, initial_activities())
             self.send_json({
                 "conversationId": conversation_id,
                 "token": "local-test-token",
@@ -855,7 +913,7 @@ else
   URL="http://127.0.0.1:${PORT}/v1/web/webchat/${SKIN}/?tenant=${SKIN}"
 fi
 
-WEBCHAT_TEST_ROOT="${WWW_DIR}" WEBCHAT_TEST_PORT="${PORT}" python3 "${WORK_DIR}/server.py" &
+WEBCHAT_TEST_ROOT="${WWW_DIR}" WEBCHAT_TEST_PORT="${PORT}" WEBCHAT_TEST_SKIN="${SKIN}" python3 "${WORK_DIR}/server.py" &
 SERVER_PID="$!"
 trap 'kill "${SERVER_PID}" 2>/dev/null || true' EXIT
 
