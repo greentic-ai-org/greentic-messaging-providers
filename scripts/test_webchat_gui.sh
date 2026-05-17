@@ -893,7 +893,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({
                 "token": "local-test-token",
                 "expires_in": 1800,
-                "conversationId": "local-test-conversation",
             })
             return
 

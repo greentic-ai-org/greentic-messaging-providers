@@ -958,7 +958,6 @@ console.log('[runtime-bootstrap] loaded');
       var record = {
         token: payload.token,
         expires_in: payload.expires_in,
-        conversationId: payload.conversationId || null,
         expires_at: Date.now() + ttlMs,
       };
       localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(record));
@@ -1037,7 +1036,6 @@ console.log('[runtime-bootstrap] loaded');
         return Promise.resolve(new Response(JSON.stringify({
           token: cached.token,
           expires_in: cached.expires_in,
-          conversationId: cached.conversationId,
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
