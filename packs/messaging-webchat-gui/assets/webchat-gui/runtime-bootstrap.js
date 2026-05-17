@@ -1022,18 +1022,26 @@ console.log('[runtime-bootstrap] loaded');
       return originalFetch(input, init).then(async function (response) {
         var tenantId = decodeURIComponent(url.pathname.split('/').pop().replace(/\.json$/i, ''));
         var locale = selectedLocale || 'en-US';
-        var payload;
-        if (response.ok) {
-          // Use actual tenant config file and patch missing fields
-          payload = await response.json();
-        } else {
-          // Fallback: generate minimal config if file doesn't exist
-          payload = {
+        var payload = null;
+        var fallbackPayload = function () {
+          return {
             tenant_id: tenantId,
             legacy_skin: 'default',
             branding: { company_name: tenantId }
           };
+        };
+        var contentType = response.headers && response.headers.get ? (response.headers.get('Content-Type') || '') : '';
+        if (response.ok && /(^|[;\s])application\/json($|[;\s])|\+json($|[;\s])/i.test(contentType)) {
+          try {
+            // Use actual tenant config file and patch missing fields
+            payload = await response.json();
+          } catch (err) {
+            console.warn('[bootstrap] tenant config JSON parse failed, using route tenant fallback:', tenantId, err);
+          }
+        } else if (response.ok) {
+          console.warn('[bootstrap] tenant config returned non-JSON content, using route tenant fallback:', tenantId, contentType || '<unknown>');
         }
+        if (!payload) payload = fallbackPayload();
         // Ensure directline config is set
         payload.webchat = payload.webchat || {};
         payload.webchat.directline = payload.webchat.directline || {};
