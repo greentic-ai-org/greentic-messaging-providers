@@ -12,7 +12,6 @@ use crate::bindings::greentic::http::http_client as client;
 use crate::config::{get_secret_string, put_secret_string};
 use crate::{
     DEFAULT_APP_ID_KEY, DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
-    LEGACY_CONFIG_TOKEN_KEY,
 };
 
 /// Rotate an expired Slack configuration token using the refresh token.
@@ -110,23 +109,9 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         .map(String::from)
         .or_else(|| get_secret_string(DEFAULT_APP_ID_KEY).ok());
 
-    // Resolve config access token: new input/secret first, then legacy names.
-    let config_token_input = parsed
-        .get("slack_configuration_access_token")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .or_else(|| {
-            parsed
-                .get("slack_configuration_token")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(String::from)
-        })
-        .or_else(|| get_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY).ok())
-        .or_else(|| get_secret_string(LEGACY_CONFIG_TOKEN_KEY).ok());
+    // Resolve config access token from the current input/secret names only.
+    let config_token_input = config_access_token_from_input(&parsed)
+        .or_else(|| get_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY).ok());
 
     // Resolve refresh token: input field → secrets store fallback.
     let refresh_token = parsed
@@ -320,7 +305,6 @@ fn try_refresh_token(_config_token: &str, refresh_token: Option<&str>) -> Result
     match rotate_config_token(refresh_token) {
         Ok((new_token, new_refresh)) => {
             put_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY, &new_token);
-            put_secret_string(LEGACY_CONFIG_TOKEN_KEY, &new_token);
             put_secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY, &new_refresh);
             Ok(new_token)
         }
@@ -334,16 +318,49 @@ fn try_refresh_token(_config_token: &str, refresh_token: Option<&str>) -> Result
     }
 }
 
+fn config_access_token_from_input(parsed: &Value) -> Option<String> {
+    parsed
+        .get("slack_configuration_access_token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
 /// Update Slack manifest JSON with webhook URLs for event subscriptions
 /// and interactivity.
 fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
-    let settings = manifest
+    let manifest_obj = manifest.as_object_mut();
+    let Some(manifest_obj) = manifest_obj else { return };
+
+    let features = manifest_obj
+        .entry("features")
+        .or_insert_with(|| json!({}))
+        .as_object_mut();
+    if let Some(features) = features {
+        let app_home = features.entry("app_home").or_insert_with(|| json!({}));
+        if let Some(obj) = app_home.as_object_mut() {
+            obj.insert("messages_tab_enabled".to_string(), json!(true));
+            obj.insert("messages_tab_read_only_enabled".to_string(), json!(false));
+        }
+    }
+
+    let oauth_config = manifest_obj
+        .entry("oauth_config")
+        .or_insert_with(|| json!({}))
+        .as_object_mut();
+    if let Some(oauth_config) = oauth_config {
+        let scopes = oauth_config.entry("scopes").or_insert_with(|| json!({}));
+        if let Some(scopes_obj) = scopes.as_object_mut() {
+            let bot_scopes = scopes_obj.entry("bot").or_insert_with(|| json!([]));
+            push_unique_string(bot_scopes, "im:history");
+        }
+    }
+
+    let settings = manifest_obj
+        .entry("settings")
+        .or_insert_with(|| json!({}))
         .as_object_mut()
-        .and_then(|m| {
-            m.entry("settings")
-                .or_insert_with(|| json!({}))
-                .as_object_mut()
-        })
         .map(|s| s as &mut serde_json::Map<String, Value>);
     let Some(settings) = settings else { return };
 
@@ -353,6 +370,8 @@ fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
         .or_insert_with(|| json!({}));
     if let Some(obj) = event_subs.as_object_mut() {
         obj.insert("request_url".to_string(), json!(webhook_url));
+        let bot_events = obj.entry("bot_events").or_insert_with(|| json!([]));
+        push_unique_string(bot_events, "message.im");
     }
 
     // interactivity.request_url + is_enabled
@@ -360,6 +379,16 @@ fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
     if let Some(obj) = interactivity.as_object_mut() {
         obj.insert("request_url".to_string(), json!(webhook_url));
         obj.insert("is_enabled".to_string(), json!(true));
+    }
+}
+
+fn push_unique_string(value: &mut Value, item: &str) {
+    let Value::Array(items) = value else {
+        *value = json!([item]);
+        return;
+    };
+    if !items.iter().any(|value| value.as_str() == Some(item)) {
+        items.push(Value::String(item.to_string()));
     }
 }
 
@@ -394,8 +423,32 @@ mod tests {
         update_manifest_urls(&mut manifest, "https://chat.example.com/hook");
 
         assert_eq!(
+            manifest["features"]["app_home"]["messages_tab_enabled"],
+            true
+        );
+        assert_eq!(
+            manifest["features"]["app_home"]["messages_tab_read_only_enabled"],
+            false
+        );
+        assert_eq!(
+            manifest["oauth_config"]["scopes"]["bot"]
+                .as_array()
+                .expect("bot scopes")
+                .iter()
+                .any(|scope| scope.as_str() == Some("im:history")),
+            true
+        );
+        assert_eq!(
             manifest["settings"]["event_subscriptions"]["request_url"],
             "https://chat.example.com/hook"
+        );
+        assert_eq!(
+            manifest["settings"]["event_subscriptions"]["bot_events"]
+                .as_array()
+                .expect("bot events")
+                .iter()
+                .any(|event| event.as_str() == Some("message.im")),
+            true
         );
         assert_eq!(
             manifest["settings"]["interactivity"]["request_url"],
@@ -437,5 +490,15 @@ mod tests {
                 .unwrap_or_default()
                 .contains("public_base_url")
         );
+    }
+
+    #[test]
+    fn config_access_token_parser_ignores_legacy_configuration_token_field_name() {
+        let parsed = json!({
+            "slack_configuration_token": "xoxe-legacy",
+            "slack_configuration_refresh_token": "xoxe-refresh"
+        });
+
+        assert_eq!(config_access_token_from_input(&parsed), None);
     }
 }
