@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Build provider component WASMs and provider packs locally.
 #
+# Requires bash 4+ (uses `mapfile` and `declare -A`). macOS ships bash 3.2,
+# so install a modern bash first: `brew install bash`. The shebang above
+# resolves `bash` via PATH, so Homebrew's bash is picked up automatically.
+#
 # Usage:
 #   scripts/build_providers.sh [provider]
 #

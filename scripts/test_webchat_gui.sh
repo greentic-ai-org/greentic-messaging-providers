@@ -2,6 +2,11 @@
 # Build/extract the current webchat-gui pack and open a local browser harness
 # with a mocked Direct Line backend and sample Adaptive Card activity.
 #
+# Requires bash 4+ (this script and scripts/build_providers.sh use `mapfile`
+# and `declare -A`). macOS ships bash 3.2, so install a modern bash first:
+# `brew install bash`. The shebang resolves `bash` via PATH, so Homebrew's
+# bash is picked up automatically.
+#
 # Usage:
 #   scripts/test_webchat_gui.sh [skin] [--embedded] [--login] [--no-text-input] [--no-build] [--no-open] [--port <port>] [--nav-link <spec>] [--nav-links-json <json|@file>] [--demo-links]
 #
@@ -244,16 +249,26 @@ if demo_links:
 nav_links.extend(parse_nav_json(nav_links_json))
 nav_links.extend(parse_nav_spec(spec) for spec in nav_specs)
 
+default_path = asset_dir / "config" / "tenants" / "default.json"
 if tenant_path.exists():
+    # A tenant-specific file ships in the pack — use it as-is, the same as
+    # greentic-setup's resolve_or_scaffold_tenant_config does.
     config = json.loads(tenant_path.read_text(encoding="utf-8"))
+elif default_path.exists():
+    # Mirror greentic-setup: scaffold the per-tenant config by copying
+    # default.json and rewriting tenant_id. This is the path `gtc setup`
+    # takes for every new tenant. Exercising it here (instead of inventing a
+    # config) means the harness fails the same way gtc does when the pack
+    # forgets to ship default.json — see crates/provider-common's
+    # webchat_gui_pack_ships_default_tenant_config test.
+    config = json.loads(default_path.read_text(encoding="utf-8"))
+    config["tenant_id"] = skin
 else:
-    config = {
-        "tenant_id": skin,
-        "skin": skin,
-        "legacy_skin": skin,
-        "branding": {"company_name": skin},
-        "webchat": {"directline": {}, "locale": "en-US"},
-    }
+    raise SystemExit(
+        f"missing scaffold template {default_path} — the messaging-webchat-gui "
+        "pack must ship config/tenants/default.json; greentic-setup cannot "
+        "scaffold per-tenant configs without it"
+    )
 
 config["tenant_id"] = config.get("tenant_id") or skin
 config["skin"] = skin
