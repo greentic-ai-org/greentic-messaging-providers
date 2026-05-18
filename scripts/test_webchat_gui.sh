@@ -278,6 +278,18 @@ if login_required:
     providers = auth.get("providers")
     if not isinstance(providers, list) or not providers:
         auth["providers"] = [{"id": "guest", "label": "Continue as Guest", "type": "dummy", "enabled": True}]
+    else:
+        guest = None
+        for provider in providers:
+            if isinstance(provider, dict) and provider.get("id") == "guest":
+                guest = provider
+                break
+        if guest is None:
+            providers.insert(0, {"id": "guest", "label": "Continue as Guest", "type": "dummy", "enabled": True})
+        else:
+            guest["type"] = "dummy"
+            guest["enabled"] = True
+            guest.setdefault("label", "Continue as Guest")
 else:
     config.pop("auth", None)
 webchat = config.setdefault("webchat", {})
@@ -755,6 +767,7 @@ from urllib.parse import unquote, urlparse
 ROOT = Path(os.environ["WEBCHAT_TEST_ROOT"]).resolve()
 SKIN = os.environ.get("WEBCHAT_TEST_SKIN", "default")
 CONVERSATIONS: dict[str, list[dict]] = {}
+STREAMS: dict[str, list] = {}
 
 
 def conversation_id_from_path(path: str) -> str | None:
@@ -795,6 +808,11 @@ def sample_adaptive_card_activity() -> dict:
                             "wrap": True,
                         },
                         {
+                            "type": "TextBlock",
+                            "text": "Try the [Adaptive Cards reference](https://adaptivecards.io/) or email [support@greentic.ai](mailto:support@greentic.ai).",
+                            "wrap": True,
+                        },
+                        {
                             "type": "FactSet",
                             "facts": [
                                 {"title": "Skin", "value": SKIN},
@@ -805,10 +823,53 @@ def sample_adaptive_card_activity() -> dict:
                     ],
                     "actions": [
                         {
-                            "type": "Action.OpenUrl",
-                            "title": "Adaptive Cards docs",
-                            "url": "https://adaptivecards.io/",
+                            "type": "Action.Submit",
+                            "title": "Show next card",
+                            "data": {
+                                "action": "show_followup_card",
+                            },
                         }
+                    ],
+                },
+            }
+        ],
+    }
+
+
+def followup_adaptive_card_activity(activity_id: str) -> dict:
+    return {
+        "type": "message",
+        "id": activity_id,
+        "timestamp": "2026-01-01T00:00:01.500Z",
+        "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.5",
+                    "body": [
+                        {
+                            "type": "TextBlock",
+                            "text": "Second Adaptive Card",
+                            "weight": "Bolder",
+                            "size": "Medium",
+                            "wrap": True,
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "This card was returned by the local mock Direct Line backend after clicking the first card button.",
+                            "wrap": True,
+                        },
+                        {
+                            "type": "FactSet",
+                            "facts": [
+                                {"title": "Action", "value": "Action.Submit"},
+                                {"title": "Skin", "value": SKIN},
+                                {"title": "Backend", "value": "Local mock Direct Line"},
+                            ],
+                        },
                     ],
                 },
             }
@@ -860,6 +921,20 @@ def websocket_ping_frame() -> bytes:
     return b"\x89\x00"
 
 
+def broadcast_activities(conversation_id: str, activities: list[dict], watermark: str) -> None:
+    frame = websocket_frame({"activities": activities, "watermark": watermark})
+    streams = STREAMS.get(conversation_id, [])
+    for stream in list(streams):
+        try:
+            stream.write(frame)
+            stream.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            try:
+                streams.remove(stream)
+            except ValueError:
+                pass
+
+
 class Handler(SimpleHTTPRequestHandler):
     server_version = "GreenticWebChatGuiTest/1.0"
 
@@ -897,8 +972,13 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         length = int(self.headers.get("content-length") or 0)
-        if length:
-            self.rfile.read(length)
+        body_bytes = self.rfile.read(length) if length else b""
+        body_json = {}
+        if body_bytes:
+            try:
+                body_json = json.loads(body_bytes.decode("utf-8"))
+            except json.JSONDecodeError:
+                body_json = {}
 
         if (
             path.endswith("/token")
@@ -927,13 +1007,19 @@ class Handler(SimpleHTTPRequestHandler):
         if conversation_id and path.endswith("/activities"):
             activities = CONVERSATIONS.setdefault(conversation_id, [])
             activity_id = f"activity-{len(activities) + 1}"
-            activities.append({
-                "type": "message",
-                "id": activity_id,
-                "timestamp": "2026-01-01T00:00:01.000Z",
-                "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
-                "text": "Echo from local test backend.",
-            })
+            action_value = body_json.get("value") if isinstance(body_json, dict) else None
+            if isinstance(action_value, dict) and action_value.get("action") == "show_followup_card":
+                next_activity = followup_adaptive_card_activity(activity_id)
+            else:
+                next_activity = {
+                    "type": "message",
+                    "id": activity_id,
+                    "timestamp": "2026-01-01T00:00:01.000Z",
+                    "from": {"id": "greentic-test-bot", "name": "Greentic Test Bot"},
+                    "text": "Echo from local test backend.",
+                }
+            activities.append(next_activity)
+            broadcast_activities(conversation_id, [next_activity], str(len(activities)))
             self.send_json({"id": activity_id})
             return
 
@@ -981,6 +1067,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Connection", "Upgrade")
         self.send_header("Sec-WebSocket-Accept", accept)
         self.end_headers()
+        STREAMS.setdefault(conversation_id, []).append(self.wfile)
         self.wfile.write(websocket_frame({"activities": activities, "watermark": str(len(activities))}))
         self.wfile.flush()
         try:
@@ -989,6 +1076,10 @@ class Handler(SimpleHTTPRequestHandler):
                 self.wfile.write(websocket_ping_frame())
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, OSError):
+            try:
+                STREAMS.get(conversation_id, []).remove(self.wfile)
+            except ValueError:
+                pass
             return
 
 

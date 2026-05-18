@@ -55,6 +55,7 @@ function tenantScenario(tenant) {
     skin,
     nav: normalized.includes('nav'),
     login: normalized.includes('login'),
+    tenantConfigLogin: normalized.includes('tenant-config-login'),
   };
 }
 
@@ -80,6 +81,13 @@ function tenantConfig(tenant) {
   base.navigation = scenario.nav ? { menu: demoLinks } : { menu: [] };
   base.nav_links = scenario.nav ? demoLinks : [];
   delete base.auth;
+  if (scenario.tenantConfigLogin) {
+    base.auth = {
+      providers: [
+        { id: 'guest', label: 'Continue as Guest', type: 'dummy', enabled: true },
+      ],
+    };
+  }
   return base;
 }
 
@@ -143,6 +151,10 @@ const server = http.createServer((req, res) => {
   if (urlPath.endsWith('/auth/config')) {
     const tenant = urlPath.split('/v1/messaging/webchat/')[1]?.split('/')[0] || 'default';
     const scenario = tenantScenario(tenant);
+    if (scenario.tenantConfigLogin) {
+      sendJson(res, 404, { error: 'auth config unavailable for tenant-config fallback scenario' });
+      return;
+    }
     sendJson(res, 200, scenario.login
       ? { enabled: true, providers: [{ id: 'test-login', label: 'Test Login', type: 'dummy', enabled: true }] }
       : { enabled: false });

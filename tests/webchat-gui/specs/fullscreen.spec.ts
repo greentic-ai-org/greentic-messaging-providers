@@ -71,6 +71,19 @@ test.describe('full-screen WebChat', () => {
     await expect(page.evaluate(() => sessionStorage.getItem('greentic_oauth_token_handle'))).resolves.toBe('guest');
   });
 
+  test('tenant-config login fallback appears when auth config endpoint is unavailable', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await page.goto('/v1/web/webchat/tenant-config-login/?tenant=tenant-config-login&loginRequired=1');
+
+    await expect(page.getByRole('heading', { name: /sign in to greentic/i })).toBeVisible();
+    await page.getByRole('button', { name: /continue as guest/i }).click();
+    await webchat.expectChatReady();
+    await expect(page.evaluate(() => {
+      const raw = localStorage.getItem('webchat_auth_session');
+      return raw ? JSON.parse(raw).isAuthenticated === true : false;
+    })).resolves.toBe(true);
+  });
+
   test('anonymous mode skips the login page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
@@ -92,6 +105,107 @@ test.describe('full-screen WebChat', () => {
       return bubble.getBoundingClientRect().width / transcript.getBoundingClientRect().width;
     })).toBeCloseTo(0.7, 1);
   });
+
+  test('default skin uses Greentic green adaptive card button styling', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
+    await webchat.expectChatReady();
+
+    const action = page.getByTestId('adaptive-card-action');
+    await expect(action).toBeVisible();
+    await expect.poll(async () => action.evaluate((button) => {
+      const style = getComputedStyle(button);
+      const theme = document.documentElement.getAttribute('data-theme');
+      if (theme === 'dark') {
+        return style.color === 'rgb(209, 250, 229)' && style.borderColor === 'rgba(16, 185, 129, 0.45)';
+      }
+
+      const probe = document.createElement('span');
+      const rootStyle = getComputedStyle(document.documentElement);
+      probe.style.color = rootStyle.getPropertyValue('--brand-dark').trim();
+      probe.style.borderColor = rootStyle.getPropertyValue('--brand-border').trim();
+      document.body.appendChild(probe);
+      const expectedColor = getComputedStyle(probe).color;
+      const expectedBorder = getComputedStyle(probe).borderColor;
+      probe.remove();
+      return style.color === expectedColor && style.borderColor === expectedBorder;
+    })).toBe(true);
+  });
+
+  test('3aigent light mode keeps adaptive card text readable', async ({ page }) => {
+    await page.addInitScript(() => {
+      sessionStorage.setItem('greentic-theme', 'light');
+    });
+    const webchat = new WebChatGuiPage(page);
+    await webchat.openFullscreen({ skin: '3aigent', nav: false, login: false });
+    await webchat.expectChatReady();
+
+    const textBlock = page.getByTestId('adaptive-card').locator('.ac-textBlock').first();
+    await expect(textBlock).toBeVisible();
+    await expect.poll(async () => textBlock.evaluate((node) => {
+      const rootStyle = getComputedStyle(document.documentElement);
+      const probe = document.createElement('span');
+      probe.style.color = rootStyle.getPropertyValue('--text-primary').trim();
+      document.body.appendChild(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return getComputedStyle(node).color === expected;
+    })).toBe(true);
+  });
+
+  for (const skin of skins) {
+    test(`${skin} skin uses brand color for adaptive card links`, async ({ page }) => {
+      const webchat = new WebChatGuiPage(page);
+      await webchat.openFullscreen({ skin, nav: false, login: false });
+      await webchat.expectChatReady();
+
+      const link = page.getByTestId('adaptive-card-link');
+      const email = page.getByTestId('adaptive-card-email');
+      await expect(link).toHaveAttribute('href', 'https://adaptivecards.io/');
+      await expect(email).toHaveAttribute('href', 'mailto:support@greentic.ai');
+
+      await expect.poll(async () => link.evaluate((node, activeSkin) => {
+        const rootStyle = getComputedStyle(document.documentElement);
+        const theme = document.documentElement.getAttribute('data-theme');
+        const expectedVariable = activeSkin === '3aigent' && theme !== 'light'
+          ? '--brand-light'
+          : activeSkin === '3aigent'
+            ? '--brand-dark'
+            : '--brand';
+        const probe = document.createElement('span');
+        probe.style.color = rootStyle.getPropertyValue(expectedVariable).trim();
+        document.body.appendChild(probe);
+        const expected = getComputedStyle(probe).color;
+        probe.remove();
+        return getComputedStyle(node).color === expected;
+      }, skin)).toBe(true);
+    });
+
+    test(`${skin} skin shows adaptive card action spinner while pending`, async ({ page }) => {
+      const webchat = new WebChatGuiPage(page);
+      await webchat.openFullscreen({ skin, nav: false, login: false });
+      await webchat.expectChatReady();
+
+      const action = page.getByTestId('adaptive-card-action');
+      await expect(action).toBeVisible();
+      await action.click();
+
+      await expect(action).toBeDisabled();
+      await expect(action).toHaveAttribute('aria-busy', 'true');
+      await expect.poll(async () => action.evaluate((button) => {
+        const before = getComputedStyle(button, '::before');
+        return {
+          animationName: before.animationName,
+          content: before.content,
+          cursor: getComputedStyle(button).cursor,
+        };
+      })).toMatchObject({
+        animationName: 'ac-action-spin',
+        content: '""',
+        cursor: 'wait',
+      });
+    });
+  }
 
   test('missing tenant config does not invent a login page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);

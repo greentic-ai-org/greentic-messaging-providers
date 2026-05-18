@@ -15,7 +15,7 @@
         "id": "guest",
         "label": "Continue as Guest",
         "type": "dummy",
-        "enabled": true
+        "enabled": false
       },
       {
         "id": "google",

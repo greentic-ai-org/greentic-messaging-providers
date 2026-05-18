@@ -333,6 +333,35 @@ console.log('[runtime-bootstrap] loaded');
       ].join('\n');
       document.head.appendChild(style);
     }
+
+    // Baseline pending state for Adaptive Card actions across all skins.
+    if (!document.getElementById('greentic-ac-action-pending-style')) {
+      var pendingStyle = document.createElement('style');
+      pendingStyle.id = 'greentic-ac-action-pending-style';
+      pendingStyle.textContent = [
+        '.ac-actionSet button[disabled], .ac-actionSet button[aria-disabled="true"], .ac-actionSet button[aria-busy="true"], .ac-pushButton[disabled], .ac-pushButton[aria-disabled="true"], .ac-pushButton[aria-busy="true"] { position: relative !important; cursor: wait !important; opacity: .72 !important; padding-left: 2.125rem !important; pointer-events: none !important; }',
+        '.ac-actionSet button[disabled]::before, .ac-actionSet button[aria-disabled="true"]::before, .ac-actionSet button[aria-busy="true"]::before, .ac-pushButton[disabled]::before, .ac-pushButton[aria-disabled="true"]::before, .ac-pushButton[aria-busy="true"]::before { content: "" !important; position: absolute !important; left: .75rem !important; top: 50% !important; width: .875rem !important; height: .875rem !important; margin-top: -.4375rem !important; border: 2px solid currentColor !important; border-right-color: transparent !important; border-radius: 999px !important; animation: ac-action-spin .75s linear infinite !important; box-sizing: border-box !important; }',
+        '@keyframes ac-action-spin { to { transform: rotate(360deg); } }',
+      ].join('\n');
+      document.head.appendChild(pendingStyle);
+    }
+    if (!window.__greenticAdaptiveCardActionPendingInstalled) {
+      window.__greenticAdaptiveCardActionPendingInstalled = true;
+      document.addEventListener('click', function (event) {
+        var source = event.target;
+        var actionButton = source && source.closest
+          ? source.closest('.ac-pushButton, .ac-actionSet button')
+          : null;
+        if (!actionButton || actionButton.getAttribute('aria-busy') === 'true') return;
+
+        window.setTimeout(function () {
+          if (!document.documentElement.contains(actionButton)) return;
+          actionButton.setAttribute('aria-busy', 'true');
+          actionButton.setAttribute('aria-disabled', 'true');
+          if ('disabled' in actionButton) actionButton.disabled = true;
+        }, 0);
+      });
+    }
   }
 
   loadUiI18n(selectedLocale);
