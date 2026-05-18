@@ -106,51 +106,51 @@ test.describe('full-screen WebChat', () => {
     })).toBeCloseTo(0.7, 1);
   });
 
-  test('default skin uses Greentic green adaptive card button styling', async ({ page }) => {
+  test('3aigent light mode keeps adaptive card text readable', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await page.addInitScript(() => sessionStorage.setItem('greentic-theme', 'light'));
+    await webchat.openFullscreen({ skin: '3aigent', nav: false, login: false });
+    await webchat.expectChatReady();
+
+    const color = await page.getByTestId('adaptive-card-title').evaluate((element) => {
+      return window.getComputedStyle(element).color;
+    });
+    const channels = color.match(/\d+(\.\d+)?/g)?.slice(0, 3).map(Number) ?? [];
+    expect(channels).toHaveLength(3);
+    expect(Math.max(...channels)).toBeLessThan(100);
+  });
+
+  test('default skin uses Greentic green adaptive card action styling', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
     await webchat.expectChatReady();
 
     const action = page.getByTestId('adaptive-card-action');
     await expect(action).toBeVisible();
-    await expect.poll(async () => action.evaluate((button) => {
-      const style = getComputedStyle(button);
-      const theme = document.documentElement.getAttribute('data-theme');
-      if (theme === 'dark') {
-        return style.color === 'rgb(209, 250, 229)' && style.borderColor === 'rgba(16, 185, 129, 0.45)';
-      }
-
-      const probe = document.createElement('span');
-      const rootStyle = getComputedStyle(document.documentElement);
-      probe.style.color = rootStyle.getPropertyValue('--brand-dark').trim();
-      probe.style.borderColor = rootStyle.getPropertyValue('--brand-border').trim();
-      document.body.appendChild(probe);
-      const expectedColor = getComputedStyle(probe).color;
-      const expectedBorder = getComputedStyle(probe).borderColor;
-      probe.remove();
-      return style.color === expectedColor && style.borderColor === expectedBorder;
-    })).toBe(true);
+    const styles = await action.evaluate((element) => {
+      const computed = window.getComputedStyle(element);
+      return {
+        backgroundColor: computed.backgroundColor,
+        borderColor: computed.borderTopColor,
+        color: computed.color,
+      };
+    });
+    expect(styles.backgroundColor).toBe('rgb(236, 253, 245)');
+    expect(styles.borderColor).toBe('rgba(5, 150, 105, 0.35)');
+    expect(styles.color).toBe('rgb(6, 78, 59)');
   });
 
-  test('3aigent light mode keeps adaptive card text readable', async ({ page }) => {
-    await page.addInitScript(() => {
-      sessionStorage.setItem('greentic-theme', 'light');
-    });
+  test('default dark mode keeps adaptive card action borders green and visible', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
-    await webchat.openFullscreen({ skin: '3aigent', nav: false, login: false });
+    await page.addInitScript(() => sessionStorage.setItem('greentic-theme', 'dark'));
+    await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
     await webchat.expectChatReady();
 
-    const textBlock = page.getByTestId('adaptive-card').locator('.ac-textBlock').first();
-    await expect(textBlock).toBeVisible();
-    await expect.poll(async () => textBlock.evaluate((node) => {
-      const rootStyle = getComputedStyle(document.documentElement);
-      const probe = document.createElement('span');
-      probe.style.color = rootStyle.getPropertyValue('--text-primary').trim();
-      document.body.appendChild(probe);
-      const expected = getComputedStyle(probe).color;
-      probe.remove();
-      return getComputedStyle(node).color === expected;
-    })).toBe(true);
+    await expect(page.getByTestId('adaptive-card-action')).toBeVisible();
+    const borderColor = await page.getByTestId('adaptive-card-action').evaluate((element) => {
+      return window.getComputedStyle(element).borderTopColor;
+    });
+    expect(borderColor).toBe('rgb(52, 211, 153)');
   });
 
   for (const skin of skins) {

@@ -284,7 +284,8 @@ button[data-action="logout"]:hover,
   border-bottom: none !important;
 }
 
-/* Action buttons — shadcn outline variant */
+/* Action buttons — Greentic brand-tinted outline variant */
+.ac-actionSet button,
 .ac-pushButton {
   font-family: var(--font) !important;
   font-weight: 500 !important;
@@ -299,14 +300,18 @@ button[data-action="logout"]:hover,
   transition: background 0.15s, border-color 0.15s !important;
 }
 
+.ac-actionSet button div,
+.ac-actionSet button span,
+.ac-actionSet button p,
 .ac-pushButton div,
 .ac-pushButton span,
 .ac-pushButton p {
   color: inherit !important;
 }
 
+.ac-actionSet button:hover,
 .ac-pushButton:hover {
-  background-color: rgba(5,150,105,0.12) !important;
+  background-color: rgba(5, 150, 105, 0.14) !important;
   border-color: var(--brand) !important;
   color: var(--brand-dark) !important;
 }
@@ -560,8 +565,8 @@ button[data-action="logout"]:hover,
     border-bottom-color: #374151 !important;
   }
   :root:not([data-theme="light"]) .ac-pushButton {
-    background-color: rgba(5,150,105,0.18) !important;
-    border-color: rgba(16,185,129,0.45) !important;
+    background-color: rgba(5, 150, 105, 0.18) !important;
+    border-color: #34d399 !important;
     color: #d1fae5 !important;
   }
   :root:not([data-theme="light"]) .ac-pushButton div,
@@ -570,8 +575,8 @@ button[data-action="logout"]:hover,
     color: #d1fae5 !important;
   }
   :root:not([data-theme="light"]) .ac-pushButton:hover {
-    background-color: rgba(5,150,105,0.26) !important;
-    border-color: #34d399 !important;
+    background-color: rgba(5, 150, 105, 0.28) !important;
+    border-color: #6ee7b7 !important;
   }
 }
 [data-theme="dark"] .ac-fact .ac-factTitle {
@@ -583,8 +588,8 @@ button[data-action="logout"]:hover,
   border-bottom-color: #374151 !important;
 }
 [data-theme="dark"] .ac-pushButton {
-  background-color: rgba(5,150,105,0.18) !important;
-  border-color: rgba(16,185,129,0.45) !important;
+  background-color: rgba(5, 150, 105, 0.18) !important;
+  border-color: #34d399 !important;
   color: #d1fae5 !important;
 }
 [data-theme="dark"] .ac-pushButton div,
@@ -593,8 +598,8 @@ button[data-action="logout"]:hover,
   color: #d1fae5 !important;
 }
 [data-theme="dark"] .ac-pushButton:hover {
-  background-color: rgba(5,150,105,0.26) !important;
-  border-color: #34d399 !important;
+  background-color: rgba(5, 150, 105, 0.28) !important;
+  border-color: #6ee7b7 !important;
 }
 
 /* ── Error card layout polish ──────────────────────────── */
@@ -713,6 +718,20 @@ button[data-action="logout"]:hover,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-separator {
     border-color: #374151 !important;
   }
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-actionSet button,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-pushButton,
+  :root:not([data-theme="light"]) .webchat__bubble__content [role="group"] button {
+    background-color: rgba(5, 150, 105, 0.18) !important;
+    border: 1px solid #34d399 !important;
+    border-radius: 6px !important;
+    color: #d1fae5 !important;
+  }
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-actionSet button:hover,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-pushButton:hover,
+  :root:not([data-theme="light"]) .webchat__bubble__content [role="group"] button:hover {
+    background-color: rgba(5, 150, 105, 0.28) !important;
+    border-color: #6ee7b7 !important;
+  }
 }
 [data-theme="dark"] .widget-card-wrapper {
   background: hsl(224, 30%, 16%);
@@ -762,6 +781,20 @@ button[data-action="logout"]:hover,
 }
 [data-theme="dark"] .webchat__bubble__content .ac-separator {
   border-color: #374151 !important;
+}
+[data-theme="dark"] .webchat__bubble__content .ac-actionSet button,
+[data-theme="dark"] .webchat__bubble__content .ac-pushButton,
+[data-theme="dark"] .webchat__bubble__content [role="group"] button {
+  background-color: rgba(5, 150, 105, 0.18) !important;
+  border: 1px solid #34d399 !important;
+  border-radius: 6px !important;
+  color: #d1fae5 !important;
+}
+[data-theme="dark"] .webchat__bubble__content .ac-actionSet button:hover,
+[data-theme="dark"] .webchat__bubble__content .ac-pushButton:hover,
+[data-theme="dark"] .webchat__bubble__content [role="group"] button:hover {
+  background-color: rgba(5, 150, 105, 0.28) !important;
+  border-color: #6ee7b7 !important;
 }
 
 .webchat__bubble__content .ac-adaptiveCard a,

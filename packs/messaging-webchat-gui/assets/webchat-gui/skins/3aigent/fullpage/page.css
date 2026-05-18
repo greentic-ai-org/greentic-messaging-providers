@@ -631,6 +631,24 @@ button[aria-label*="Upload" i] {
   box-shadow: 0 0 0 3px var(--brand-glow) !important;
 }
 
+/* Adaptive Cards can keep dark-theme inline text colors when the 3aigent
+   theme is toggled to light after Web Chat has mounted. In light mode the
+   bubble/card background is white, so force readable card copy. */
+[data-theme="light"] .ac-adaptiveCard,
+[data-theme="light"] .ac-adaptiveCard .ac-textBlock,
+[data-theme="light"] .ac-adaptiveCard .ac-richTextBlock,
+[data-theme="light"] .ac-adaptiveCard .ac-richTextBlock span {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .ac-adaptiveCard .ac-textBlock[aria-level],
+[data-theme="light"] .ac-adaptiveCard [role="heading"],
+[data-theme="light"] .ac-adaptiveCard .ac-factTitle {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .ac-adaptiveCard .ac-factValue {
+  color: var(--text-muted) !important;
+}
+
 /* ===== ADAPTIVE CARD ACTION BUTTONS ===== */
 /* Adaptive Cards renderer styles `.ac-pushButton` outside the host config's
    color graph; in dark mode the default white pill clashes hard with our

@@ -33,8 +33,10 @@
     card.style.cssText = 'display:block;padding:16px;border:1px solid #d1d5db;background:#fff;';
     var title = createElement('div', {
       class: 'ac-textBlock',
+      'data-testid': 'adaptive-card-title',
       text: 'Adaptive card preview',
     });
+    title.style.cssText = 'color:#f5f5f5;';
     var linkText = createElement('div', {
       class: 'ac-textBlock',
     });

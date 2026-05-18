@@ -60,7 +60,7 @@
   },
   "actions": {
     "actionsOrientation": "horizontal",
-    "actionAlignment": "stretch",
+    "actionAlignment": "left",
     "buttonSpacing": 8,
     "maxActions": 10,
     "showCard": { "actionMode": "inline" }

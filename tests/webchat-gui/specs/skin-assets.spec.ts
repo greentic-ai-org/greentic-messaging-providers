@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
 import { WebChatGuiPage } from '../pages/webchatGuiPage';
 
 /**
@@ -16,6 +18,18 @@ import { WebChatGuiPage } from '../pages/webchatGuiPage';
  * reconciles `legacy_skin` to `skin` so the chosen skin actually renders.
  */
 test.describe('custom skin selection', () => {
+  test('3aigent adaptive card actions use default non-stretched sizing', async () => {
+    for (const file of ['hostconfig.json', 'hostconfig-light.json', 'hostconfig-dark.json']) {
+      const hostConfigPath = path.resolve(
+        process.cwd(),
+        'packs/messaging-webchat-gui/assets/webchat-gui/skins/3aigent/webchat',
+        file,
+      );
+      const hostConfig = JSON.parse(fs.readFileSync(hostConfigPath, 'utf8'));
+      expect(hostConfig.actions?.actionAlignment, file).toBe('left');
+    }
+  });
+
   test('3aigent skin loads, not the default fallback', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     await webchat.installMockWebChat();
