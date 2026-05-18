@@ -15,6 +15,23 @@ use greentic_types::{
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
 use serde_json::{Value, json};
 
+fn debug_enabled() -> bool {
+    matches!(
+        std::env::var("TELEGRAM_DEBUG")
+            .or_else(|_| std::env::var("GREENTIC_DEBUG"))
+            .as_deref(),
+        Ok("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    )
+}
+
+macro_rules! telegram_debug {
+    ($($arg:tt)*) => {
+        if debug_enabled() {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
 pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
     // Use operator-compat parser which handles both `body_b64` (string)
     // and `body` (raw byte array from operator's IngressRequestV1).
@@ -31,7 +48,7 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
     // Handle callback_query (inline keyboard button clicks — e.g. AC Action.Submit).
     let has_callback = body_val.get("callback_query").is_some();
     let has_message = body_val.get("message").is_some();
-    eprintln!(
+    telegram_debug!(
         "telegram ingest_http: has_callback={} has_message={} keys={:?}",
         has_callback,
         has_message,
@@ -107,9 +124,10 @@ fn ingest_callback_query(body_val: &Value, callback: &Value) -> Vec<u8> {
         .get("data")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    eprintln!(
+    telegram_debug!(
         "telegram callback_query: id={} data_str={}",
-        callback_id, data_str
+        callback_id,
+        data_str
     );
 
     // Try to parse callback data as JSON (AC Action.Submit serializes data as JSON).
