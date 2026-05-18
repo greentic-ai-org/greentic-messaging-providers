@@ -3282,7 +3282,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-telegram"
-version = "0.4.99"
+version = "0.4.100"
 dependencies = [
  "serde",
  "serde_json",
@@ -3354,7 +3354,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-telegram"
-version = "0.4.99"
+version = "0.4.100"
 dependencies = [
  "base64 0.22.1",
  "greentic-messaging-provider-common",
@@ -3402,7 +3402,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webex"
-version = "0.4.99"
+version = "0.4.100"
 dependencies = [
  "base64 0.22.1",
  "greentic-messaging-provider-common",
@@ -5352,7 +5352,7 @@ dependencies = [
 
 [[package]]
 name = "telegram"
-version = "0.4.99"
+version = "0.4.100"
 dependencies = [
  "greentic-messaging-provider-common",
  "htmlescape",
@@ -5364,7 +5364,7 @@ dependencies = [
 
 [[package]]
 name = "telegram-webhook"
-version = "0.4.99"
+version = "0.4.100"
 dependencies = [
  "serde",
  "serde_json",
@@ -6728,7 +6728,7 @@ dependencies = [
 
 [[package]]
 name = "webex"
-version = "0.4.99"
+version = "0.4.100"
 dependencies = [
  "greentic-messaging-provider-common",
  "provider-runtime-config",
@@ -6739,7 +6739,7 @@ dependencies = [
 
 [[package]]
 name = "webex-webhook"
-version = "0.4.99"
+version = "0.4.100"
 dependencies = [
  "serde",
  "serde_json",

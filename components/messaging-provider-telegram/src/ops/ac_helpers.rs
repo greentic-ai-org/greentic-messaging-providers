@@ -13,6 +13,23 @@ use serde_json::{Value, json};
 
 use super::ac_to_html::{AcInput, AcInputKind};
 
+fn debug_enabled() -> bool {
+    matches!(
+        std::env::var("TELEGRAM_DEBUG")
+            .or_else(|_| std::env::var("GREENTIC_DEBUG"))
+            .as_deref(),
+        Ok("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    )
+}
+
+macro_rules! telegram_debug {
+    ($($arg:tt)*) => {
+        if debug_enabled() {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
 /// Collect AC actions into a flat JSON array for inline keyboard.
 pub(crate) fn collect_actions(action_list: &[Value], actions: &mut Vec<Value>) {
     for action in action_list {
@@ -246,7 +263,7 @@ pub(crate) fn build_inline_keyboard_from_metadata(
             let has_data = action.get("data").is_some();
             let cb = if let Some(data) = action.get("data") {
                 let serialized = data.to_string();
-                eprintln!(
+                telegram_debug!(
                     "tg build_keyboard: title={title} data_len={} data={serialized}",
                     serialized.len()
                 );
@@ -256,7 +273,7 @@ pub(crate) fn build_inline_keyboard_from_metadata(
                     // Too large — extract only routeToCardId for compact callback_data.
                     let compact = compact_callback_data(data);
                     let compact_str = compact.to_string();
-                    eprintln!(
+                    telegram_debug!(
                         "tg build_keyboard: compact_len={} compact={compact_str}",
                         compact_str.len()
                     );
@@ -267,10 +284,10 @@ pub(crate) fn build_inline_keyboard_from_metadata(
                     }
                 }
             } else {
-                eprintln!("tg build_keyboard: title={title} NO data field");
+                telegram_debug!("tg build_keyboard: title={title} NO data field");
                 title.chars().take(64).collect()
             };
-            eprintln!("tg build_keyboard: final cb={cb} has_data={has_data}");
+            telegram_debug!("tg build_keyboard: final cb={cb} has_data={has_data}");
             current_row.push(json!({"text": title, "callback_data": cb}));
         }
     }

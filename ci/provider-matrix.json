@@ -222,7 +222,7 @@
     },
     "telegram": {
       "pack": "messaging-telegram",
-      "version": "0.4.99",
+      "version": "0.4.100",
       "ghcr_target": "ghcr.io/greenticai/messaging-telegram",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
       "e2e": {
@@ -323,7 +323,7 @@
     },
     "webex": {
       "pack": "messaging-webex",
-      "version": "0.4.99",
+      "version": "0.4.100",
       "ghcr_target": "ghcr.io/greenticai/messaging-webex",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
       "e2e": {
