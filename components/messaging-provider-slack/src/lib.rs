@@ -30,7 +30,6 @@ pub(crate) const DEFAULT_API_BASE: &str = "https://slack.com/api";
 pub(crate) const DEFAULT_BOT_TOKEN_KEY: &str = "SLACK_BOT_TOKEN";
 pub(crate) const DEFAULT_APP_ID_KEY: &str = "SLACK_APP_ID";
 pub(crate) const DEFAULT_CONFIG_ACCESS_TOKEN_KEY: &str = "SLACK_CONFIGURATION_ACCESS_TOKEN";
-pub(crate) const LEGACY_CONFIG_TOKEN_KEY: &str = "SLACK_CONFIGURATION_TOKEN";
 pub(crate) const DEFAULT_CONFIG_REFRESH_TOKEN_KEY: &str = "SLACK_CONFIGURATION_REFRESH_TOKEN";
 
 use config::{ProviderConfigOut, default_config_out, validate_config_out};

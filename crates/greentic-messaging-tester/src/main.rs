@@ -562,6 +562,10 @@ fn handle_webhook(
     let values =
         Values::load(&values_path).map_err(|err| CliError::ValuesLoad(values_path.clone(), err))?;
 
+    if provider == "slack" {
+        return handle_provider_webhook(provider, values, public_base_url, dry_run);
+    }
+
     let component = webhook_component_for(&provider)
         .ok_or_else(|| CliError::WebhookUnsupported(provider.clone()))?;
     let component_path = find_component_wasm_path(component).map_err(CliError::Webhook)?;
@@ -583,6 +587,52 @@ fn handle_webhook(
     let output: Value =
         serde_json::from_slice(&out_bytes).map_err(|err| CliError::ProviderOp(err.into()))?;
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    Ok(())
+}
+
+fn handle_provider_webhook(
+    provider: String,
+    mut values: Values,
+    public_base_url: String,
+    dry_run: bool,
+) -> Result<(), CliError> {
+    inject_public_base_url(&mut values, &public_base_url);
+    if dry_run {
+        let output = json!({
+            "ok": true,
+            "dry_run": true,
+            "provider": provider,
+            "webhook_url": provider_webhook_url(&values, &public_base_url),
+        });
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        return Ok(());
+    }
+
+    let harness = WasmHarness::new(&provider).map_err(CliError::WasmLoad)?;
+    let history = new_history();
+    let secrets = values.secret_bytes();
+    let http_mode = values.http_mode();
+    let input = build_provider_webhook_input(&values, public_base_url);
+    let input_bytes = serde_json::to_vec(&input).map_err(|err| CliError::ProviderOp(err.into()))?;
+    let out_bytes = harness
+        .invoke(
+            "setup_webhook",
+            input_bytes,
+            &secrets,
+            http_mode,
+            history,
+            None,
+        )
+        .map_err(map_invoke_error)?;
+    let output: Value =
+        serde_json::from_slice(&out_bytes).map_err(|err| CliError::ProviderOp(err.into()))?;
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    if output.get("ok").and_then(Value::as_bool) == Some(false) {
+        return Err(CliError::Webhook(anyhow!(
+            "{} webhook setup reported failure",
+            provider
+        )));
+    }
     Ok(())
 }
 
@@ -1418,6 +1468,48 @@ mod tests {
         assert_eq!(stored.kind, dest.kind);
     }
 
+    #[test]
+    fn provider_webhook_url_uses_slack_defaults() {
+        let values = Values {
+            config: serde_json::Map::new(),
+            secrets: serde_json::Map::new(),
+            to: serde_json::Map::new(),
+            http: None,
+            state: serde_json::Map::new(),
+        };
+
+        assert_eq!(
+            provider_webhook_url(&values, "https://example.com/"),
+            "https://example.com/v1/messaging/ingress/messaging-slack/default/default"
+        );
+    }
+
+    #[test]
+    fn build_provider_webhook_input_preserves_config_and_overrides_public_url() {
+        let config = json!({
+            "provider_id": "messaging-slack",
+            "tenant": "acme",
+            "team": "workspace",
+            "public_base_url": "https://old.example.com"
+        })
+        .as_object()
+        .expect("config object")
+        .clone();
+        let values = Values {
+            config,
+            secrets: serde_json::Map::new(),
+            to: serde_json::Map::new(),
+            http: None,
+            state: serde_json::Map::new(),
+        };
+
+        let input = build_provider_webhook_input(&values, "https://new.example.com".to_string());
+
+        assert_eq!(input["tenant"], "acme");
+        assert_eq!(input["team"], "workspace");
+        assert_eq!(input["public_base_url"], "https://new.example.com");
+    }
+
     fn queue_webex_response(queue: &HttpResponseQueue, status: u16, body: Value) {
         http_mock::clear_mock_responses(queue);
         http_mock::queue_mock_response(
@@ -1684,6 +1776,41 @@ fn build_webhook_input(
         secret_token,
         dry_run: if dry_run { Some(true) } else { None },
     })
+}
+
+fn build_provider_webhook_input(values: &Values, public_base_url: String) -> Value {
+    let mut input = Value::Object(values.config.clone());
+    let obj = input.as_object_mut().expect("input object");
+    obj.insert(
+        "public_base_url".to_string(),
+        Value::String(public_base_url.trim().to_string()),
+    );
+    input
+}
+
+fn provider_webhook_url(values: &Values, public_base_url: &str) -> String {
+    let provider_id = values
+        .config
+        .get("provider_id")
+        .and_then(Value::as_str)
+        .unwrap_or("messaging-slack");
+    let tenant = values
+        .config
+        .get("tenant")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
+    let team = values
+        .config
+        .get("team")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
+    format!(
+        "{}/v1/messaging/ingress/{}/{}/{}",
+        public_base_url.trim_end_matches('/'),
+        provider_id,
+        tenant,
+        team
+    )
 }
 
 #[derive(thiserror::Error, Debug)]
