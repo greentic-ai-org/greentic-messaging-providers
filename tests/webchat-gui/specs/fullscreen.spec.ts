@@ -71,6 +71,19 @@ test.describe('full-screen WebChat', () => {
     await expect(page.evaluate(() => sessionStorage.getItem('greentic_oauth_token_handle'))).resolves.toBe('guest');
   });
 
+  test('tenant-config login fallback appears when auth config endpoint is unavailable', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await page.goto('/v1/web/webchat/tenant-config-login/?tenant=tenant-config-login&loginRequired=1');
+
+    await expect(page.getByRole('heading', { name: /sign in to greentic/i })).toBeVisible();
+    await page.getByRole('button', { name: /continue as guest/i }).click();
+    await webchat.expectChatReady();
+    await expect(page.evaluate(() => {
+      const raw = localStorage.getItem('webchat_auth_session');
+      return raw ? JSON.parse(raw).isAuthenticated === true : false;
+    })).resolves.toBe(true);
+  });
+
   test('anonymous mode skips the login page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
@@ -112,8 +125,9 @@ test.describe('full-screen WebChat', () => {
     await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
     await webchat.expectChatReady();
 
-    await expect(page.getByTestId('adaptive-card-action')).toBeVisible();
-    const styles = await page.getByTestId('adaptive-card-action').evaluate((element) => {
+    const action = page.getByTestId('adaptive-card-action');
+    await expect(action).toBeVisible();
+    const styles = await action.evaluate((element) => {
       const computed = window.getComputedStyle(element);
       return {
         backgroundColor: computed.backgroundColor,
@@ -140,25 +154,56 @@ test.describe('full-screen WebChat', () => {
   });
 
   for (const skin of skins) {
-    test(`${skin} skin shows adaptive card action pending spinner`, async ({ page }) => {
+    test(`${skin} skin uses brand color for adaptive card links`, async ({ page }) => {
+      const webchat = new WebChatGuiPage(page);
+      await webchat.openFullscreen({ skin, nav: false, login: false });
+      await webchat.expectChatReady();
+
+      const link = page.getByTestId('adaptive-card-link');
+      const email = page.getByTestId('adaptive-card-email');
+      await expect(link).toHaveAttribute('href', 'https://adaptivecards.io/');
+      await expect(email).toHaveAttribute('href', 'mailto:support@greentic.ai');
+
+      await expect.poll(async () => link.evaluate((node, activeSkin) => {
+        const rootStyle = getComputedStyle(document.documentElement);
+        const theme = document.documentElement.getAttribute('data-theme');
+        const expectedVariable = activeSkin === '3aigent' && theme !== 'light'
+          ? '--brand-light'
+          : activeSkin === '3aigent'
+            ? '--brand-dark'
+            : '--brand';
+        const probe = document.createElement('span');
+        probe.style.color = rootStyle.getPropertyValue(expectedVariable).trim();
+        document.body.appendChild(probe);
+        const expected = getComputedStyle(probe).color;
+        probe.remove();
+        return getComputedStyle(node).color === expected;
+      }, skin)).toBe(true);
+    });
+
+    test(`${skin} skin shows adaptive card action spinner while pending`, async ({ page }) => {
       const webchat = new WebChatGuiPage(page);
       await webchat.openFullscreen({ skin, nav: false, login: false });
       await webchat.expectChatReady();
 
       const action = page.getByTestId('adaptive-card-action');
+      await expect(action).toBeVisible();
       await action.click();
+
       await expect(action).toBeDisabled();
-      const spinner = await action.evaluate((element) => {
-        const styles = window.getComputedStyle(element, '::after');
+      await expect(action).toHaveAttribute('aria-busy', 'true');
+      await expect.poll(async () => action.evaluate((button) => {
+        const before = getComputedStyle(button, '::before');
         return {
-          content: styles.content,
-          animationName: styles.animationName,
-          borderTopColor: styles.borderTopColor,
+          animationName: before.animationName,
+          content: before.content,
+          cursor: getComputedStyle(button).cursor,
         };
+      })).toMatchObject({
+        animationName: 'ac-action-spin',
+        content: '""',
+        cursor: 'wait',
       });
-      expect(spinner.content).toBe('""');
-      expect(spinner.animationName).toBe('greentic-ac-action-spin');
-      expect(spinner.borderTopColor).toBe('rgba(0, 0, 0, 0)');
     });
   }
 

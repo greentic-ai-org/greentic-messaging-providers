@@ -8,6 +8,7 @@
   --brand: #059669;
   --brand-light: #ecfdf5;
   --brand-dark: #064e3b;
+  --brand-border: rgba(5,150,105,0.35);
   --surface: #ffffff;
   --bg: #f8fafb;
   --border: #e5e7eb;
@@ -291,7 +292,7 @@ button[data-action="logout"]:hover,
   font-size: 0.8125rem !important;
   line-height: 1.25rem !important;
   border-radius: 6px !important;
-  border: 1px solid rgba(5, 150, 105, 0.35) !important;
+  border: 1px solid var(--brand-border) !important;
   background-color: var(--brand-light) !important;
   color: var(--brand-dark) !important;
   padding: 0.5rem 0.875rem !important;
@@ -312,6 +313,46 @@ button[data-action="logout"]:hover,
 .ac-pushButton:hover {
   background-color: rgba(5, 150, 105, 0.14) !important;
   border-color: var(--brand) !important;
+  color: var(--brand-dark) !important;
+}
+
+.ac-actionSet button[disabled],
+.ac-actionSet button[aria-disabled="true"],
+.ac-actionSet button[aria-busy="true"],
+.ac-pushButton[disabled],
+.ac-pushButton[aria-disabled="true"],
+.ac-pushButton[aria-busy="true"] {
+  position: relative !important;
+  cursor: wait !important;
+  opacity: 0.72 !important;
+  padding-left: 2.125rem !important;
+  pointer-events: none !important;
+}
+
+.ac-actionSet button[disabled]::before,
+.ac-actionSet button[aria-disabled="true"]::before,
+.ac-actionSet button[aria-busy="true"]::before,
+.ac-pushButton[disabled]::before,
+.ac-pushButton[aria-disabled="true"]::before,
+.ac-pushButton[aria-busy="true"]::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 0.75rem !important;
+  top: 50% !important;
+  width: 0.875rem !important;
+  height: 0.875rem !important;
+  margin-top: -0.4375rem !important;
+  border: 2px solid currentColor !important;
+  border-right-color: transparent !important;
+  border-radius: 999px !important;
+  animation: ac-action-spin 0.75s linear infinite !important;
+  box-sizing: border-box !important;
+}
+
+@keyframes ac-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Action set — flex-wrap so buttons don't overflow */
@@ -319,45 +360,6 @@ button[data-action="logout"]:hover,
   display: flex !important;
   flex-wrap: wrap !important;
   gap: 0.375rem !important;
-}
-
-@keyframes greentic-ac-action-spin {
-  to { transform: rotate(360deg); }
-}
-
-.ac-actionSet button,
-.ac-pushButton {
-  position: relative !important;
-}
-
-.ac-actionSet button:disabled,
-.ac-actionSet button[aria-disabled="true"],
-.ac-actionSet button[aria-busy="true"],
-.ac-pushButton:disabled,
-.ac-pushButton[aria-disabled="true"],
-.ac-pushButton[aria-busy="true"] {
-  cursor: progress !important;
-  opacity: 0.85 !important;
-  padding-right: 2.25rem !important;
-}
-
-.ac-actionSet button:disabled::after,
-.ac-actionSet button[aria-disabled="true"]::after,
-.ac-actionSet button[aria-busy="true"]::after,
-.ac-pushButton:disabled::after,
-.ac-pushButton[aria-disabled="true"]::after,
-.ac-pushButton[aria-busy="true"]::after {
-  content: "" !important;
-  position: absolute !important;
-  top: 50% !important;
-  right: 0.75rem !important;
-  width: 0.875rem !important;
-  height: 0.875rem !important;
-  margin-top: -0.4375rem !important;
-  border: 2px solid currentColor !important;
-  border-top-color: transparent !important;
-  border-radius: 999px !important;
-  animation: greentic-ac-action-spin 0.8s linear infinite !important;
 }
 
 /* ── Footer ─────────────────────────────────────────────── */
@@ -570,7 +572,7 @@ button[data-action="logout"]:hover,
   :root:not([data-theme="light"]) .ac-pushButton div,
   :root:not([data-theme="light"]) .ac-pushButton span,
   :root:not([data-theme="light"]) .ac-pushButton p {
-    color: #f3f4f6 !important;
+    color: #d1fae5 !important;
   }
   :root:not([data-theme="light"]) .ac-pushButton:hover {
     background-color: rgba(5, 150, 105, 0.28) !important;
@@ -593,7 +595,7 @@ button[data-action="logout"]:hover,
 [data-theme="dark"] .ac-pushButton div,
 [data-theme="dark"] .ac-pushButton span,
 [data-theme="dark"] .ac-pushButton p {
-  color: #f3f4f6 !important;
+  color: #d1fae5 !important;
 }
 [data-theme="dark"] .ac-pushButton:hover {
   background-color: rgba(5, 150, 105, 0.28) !important;
@@ -793,6 +795,21 @@ button[data-action="logout"]:hover,
 [data-theme="dark"] .webchat__bubble__content [role="group"] button:hover {
   background-color: rgba(5, 150, 105, 0.28) !important;
   border-color: #6ee7b7 !important;
+}
+
+.webchat__bubble__content .ac-adaptiveCard a,
+.webchat__bubble__content .ac-textBlock a,
+.webchat__bubble__content .ac-richTextBlock a {
+  color: var(--brand) !important;
+  font-weight: 500 !important;
+  text-decoration-color: var(--brand) !important;
+}
+
+.webchat__bubble__content .ac-adaptiveCard a:hover,
+.webchat__bubble__content .ac-textBlock a:hover,
+.webchat__bubble__content .ac-richTextBlock a:hover {
+  color: var(--brand) !important;
+  text-decoration-color: currentColor !important;
 }
 
 /* ── Welcome overlay ───────────────────────────────────── */

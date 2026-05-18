@@ -37,22 +37,33 @@
       text: 'Adaptive card preview',
     });
     title.style.cssText = 'color:#f5f5f5;';
-    card.appendChild(title);
+    var linkText = createElement('div', {
+      class: 'ac-textBlock',
+    });
+    var docsLink = createElement('a', {
+      href: 'https://adaptivecards.io/',
+      'data-testid': 'adaptive-card-link',
+      text: 'Adaptive Cards reference',
+    });
+    var emailLink = createElement('a', {
+      href: 'mailto:support@greentic.ai',
+      'data-testid': 'adaptive-card-email',
+      text: 'support@greentic.ai',
+    });
+    linkText.append('Try the ', docsLink, ' or email ', emailLink, '.');
     var actionSet = createElement('div', {
       class: 'ac-actionSet',
       role: 'group',
+      'aria-label': 'Adaptive Card actions',
     });
-    var action = createElement('button', {
-      'data-testid': 'adaptive-card-action',
+    var actionButton = createElement('button', {
       type: 'button',
+      class: 'ac-pushButton',
+      'data-testid': 'adaptive-card-action',
       text: 'Adaptive Cards docs',
     });
-    action.addEventListener('click', function () {
-      action.disabled = true;
-      action.setAttribute('aria-busy', 'true');
-    });
-    actionSet.appendChild(action);
-    card.appendChild(actionSet);
+    actionSet.appendChild(actionButton);
+    card.append(title, linkText, actionSet);
     content.appendChild(card);
     bubble.appendChild(content);
     transcript.appendChild(bubble);

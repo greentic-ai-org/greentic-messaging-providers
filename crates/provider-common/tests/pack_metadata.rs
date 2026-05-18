@@ -566,6 +566,23 @@ fn webchat_gui_pack_ships_default_tenant_config() -> Result<()> {
         config.get("nav_links").is_none(),
         "default.json is a neutral template — nav_links come from sync_nav_links_to_tenant_config"
     );
+    let enabled_dummy_login = config
+        .get("auth")
+        .and_then(|auth| auth.get("providers"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .any(|provider| {
+            provider.get("type").and_then(Value::as_str) == Some("dummy")
+                && provider
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        });
+    assert!(
+        !enabled_dummy_login,
+        "default.json must not enable dummy login by default"
+    );
 
     Ok(())
 }
