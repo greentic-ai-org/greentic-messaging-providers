@@ -63,7 +63,12 @@ function tenantConfig(tenant) {
   const basePath = path.join(assetRoot, 'config/tenants/greentic.json');
   const base = JSON.parse(fs.readFileSync(basePath, 'utf8'));
   base.tenant_id = scenario.tenant;
-  base.legacy_skin = scenario.skin;
+  // gtc-faithful: greentic-setup scaffolds <tenant>.json from default.json
+  // (legacy_skin = "default") and sync_skin writes ONLY the `skin` field —
+  // it never updates legacy_skin. Mirroring that here keeps the suite honest:
+  // setting legacy_skin = scenario.skin previously masked the skin-selection
+  // bug where the SPA picks the skin folder from legacy_skin.
+  base.legacy_skin = 'default';
   base.skin = scenario.skin;
   base.branding = {
     company_name: scenario.skin === '3aigent' ? '3AIgent' : 'Greentic',
@@ -174,7 +179,12 @@ const server = http.createServer((req, res) => {
     serveFile(res, path.join(assetRoot, 'i18n/en.json'));
     return;
   }
-  if (urlPath.startsWith('/skins/')) {
+  // Real gtc exposes a single static route — /v1/web/webchat/{tenant} — and does
+  // NOT serve /skins/ at the web root. Skin assets must resolve under the tenant
+  // route (handled by appAssetPath below). This root /skins/ alias is opt-in via
+  // WEBCHAT_LEGACY_SKINS_ALIAS=1 so the suite tests the gtc routing reality by
+  // default; serving it unconditionally masked custom-skin asset 404s.
+  if (process.env.WEBCHAT_LEGACY_SKINS_ALIAS === '1' && urlPath.startsWith('/skins/')) {
     const filePath = safeJoin(assetRoot, urlPath);
     if (filePath) serveFile(res, filePath);
     else sendJson(res, 403, { error: 'forbidden' });
