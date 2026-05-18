@@ -1151,6 +1151,15 @@ console.log('[runtime-bootstrap] loaded');
           console.warn('[bootstrap] tenant config returned non-JSON content, using route tenant fallback:', tenantId, contentType || '<unknown>');
         }
         if (!payload) payload = fallbackPayload();
+        // Reconcile the skin fields. The SPA selects the skins/<name>/ folder
+        // from `legacy_skin`, but greentic-setup's sync_skin writes the
+        // operator's chosen skin into the modern `skin` field only —
+        // `legacy_skin` keeps the default.json scaffold value ("default").
+        // Without this, a tenant set up with a custom skin (e.g. 3aigent)
+        // renders the default skin. `skin` is authoritative when present.
+        if (typeof payload.skin === 'string' && payload.skin.trim()) {
+          payload.legacy_skin = payload.skin.trim();
+        }
         // Ensure directline config is set
         payload.webchat = payload.webchat || {};
         payload.webchat.directline = payload.webchat.directline || {};
