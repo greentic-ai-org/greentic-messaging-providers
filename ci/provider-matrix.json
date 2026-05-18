@@ -297,7 +297,7 @@
     },
     "webchat-gui": {
       "pack": "messaging-webchat-gui",
-      "version": "0.4.104",
+      "version": "0.4.105",
       "ghcr_target": "ghcr.io/greenticai/messaging-webchat-gui",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
       "e2e": {

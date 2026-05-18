@@ -530,6 +530,46 @@ fn webchat_gui_pack_contains_runtime_bootstrap_and_bundled_assets() -> Result<()
     Ok(())
 }
 
+/// `greentic-setup` scaffolds every per-tenant config from `default.json`
+/// (see `resolve_or_scaffold_tenant_config`). If the pack ships no
+/// `default.json`, the scaffold step returns `None` and `gtc setup` silently
+/// drops the operator's skin, nav_links, and OAuth answers. Guard against the
+/// template being deleted again (it was removed in 3f1535ad).
+#[test]
+fn webchat_gui_pack_ships_default_tenant_config() -> Result<()> {
+    let root = workspace_root();
+    let default_tenant = root
+        .join("packs")
+        .join("messaging-webchat-gui")
+        .join("assets/webchat-gui/config/tenants/default.json");
+
+    assert!(
+        default_tenant.exists(),
+        "missing scaffold template {} — greentic-setup needs it to scaffold per-tenant configs",
+        default_tenant.display()
+    );
+
+    let config: Value = serde_json::from_slice(&fs::read(&default_tenant)?)?;
+    assert_eq!(
+        config.get("tenant_id").and_then(Value::as_str),
+        Some("default"),
+        "default.json must declare tenant_id=default"
+    );
+    assert!(
+        config
+            .get("skin")
+            .and_then(Value::as_str)
+            .is_some_and(|skin| !skin.is_empty()),
+        "default.json must declare a non-empty skin so scaffolded tenants have a valid theme"
+    );
+    assert!(
+        config.get("nav_links").is_none(),
+        "default.json is a neutral template — nav_links come from sync_nav_links_to_tenant_config"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn webchat_gui_config_schema_declares_presentation_mode() -> Result<()> {
     let root = workspace_root();
