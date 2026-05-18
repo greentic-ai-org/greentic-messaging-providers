@@ -631,6 +631,24 @@ button[aria-label*="Upload" i] {
   box-shadow: 0 0 0 3px var(--brand-glow) !important;
 }
 
+/* Adaptive Cards can keep dark-theme inline text colors when the 3aigent
+   theme is toggled to light after Web Chat has mounted. In light mode the
+   bubble/card background is white, so force readable card copy. */
+[data-theme="light"] .ac-adaptiveCard,
+[data-theme="light"] .ac-adaptiveCard .ac-textBlock,
+[data-theme="light"] .ac-adaptiveCard .ac-richTextBlock,
+[data-theme="light"] .ac-adaptiveCard .ac-richTextBlock span {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .ac-adaptiveCard .ac-textBlock[aria-level],
+[data-theme="light"] .ac-adaptiveCard [role="heading"],
+[data-theme="light"] .ac-adaptiveCard .ac-factTitle {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .ac-adaptiveCard .ac-factValue {
+  color: var(--text-muted) !important;
+}
+
 /* ===== ADAPTIVE CARD ACTION BUTTONS ===== */
 /* Adaptive Cards renderer styles `.ac-pushButton` outside the host config's
    color graph; in dark mode the default white pill clashes hard with our
@@ -662,4 +680,43 @@ button[aria-label*="Upload" i] {
   background: var(--brand-glow) !important;
   color: var(--brand-dark) !important;
   border-color: var(--brand) !important;
+}
+
+@keyframes greentic-ac-action-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ac-actionSet button,
+.ac-pushButton {
+  position: relative !important;
+}
+
+.ac-actionSet button:disabled,
+.ac-actionSet button[aria-disabled="true"],
+.ac-actionSet button[aria-busy="true"],
+.ac-pushButton:disabled,
+.ac-pushButton[aria-disabled="true"],
+.ac-pushButton[aria-busy="true"] {
+  cursor: progress !important;
+  opacity: 0.85 !important;
+  padding-right: 2.25rem !important;
+}
+
+.ac-actionSet button:disabled::after,
+.ac-actionSet button[aria-disabled="true"]::after,
+.ac-actionSet button[aria-busy="true"]::after,
+.ac-pushButton:disabled::after,
+.ac-pushButton[aria-disabled="true"]::after,
+.ac-pushButton[aria-busy="true"]::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 50% !important;
+  right: 0.75rem !important;
+  width: 0.875rem !important;
+  height: 0.875rem !important;
+  margin-top: -0.4375rem !important;
+  border: 2px solid currentColor !important;
+  border-top-color: transparent !important;
+  border-radius: 999px !important;
+  animation: greentic-ac-action-spin 0.8s linear infinite !important;
 }
