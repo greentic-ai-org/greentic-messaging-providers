@@ -30,8 +30,29 @@
       class: 'ac-adaptiveCard',
       'data-testid': 'adaptive-card',
     });
-    card.textContent = 'Adaptive card preview';
     card.style.cssText = 'display:block;padding:16px;border:1px solid #d1d5db;background:#fff;';
+    var title = createElement('div', {
+      class: 'ac-textBlock',
+      'data-testid': 'adaptive-card-title',
+      text: 'Adaptive card preview',
+    });
+    title.style.cssText = 'color:#f5f5f5;';
+    card.appendChild(title);
+    var actionSet = createElement('div', {
+      class: 'ac-actionSet',
+      role: 'group',
+    });
+    var action = createElement('button', {
+      'data-testid': 'adaptive-card-action',
+      type: 'button',
+      text: 'Adaptive Cards docs',
+    });
+    action.addEventListener('click', function () {
+      action.disabled = true;
+      action.setAttribute('aria-busy', 'true');
+    });
+    actionSet.appendChild(action);
+    card.appendChild(actionSet);
     content.appendChild(card);
     bubble.appendChild(content);
     transcript.appendChild(bubble);

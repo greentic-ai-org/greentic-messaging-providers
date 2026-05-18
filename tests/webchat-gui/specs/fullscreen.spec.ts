@@ -93,6 +93,75 @@ test.describe('full-screen WebChat', () => {
     })).toBeCloseTo(0.7, 1);
   });
 
+  test('3aigent light mode keeps adaptive card text readable', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await page.addInitScript(() => sessionStorage.setItem('greentic-theme', 'light'));
+    await webchat.openFullscreen({ skin: '3aigent', nav: false, login: false });
+    await webchat.expectChatReady();
+
+    const color = await page.getByTestId('adaptive-card-title').evaluate((element) => {
+      return window.getComputedStyle(element).color;
+    });
+    const channels = color.match(/\d+(\.\d+)?/g)?.slice(0, 3).map(Number) ?? [];
+    expect(channels).toHaveLength(3);
+    expect(Math.max(...channels)).toBeLessThan(100);
+  });
+
+  test('default skin uses Greentic green adaptive card action styling', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
+    await webchat.expectChatReady();
+
+    await expect(page.getByTestId('adaptive-card-action')).toBeVisible();
+    const styles = await page.getByTestId('adaptive-card-action').evaluate((element) => {
+      const computed = window.getComputedStyle(element);
+      return {
+        backgroundColor: computed.backgroundColor,
+        borderColor: computed.borderTopColor,
+        color: computed.color,
+      };
+    });
+    expect(styles.backgroundColor).toBe('rgb(236, 253, 245)');
+    expect(styles.borderColor).toBe('rgba(5, 150, 105, 0.35)');
+    expect(styles.color).toBe('rgb(6, 78, 59)');
+  });
+
+  test('default dark mode keeps adaptive card action borders green and visible', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await page.addInitScript(() => sessionStorage.setItem('greentic-theme', 'dark'));
+    await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
+    await webchat.expectChatReady();
+
+    await expect(page.getByTestId('adaptive-card-action')).toBeVisible();
+    const borderColor = await page.getByTestId('adaptive-card-action').evaluate((element) => {
+      return window.getComputedStyle(element).borderTopColor;
+    });
+    expect(borderColor).toBe('rgb(52, 211, 153)');
+  });
+
+  for (const skin of skins) {
+    test(`${skin} skin shows adaptive card action pending spinner`, async ({ page }) => {
+      const webchat = new WebChatGuiPage(page);
+      await webchat.openFullscreen({ skin, nav: false, login: false });
+      await webchat.expectChatReady();
+
+      const action = page.getByTestId('adaptive-card-action');
+      await action.click();
+      await expect(action).toBeDisabled();
+      const spinner = await action.evaluate((element) => {
+        const styles = window.getComputedStyle(element, '::after');
+        return {
+          content: styles.content,
+          animationName: styles.animationName,
+          borderTopColor: styles.borderTopColor,
+        };
+      });
+      expect(spinner.content).toBe('""');
+      expect(spinner.animationName).toBe('greentic-ac-action-spin');
+      expect(spinner.borderTopColor).toBe('rgba(0, 0, 0, 0)');
+    });
+  }
+
   test('missing tenant config does not invent a login page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     const tokenRequests: string[] = [];
