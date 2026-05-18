@@ -331,7 +331,9 @@ fn config_access_token_from_input(parsed: &Value) -> Option<String> {
 /// and interactivity.
 fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
     let manifest_obj = manifest.as_object_mut();
-    let Some(manifest_obj) = manifest_obj else { return };
+    let Some(manifest_obj) = manifest_obj else {
+        return;
+    };
 
     let features = manifest_obj
         .entry("features")
