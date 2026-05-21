@@ -21,6 +21,7 @@ jobs:
         with:
           toolchain: "1.94.0"
           components: rustfmt, clippy
+          targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
       - name: fmt
         run: cargo fmt --all -- --check
@@ -28,5 +29,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: build
         run: cargo build
+      - name: prebuild WASM components (required by wasm_harness tests)
+        run: ./tools/build_components.sh
       - name: test
         run: cargo test
