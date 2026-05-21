@@ -18,8 +18,8 @@
       "name": "messaging-slack",
       "file": "dist/packs/messaging-slack.gtpack",
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-slack:0.5.0",
-      "digest": "sha256:db67cd8a9d126dadb3f7690530c8547b1d5439d2fb57390d629da7507090445c",
-      "built_at": "2026-05-21T04:16:08Z"
+      "digest": "sha256:f681ca62d52c7479d4811b4331c7b9248070ec78321021f945ec09321d6ac4a7",
+      "built_at": "2026-05-21T04:28:02Z"
     },
     {
       "name": "messaging-teams",

@@ -251,7 +251,7 @@ fn update_existing_app(
     };
 
     update_manifest_urls(&mut manifest, &webhook_url);
-    update_manifest_metadata(&mut manifest, input);
+    update_manifest_metadata(&mut manifest);
 
     let update_body = match update_manifest(app_id, &config_token, &manifest) {
         ManifestApiResult::Ok(body) => body,
@@ -362,7 +362,7 @@ fn create_slack_app(
             tenant: input.tenant.clone(),
             team: input.team.clone(),
             authorize_url: format!(
-                "https://slack.com/oauth/v2/authorize?client_id={client_id}&scope=chat:write,channels:read,channels:history,im:history,im:read,im:write,users:read"
+                "https://slack.com/oauth/v2/authorize?client_id={client_id}&scope=chat:write,app_mentions:read,channels:read,channels:history,im:history,im:read,im:write,users:read"
             ),
             callback_path,
             status: "pending".to_string(),
@@ -505,9 +505,11 @@ fn parse_manifest_api_response(
     if err == "invalid_auth" || err == "token_expired" || err == "token_revoked" {
         return ManifestApiResult::AuthError;
     }
-    ManifestApiResult::Err(json_bytes(
-        &json!({"ok": false, "error": format!("{action} error: {err}")}),
-    ))
+    ManifestApiResult::Err(json_bytes(&json!({
+        "ok": false,
+        "error": format!("{action} error: {err}"),
+        "slack_response": body,
+    })))
 }
 
 #[derive(Debug)]
@@ -633,12 +635,6 @@ fn build_slack_manifest(input: &SetupWebhookInput) -> Value {
         "_metadata": {
             "major_version": 1,
             "minor_version": 0,
-            "greentic": {
-                "provider_id": input.provider_id,
-                "tenant": input.tenant,
-                "team": input.team,
-                "instance_key": instance_key,
-            }
         },
         "display_information": {
             "name": format!("Greentic {}", input.provider_id),
@@ -659,6 +655,7 @@ fn build_slack_manifest(input: &SetupWebhookInput) -> Value {
             "scopes": {
                 "bot": [
                     "chat:write",
+                    "app_mentions:read",
                     "channels:read",
                     "channels:history",
                     "im:history",
@@ -698,33 +695,14 @@ fn build_webhook_url(input: &SetupWebhookInput) -> String {
     )
 }
 
-fn update_manifest_metadata(manifest: &mut Value, input: &SetupWebhookInput) {
+fn update_manifest_metadata(manifest: &mut Value) {
     let Some(manifest_obj) = manifest.as_object_mut() else {
         return;
     };
-    let instance_key = derive_instance_key(
-        input
-            .bundle_id
-            .as_deref()
-            .unwrap_or(DEFAULT_INSTANCE_BUNDLE_ID),
-        input.bundle_digest.as_deref(),
-        &input.provider_id,
-        &input.tenant,
-        &input.team,
-    );
     let metadata = manifest_obj.entry("_metadata").or_insert_with(|| json!({}));
     if let Some(metadata_obj) = metadata.as_object_mut() {
         metadata_obj.insert("major_version".to_string(), json!(1));
         metadata_obj.insert("minor_version".to_string(), json!(0));
-        metadata_obj.insert(
-            "greentic".to_string(),
-            json!({
-                "provider_id": input.provider_id,
-                "tenant": input.tenant,
-                "team": input.team,
-                "instance_key": instance_key,
-            }),
-        );
     }
 }
 
@@ -881,15 +859,15 @@ mod tests {
             manifest["oauth_config"]["redirect_urls"][0],
             "https://chat.example.com/oauth/callback/slack"
         );
-        assert_eq!(
-            manifest["_metadata"]["greentic"]["instance_key"],
-            derive_instance_key(
-                "bundle-a",
-                Some("sha256:abc"),
-                "messaging-slack",
-                "tenant-a",
-                "team-a"
-            )
+        assert_eq!(manifest["_metadata"]["major_version"], 1);
+        assert_eq!(manifest["_metadata"]["minor_version"], 0);
+        assert_eq!(manifest["_metadata"].as_object().unwrap().len(), 2);
+        assert!(
+            manifest["oauth_config"]["scopes"]["bot"]
+                .as_array()
+                .expect("bot scopes")
+                .iter()
+                .any(|scope| scope.as_str() == Some("app_mentions:read"))
         );
     }
 
