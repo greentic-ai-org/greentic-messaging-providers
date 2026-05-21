@@ -55,8 +55,14 @@ impl bindings::exports::greentic::component::runtime::Guest for Component {
                     PROVIDER_TYPE,
                     "invalid input cbor",
                     &[
-                        Field { key: "op", value: op.as_str() },
-                        Field { key: field::ERROR, value: &detail },
+                        Field {
+                            key: "op",
+                            value: op.as_str(),
+                        },
+                        Field {
+                            key: field::ERROR,
+                            value: &detail,
+                        },
                     ],
                 );
                 return canonical_cbor_bytes(
@@ -152,7 +158,10 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
     let _span = Span::enter(
         op,
         PROVIDER_TYPE,
-        &[Field { key: field::STEP, value: op }],
+        &[Field {
+            key: field::STEP,
+            value: op,
+        }],
     );
     match op {
         "run" | "send" => handle_send(input_json),
@@ -166,7 +175,10 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
                 Level::Warn,
                 PROVIDER_TYPE,
                 "unsupported op",
-                &[Field { key: "op", value: other }],
+                &[Field {
+                    key: "op",
+                    value: other,
+                }],
             );
             json_bytes(&json!({"ok": false, "error": format!("unsupported op: {other}")}))
         }
@@ -203,7 +215,10 @@ fn apply_answers_impl(
     let _span = Span::enter(
         "apply_answers",
         PROVIDER_TYPE,
-        &[Field { key: "mode", value: mode_str }],
+        &[Field {
+            key: "mode",
+            value: mode_str,
+        }],
     );
 
     let answers: Value = match decode_cbor(&answers_cbor) {
@@ -215,8 +230,14 @@ fn apply_answers_impl(
                 PROVIDER_TYPE,
                 "apply_answers invalid cbor",
                 &[
-                    Field { key: "mode", value: mode_str },
-                    Field { key: field::ERROR, value: &detail },
+                    Field {
+                        key: "mode",
+                        value: mode_str,
+                    },
+                    Field {
+                        key: field::ERROR,
+                        value: &detail,
+                    },
                 ],
             );
             return canonical_cbor_bytes(&ApplyAnswersResult {
@@ -234,7 +255,10 @@ fn apply_answers_impl(
             Level::Info,
             PROVIDER_TYPE,
             "tenant remove plan",
-            &[Field { key: "mode", value: "remove" }],
+            &[Field {
+                key: "mode",
+                value: "remove",
+            }],
         );
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
