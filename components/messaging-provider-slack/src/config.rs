@@ -137,10 +137,6 @@ pub(crate) fn get_secret_string(key: &str) -> Result<String, String> {
     }
 }
 
-pub(crate) fn put_secret_string(key: &str, value: &str) {
-    secrets_store::put(key, value.as_bytes());
-}
-
 pub(crate) fn parse_destination(parsed: &Value) -> Option<Destination> {
     let to_value = parsed.get("to")?;
     if let Some(id) = to_value.as_str() {

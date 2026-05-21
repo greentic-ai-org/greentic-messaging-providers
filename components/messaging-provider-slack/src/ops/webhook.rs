@@ -9,9 +9,10 @@ use provider_common::helpers::json_bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 
 use crate::bindings::greentic::http::http_client as client;
-use crate::config::{get_secret_string, put_secret_string};
+use crate::config::get_secret_string;
 use crate::{
     DEFAULT_APP_ID_KEY, DEFAULT_CLIENT_ID_KEY, DEFAULT_CLIENT_SECRET_KEY,
     DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY, DEFAULT_SIGNING_SECRET_KEY,
@@ -215,13 +216,15 @@ fn update_existing_app(
     refresh_token: Option<&str>,
 ) -> Vec<u8> {
     let webhook_url = build_webhook_url(input);
+    let mut secrets_set = BTreeMap::new();
 
     let mut config_token = config_token_input;
     let export_body = match export_manifest(app_id, &config_token) {
         ExportResult::Ok(body) => body,
         ExportResult::AuthError => match try_refresh_token(refresh_token) {
-            Ok(new_token) => {
-                config_token = new_token;
+            Ok(refresh) => {
+                config_token = refresh.access_token;
+                secrets_set.extend(refresh.secrets_set);
                 match export_manifest(app_id, &config_token) {
                     ExportResult::Ok(body) => body,
                     ExportResult::AuthError => {
@@ -261,7 +264,7 @@ fn update_existing_app(
         ManifestApiResult::Err(e) => return e,
     };
     let ok = update_body.get("ok").and_then(Value::as_bool) == Some(true);
-    json_bytes(&json!({
+    let mut out = json!({
         "ok": ok,
         "status": if ok { "ready" } else { "error" },
         "app_status": "updated",
@@ -269,7 +272,9 @@ fn update_existing_app(
         "webhook_url": webhook_url,
         "setup_actions": [],
         "slack_response": update_body,
-    }))
+    });
+    attach_secrets_patch(&mut out, secrets_set);
+    json_bytes(&out)
 }
 
 fn create_slack_app(
@@ -278,12 +283,14 @@ fn create_slack_app(
     refresh_token: Option<&str>,
 ) -> Vec<u8> {
     let manifest = build_slack_manifest(input);
+    let mut secrets_set = BTreeMap::new();
     let mut config_token = config_token_input;
     let create_body = match create_manifest(&config_token, &manifest) {
         ManifestApiResult::Ok(body) => body,
         ManifestApiResult::AuthError => match try_refresh_token(refresh_token) {
-            Ok(new_token) => {
-                config_token = new_token;
+            Ok(refresh) => {
+                config_token = refresh.access_token;
+                secrets_set.extend(refresh.secrets_set);
                 match create_manifest(&config_token, &manifest) {
                     ManifestApiResult::Ok(body) => body,
                     ManifestApiResult::AuthError => {
@@ -310,19 +317,22 @@ fn create_slack_app(
         }
     };
 
-    put_secret_string(DEFAULT_APP_ID_KEY, &app_id);
-    put_optional_secret(
+    secrets_set.insert(DEFAULT_APP_ID_KEY.to_string(), app_id.clone());
+    collect_optional_secret(
+        &mut secrets_set,
         DEFAULT_CLIENT_ID_KEY,
         string_at_paths(&create_body, &["client_id", "credentials.client_id"]),
     );
-    put_optional_secret(
+    collect_optional_secret(
+        &mut secrets_set,
         DEFAULT_CLIENT_SECRET_KEY,
         string_at_paths(
             &create_body,
             &["client_secret", "credentials.client_secret"],
         ),
     );
-    put_optional_secret(
+    collect_optional_secret(
+        &mut secrets_set,
         DEFAULT_SIGNING_SECRET_KEY,
         string_at_paths(
             &create_body,
@@ -339,7 +349,7 @@ fn create_slack_app(
         &input.tenant,
         &input.team,
     );
-    put_secret_string("SLACK_INSTANCE_KEY", &instance_key);
+    secrets_set.insert("SLACK_INSTANCE_KEY".to_string(), instance_key);
 
     let client_id = string_at_paths(&create_body, &["client_id", "credentials.client_id"]);
     let callback_path = "/oauth/callback/slack".to_string();
@@ -360,7 +370,7 @@ fn create_slack_app(
         None => Vec::new(),
     };
 
-    json_bytes(&json!({
+    let mut out = json!({
         "ok": true,
         "status": "install_required",
         "app_status": "created",
@@ -368,7 +378,9 @@ fn create_slack_app(
         "webhook_url": build_webhook_url(input),
         "setup_actions": setup_actions,
         "slack_response": create_body,
-    }))
+    });
+    attach_secrets_patch(&mut out, secrets_set);
+    json_bytes(&out)
 }
 
 enum ManifestApiResult {
@@ -498,10 +510,16 @@ fn parse_manifest_api_response(
     ))
 }
 
-/// Attempt to refresh the configuration token and persist the new tokens.
+#[derive(Debug)]
+struct RefreshResult {
+    access_token: String,
+    secrets_set: BTreeMap<String, String>,
+}
+
+/// Attempt to refresh the configuration token.
 ///
 /// Returns the new config token on success, or a serialized error response.
-fn try_refresh_token(refresh_token: Option<&str>) -> Result<String, Vec<u8>> {
+fn try_refresh_token(refresh_token: Option<&str>) -> Result<RefreshResult, Vec<u8>> {
     let refresh_token = refresh_token.ok_or_else(|| {
         json_bytes(&json!({
             "ok": false,
@@ -511,9 +529,16 @@ fn try_refresh_token(refresh_token: Option<&str>) -> Result<String, Vec<u8>> {
     })?;
     match rotate_config_token(refresh_token) {
         Ok((new_token, new_refresh)) => {
-            put_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY, &new_token);
-            put_secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY, &new_refresh);
-            Ok(new_token)
+            let mut secrets_set = BTreeMap::new();
+            secrets_set.insert(
+                DEFAULT_CONFIG_ACCESS_TOKEN_KEY.to_string(),
+                new_token.clone(),
+            );
+            secrets_set.insert(DEFAULT_CONFIG_REFRESH_TOKEN_KEY.to_string(), new_refresh);
+            Ok(RefreshResult {
+                access_token: new_token,
+                secrets_set,
+            })
         }
         Err(err) => Err(json_bytes(&json!({
             "ok": false,
@@ -741,9 +766,22 @@ fn string_at_paths(value: &Value, paths: &[&str]) -> Option<String> {
     })
 }
 
-fn put_optional_secret(key: &str, value: Option<String>) {
-    if let Some(value) = value {
-        put_secret_string(key, &value);
+fn collect_optional_secret(
+    secrets_set: &mut BTreeMap<String, String>,
+    key: &str,
+    value: Option<String>,
+) {
+    if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+        secrets_set.insert(key.to_string(), value);
+    }
+}
+
+fn attach_secrets_patch(out: &mut Value, secrets_set: BTreeMap<String, String>) {
+    if !secrets_set.is_empty() {
+        out["secrets_patch"] = json!({
+            "set": secrets_set,
+            "delete": [],
+        });
     }
 }
 
