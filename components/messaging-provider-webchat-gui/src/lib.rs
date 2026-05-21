@@ -3,6 +3,8 @@
 use base64::{Engine as _, engine::general_purpose};
 use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, Span, field};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -47,8 +49,18 @@ impl bindings::exports::greentic::component::runtime::Guest for Component {
         let input_value: Value = match decode_cbor(&input_cbor) {
             Ok(value) => value,
             Err(err) => {
+                let detail = redact::error_message(&err.to_string());
+                telemetry::emit(
+                    Level::Error,
+                    PROVIDER_TYPE,
+                    "invalid input cbor",
+                    &[
+                        Field { key: "op", value: op.as_str() },
+                        Field { key: field::ERROR, value: &detail },
+                    ],
+                );
                 return canonical_cbor_bytes(
-                    &json!({"ok": false, "error": format!("invalid input cbor: {err}")}),
+                    &json!({"ok": false, "error": format!("invalid input cbor: {detail}")}),
                 );
             }
         };
@@ -133,6 +145,15 @@ fn apply_answers_bridge(mode: &str, answers_cbor: Vec<u8>) -> Vec<u8> {
 }
 
 fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
+    // One span per op so the host can correlate the webchat-gui-specific
+    // invocation with the downstream events emitted by the shared webchat
+    // ops modules. The PROVIDER_TYPE tag distinguishes gui from plain webchat
+    // in the same telemetry stream.
+    let _span = Span::enter(
+        op,
+        PROVIDER_TYPE,
+        &[Field { key: field::STEP, value: op }],
+    );
     match op {
         "run" | "send" => handle_send(input_json),
         "ingest" => handle_ingest(input_json),
@@ -140,7 +161,15 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
         "render_plan" | "render-plan" => render_plan(input_json),
         "encode" => encode_op(input_json),
         "send_payload" | "send-payload" => send_payload(input_json),
-        other => json_bytes(&json!({"ok": false, "error": format!("unsupported op: {other}")})),
+        other => {
+            telemetry::emit(
+                Level::Warn,
+                PROVIDER_TYPE,
+                "unsupported op",
+                &[Field { key: "op", value: other }],
+            );
+            json_bytes(&json!({"ok": false, "error": format!("unsupported op: {other}")}))
+        }
     }
 }
 
@@ -165,20 +194,48 @@ fn apply_answers_impl(
 ) -> Vec<u8> {
     use bindings::exports::greentic::component::qa::Mode;
 
+    let mode_str = match mode {
+        Mode::Setup => "setup",
+        Mode::Upgrade => "upgrade",
+        Mode::Remove => "remove",
+        Mode::Default => "default",
+    };
+    let _span = Span::enter(
+        "apply_answers",
+        PROVIDER_TYPE,
+        &[Field { key: "mode", value: mode_str }],
+    );
+
     let answers: Value = match decode_cbor(&answers_cbor) {
         Ok(value) => value,
         Err(err) => {
+            let detail = redact::error_message(&err.to_string());
+            telemetry::emit(
+                Level::Error,
+                PROVIDER_TYPE,
+                "apply_answers invalid cbor",
+                &[
+                    Field { key: "mode", value: mode_str },
+                    Field { key: field::ERROR, value: &detail },
+                ],
+            );
             return canonical_cbor_bytes(&ApplyAnswersResult {
                 ok: false,
                 config: None,
                 remove: None,
                 diagnostics: Vec::new(),
-                error: Some(format!("invalid answers cbor: {err}")),
+                error: Some(format!("invalid answers cbor: {detail}")),
             });
         }
     };
 
     if mode == Mode::Remove {
+        telemetry::emit(
+            Level::Info,
+            PROVIDER_TYPE,
+            "tenant remove plan",
+            &[Field { key: "mode", value: "remove" }],
+        );
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
             config: None,

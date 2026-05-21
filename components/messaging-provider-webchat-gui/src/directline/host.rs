@@ -1,6 +1,9 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::Value;
 
+use crate::PROVIDER_TYPE;
 use crate::bindings::greentic::secrets_store::secrets_store;
 use crate::bindings::greentic::state::state_store;
 use webchat_directline_core::directline::store::{SecretStore, StateStore};
@@ -21,16 +24,36 @@ impl StateStore for HostStateStore {
                 if err.code == "not_found" {
                     Ok(None)
                 } else {
-                    Err(format!("state read error: {} - {}", err.code, err.message))
+                    let detail = redact::error_message(&err.message);
+                    telemetry::emit(
+                        Level::Warn,
+                        PROVIDER_TYPE,
+                        "state read error",
+                        &[
+                            Field { key: "code", value: err.code.as_str() },
+                            Field { key: field::ERROR, value: &detail },
+                        ],
+                    );
+                    Err(format!("state read error: {} - {}", err.code, detail))
                 }
             }
         }
     }
 
     fn write(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
-        state_store::write(key, value, None)
-            .map(|_ack| ())
-            .map_err(|err| format!("state write error: {} - {}", err.code, err.message))
+        state_store::write(key, value, None).map(|_ack| ()).map_err(|err| {
+            let detail = redact::error_message(&err.message);
+            telemetry::emit(
+                Level::Warn,
+                PROVIDER_TYPE,
+                "state write error",
+                &[
+                    Field { key: "code", value: err.code.as_str() },
+                    Field { key: field::ERROR, value: &detail },
+                ],
+            );
+            format!("state write error: {} - {}", err.code, detail)
+        })
     }
 }
 
@@ -70,7 +93,22 @@ impl SecretStore for ConfigAwareSecretStore {
         // Fallback to host secrets_store interface
         match secrets_store::get(key) {
             Ok(opt) => Ok(opt),
-            Err(err) => Err(format!("secret error: {} - {}", err.name(), err.message())),
+            Err(err) => {
+                let kind = err.name().to_string();
+                let detail = redact::error_message(err.message());
+                telemetry::emit(
+                    Level::Warn,
+                    PROVIDER_TYPE,
+                    "secret fetch error",
+                    &[
+                        Field { key: field::EVENT_KIND, value: event::SECRET_FETCH },
+                        Field { key: field::SECRET, value: key },
+                        Field { key: field::ERROR_KIND, value: kind.as_str() },
+                        Field { key: field::ERROR, value: &detail },
+                    ],
+                );
+                Err(format!("secret error: {} - {}", kind, detail))
+            }
         }
     }
 }

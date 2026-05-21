@@ -11,6 +11,8 @@ use greentic_types::ChannelMessageEnvelope;
 use greentic_types::messaging::universal_dto::{HttpInV1, HttpOutV1};
 use hmac::{Hmac, KeyInit, Mac};
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::{Value, json};
 use sha1::Sha1;
 
@@ -21,7 +23,7 @@ use super::ingest_helpers::{
 #[cfg(not(test))]
 use crate::DEFAULT_WEBHOOK_SECRET_KEY;
 use crate::config::{get_secret_string, load_config};
-use crate::{DEFAULT_API_BASE, DEFAULT_TOKEN_KEY, ProviderConfig};
+use crate::{DEFAULT_API_BASE, DEFAULT_TOKEN_KEY, PROVIDER_TYPE, ProviderConfig};
 
 pub(crate) struct IngestOutcome {
     pub(crate) envelope: ChannelMessageEnvelope,
@@ -212,7 +214,26 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
             Ok(token) => match fetch_action_details(action_id, &api_base, &token) {
                 Ok(details) => details,
                 Err(err) => {
-                    eprintln!("webex fetch action details failed: {err}");
+                    let detail = redact::error_message(&err);
+                    telemetry::emit(
+                        Level::Warn,
+                        PROVIDER_TYPE,
+                        "webex fetch action details failed",
+                        &[
+                            Field {
+                                key: field::EVENT_KIND,
+                                value: event::DOWNSTREAM_ERROR,
+                            },
+                            Field {
+                                key: field::MESSAGE_ID,
+                                value: action_id,
+                            },
+                            Field {
+                                key: field::ERROR,
+                                value: &detail,
+                            },
+                        ],
+                    );
                     json!({})
                 }
             },
@@ -354,7 +375,26 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                     };
                 }
                 Err(err) => {
-                    println!("webex ingest fetch error for {message_id}: {err}");
+                    let detail = redact::error_message(&err);
+                    telemetry::emit(
+                        Level::Warn,
+                        PROVIDER_TYPE,
+                        "webex ingest fetch error",
+                        &[
+                            Field {
+                                key: field::EVENT_KIND,
+                                value: event::DOWNSTREAM_ERROR,
+                            },
+                            Field {
+                                key: field::MESSAGE_ID,
+                                value: &message_id,
+                            },
+                            Field {
+                                key: field::ERROR,
+                                value: &detail,
+                            },
+                        ],
+                    );
                     let session_id = webhook_room.clone().unwrap_or_else(|| message_id.clone());
                     let sender = pick_sender(&webhook_person_email, &webhook_person_id);
                     let metadata = build_webhook_metadata(

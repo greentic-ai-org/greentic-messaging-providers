@@ -11,6 +11,8 @@
 
 use greentic_types::{ChannelMessageEnvelope, Destination};
 use provider_common::helpers::json_bytes;
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, Span, event, field};
 use serde_json::{Value, json};
 
 use super::{build_webex_body, format_webex_error, summarize_card_text};
@@ -22,6 +24,7 @@ use crate::config::{
 use crate::{DEFAULT_API_BASE, PROVIDER_TYPE};
 
 pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
+    let _span = Span::enter(event::SEND_PAYLOAD, PROVIDER_TYPE, &[]);
     let parsed: Value = match serde_json::from_slice(input_json) {
         Ok(val) => val,
         Err(err) => {
@@ -51,9 +54,21 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
 
     override_config_from_metadata(&mut cfg, &envelope.metadata);
 
-    println!(
-        "webex encoded envelope {}",
-        serde_json::to_string(&envelope).unwrap_or_default()
+    let envelope_summary = redact::body(&serde_json::to_string(&envelope).unwrap_or_default());
+    telemetry::emit(
+        Level::Trace,
+        PROVIDER_TYPE,
+        "webex envelope ready",
+        &[
+            Field {
+                key: field::MESSAGE_ID,
+                value: envelope.id.as_str(),
+            },
+            Field {
+                key: field::BODY,
+                value: &envelope_summary,
+            },
+        ],
     );
 
     let text = envelope
@@ -82,7 +97,18 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
                 kind: Some("email".into()),
             })
     });
-    println!("webex envelope to={:?}", envelope.to);
+    if let Some(dest) = envelope.to.first() {
+        let redacted = redact::user_id(&dest.id);
+        telemetry::emit(
+            Level::Trace,
+            PROVIDER_TYPE,
+            "webex envelope destination",
+            &[Field {
+                key: field::USER,
+                value: &redacted,
+            }],
+        );
+    }
     let destination = match destination {
         Some(dest) => dest,
         None => return json_bytes(&json!({"ok": false, "error": "destination required"})),
@@ -159,10 +185,26 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
 
-    println!(
-        "webex send url={} body={}",
-        url,
-        serde_json::to_string(&body).unwrap_or_default()
+    let body_serialised = serde_json::to_string(&body).unwrap_or_default();
+    let body_summary = redact::body(&body_serialised);
+    telemetry::emit(
+        Level::Info,
+        PROVIDER_TYPE,
+        "webex outbound message",
+        &[
+            Field {
+                key: field::HTTP_METHOD,
+                value: "POST",
+            },
+            Field {
+                key: field::HTTP_HOST,
+                value: api_base.as_str(),
+            },
+            Field {
+                key: field::BODY,
+                value: &body_summary,
+            },
+        ],
     );
     let request = client::Request {
         method: "POST".into(),
@@ -177,14 +219,36 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
     let resp = match client::send(&request, None, None) {
         Ok(resp) => resp,
         Err(err) => {
+            let detail = redact::error_message(&err.message);
+            telemetry::emit(
+                Level::Error,
+                PROVIDER_TYPE,
+                "webex transport error",
+                &[
+                    Field {
+                        key: field::EVENT_KIND,
+                        value: event::DOWNSTREAM_ERROR,
+                    },
+                    Field {
+                        key: field::HTTP_HOST,
+                        value: api_base.as_str(),
+                    },
+                    Field {
+                        key: field::ERROR,
+                        value: &detail,
+                    },
+                ],
+            );
             return json_bytes(
-                &json!({"ok": false, "error": format!("transport error: {}", err.message)}),
+                &json!({"ok": false, "error": format!("transport error: {detail}")}),
             );
         }
     };
 
     if resp.status < 200 || resp.status >= 300 {
         let err_body = resp.body.unwrap_or_default();
+        let body_text = String::from_utf8_lossy(&err_body);
+        telemetry::downstream_error(PROVIDER_TYPE, api_base.as_str(), resp.status, &body_text);
         let detail = format_webex_error(resp.status, &err_body);
         return json_bytes(&json!({"ok": false, "error": detail}));
     }

@@ -432,25 +432,23 @@ mod tests {
             manifest["features"]["app_home"]["messages_tab_read_only_enabled"],
             false
         );
-        assert_eq!(
+        assert!(
             manifest["oauth_config"]["scopes"]["bot"]
                 .as_array()
                 .expect("bot scopes")
                 .iter()
-                .any(|scope| scope.as_str() == Some("im:history")),
-            true
+                .any(|scope| scope.as_str() == Some("im:history"))
         );
         assert_eq!(
             manifest["settings"]["event_subscriptions"]["request_url"],
             "https://chat.example.com/hook"
         );
-        assert_eq!(
+        assert!(
             manifest["settings"]["event_subscriptions"]["bot_events"]
                 .as_array()
                 .expect("bot events")
                 .iter()
-                .any(|event| event.as_str() == Some("message.im")),
-            true
+                .any(|event| event.as_str() == Some("message.im"))
         );
         assert_eq!(
             manifest["settings"]["interactivity"]["request_url"],

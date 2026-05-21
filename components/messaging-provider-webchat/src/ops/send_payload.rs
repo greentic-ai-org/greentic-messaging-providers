@@ -10,7 +10,11 @@
 use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::SendPayloadInV1;
 use provider_common::helpers::{json_bytes, send_payload_error};
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, field};
 use serde_json::{Value, json};
+
+const PROVIDER_TYPE: &str = "messaging.webchat";
 
 use crate::directline::HostStateStore;
 use crate::directline::jwt::DirectLineContext;
@@ -212,13 +216,35 @@ fn find_existing_conversation_state<S: crate::directline::store::StateStore>(
         }
         tried_keys.push(key);
     }
-    eprintln!(
-        "[webchat send_payload] conversation lookup miss conv={} ctx_env={} ctx_tenant={} ctx_team={:?} tried_keys=[{}]",
-        conversation_id,
-        ctx.env,
-        ctx.tenant,
-        ctx.team,
-        tried_keys.join(","),
+    let conv_redacted = redact::user_id(conversation_id);
+    let team_str = ctx.team.as_deref().unwrap_or("<none>");
+    let tried = tried_keys.join(",");
+    telemetry::emit(
+        Level::Warn,
+        PROVIDER_TYPE,
+        "conversation lookup miss",
+        &[
+            Field {
+                key: field::CONVERSATION_ID,
+                value: &conv_redacted,
+            },
+            Field {
+                key: "ctx_env",
+                value: ctx.env.as_str(),
+            },
+            Field {
+                key: field::TENANT,
+                value: ctx.tenant.as_str(),
+            },
+            Field {
+                key: "ctx_team",
+                value: team_str,
+            },
+            Field {
+                key: "tried_keys",
+                value: &tried,
+            },
+        ],
     );
     Ok(None)
 }

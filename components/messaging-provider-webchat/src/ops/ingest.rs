@@ -11,8 +11,12 @@ use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 use provider_common::helpers::json_bytes;
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, field};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+
+use crate::PROVIDER_TYPE;
 
 use crate::directline::{ConfigAwareSecretStore, HostStateStore, handle_directline_request};
 
@@ -180,9 +184,41 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             .filter(|v| !v.is_empty());
         // Surface the autoStart envelope shape so a missing welcome card on
         // the client can be diffed against the operator's flow execution.
-        eprintln!(
-            "[webchat ingest_http] autoStart envelope built env={} tenant={} conv={:?} user={:?} locale={:?}",
-            env_id, tenant_id, conv_id, user_id, locale,
+        let conv_redacted = conv_id
+            .as_deref()
+            .map(redact::user_id)
+            .unwrap_or_else(|| "<none>".to_string());
+        let user_redacted = user_id
+            .as_deref()
+            .map(redact::user_id)
+            .unwrap_or_else(|| "<none>".to_string());
+        let locale_str = locale.as_deref().unwrap_or("<none>");
+        telemetry::emit(
+            Level::Debug,
+            PROVIDER_TYPE,
+            "autoStart envelope built",
+            &[
+                Field {
+                    key: "env",
+                    value: env_id.as_str(),
+                },
+                Field {
+                    key: field::TENANT,
+                    value: tenant_id.as_str(),
+                },
+                Field {
+                    key: field::CONVERSATION_ID,
+                    value: &conv_redacted,
+                },
+                Field {
+                    key: field::USER,
+                    value: &user_redacted,
+                },
+                Field {
+                    key: "locale",
+                    value: locale_str,
+                },
+            ],
         );
         let mut envelope = build_webchat_envelope_with_ctx(
             String::new(),
