@@ -30,8 +30,14 @@ impl StateStore for HostStateStore {
                         PROVIDER_TYPE,
                         "state read error",
                         &[
-                            Field { key: "code", value: err.code.as_str() },
-                            Field { key: field::ERROR, value: &detail },
+                            Field {
+                                key: "code",
+                                value: err.code.as_str(),
+                            },
+                            Field {
+                                key: field::ERROR,
+                                value: &detail,
+                            },
                         ],
                     );
                     Err(format!("state read error: {} - {}", err.code, detail))
@@ -41,19 +47,27 @@ impl StateStore for HostStateStore {
     }
 
     fn write(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
-        state_store::write(key, value, None).map(|_ack| ()).map_err(|err| {
-            let detail = redact::error_message(&err.message);
-            telemetry::emit(
-                Level::Warn,
-                PROVIDER_TYPE,
-                "state write error",
-                &[
-                    Field { key: "code", value: err.code.as_str() },
-                    Field { key: field::ERROR, value: &detail },
-                ],
-            );
-            format!("state write error: {} - {}", err.code, detail)
-        })
+        state_store::write(key, value, None)
+            .map(|_ack| ())
+            .map_err(|err| {
+                let detail = redact::error_message(&err.message);
+                telemetry::emit(
+                    Level::Warn,
+                    PROVIDER_TYPE,
+                    "state write error",
+                    &[
+                        Field {
+                            key: "code",
+                            value: err.code.as_str(),
+                        },
+                        Field {
+                            key: field::ERROR,
+                            value: &detail,
+                        },
+                    ],
+                );
+                format!("state write error: {} - {}", err.code, detail)
+            })
     }
 }
 
@@ -101,10 +115,22 @@ impl SecretStore for ConfigAwareSecretStore {
                     PROVIDER_TYPE,
                     "secret fetch error",
                     &[
-                        Field { key: field::EVENT_KIND, value: event::SECRET_FETCH },
-                        Field { key: field::SECRET, value: key },
-                        Field { key: field::ERROR_KIND, value: kind.as_str() },
-                        Field { key: field::ERROR, value: &detail },
+                        Field {
+                            key: field::EVENT_KIND,
+                            value: event::SECRET_FETCH,
+                        },
+                        Field {
+                            key: field::SECRET,
+                            value: key,
+                        },
+                        Field {
+                            key: field::ERROR_KIND,
+                            value: kind.as_str(),
+                        },
+                        Field {
+                            key: field::ERROR,
+                            value: &detail,
+                        },
                     ],
                 );
                 Err(format!("secret error: {} - {}", kind, detail))
