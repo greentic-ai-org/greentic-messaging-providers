@@ -10,6 +10,7 @@ name = "questions-cli"
 path = "src/main.rs"
 
 [dependencies]
+greentic-telemetry = { workspace = true }
 anyhow.workspace = true
 rpassword.workspace = true
 serde.workspace = true

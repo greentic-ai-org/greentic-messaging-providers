@@ -9,6 +9,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+greentic-telemetry = { workspace = true }
 wit-bindgen.workspace = true
 
 [package.metadata.component]

@@ -25,7 +25,14 @@ fn debug_enabled() -> bool {
 macro_rules! telegram_debug {
     ($($arg:tt)*) => {
         if debug_enabled() {
-            eprintln!($($arg)*);
+            provider_common::telemetry::log(
+                provider_common::telemetry::Level::Debug,
+                &format!($($arg)*),
+                &[provider_common::telemetry::Field {
+                    key: provider_common::telemetry::field::PROVIDER,
+                    value: "telegram",
+                }],
+            );
         }
     };
 }

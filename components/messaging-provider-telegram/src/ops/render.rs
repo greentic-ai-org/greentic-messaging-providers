@@ -8,12 +8,24 @@
 //! host runtime — matching the previous contract of `ops.rs`.
 
 use provider_common::helpers::{RenderPlanConfig, render_plan_common};
+use provider_common::telemetry::{self, Field, Level, field};
+
+const PROVIDER_TYPE: &str = "telegram";
 
 pub(crate) fn render_plan(input_json: &[u8]) -> Vec<u8> {
     match std::panic::catch_unwind(|| render_plan_inner(input_json)) {
         Ok(result) => result,
         Err(err) => {
-            eprintln!("telegram render_plan panic: {err:?}");
+            let detail = format!("{err:?}");
+            telemetry::emit(
+                Level::Error,
+                PROVIDER_TYPE,
+                "render_plan panic",
+                &[Field {
+                    key: field::ERROR,
+                    value: &detail,
+                }],
+            );
             std::panic::resume_unwind(err);
         }
     }

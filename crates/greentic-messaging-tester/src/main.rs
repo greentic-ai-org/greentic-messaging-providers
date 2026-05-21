@@ -181,6 +181,7 @@ struct WebchatState {
 }
 
 fn main() {
+    init_telemetry();
     let cli = Cli::parse();
     let exit_code = match run(cli) {
         Ok(_) => 0,
@@ -192,6 +193,18 @@ fn main() {
         }
     };
     process::exit(exit_code);
+}
+
+fn init_telemetry() {
+    // Honour TELEMETRY_EXPORT (json-stdout|otlp-grpc|otlp-http). When unset the
+    // call short-circuits to a noop subscriber, so the CLI stays silent for
+    // users who don't opt in.
+    if std::env::var_os("TELEMETRY_EXPORT").is_none() {
+        return;
+    }
+    let _ = greentic_telemetry::init_telemetry_auto(greentic_telemetry::TelemetryConfig {
+        service_name: "greentic-messaging-tester".into(),
+    });
 }
 
 fn run(cli: Cli) -> Result<(), CliError> {

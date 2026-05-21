@@ -1,10 +1,10 @@
 pack_id: messaging-provider-bundle
-version: 0.4.99
+version: 0.4.100
 kind: application
 publisher: Greentic
 components:
 - id: templates
-  version: 0.4.33
+  version: 0.4.100
   world: greentic:component/component@0.5.0
   supports:
   - messaging
@@ -19,7 +19,7 @@ components:
     host: {}
   wasm: components/templates/component.wasm
 - id: messaging-provider-dummy
-  version: 0.4.99
+  version: 0.4.100
   world: greentic:provider/schema-core@1.0.0
   supports:
   - messaging
@@ -35,7 +35,7 @@ components:
   wasm: components/messaging-provider-dummy/component.wasm
   manifest: components/messaging-provider-dummy/component.manifest.json
 - id: ai.greentic.component-provision
-  version: 0.4.43
+  version: 0.4.100
   world: greentic:component/component@0.5.0
   supports:
   - messaging
@@ -59,7 +59,7 @@ components:
       random: false
   wasm: components/provision/provision.wasm
 - id: ai.greentic.component-qa
-  version: 0.4.43
+  version: 0.4.100
   world: greentic:component/component@0.5.0
   supports:
   - messaging
@@ -88,7 +88,7 @@ components:
 extensions:
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
-    version: 0.4.33
+    version: 0.4.100
     inline:
       providers:
       - provider_type: messaging.provider.bundle

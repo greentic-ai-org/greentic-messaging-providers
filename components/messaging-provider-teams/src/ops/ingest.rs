@@ -9,8 +9,11 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use greentic_types::messaging::universal_dto::{HttpInV1, HttpOutV1};
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::{Value, json};
 
+use crate::PROVIDER_TYPE;
 use crate::auth::{extract_bearer_token, validate_jwt};
 use crate::config::{get_activity_id, get_conversation_id, load_config};
 
@@ -48,7 +51,22 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         // Validate JWT (Phase 1: decode-only, no signature verification)
         if let Err(err) = validate_jwt(&token, &config.ms_bot_app_id) {
             // Log warning but don't fail - allow dev/testing without full validation
-            eprintln!("JWT validation warning: {}", err);
+            let detail = redact::error_message(&err);
+            telemetry::emit(
+                Level::Warn,
+                PROVIDER_TYPE,
+                "JWT validation warning",
+                &[
+                    Field {
+                        key: field::EVENT_KIND,
+                        value: event::WEBHOOK_REJECTED,
+                    },
+                    Field {
+                        key: field::ERROR,
+                        value: &detail,
+                    },
+                ],
+            );
         }
     }
 
