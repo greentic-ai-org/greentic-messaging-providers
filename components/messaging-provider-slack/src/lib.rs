@@ -31,6 +31,9 @@ pub(crate) const DEFAULT_BOT_TOKEN_KEY: &str = "SLACK_BOT_TOKEN";
 pub(crate) const DEFAULT_APP_ID_KEY: &str = "SLACK_APP_ID";
 pub(crate) const DEFAULT_CONFIG_ACCESS_TOKEN_KEY: &str = "SLACK_CONFIGURATION_ACCESS_TOKEN";
 pub(crate) const DEFAULT_CONFIG_REFRESH_TOKEN_KEY: &str = "SLACK_CONFIGURATION_REFRESH_TOKEN";
+pub(crate) const DEFAULT_CLIENT_ID_KEY: &str = "SLACK_CLIENT_ID";
+pub(crate) const DEFAULT_CLIENT_SECRET_KEY: &str = "SLACK_CLIENT_SECRET";
+pub(crate) const DEFAULT_SIGNING_SECRET_KEY: &str = "SLACK_SIGNING_SECRET";
 
 use config::{ProviderConfigOut, default_config_out, validate_config_out};
 use describe::{
@@ -249,6 +252,7 @@ fn apply_answers_impl(
             DEFAULT_APP_ID_KEY,
             &mut secrets_set,
         );
+        merged.slack_app_id = None;
         collect_secret_answer(
             &answers,
             "slack_configuration_access_token",
@@ -298,6 +302,7 @@ fn apply_answers_impl(
                 &mut secrets_set,
             );
         }
+        merged.slack_app_id = None;
         if has("slack_configuration_access_token") {
             collect_secret_answer(
                 &answers,
@@ -409,7 +414,7 @@ mod tests {
         let describe = build_describe_payload();
         assert_eq!(
             describe.schema_hash,
-            "b1691171bdea022a0f7690779d9aa0ea5eafc62fbb9cc06dd0b7ce2679614f2d"
+            "245265f4310a4f03736bf588aba114eb8f626ca7a555134fcc4ad5634102b1cd"
         );
     }
 
@@ -511,6 +516,7 @@ mod tests {
             "xoxb-token"
         );
         assert_eq!(out_json["secrets_patch"]["set"][DEFAULT_APP_ID_KEY], "A123");
+        assert!(out_json["config"].get("slack_app_id").is_none());
         assert_eq!(
             out_json["secrets_patch"]["set"][DEFAULT_CONFIG_ACCESS_TOKEN_KEY],
             "xoxe-access"

@@ -325,6 +325,9 @@ mod tests {
             public_base_url: "https://chat.example.com".to_string(),
             api_base_url: None,
             bot_token: "xoxb".to_string(),
+            slack_app_id: None,
+            slack_configuration_access_token: None,
+            slack_configuration_refresh_token: None,
         }
     }
 

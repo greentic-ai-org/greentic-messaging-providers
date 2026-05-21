@@ -16,6 +16,16 @@ pub(crate) struct ProviderConfig {
     pub(crate) api_base_url: Option<String>,
     #[serde(default)]
     pub(crate) bot_token: String,
+    // Slack app configuration credentials (optional; prefer secrets_store)
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub(crate) slack_app_id: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub(crate) slack_configuration_access_token: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub(crate) slack_configuration_refresh_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +41,9 @@ pub(crate) struct ProviderConfigOut {
     #[serde(skip_serializing_if = "String::is_empty")]
     #[serde(default)]
     pub(crate) bot_token: String,
+    // App credentials stored in secrets_patch, not in config
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) slack_app_id: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -48,6 +61,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         public_base_url: String::new(),
         api_base_url: DEFAULT_API_BASE.to_string(),
         bot_token: String::new(),
+        slack_app_id: None,
     }
 }
 
@@ -93,6 +107,9 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "public_base_url",
         "api_base_url",
         "bot_token",
+        "slack_app_id",
+        "slack_configuration_access_token",
+        "slack_configuration_refresh_token",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -168,6 +185,7 @@ mod tests {
             public_base_url: "https://example.com".to_string(),
             api_base_url: "https://slack.test/api".to_string(),
             bot_token: "token".to_string(),
+            slack_app_id: None,
         }
     }
 
@@ -219,6 +237,27 @@ mod tests {
         .expect("top-level config");
         assert_eq!(top_level.bot_token, "top-level");
         assert_eq!(top_level.default_channel.as_deref(), Some("C123"));
+    }
+
+    #[test]
+    fn load_config_accepts_slack_app_credentials() {
+        let config = load_config(&json!({
+            "public_base_url": "https://example.com",
+            "slack_app_id": "A123",
+            "slack_configuration_access_token": "xoxe-access",
+            "slack_configuration_refresh_token": "xoxe-refresh"
+        }))
+        .expect("config with app credentials");
+
+        assert_eq!(config.slack_app_id.as_deref(), Some("A123"));
+        assert_eq!(
+            config.slack_configuration_access_token.as_deref(),
+            Some("xoxe-access")
+        );
+        assert_eq!(
+            config.slack_configuration_refresh_token.as_deref(),
+            Some("xoxe-refresh")
+        );
     }
 
     #[test]

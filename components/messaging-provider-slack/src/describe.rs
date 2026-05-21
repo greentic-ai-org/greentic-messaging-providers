@@ -65,19 +65,19 @@ pub(crate) const I18N_KEYS: &[&str] = &[
 
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
     ("enabled", "slack.qa.setup.enabled", true),
-    ("public_base_url", "slack.qa.setup.public_base_url", true),
-    ("bot_token", "slack.qa.setup.bot_token", true),
+    ("public_base_url", "slack.qa.setup.public_base_url", false),
+    ("bot_token", "slack.qa.setup.bot_token", false),
     ("default_channel", "slack.qa.setup.default_channel", false),
-    ("slack_app_id", "slack.qa.setup.slack_app_id", true),
+    ("slack_app_id", "slack.qa.setup.slack_app_id", false),
     (
         "slack_configuration_access_token",
         "slack.qa.setup.slack_configuration_access_token",
-        true,
+        false,
     ),
     (
         "slack_configuration_refresh_token",
         "slack.qa.setup.slack_configuration_refresh_token",
-        true,
+        false,
     ),
 ];
 
@@ -118,6 +118,11 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 "send_payload",
                 "slack.op.send_payload.title",
                 "slack.op.send_payload.description",
+            ),
+            op(
+                "setup_webhook",
+                "slack.op.setup_webhook.title",
+                "slack.op.setup_webhook.description",
             ),
         ],
         input_schema: input_schema.clone(),
@@ -247,15 +252,18 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("slack.qa.setup.public_base_url", "Public base URL"),
     ("slack.qa.setup.bot_token", "Bot token"),
     ("slack.qa.setup.default_channel", "Default channel"),
-    ("slack.qa.setup.slack_app_id", "Slack App ID"),
+    (
+        "slack.qa.setup.slack_app_id",
+        "Slack App ID (optional for existing apps)",
+    ),
     (
         "slack.qa.setup.slack_configuration_access_token",
-        "Slack Configuration Access Token",
+        "Slack Configuration Access Token (for automated app setup)",
     ),
     ("slack.schema.config.slack_app_id.title", "Slack App ID"),
     (
         "slack.schema.config.slack_app_id.description",
-        "App ID from api.slack.com/apps (e.g. A07XXXXXX). Required for auto-configuring event subscriptions.",
+        "App ID from api.slack.com/apps (e.g. A07XXXXXX). Leave blank to create a new app during automated setup.",
     ),
     (
         "slack.schema.config.slack_configuration_access_token.title",
@@ -263,7 +271,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ),
     (
         "slack.schema.config.slack_configuration_access_token.description",
-        "Short-lived configuration access token from api.slack.com/apps settings. Used to update your app manifest automatically.",
+        "Short-lived configuration access token from api.slack.com/apps settings. Used to create or update your app manifest automatically.",
     ),
     (
         "slack.qa.setup.slack_configuration_refresh_token",
@@ -362,6 +370,30 @@ fn config_schema() -> SchemaIr {
                     "slack.schema.config.api_base_url.title",
                     "slack.schema.config.api_base_url.description",
                     "uri",
+                ),
+            ),
+            (
+                "slack_app_id",
+                false,
+                schema_str(
+                    "slack.schema.config.slack_app_id.title",
+                    "slack.schema.config.slack_app_id.description",
+                ),
+            ),
+            (
+                "slack_configuration_access_token",
+                false,
+                schema_str(
+                    "slack.schema.config.slack_configuration_access_token.title",
+                    "slack.schema.config.slack_configuration_access_token.description",
+                ),
+            ),
+            (
+                "slack_configuration_refresh_token",
+                false,
+                schema_str(
+                    "slack.schema.config.slack_configuration_refresh_token.title",
+                    "slack.schema.config.slack_configuration_refresh_token.description",
                 ),
             ),
         ],

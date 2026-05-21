@@ -10,6 +10,11 @@
 #   scripts/change_provider_version.sh messaging-webchat-gui 1.1.1
 #   scripts/change_provider_version.sh --no-build slack 1.1.1
 
+# Re-execute with bash if not already running in bash
+if [ -z "${BASH_VERSION}" ]; then
+  exec bash "$0" "$@"
+fi
+
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

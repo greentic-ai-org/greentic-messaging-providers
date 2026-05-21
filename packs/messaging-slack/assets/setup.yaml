@@ -2,11 +2,27 @@ provider_id: slack
 version: 1
 title: Slack provider setup
 questions:
+  - name: slack_configuration_access_token
+    title: Slack Configuration Access Token
+    kind: string
+    required: true
+    secret: true
+    help: "Required. Greentic uses this Slack configuration token to create a new Slack app, or update the app named below if you provide an existing Slack App ID."
+    group: Automated setup
+    docs_url: "https://api.slack.com/apps"
+  - name: slack_configuration_refresh_token
+    title: Slack Configuration Refresh Token
+    kind: string
+    required: true
+    secret: true
+    help: "Required. Slack configuration access tokens are short lived; Greentic stores this refresh token and rotates the access token automatically during setup."
+    group: Automated setup
+    docs_url: "https://api.slack.com/apps"
   - name: public_base_url
     title: Public base URL
     kind: string
-    required: true
-    help: "Public-facing URL for webhook callbacks (auto-replaced by gtc start when using tunnel)"
+    required: false
+    help: "Optional. Leave blank when the setup runner can auto-detect the public tunnel URL. Fill this only when Slack should call a specific HTTPS base URL for Events and interactivity callbacks."
     placeholder: "https://xxxx.trycloudflare.com"
     group: Connection
     validate:
@@ -14,47 +30,41 @@ questions:
   - name: api_base_url
     title: API base URL
     kind: string
-    required: true
-    help: "Slack API base URL (default: https://slack.com/api)"
+    required: false
+    help: "Optional. Leave blank to use https://slack.com/api. Override only for a Slack-compatible API endpoint."
     placeholder: "https://slack.com/api"
     group: Connection
     validate:
       regex: "^https?://"
-  - name: slack_bot_token
-    title: Slack bot token
-    kind: string
-    required: true
-    secret: true
-    placeholder: "xoxb-your-token-here"
-    group: Authentication
-    docs_url: "https://api.slack.com/apps"
   - name: default_channel
     title: Default channel
     kind: string
     required: false
+    help: "Optional. Default channel or conversation ID used when a message does not provide a destination."
     placeholder: "#general"
     group: Defaults
   - name: slack_app_id
-    title: Slack App ID
+    title: Existing Slack App ID
     kind: string
-    required: true
-    help: "Find in Slack App settings → Basic Information → App ID"
+    required: false
+    help: "Optional. Fill this only to reuse and update an existing Slack app. Leave blank for Greentic to create a new Slack app with the right Events API, interactivity, and OAuth settings."
     placeholder: "A0XXXXXXXXX"
-    group: Authentication
+    group: Existing app or manual setup
     docs_url: "https://api.slack.com/apps"
-  - name: slack_configuration_access_token
-    title: Slack Configuration Access Token
+  - name: slack_bot_token
+    title: Existing Slack bot token
     kind: string
-    required: true
+    required: false
     secret: true
-    help: "Short-lived access token generated at api.slack.com → Your Apps → App Configuration Tokens"
-    group: Authentication
+    help: "Optional. Fill this only when reusing an already-installed Slack app and you already have its xoxb bot token. Leave blank for the automated setup/OAuth install flow."
+    placeholder: "xoxb-your-token-here"
+    group: Existing app or manual setup
     docs_url: "https://api.slack.com/apps"
-  - name: slack_configuration_refresh_token
-    title: Slack Configuration Refresh Token
+  - name: slack_signing_secret
+    title: Existing Slack signing secret
     kind: string
-    required: true
+    required: false
     secret: true
-    help: "Refresh token generated alongside the Slack configuration access token. Used to rotate expired access tokens automatically."
-    group: Authentication
+    help: "Optional. Fill this only when reusing an existing Slack app and you already know its signing secret. New apps created by automated setup return and store this automatically when Slack provides it."
+    group: Existing app or manual setup
     docs_url: "https://api.slack.com/apps"

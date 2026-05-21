@@ -16,6 +16,11 @@
 # The optional provider name is resolved through ci/provider_matrix.py, so it
 # accepts the same names as scripts/publish_provider.sh.
 
+# Re-execute with bash if not already running in bash
+if [ -z "${BASH_VERSION}" ]; then
+  exec bash "$0" "$@"
+fi
+
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,52 +38,84 @@ if [ $# -gt 1 ]; then
   exit 2
 fi
 
-if [ -n "${PROVIDER_FILTER}" ]; then
-  mapfile -t PROVIDERS < <(python3 ci/provider_matrix.py resolve-provider "${PROVIDER_FILTER}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])')
-else
-  mapfile -t PROVIDERS < <(python3 - <<'PY'
-import json
-from pathlib import Path
-
-matrix = json.loads(Path("ci/provider-matrix.json").read_text())
-for provider in sorted(matrix["providers"]):
-    print(provider)
-PY
-)
+if [ $# -gt 1 ]; then
+  echo "Usage: $0 [provider]" >&2
+  exit 2
 fi
 
-declare -A BUILT_COMPONENTS=()
+# Use Python to handle all array operations (bash 3.2 compatible)
+python3 - "${PROVIDER_FILTER}" <<'PYTHON_EOF'
+import json
+import subprocess
+import sys
+import os
+from pathlib import Path
 
-for provider in "${PROVIDERS[@]}"; do
-  resolved_json="$(python3 ci/provider_matrix.py resolve-provider "${provider}")"
-  pack="$(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["pack"])')"
-  version="$(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
-  mapfile -t components < <(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["components"]))')
+provider_filter = sys.argv[1]
+root_dir = Path(".")
 
-  echo "== provider: ${provider} =="
-  echo "  pack      : ${pack}"
-  echo "  version   : ${version}"
-  echo "  components: ${components[*]}"
+# Get providers list
+if provider_filter:
+    try:
+        resolved = subprocess.run(
+            ["python3", "ci/provider_matrix.py", "resolve-provider", provider_filter],
+            capture_output=True, text=True, check=True
+        )
+        provider_name = json.loads(resolved.stdout)["provider"]
+        providers = [provider_name]
+    except Exception as e:
+        print(f"Error resolving provider: {e}", file=sys.stderr)
+        sys.exit(1)
+else:
+    matrix = json.loads((root_dir / "ci/provider-matrix.json").read_text())
+    providers = sorted(matrix["providers"].keys())
 
-  for component in "${components[@]}"; do
-    if [ -n "${BUILT_COMPONENTS[${component}]:-}" ]; then
-      echo "-- component already built: ${component}"
-      continue
-    fi
-    if [ ! -f "tools/build_components/${component}.sh" ]; then
-      echo "missing component build script: tools/build_components/${component}.sh" >&2
-      exit 1
-    fi
-    echo "-- build component: ${component}"
-    bash "tools/build_components/${component}.sh"
-    if [ -f "components/${component}/component.manifest.json" ]; then
-      cp "components/${component}/component.manifest.json" "target/components/${component}.manifest.json"
-    fi
-    BUILT_COMPONENTS["${component}"]=1
-  done
+built_components = set()
 
-  echo "-- stage pack inputs: ${pack}"
-  python3 - "${pack}" "${components[@]}" <<'PY'
+for provider in providers:
+    resolved = subprocess.run(
+        ["python3", "ci/provider_matrix.py", "resolve-provider", provider],
+        capture_output=True, text=True, check=True
+    )
+    data = json.loads(resolved.stdout)
+    pack = data["pack"]
+    version = data["version"]
+    components = data["components"]
+
+    print(f"== provider: {provider} ==")
+    print(f"  pack      : {pack}")
+    print(f"  version   : {version}")
+    print(f"  components: {' '.join(components)}")
+
+    for component in components:
+        if component in built_components:
+            print(f"-- component already built: {component}")
+            continue
+
+        build_script = root_dir / "tools" / "build_components" / f"{component}.sh"
+        if not build_script.exists():
+            print(f"missing component build script: {build_script}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"-- build component: {component}")
+        result = subprocess.run(["bash", str(build_script)], check=False)
+        if result.returncode != 0:
+            sys.exit(result.returncode)
+
+        manifest_src = root_dir / "components" / component / "component.manifest.json"
+        if manifest_src.exists():
+            manifest_dst = root_dir / "target" / "components" / f"{component}.manifest.json"
+            manifest_dst.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(manifest_src, manifest_dst)
+
+        built_components.add(component)
+
+    # Stage pack inputs
+    print(f"-- stage pack inputs: {pack}")
+    stage_result = subprocess.run(
+        ["python3", "-", pack] + components,
+        input='''
 import json
 import shutil
 import sys
@@ -137,20 +174,37 @@ for item in component_sources:
         pack_manifest = pack_dir / manifest_rel
         if pack_manifest.exists():
             shutil.copy2(pack_manifest, target_components / f"{comp_id}.manifest.json")
+''',
+        text=True,
+        check=False
+    )
+    if stage_result.returncode != 0:
+        sys.exit(stage_result.returncode)
 
-PY
+    # Build pack
+    print(f"-- build pack: {pack}")
+    env = dict(os.environ)
+    if pack == "messaging-webchat-gui" and "GREENTIC_WEBCHAT_SITE_DIR" not in env:
+        env["GREENTIC_WEBCHAT_SITE_DIR"] = str(root_dir / ".tmp" / "no-webchat-site-import")
+    env["PACK_FILTER"] = pack
+    env["PACK_VERSION"] = version
 
-  echo "-- build pack: ${pack}"
-  if [ "${pack}" = "messaging-webchat-gui" ] && [ -z "${GREENTIC_WEBCHAT_SITE_DIR+x}" ]; then
-    GREENTIC_WEBCHAT_SITE_DIR="${ROOT_DIR}/.tmp/no-webchat-site-import" PACK_FILTER="${pack}" PACK_VERSION="${version}" ./ci/steps/11_build_packs.sh
-  else
-    PACK_FILTER="${pack}" PACK_VERSION="${version}" ./ci/steps/11_build_packs.sh
-  fi
-  echo
-done
+    import os
+    result = subprocess.run(
+        ["bash", "ci/steps/11_build_packs.sh"],
+        env=env,
+        check=False
+    )
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+    print()
 
-echo "Built provider pack artifacts:"
-for provider in "${PROVIDERS[@]}"; do
-  pack="$(python3 ci/provider_matrix.py resolve-provider "${provider}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["pack"])')"
-  echo "  dist/packs/${pack}.gtpack"
-done
+print("Built provider pack artifacts:")
+for provider in providers:
+    resolved = subprocess.run(
+        ["python3", "ci/provider_matrix.py", "resolve-provider", provider],
+        capture_output=True, text=True, check=True
+    )
+    pack = json.loads(resolved.stdout)["pack"]
+    print(f"  dist/packs/{pack}.gtpack")
+PYTHON_EOF
