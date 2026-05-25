@@ -19,7 +19,8 @@ pub use greentic_telemetry::wasm_guest::{Field, Level, log, span_end, span_start
 
 use std::sync::Once;
 
-/// One-shot identity registration for the calling component.
+/// One-shot identity + emission-config registration for the calling
+/// component.
 ///
 /// Each provider component embeds its own copy of `provider_common`, so the
 /// underlying `Once` is per-component; the first telemetry call from a
@@ -28,11 +29,15 @@ use std::sync::Once;
 /// fallback line carries an explicit `[<provider>]` prefix. Subsequent calls
 /// are no-ops.
 ///
-/// The same init checks `GREENTIC_TELEMETRY_FILE_LINE` (values: `0|1`,
-/// `on|off`, `true|false`, `yes|no`) and toggles
-/// [`greentic_telemetry::wasm_guest::set_caller_location_enabled`] so
-/// operators can suppress the `file:line` segment via wasi env without a
-/// recompile.
+/// The same init reads three wasi env vars (set by the runner / gtc):
+///
+/// - `GREENTIC_TELEMETRY_FILE_LINE` (`0|1`, `on|off`, `true|false`,
+///   `yes|no`) toggles the `file:line` segment on each emitted line. Default
+///   `on`.
+/// - `GREENTIC_TELEMETRY_LEVEL` (`trace|debug|info|warn|error`,
+///   case-insensitive) sets a hard floor for emission at the source. Events
+///   below the floor short-circuit before any formatting. Default `trace`
+///   (no filtering).
 fn init_identity_once(provider: &str) {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
@@ -44,7 +49,24 @@ fn init_identity_once(provider: &str) {
             );
             greentic_telemetry::wasm_guest::set_caller_location_enabled(on);
         }
+        if let Ok(val) = std::env::var("GREENTIC_TELEMETRY_LEVEL")
+            && let Some(level) = parse_level(&val)
+        {
+            greentic_telemetry::wasm_guest::set_min_level(level);
+        }
     });
+}
+
+fn parse_level(value: &str) -> Option<Level> {
+    let lower = value.trim().to_ascii_lowercase();
+    Some(match lower.as_str() {
+        "trace" => Level::Trace,
+        "debug" => Level::Debug,
+        "info" => Level::Info,
+        "warn" | "warning" => Level::Warn,
+        "error" | "err" => Level::Error,
+        _ => return None,
+    })
 }
 
 /// Canonical field keys. Use these constants so all providers tag events with
