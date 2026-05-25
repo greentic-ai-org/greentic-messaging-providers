@@ -17,6 +17,36 @@
 
 pub use greentic_telemetry::wasm_guest::{Field, Level, log, span_end, span_start};
 
+use std::sync::Once;
+
+/// One-shot identity registration for the calling component.
+///
+/// Each provider component embeds its own copy of `provider_common`, so the
+/// underlying `Once` is per-component; the first telemetry call from a
+/// component registers its `PROVIDER_TYPE` with
+/// [`greentic_telemetry::wasm_guest::set_component_name`] so every emitted
+/// fallback line carries an explicit `[<provider>]` prefix. Subsequent calls
+/// are no-ops.
+///
+/// The same init checks `GREENTIC_TELEMETRY_FILE_LINE` (values: `0|1`,
+/// `on|off`, `true|false`, `yes|no`) and toggles
+/// [`greentic_telemetry::wasm_guest::set_caller_location_enabled`] so
+/// operators can suppress the `file:line` segment via wasi env without a
+/// recompile.
+fn init_identity_once(provider: &str) {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        greentic_telemetry::wasm_guest::set_component_name(provider);
+        if let Ok(val) = std::env::var("GREENTIC_TELEMETRY_FILE_LINE") {
+            let on = matches!(
+                val.as_str(),
+                "1" | "true" | "TRUE" | "on" | "ON" | "yes" | "YES"
+            );
+            greentic_telemetry::wasm_guest::set_caller_location_enabled(on);
+        }
+    });
+}
+
 /// Canonical field keys. Use these constants so all providers tag events with
 /// the same names — collectors index on them.
 pub mod field {
@@ -77,6 +107,7 @@ impl Span {
     /// Start a span named after a canonical event kind, attaching the
     /// provider identifier as a field.
     pub fn enter(event_kind: &str, provider: &str, extra: &[Field<'_>]) -> Self {
+        init_identity_once(provider);
         let mut fields: Vec<Field<'_>> = Vec::with_capacity(extra.len() + 2);
         fields.push(Field {
             key: field::EVENT_KIND,
@@ -105,6 +136,7 @@ impl Drop for Span {
 
 /// Emit a structured log line tagged with the provider name.
 pub fn emit(level: Level, provider: &str, message: &str, extra: &[Field<'_>]) {
+    init_identity_once(provider);
     let mut fields: Vec<Field<'_>> = Vec::with_capacity(extra.len() + 1);
     fields.push(Field {
         key: field::PROVIDER,
@@ -120,6 +152,7 @@ pub fn emit(level: Level, provider: &str, message: &str, extra: &[Field<'_>]) {
 /// query string — query strings sometimes carry tokens). `body` is run
 /// through [`crate::redact::response_snippet`] before reaching the log layer.
 pub fn downstream_error(provider: &str, endpoint: &str, status: u16, body: &str) {
+    init_identity_once(provider);
     let status_str = status.to_string();
     let snippet = crate::redact::response_snippet(body);
     let fields = [
