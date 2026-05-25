@@ -54,8 +54,51 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
     let payload: Value = serde_json::from_slice(&payload_bytes).unwrap_or(Value::Null);
     match persist_send_payload(&payload) {
         Ok(meta) => send_payload_success_with_meta(meta.as_ref()),
-        Err(err) => send_payload_error(&err, false),
+        Err(err) => {
+            try_surface_error_activity(&payload, &err);
+            send_payload_error(&err, false)
+        }
     }
+}
+
+/// Pull a structured flow-error envelope out of a send_payload body when the
+/// upstream flow engine flagged the activity as an error reply. Returns
+/// `Some((error_kind, error_message))` when both `metadata.error_kind` and
+/// `metadata.error_message` are present and non-empty.
+fn extract_error_envelope(payload: &Value) -> Option<(String, String)> {
+    let metadata = payload.get("metadata")?;
+    let kind = metadata
+        .get("error_kind")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+    let message = metadata
+        .get("error_message")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+    Some((kind.to_string(), message.to_string()))
+}
+
+/// Best-effort: append a redacted error card to the conversation pointed at
+/// by `payload.session_id` so the chat user sees what failed instead of
+/// silently re-prompting. No-op when context is missing.
+fn try_surface_error_activity(payload: &Value, error_message: &str) {
+    let Some(session_id) = value_as_trimmed_string(payload.get("session_id")) else {
+        return;
+    };
+    let env = value_as_trimmed_string(payload.get("env"));
+    let tenant = value_as_trimmed_string(payload.get("tenant"));
+    let team = value_as_trimmed_string(payload.get("team"));
+    let safe_message = redact::error_message(error_message);
+    let _ = append_error_activity_to_conversation(
+        &session_id,
+        &safe_message,
+        "send_payload_error",
+        env.as_deref(),
+        tenant.as_deref(),
+        team.as_deref(),
+    );
 }
 
 /// Build a `send_payload` success response, optionally including a `_greentic`
@@ -104,23 +147,42 @@ fn persist_send_payload(payload: &Value) -> Result<Option<GreenticActivityMeta>,
         return Err("text, adaptive_card, attachments, or extensions required".into());
     }
 
-    // If session_id is present, try to append the bot response as a Direct Line
-    // activity so that GET /activities polling returns it to the frontend.
+    // Detect a structured flow-error envelope (set by greentic-runner's
+    // engine when a user-facing flow node fails). When present, route the
+    // activity through the styled error-card path instead of the regular
+    // bot reply.
+    let error_envelope = extract_error_envelope(payload);
+
     let mut activity_meta: Option<GreenticActivityMeta> = None;
     if let Some(session_id) = value_as_trimmed_string(payload.get("session_id")) {
         let env = value_as_trimmed_string(payload.get("env"));
         let tenant = value_as_trimmed_string(payload.get("tenant"));
         let team = value_as_trimmed_string(payload.get("team"));
-        if let Ok(Some(watermark)) = append_bot_activity_to_conversation(
-            &session_id,
-            &text,
-            adaptive_card_json.as_deref(),
-            extensions.as_ref(),
-            envelope_attachments.as_ref(),
-            env.as_deref(),
-            tenant.as_deref(),
-            team.as_deref(),
-        ) {
+
+        let append_result = if let Some((error_kind, error_message)) = &error_envelope {
+            let safe_message = redact::error_message(error_message);
+            append_error_activity_to_conversation(
+                &session_id,
+                &safe_message,
+                error_kind,
+                env.as_deref(),
+                tenant.as_deref(),
+                team.as_deref(),
+            )
+        } else {
+            append_bot_activity_to_conversation(
+                &session_id,
+                &text,
+                adaptive_card_json.as_deref(),
+                extensions.as_ref(),
+                envelope_attachments.as_ref(),
+                env.as_deref(),
+                tenant.as_deref(),
+                team.as_deref(),
+            )
+        };
+
+        if let Ok(Some(watermark)) = append_result {
             activity_meta = Some(GreenticActivityMeta {
                 conversation_id: session_id,
                 tenant: tenant.unwrap_or_else(|| "default".to_string()),
@@ -197,6 +259,85 @@ fn append_bot_activity_to_conversation(
     let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
     store.write(&conv_key, &updated)?;
     Ok(Some(watermark))
+}
+
+/// Append an "event"-typed activity carrying a redacted error AC card. Returns
+/// `Ok(None)` when the conversation isn't found (we never create a stray one
+/// just to deliver an error).
+fn append_error_activity_to_conversation(
+    conversation_id: &str,
+    safe_message: &str,
+    error_kind: &str,
+    env: Option<&str>,
+    tenant: Option<&str>,
+    team: Option<&str>,
+) -> Result<Option<u64>, String> {
+    let ctx = DirectLineContext {
+        env: env.unwrap_or("default").to_string(),
+        tenant: tenant.unwrap_or("default").to_string(),
+        team: team.map(str::to_string),
+    };
+    let mut store = HostStateStore;
+
+    let (conv_key, conv_bytes) =
+        match find_existing_conversation_state(&mut store, &ctx, conversation_id)? {
+            Some(found) => found,
+            None => return Ok(None),
+        };
+
+    let mut conversation: crate::directline::state::ConversationState =
+        serde_json::from_slice(&conv_bytes).map_err(|e| e.to_string())?;
+    let watermark = conversation.bump_watermark();
+    let card = build_error_adaptive_card(safe_message, error_kind);
+    let card_json = serde_json::to_string(&card).unwrap_or_else(|_| "{}".to_string());
+    let raw = build_bot_activity_raw(safe_message, Some(&card_json), None, None);
+
+    let activity = StoredActivity {
+        id: format!("error-{watermark}"),
+        // `event` type avoids the bot-echo loop and one-shot delivery.
+        type_: "event".to_string(),
+        text: Some(safe_message.to_string()),
+        from: Some("bot".to_string()),
+        timestamp: chrono::Utc::now().timestamp_millis(),
+        watermark,
+        raw,
+    };
+    conversation.activities.push(activity);
+
+    let updated = serde_json::to_vec(&conversation).map_err(|e| e.to_string())?;
+    store.write(&conv_key, &updated)?;
+    Ok(Some(watermark))
+}
+
+/// Adaptive Card body for the error activity. Attention-styled headline +
+/// the redacted detail + a small `kind:` tag.
+fn build_error_adaptive_card(safe_message: &str, error_kind: &str) -> Value {
+    json!({
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "Something went wrong",
+                "weight": "Bolder",
+                "size": "Medium",
+                "color": "Attention"
+            },
+            {
+                "type": "TextBlock",
+                "text": safe_message,
+                "wrap": true
+            },
+            {
+                "type": "TextBlock",
+                "text": format!("kind: {error_kind}"),
+                "isSubtle": true,
+                "size": "Small",
+                "spacing": "Small"
+            }
+        ]
+    })
 }
 
 /// Try to locate an existing conversation state under any plausible context
@@ -642,6 +783,64 @@ mod tests {
         assert_eq!(
             value_as_trimmed_string(json!({"team": "  "}).get("team")),
             None
+        );
+    }
+
+    #[test]
+    fn error_adaptive_card_has_expected_shape() {
+        let card = build_error_adaptive_card("downstream 502", "send_payload_error");
+        assert_eq!(card["type"], "AdaptiveCard");
+        let body = card["body"].as_array().expect("body array");
+        assert_eq!(body.len(), 3);
+        assert_eq!(body[0]["color"], "Attention");
+        assert_eq!(body[0]["weight"], "Bolder");
+        assert_eq!(body[1]["text"], "downstream 502");
+        assert_eq!(body[1]["wrap"], true);
+        assert_eq!(body[2]["text"], "kind: send_payload_error");
+        assert_eq!(body[2]["isSubtle"], true);
+    }
+
+    #[test]
+    fn try_surface_error_activity_no_session_id_is_silent_noop() {
+        try_surface_error_activity(&json!({}), "input decode failed");
+        try_surface_error_activity(&json!({"session_id": "  "}), "blank session");
+    }
+
+    #[test]
+    fn extract_error_envelope_recognises_engine_shape() {
+        // What greentic-runner's engine writes when a user-facing flow node
+        // fails: `metadata.error_kind` + `metadata.error_message`.
+        let payload = json!({
+            "text": "Something went wrong while running this step: 401",
+            "metadata": {
+                "error_kind": "flow_node_failed",
+                "error_message": "weatherapi returned 401 Unauthorized",
+                "node_id": "call_weather",
+            }
+        });
+        let (kind, message) = extract_error_envelope(&payload).expect("envelope present");
+        assert_eq!(kind, "flow_node_failed");
+        assert_eq!(message, "weatherapi returned 401 Unauthorized");
+    }
+
+    #[test]
+    fn extract_error_envelope_returns_none_for_regular_replies() {
+        // Normal bot replies must not be confused for errors.
+        assert!(extract_error_envelope(&json!({"text": "hello"})).is_none());
+        assert!(extract_error_envelope(&json!({"metadata": {}})).is_none());
+        // Empty values fall through too: a real envelope must have both
+        // fields and they must be non-empty.
+        assert!(
+            extract_error_envelope(&json!({
+                "metadata": {"error_kind": "", "error_message": "x"}
+            }))
+            .is_none()
+        );
+        assert!(
+            extract_error_envelope(&json!({
+                "metadata": {"error_kind": "x", "error_message": "  "}
+            }))
+            .is_none()
         );
     }
 }
