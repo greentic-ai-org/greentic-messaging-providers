@@ -17,6 +17,7 @@
 
 pub use greentic_telemetry::wasm_guest::{Field, Level, log, span_end, span_start};
 
+use std::panic::Location;
 use std::sync::Once;
 
 /// One-shot identity + emission-config registration for the calling
@@ -112,24 +113,32 @@ pub mod event {
     pub const MESSAGE_REJECTED: &str = "message_rejected";
 }
 
-/// RAII span guard. Drop ends the span — works correctly even on `?` early
-/// returns or panics.
+/// RAII span guard. Drop ends the span (works correctly even on `?` early
+/// returns or panics).
 ///
-/// Built on [`greentic_telemetry::wasm_guest::span_start`] /
-/// [`greentic_telemetry::wasm_guest::span_end`]. On `wasm32` with the
-/// `wit-guest` feature these forward to the host; otherwise they emit
-/// structured stdout (which the runner host captures from the WASM stdio
-/// pipe).
+/// Built on
+/// [`greentic_telemetry::wasm_guest::span_start_at`] /
+/// [`greentic_telemetry::wasm_guest::span_end_at`]. The caller's
+/// `Location` is captured once at `enter()` time and stored on the guard
+/// so that the end line emitted from `Drop` attributes back to the source
+/// line that opened the span, not to this wrapper or `Drop::drop`.
 #[must_use = "the span ends when the guard drops; bind it to a local"]
 pub struct Span {
     id: u64,
+    caller: &'static Location<'static>,
 }
 
 impl Span {
     /// Start a span named after a canonical event kind, attaching the
     /// provider identifier as a field.
+    ///
+    /// `#[track_caller]` captures the caller's `Location` once at this
+    /// call site; the same `Location` is reused by `Drop` so the matching
+    /// end line attributes to the same source point.
+    #[track_caller]
     pub fn enter(event_kind: &str, provider: &str, extra: &[Field<'_>]) -> Self {
         init_identity_once(provider);
+        let caller = Location::caller();
         let mut fields: Vec<Field<'_>> = Vec::with_capacity(extra.len() + 2);
         fields.push(Field {
             key: field::EVENT_KIND,
@@ -140,11 +149,12 @@ impl Span {
             value: provider,
         });
         fields.extend_from_slice(extra);
-        let id = span_start(event_kind, &fields);
-        Span { id }
+        let id = greentic_telemetry::wasm_guest::span_start_at(event_kind, &fields, caller);
+        Span { id, caller }
     }
 
     /// Record a structured event inside the span without ending it.
+    #[track_caller]
     pub fn event(&self, level: Level, message: &str, fields: &[Field<'_>]) {
         log(level, message, fields);
     }
@@ -152,11 +162,17 @@ impl Span {
 
 impl Drop for Span {
     fn drop(&mut self) {
-        span_end(self.id);
+        // Use the caller stored at `enter()` so the end line points at the
+        // source location that opened the span, not at `Drop::drop`.
+        greentic_telemetry::wasm_guest::span_end_at(self.id, self.caller);
     }
 }
 
 /// Emit a structured log line tagged with the provider name.
+///
+/// `#[track_caller]` so emitted lines carry the caller's `file:line`, not
+/// this wrapper.
+#[track_caller]
 pub fn emit(level: Level, provider: &str, message: &str, extra: &[Field<'_>]) {
     init_identity_once(provider);
     let mut fields: Vec<Field<'_>> = Vec::with_capacity(extra.len() + 1);
@@ -171,8 +187,9 @@ pub fn emit(level: Level, provider: &str, message: &str, extra: &[Field<'_>]) {
 /// Convenience: log a downstream HTTP error with the response body redacted.
 ///
 /// `endpoint` should be the bare host or host+path (never the full URL with
-/// query string — query strings sometimes carry tokens). `body` is run
+/// query string, since query strings sometimes carry tokens). `body` is run
 /// through [`crate::redact::response_snippet`] before reaching the log layer.
+#[track_caller]
 pub fn downstream_error(provider: &str, endpoint: &str, status: u16, body: &str) {
     init_identity_once(provider);
     let status_str = status.to_string();
