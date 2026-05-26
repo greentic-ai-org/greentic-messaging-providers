@@ -64,11 +64,6 @@ pub(crate) const I18N_KEYS: &[&str] = &[
 ];
 
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
-    ("enabled", "slack.qa.setup.enabled", true),
-    ("public_base_url", "slack.qa.setup.public_base_url", true),
-    ("bot_token", "slack.qa.setup.bot_token", true),
-    ("default_channel", "slack.qa.setup.default_channel", false),
-    ("slack_app_id", "slack.qa.setup.slack_app_id", true),
     (
         "slack_configuration_access_token",
         "slack.qa.setup.slack_configuration_access_token",
@@ -79,6 +74,11 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
         "slack.qa.setup.slack_configuration_refresh_token",
         true,
     ),
+    ("enabled", "slack.qa.setup.enabled", false),
+    ("public_base_url", "slack.qa.setup.public_base_url", false),
+    ("bot_token", "slack.qa.setup.bot_token", false),
+    ("default_channel", "slack.qa.setup.default_channel", false),
+    ("slack_app_id", "slack.qa.setup.slack_app_id", false),
 ];
 
 pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "bot_token"];
