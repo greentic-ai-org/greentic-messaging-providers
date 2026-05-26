@@ -61,10 +61,8 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
     }
 }
 
-/// Pull a structured flow-error envelope out of a send_payload body when the
-/// upstream flow engine flagged the activity as an error reply. Returns
-/// `Some((error_kind, error_message))` when both `metadata.error_kind` and
-/// `metadata.error_message` are present and non-empty.
+/// Returns `(error_kind, error_message)` when the engine lifted a node failure
+/// onto `metadata.error_kind` / `metadata.error_message`.
 fn extract_error_envelope(payload: &Value) -> Option<(String, String)> {
     let metadata = payload.get("metadata")?;
     let kind = metadata
