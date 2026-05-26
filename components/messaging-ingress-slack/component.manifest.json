@@ -13,6 +13,7 @@
   "secret_requirements": [
     {
       "name": "SLACK_SIGNING_SECRET",
+      "required": false,
       "scope": "tenant",
       "description": "Slack signing secret used to verify webhook signatures (optional)."
     }

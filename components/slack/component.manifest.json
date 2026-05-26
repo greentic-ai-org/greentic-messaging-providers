@@ -17,6 +17,7 @@
     },
     {
       "name": "SLACK_SIGNING_SECRET",
+      "required": false,
       "scope": "tenant",
       "description": "Optional signing secret for webhook verification."
     }
