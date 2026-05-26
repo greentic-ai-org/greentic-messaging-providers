@@ -525,7 +525,8 @@
     {
       "name": "jwt_signing_key",
       "scope": "tenant",
-      "description": "Secret key used for Direct Line JWT token signing and verification."
+      "description": "Secret key used for Direct Line JWT token signing and verification.",
+      "required": true
     },
     {
       "name": "WEBCHAT_TOKEN",

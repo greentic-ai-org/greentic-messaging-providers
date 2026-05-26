@@ -16,6 +16,7 @@ actions:
       - channels:join
       - im:history
       - im:write
+    client_id_source: registration
     client_id_field: slack_client_id
 questions:
   - name: slack_configuration_access_token
@@ -43,14 +44,6 @@ questions:
     group: Connection
     validate:
       regex: "^https://"
-  - name: slack_client_id
-    title: Slack Client ID
-    kind: string
-    required: false
-    help: "Used only to generate the Add to Slack install URL. Find it in Slack App settings -> Basic Information -> App Credentials."
-    placeholder: "1234567890.1234567890"
-    group: Authentication
-    docs_url: "https://api.slack.com/apps"
   - name: api_base_url
     title: API base URL
     kind: string

@@ -24,6 +24,7 @@
     },
     {
       "name": "SLACK_SIGNING_SECRET",
+      "required": false,
       "scope": "tenant",
       "description": "Slack signing secret (optional for future webhook validation)."
     },
