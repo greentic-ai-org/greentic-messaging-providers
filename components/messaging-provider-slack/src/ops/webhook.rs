@@ -9,7 +9,7 @@ use provider_common::helpers::json_bytes;
 use serde_json::{Value, json};
 
 use crate::bindings::greentic::http::http_client as client;
-use crate::config::{get_secret_string, put_secret_string};
+use crate::config::put_secret_string;
 use crate::{
     DEFAULT_APP_ID_KEY, DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
 };
@@ -107,11 +107,11 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(String::from)
-        .or_else(|| get_secret_string(DEFAULT_APP_ID_KEY).ok());
+        .or_else(|| secret_string(DEFAULT_APP_ID_KEY));
 
-    // Resolve config access token from the current input/secret names only.
+    // Resolve config access token from current and legacy setup field names.
     let config_token_input = config_access_token_from_input(&parsed)
-        .or_else(|| get_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY).ok());
+        .or_else(|| secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY));
 
     // Resolve refresh token: input field → secrets store fallback.
     let refresh_token = parsed
@@ -120,13 +120,15 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(String::from)
-        .or_else(|| get_secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY).ok());
+        .or_else(|| secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY));
 
     let (app_id, config_token_input) = match (app_id.as_deref(), config_token_input) {
         (Some(a), Some(t)) => (a, t),
         _ => {
             return json_bytes(&json!({
-                "ok": false,
+                "ok": true,
+                "skipped": true,
+                "reason": "slack app registration not configured",
                 "error": "slack_app_id and slack_configuration_access_token required"
             }));
         }
@@ -319,12 +321,31 @@ fn try_refresh_token(_config_token: &str, refresh_token: Option<&str>) -> Result
 }
 
 fn config_access_token_from_input(parsed: &Value) -> Option<String> {
-    parsed
-        .get("slack_configuration_access_token")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from)
+    for key in [
+        "slack_configuration_access_token",
+        "slack_configuration_token",
+    ] {
+        if let Some(value) = parsed
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+        {
+            return Some(value);
+        }
+    }
+    None
+}
+
+#[cfg(not(test))]
+fn secret_string(key: &str) -> Option<String> {
+    crate::config::get_secret_string(key).ok()
+}
+
+#[cfg(test)]
+fn secret_string(_key: &str) -> Option<String> {
+    None
 }
 
 /// Update Slack manifest JSON with webhook URLs for event subscriptions
@@ -493,12 +514,34 @@ mod tests {
     }
 
     #[test]
-    fn config_access_token_parser_ignores_legacy_configuration_token_field_name() {
+    fn setup_webhook_skips_when_registration_values_are_missing() {
+        let out: Value = serde_json::from_slice(&setup_webhook(
+            br#"{
+                "public_base_url": "https://example.com"
+            }"#,
+        ))
+        .expect("json");
+
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["skipped"], true);
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("slack_app_id")
+        );
+    }
+
+    #[test]
+    fn config_access_token_parser_accepts_legacy_configuration_token_field_name() {
         let parsed = json!({
             "slack_configuration_token": "xoxe-legacy",
             "slack_configuration_refresh_token": "xoxe-refresh"
         });
 
-        assert_eq!(config_access_token_from_input(&parsed), None);
+        assert_eq!(
+            config_access_token_from_input(&parsed).as_deref(),
+            Some("xoxe-legacy")
+        );
     }
 }

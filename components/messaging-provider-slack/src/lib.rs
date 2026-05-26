@@ -257,6 +257,12 @@ fn apply_answers_impl(
         );
         collect_secret_answer(
             &answers,
+            "slack_configuration_token",
+            DEFAULT_CONFIG_ACCESS_TOKEN_KEY,
+            &mut secrets_set,
+        );
+        collect_secret_answer(
+            &answers,
             "slack_configuration_refresh_token",
             DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
             &mut secrets_set,
@@ -302,6 +308,14 @@ fn apply_answers_impl(
             collect_secret_answer(
                 &answers,
                 "slack_configuration_access_token",
+                DEFAULT_CONFIG_ACCESS_TOKEN_KEY,
+                &mut secrets_set,
+            );
+        }
+        if has("slack_configuration_token") {
+            collect_secret_answer(
+                &answers,
+                "slack_configuration_token",
                 DEFAULT_CONFIG_ACCESS_TOKEN_KEY,
                 &mut secrets_set,
             );
