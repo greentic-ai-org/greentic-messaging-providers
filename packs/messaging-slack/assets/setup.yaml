@@ -1,20 +1,60 @@
 provider_id: slack
 version: 1
 title: Slack provider setup
+actions:
+  - id: add_to_slack
+    title: Add to Slack
+    kind: oauth_authorize
+    provider_id: slack
+    oauth_provider_id: slack
+    authorize_url: "https://slack.com/oauth/v2/authorize"
+    redirect_path: "/oauth/callback/slack"
+    scopes:
+      - chat:write
+      - channels:read
+      - channels:history
+      - channels:join
+      - im:history
+      - im:write
+    client_id_field: slack_client_id
 questions:
+  - name: slack_configuration_access_token
+    title: Slack Configuration Access Token
+    kind: string
+    required: true
+    secret: true
+    help: "Short-lived access token generated at api.slack.com -> Your Apps -> App Configuration Tokens"
+    group: Authentication
+    docs_url: "https://api.slack.com/apps"
+  - name: slack_configuration_refresh_token
+    title: Slack Configuration Refresh Token
+    kind: string
+    required: true
+    secret: true
+    help: "Refresh token generated alongside the Slack configuration access token. Used to rotate expired access tokens automatically."
+    group: Authentication
+    docs_url: "https://api.slack.com/apps"
   - name: public_base_url
     title: Public base URL
     kind: string
-    required: true
+    required: false
     help: "Public-facing URL for webhook callbacks (auto-replaced by gtc start when using tunnel)"
     placeholder: "https://xxxx.trycloudflare.com"
     group: Connection
     validate:
       regex: "^https://"
+  - name: slack_client_id
+    title: Slack Client ID
+    kind: string
+    required: false
+    help: "Used only to generate the Add to Slack install URL. Find it in Slack App settings -> Basic Information -> App Credentials."
+    placeholder: "1234567890.1234567890"
+    group: Authentication
+    docs_url: "https://api.slack.com/apps"
   - name: api_base_url
     title: API base URL
     kind: string
-    required: true
+    required: false
     help: "Slack API base URL (default: https://slack.com/api)"
     placeholder: "https://slack.com/api"
     group: Connection
@@ -23,7 +63,7 @@ questions:
   - name: slack_bot_token
     title: Slack bot token
     kind: string
-    required: true
+    required: false
     secret: true
     placeholder: "xoxb-your-token-here"
     group: Authentication
@@ -37,24 +77,8 @@ questions:
   - name: slack_app_id
     title: Slack App ID
     kind: string
-    required: true
-    help: "Find in Slack App settings → Basic Information → App ID"
+    required: false
+    help: "Find in Slack App settings -> Basic Information -> App ID"
     placeholder: "A0XXXXXXXXX"
-    group: Authentication
-    docs_url: "https://api.slack.com/apps"
-  - name: slack_configuration_access_token
-    title: Slack Configuration Access Token
-    kind: string
-    required: true
-    secret: true
-    help: "Short-lived access token generated at api.slack.com → Your Apps → App Configuration Tokens"
-    group: Authentication
-    docs_url: "https://api.slack.com/apps"
-  - name: slack_configuration_refresh_token
-    title: Slack Configuration Refresh Token
-    kind: string
-    required: true
-    secret: true
-    help: "Refresh token generated alongside the Slack configuration access token. Used to rotate expired access tokens automatically."
     group: Authentication
     docs_url: "https://api.slack.com/apps"

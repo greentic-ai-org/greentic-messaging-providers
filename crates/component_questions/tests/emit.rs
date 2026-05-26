@@ -23,6 +23,7 @@ fn emit_from_fixture() {
             .title
             .clone()
             .unwrap_or_else(|| format!("{} setup", spec.provider_id)),
+        actions: spec.actions,
         questions: spec
             .questions
             .iter()
@@ -32,4 +33,38 @@ fn emit_from_fixture() {
     };
     let json_value: Value = serde_json::to_value(&output).expect("serialize output");
     insta::assert_json_snapshot!(json_value);
+}
+
+#[test]
+fn emit_preserves_setup_actions() {
+    let spec_text = r#"
+provider_id: slack
+version: 1
+title: Slack provider setup
+actions:
+  - id: add_to_slack
+    title: Add to Slack
+    kind: oauth_authorize
+    authorize_url: https://slack.com/oauth/v2/authorize
+    client_id_field: slack_client_id
+questions: []
+"#;
+    let spec: questions::spec::SetupSpec = serde_yaml_bw::from_str(spec_text).expect("parse spec");
+    let output = QuestionsSpec {
+        id: "slack-setup".to_string(),
+        title: spec
+            .title
+            .clone()
+            .unwrap_or_else(|| format!("{} setup", spec.provider_id)),
+        actions: spec.actions,
+        questions: vec![],
+    };
+    let json_value: Value = serde_json::to_value(&output).expect("serialize output");
+    assert_eq!(json_value["actions"][0]["id"], "add_to_slack");
+    assert_eq!(json_value["actions"][0]["title"], "Add to Slack");
+    assert_eq!(json_value["actions"][0]["kind"], "oauth_authorize");
+    assert_eq!(
+        json_value["actions"][0]["client_id_field"],
+        "slack_client_id"
+    );
 }

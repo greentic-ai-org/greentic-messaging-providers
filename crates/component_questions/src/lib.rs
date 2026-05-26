@@ -300,6 +300,7 @@ fn emit(input_json: String) -> Result<String, String> {
     let spec = QuestionsSpec {
         id: input.id,
         title,
+        actions: spec.actions,
         questions,
     };
     serde_json::to_string(&spec).map_err(err_string)
