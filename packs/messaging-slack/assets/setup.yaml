@@ -18,6 +18,8 @@ actions:
       - im:write
     client_id_source: registration
     client_id_field: slack_client_id
+    app_name_template: "{{ bundle_name }} Slack"
+    default_app_name: "Greentic Slack"
 questions:
   - name: slack_configuration_access_token
     title: Slack Configuration Access Token

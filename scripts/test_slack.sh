@@ -161,7 +161,11 @@ def app_display_name() -> str:
             return name
     except FileNotFoundError:
         pass
-    name = f"Greentic Tester {time.strftime('%H%M%S', time.gmtime())}"
+    bundle_name = os.environ.get("GREENTIC_BUNDLE_NAME", "").strip()
+    if bundle_name:
+        name = f"{bundle_name} Slack"
+    else:
+        name = f"Greentic Slack {time.strftime('%H%M%S', time.gmtime())}"
     APP_NAME.write_text(name + "\n", encoding="utf-8")
     return name
 
