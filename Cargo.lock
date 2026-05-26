@@ -2103,9 +2103,9 @@ dependencies = [
 
 [[package]]
 name = "greentic-runner-desktop"
-version = "0.5.17"
+version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43d8ae80e52a47c384a897f1b6659fe113b214d060901b1e9a1ec4264cd6adde"
+checksum = "f852ae1e4a2910ff68eb28266761cfce79fdfa9cc673b83890201a658abb07ea"
 dependencies = [
  "anyhow",
  "greentic-pack-lib",
@@ -2124,9 +2124,9 @@ dependencies = [
 
 [[package]]
 name = "greentic-runner-host"
-version = "0.5.17"
+version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cfd49e8788c191e7a58f3db875c4273844ae8ee2ec479357ee4f7054c991924"
+checksum = "37837fbeffa37134bd0983b34e4bf604e45a841ae43a405785123fd5c122266c"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2305,9 +2305,9 @@ dependencies = [
 
 [[package]]
 name = "greentic-telemetry"
-version = "0.5.1"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f52813e6d9117803d3f1f0eb042beb85d62cee60a46bb22a5489582e22e1e2a"
+checksum = "6afcdc8584859dce6e44eb89914bc779936406bf30a89a0f6740dd353a9fe24d"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -4617,9 +4617,9 @@ dependencies = [
 
 [[package]]
 name = "runner-core"
-version = "0.5.17"
+version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce015e9850c3faf0521cfc7390d226cd396e673b777c6079c564b923285841d4"
+checksum = "d2e4106236c9707bcacf67a5adb6142288969f79a51053b7f2a08bc4c9089041"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
