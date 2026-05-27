@@ -172,6 +172,14 @@ Before adding new core types or interfaces, check if they exist in shared Greent
 - GitHub Actions: `.github/workflows/build-and-publish.yml` (fmt, clippy, schema check, build+test, packs)
 - Required env vars for OCI publishing: `GHCR_USERNAME`, `GHCR_TOKEN` (see `.env.example`)
 
+## Code Style
+
+- **Keep comments minimal.** Default to no comment. Add one only when the WHY is non-obvious (a hidden constraint, a subtle invariant, a workaround). Never explain WHAT the code does — well-named identifiers cover that.
+- **One short line max** for a comment when needed. No multi-paragraph block comments or multi-line docstrings on internal items. Trim before committing.
+- Don't reference the current task, fix, or callers ("used by X", "added for Y") — those belong in the PR description and rot as the codebase evolves.
+
 ## Git Conventions
 
 Do NOT add Claude co-author attribution to commits or PRs.
+
+Prefer atomic, well-scoped commits per PR. If a PR accumulates fix-up commits during review, squash them down to logically-grouped commits before merge.
