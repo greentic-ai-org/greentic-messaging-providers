@@ -65,9 +65,3 @@ wasmtime-wasi = "43.0.2"
 webchat-directline-core = { path = "crates/webchat-directline-core" }
 wit-bindgen = "0.57"
 zip = "8"
-
-# Local override: pick up unreleased greentic-telemetry 0.5.2
-# (`set_component_name`, `set_caller_location_enabled`, span-end emission).
-# Drop once 0.5.2 ships to crates.io.
-[patch.crates-io]
-greentic-telemetry = { path = "../greentic-telemetry" }
