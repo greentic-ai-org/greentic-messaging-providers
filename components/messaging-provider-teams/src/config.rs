@@ -1,111 +1,168 @@
-//! Configuration for Teams Bot Service provider.
-//!
-//! New Bot Service schema replaces the Graph API configuration.
+//! Configuration for the Microsoft Teams Graph provider.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[cfg(not(test))]
 use crate::bindings::greentic::secrets_store::secrets_store;
-use crate::{DEFAULT_BOT_APP_ID_KEY, DEFAULT_BOT_APP_PASSWORD_KEY};
+use crate::{
+    DEFAULT_AUTH_BASE_URL, DEFAULT_BOT_APP_ID_KEY, DEFAULT_BOT_APP_PASSWORD_KEY,
+    DEFAULT_GRAPH_ACCESS_TOKEN_KEY, DEFAULT_GRAPH_BASE_URL, DEFAULT_GRAPH_CLIENT_ID_KEY,
+    DEFAULT_GRAPH_CLIENT_SECRET_KEY, DEFAULT_GRAPH_REFRESH_TOKEN_KEY, DEFAULT_GRAPH_TENANT_ID_KEY,
+    DEFAULT_GRAPH_TOKEN_SCOPE,
+};
 use greentic_types::Destination;
 
-/// Provider configuration for Teams Bot Service.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 pub(crate) struct ProviderConfig {
-    /// Whether the provider is enabled.
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
 
-    /// Public base URL for webhook callbacks.
-    pub(crate) public_base_url: String,
-
-    /// Microsoft Bot App ID (from Azure Bot registration).
-    pub(crate) ms_bot_app_id: String,
-
-    /// Microsoft Bot App Password (secret, optional in config if stored in secrets).
     #[serde(default)]
-    pub(crate) ms_bot_app_password: Option<String>,
+    pub(crate) public_base_url: Option<String>,
 
-    /// Default service URL for proactive messages.
-    /// Usually extracted from incoming Activity, but can be preset.
+    pub(crate) tenant_id: String,
+    pub(crate) client_id: String,
+
     #[serde(default)]
-    pub(crate) default_service_url: Option<String>,
+    pub(crate) refresh_token: Option<String>,
+    #[serde(default)]
+    pub(crate) client_secret: Option<String>,
+    #[serde(default)]
+    pub(crate) access_token: Option<String>,
 
-    /// Default Team ID for channel messages.
+    #[serde(default = "default_graph_base_url")]
+    pub(crate) graph_base_url: String,
+    #[serde(default = "default_auth_base_url")]
+    pub(crate) auth_base_url: String,
+    #[serde(default = "default_token_scope")]
+    pub(crate) token_scope: String,
+
     #[serde(default)]
     pub(crate) team_id: Option<String>,
-
-    /// Default Channel ID for channel messages.
     #[serde(default)]
     pub(crate) channel_id: Option<String>,
+    #[serde(default)]
+    pub(crate) chat_id: Option<String>,
+    #[serde(default)]
+    pub(crate) user_id: Option<String>,
+
+    #[serde(default)]
+    pub(crate) ms_bot_app_id: Option<String>,
+    #[serde(default)]
+    pub(crate) ms_bot_app_password: Option<String>,
+    #[serde(default)]
+    pub(crate) default_service_url: Option<String>,
 }
 
-/// Output configuration for QA apply_answers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ProviderConfigOut {
     pub(crate) enabled: bool,
-    pub(crate) public_base_url: String,
-    pub(crate) ms_bot_app_id: String,
-    pub(crate) ms_bot_app_password: Option<String>,
-    pub(crate) default_service_url: Option<String>,
+    pub(crate) public_base_url: Option<String>,
+    pub(crate) tenant_id: String,
+    pub(crate) client_id: String,
+    pub(crate) refresh_token: Option<String>,
+    pub(crate) client_secret: Option<String>,
+    pub(crate) access_token: Option<String>,
+    pub(crate) graph_base_url: String,
+    pub(crate) auth_base_url: String,
+    pub(crate) token_scope: String,
     pub(crate) team_id: Option<String>,
     pub(crate) channel_id: Option<String>,
+    pub(crate) chat_id: Option<String>,
+    pub(crate) user_id: Option<String>,
 }
 
 fn default_enabled() -> bool {
     true
 }
 
-/// Creates a default (empty) config output.
+fn default_graph_base_url() -> String {
+    DEFAULT_GRAPH_BASE_URL.to_string()
+}
+
+fn default_auth_base_url() -> String {
+    DEFAULT_AUTH_BASE_URL.to_string()
+}
+
+fn default_token_scope() -> String {
+    DEFAULT_GRAPH_TOKEN_SCOPE.to_string()
+}
+
 pub(crate) fn default_config_out() -> ProviderConfigOut {
     ProviderConfigOut {
         enabled: true,
-        public_base_url: String::new(),
-        ms_bot_app_id: String::new(),
-        ms_bot_app_password: None,
-        default_service_url: None,
+        public_base_url: None,
+        tenant_id: String::new(),
+        client_id: String::new(),
+        refresh_token: None,
+        client_secret: None,
+        access_token: None,
+        graph_base_url: default_graph_base_url(),
+        auth_base_url: default_auth_base_url(),
+        token_scope: default_token_scope(),
         team_id: None,
         channel_id: None,
+        chat_id: None,
+        user_id: None,
     }
 }
 
-/// Validates the config output structure.
 pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), String> {
-    if config.ms_bot_app_id.trim().is_empty() {
-        return Err("config validation failed: ms_bot_app_id is required".to_string());
+    if config.tenant_id.trim().is_empty() {
+        return Err("config validation failed: tenant_id is required".to_string());
     }
-    if config.public_base_url.trim().is_empty() {
-        return Err("config validation failed: public_base_url is required".to_string());
+    if config.client_id.trim().is_empty() {
+        return Err("config validation failed: client_id is required".to_string());
     }
-    if !(config.public_base_url.starts_with("http://")
-        || config.public_base_url.starts_with("https://"))
+    if let Some(url) = config.public_base_url.as_deref()
+        && !url.trim().is_empty()
+        && !(url.starts_with("http://") || url.starts_with("https://"))
     {
         return Err(
             "config validation failed: public_base_url must be an absolute URL".to_string(),
         );
     }
-    if let Some(ref service_url) = config.default_service_url
-        && !(service_url.is_empty()
-            || service_url.starts_with("http://")
-            || service_url.starts_with("https://"))
-    {
-        return Err(
-            "config validation failed: default_service_url must be an absolute URL".to_string(),
-        );
+    validate_absolute_url("graph_base_url", &config.graph_base_url)?;
+    validate_absolute_url("auth_base_url", &config.auth_base_url)?;
+    if config.token_scope.trim().is_empty() {
+        return Err("config validation failed: token_scope is required".to_string());
     }
     Ok(())
 }
 
-/// Validates the runtime provider config.
-pub(crate) fn validate_provider_config(cfg: ProviderConfig) -> Result<ProviderConfig, String> {
-    if cfg.ms_bot_app_id.trim().is_empty() {
-        return Err("invalid config: ms_bot_app_id cannot be empty".to_string());
+pub(crate) fn validate_provider_config(mut cfg: ProviderConfig) -> Result<ProviderConfig, String> {
+    cfg.tenant_id = cfg.tenant_id.trim().to_string();
+    cfg.client_id = cfg.client_id.trim().to_string();
+    cfg.graph_base_url = cfg.graph_base_url.trim_end_matches('/').to_string();
+    cfg.auth_base_url = cfg.auth_base_url.trim_end_matches('/').to_string();
+    cfg.token_scope = cfg.token_scope.trim().to_string();
+
+    if cfg.tenant_id.is_empty() {
+        return Err("invalid config: tenant_id cannot be empty".to_string());
     }
-    if cfg.public_base_url.trim().is_empty() {
-        return Err("invalid config: public_base_url cannot be empty".to_string());
+    if cfg.client_id.is_empty() {
+        return Err("invalid config: client_id cannot be empty".to_string());
+    }
+    validate_absolute_url("graph_base_url", &cfg.graph_base_url)
+        .map_err(|err| err.replace("config validation failed", "invalid config"))?;
+    validate_absolute_url("auth_base_url", &cfg.auth_base_url)
+        .map_err(|err| err.replace("config validation failed", "invalid config"))?;
+    if cfg.token_scope.is_empty() {
+        return Err("invalid config: token_scope cannot be empty".to_string());
     }
     Ok(cfg)
+}
+
+fn validate_absolute_url(field: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() || !(value.starts_with("http://") || value.starts_with("https://")) {
+        return Err(format!(
+            "config validation failed: {field} must be an absolute URL"
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -116,30 +173,63 @@ pub(crate) fn parse_config_bytes(bytes: &[u8]) -> Result<ProviderConfig, String>
 }
 
 pub(crate) fn parse_config_value(val: &Value) -> Result<ProviderConfig, String> {
-    let cfg = serde_json::from_value::<ProviderConfig>(val.clone())
+    let cfg = serde_json::from_value::<ProviderConfig>(normalize_config_value(val))
         .map_err(|e| format!("invalid config: {e}"))?;
     validate_provider_config(cfg)
 }
 
-/// Loads config from input JSON, nested config, or secrets store.
+fn normalize_config_value(val: &Value) -> Value {
+    let mut normalized = val.clone();
+    let Some(obj) = normalized.as_object_mut() else {
+        return normalized;
+    };
+
+    for (field, secret_key) in [
+        ("tenant_id", DEFAULT_GRAPH_TENANT_ID_KEY),
+        ("client_id", DEFAULT_GRAPH_CLIENT_ID_KEY),
+        ("refresh_token", DEFAULT_GRAPH_REFRESH_TOKEN_KEY),
+        ("access_token", DEFAULT_GRAPH_ACCESS_TOKEN_KEY),
+        ("client_secret", DEFAULT_GRAPH_CLIENT_SECRET_KEY),
+    ] {
+        let missing_or_blank = obj
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .map(str::is_empty)
+            .unwrap_or(true);
+        if missing_or_blank && let Some(value) = optional_secret(secret_key) {
+            obj.insert(field.to_string(), Value::String(value));
+        }
+    }
+
+    normalized
+}
+
 pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
-    // First try nested "config" object
     if let Some(cfg) = input.get("config") {
         return parse_config_value(cfg);
     }
 
-    // Try to build config from top-level keys
     let mut partial = serde_json::Map::new();
-    let keys = [
+    for key in [
         "enabled",
         "public_base_url",
+        "tenant_id",
+        "client_id",
+        "refresh_token",
+        "client_secret",
+        "access_token",
+        "graph_base_url",
+        "auth_base_url",
+        "token_scope",
+        "team_id",
+        "channel_id",
+        "chat_id",
+        "user_id",
         "ms_bot_app_id",
         "ms_bot_app_password",
         "default_service_url",
-        "team_id",
-        "channel_id",
-    ];
-    for key in keys {
+    ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
         }
@@ -148,12 +238,15 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         return parse_config_value(&Value::Object(partial));
     }
 
-    // Fall back to secret store for required fields
     load_config_from_secrets()
 }
 
-/// Retrieves a secret from the secret store.
 pub(crate) fn get_secret(key: &str) -> Result<String, String> {
+    #[cfg(test)]
+    {
+        Err(format!("missing secret: {key}"))
+    }
+    #[cfg(not(test))]
     match secrets_store::get(key) {
         Ok(Some(bytes)) => String::from_utf8(bytes).map_err(|_| format!("secret {key} not utf-8")),
         Ok(None) => Err(format!("missing secret: {key}")),
@@ -161,33 +254,54 @@ pub(crate) fn get_secret(key: &str) -> Result<String, String> {
     }
 }
 
-fn get_secret_any_case(uppercase: &str) -> Result<String, String> {
+pub(crate) fn get_secret_any_case(uppercase: &str) -> Result<String, String> {
     get_secret(uppercase).or_else(|_| get_secret(&uppercase.to_ascii_lowercase()))
 }
 
-/// Loads config from secrets store when no explicit config is provided.
+fn optional_secret(key: &str) -> Option<String> {
+    get_secret_any_case(key)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 fn load_config_from_secrets() -> Result<ProviderConfig, String> {
-    let ms_bot_app_id = get_secret_any_case(DEFAULT_BOT_APP_ID_KEY).map_err(|e| {
+    let tenant_id = get_secret_any_case(DEFAULT_GRAPH_TENANT_ID_KEY).map_err(|e| {
         format!(
-            "config required: ms_bot_app_id not found (tried {} and {}): {e}",
-            DEFAULT_BOT_APP_ID_KEY,
-            DEFAULT_BOT_APP_ID_KEY.to_ascii_lowercase()
+            "config required: tenant_id not found (tried {} and {}): {e}",
+            DEFAULT_GRAPH_TENANT_ID_KEY,
+            DEFAULT_GRAPH_TENANT_ID_KEY.to_ascii_lowercase()
         )
     })?;
-    let ms_bot_app_password = get_secret_any_case(DEFAULT_BOT_APP_PASSWORD_KEY).ok();
+    let client_id = get_secret_any_case(DEFAULT_GRAPH_CLIENT_ID_KEY).map_err(|e| {
+        format!(
+            "config required: client_id not found (tried {} and {}): {e}",
+            DEFAULT_GRAPH_CLIENT_ID_KEY,
+            DEFAULT_GRAPH_CLIENT_ID_KEY.to_ascii_lowercase()
+        )
+    })?;
 
     Ok(ProviderConfig {
         enabled: true,
-        public_base_url: String::new(),
-        ms_bot_app_id,
-        ms_bot_app_password,
-        default_service_url: None,
+        public_base_url: None,
+        tenant_id,
+        client_id,
+        refresh_token: optional_secret(DEFAULT_GRAPH_REFRESH_TOKEN_KEY),
+        client_secret: optional_secret(DEFAULT_GRAPH_CLIENT_SECRET_KEY),
+        access_token: optional_secret(DEFAULT_GRAPH_ACCESS_TOKEN_KEY),
+        graph_base_url: default_graph_base_url(),
+        auth_base_url: default_auth_base_url(),
+        token_scope: default_token_scope(),
         team_id: None,
         channel_id: None,
+        chat_id: None,
+        user_id: None,
+        ms_bot_app_id: optional_secret(DEFAULT_BOT_APP_ID_KEY),
+        ms_bot_app_password: optional_secret(DEFAULT_BOT_APP_PASSWORD_KEY),
+        default_service_url: None,
     })
 }
 
-/// Builds a default channel destination from config.
 pub(crate) fn default_channel_destination(cfg: &ProviderConfig) -> Option<Destination> {
     let team = cfg.team_id.as_ref()?;
     let channel = cfg.channel_id.as_ref()?;
@@ -202,19 +316,27 @@ pub(crate) fn default_channel_destination(cfg: &ProviderConfig) -> Option<Destin
     })
 }
 
-/// Extracts service URL from Activity or falls back to config.
+pub(crate) fn default_chat_destination(cfg: &ProviderConfig) -> Option<Destination> {
+    let chat = cfg.chat_id.as_ref()?.trim();
+    if chat.is_empty() {
+        return None;
+    }
+    Some(Destination {
+        id: chat.to_string(),
+        kind: Some("chat".into()),
+    })
+}
+
+#[allow(dead_code)]
 pub(crate) fn get_service_url(activity: &Value, cfg: &ProviderConfig) -> Option<String> {
-    // First try to get from Activity
     activity
         .get("serviceUrl")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
-        // Fall back to config
         .or_else(|| cfg.default_service_url.clone())
 }
 
-/// Extracts conversation ID from Activity.
 pub(crate) fn get_conversation_id(activity: &Value) -> Option<String> {
     activity
         .get("conversation")
@@ -224,7 +346,6 @@ pub(crate) fn get_conversation_id(activity: &Value) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Extracts activity ID from Activity (for threading/replies).
 pub(crate) fn get_activity_id(activity: &Value) -> Option<String> {
     activity
         .get("id")
@@ -241,26 +362,33 @@ mod tests {
     fn valid_config_out() -> ProviderConfigOut {
         ProviderConfigOut {
             enabled: true,
-            public_base_url: "https://example.com".to_string(),
-            ms_bot_app_id: "app-id".to_string(),
-            ms_bot_app_password: Some("secret".to_string()),
-            default_service_url: Some("https://service.example.com".to_string()),
+            public_base_url: Some("https://example.com".to_string()),
+            tenant_id: "tenant".to_string(),
+            client_id: "client".to_string(),
+            refresh_token: Some("refresh".to_string()),
+            client_secret: None,
+            access_token: None,
+            graph_base_url: DEFAULT_GRAPH_BASE_URL.to_string(),
+            auth_base_url: DEFAULT_AUTH_BASE_URL.to_string(),
+            token_scope: DEFAULT_GRAPH_TOKEN_SCOPE.to_string(),
             team_id: Some("team-1".to_string()),
             channel_id: Some("channel-1".to_string()),
+            chat_id: Some("chat-1".to_string()),
+            user_id: None,
         }
     }
 
     #[test]
     fn validate_config_out_rejects_missing_or_relative_values() {
         let mut config = valid_config_out();
-        config.ms_bot_app_id = String::new();
+        config.tenant_id = String::new();
         assert_eq!(
             validate_config_out(&config),
-            Err("config validation failed: ms_bot_app_id is required".to_string())
+            Err("config validation failed: tenant_id is required".to_string())
         );
 
         let mut config = valid_config_out();
-        config.public_base_url = "/relative".to_string();
+        config.public_base_url = Some("/relative".to_string());
         assert_eq!(
             validate_config_out(&config),
             Err("config validation failed: public_base_url must be an absolute URL".to_string())
@@ -271,16 +399,18 @@ mod tests {
     fn load_config_supports_nested_and_top_level_inputs() {
         let nested = load_config(&json!({
             "config": {
-                "public_base_url": "https://example.com",
-                "ms_bot_app_id": "nested-app"
+                "tenant_id": "tenant",
+                "client_id": "nested-client",
+                "refresh_token": "refresh"
             }
         }))
         .expect("nested config");
-        assert_eq!(nested.ms_bot_app_id, "nested-app");
+        assert_eq!(nested.client_id, "nested-client");
 
         let top_level = load_config(&json!({
-            "public_base_url": "https://example.com",
-            "ms_bot_app_id": "top-level-app",
+            "tenant_id": "tenant",
+            "client_id": "top-level-client",
+            "refresh_token": "refresh",
             "team_id": "team-1",
             "channel_id": "channel-1"
         }))
@@ -290,19 +420,30 @@ mod tests {
     }
 
     #[test]
-    fn helper_extractors_prefer_activity_data_and_trim_defaults() {
+    fn helper_extractors_keep_legacy_activity_metadata() {
         let cfg = ProviderConfig {
             enabled: true,
-            public_base_url: "https://example.com".to_string(),
-            ms_bot_app_id: "app-id".to_string(),
-            ms_bot_app_password: None,
-            default_service_url: Some("https://fallback.example.com".to_string()),
+            public_base_url: None,
+            tenant_id: "tenant".to_string(),
+            client_id: "client".to_string(),
+            refresh_token: Some("refresh".to_string()),
+            client_secret: None,
+            access_token: None,
+            graph_base_url: DEFAULT_GRAPH_BASE_URL.to_string(),
+            auth_base_url: DEFAULT_AUTH_BASE_URL.to_string(),
+            token_scope: DEFAULT_GRAPH_TOKEN_SCOPE.to_string(),
             team_id: Some(" team-1 ".to_string()),
             channel_id: Some(" channel-1 ".to_string()),
+            chat_id: Some(" chat-1 ".to_string()),
+            user_id: None,
+            ms_bot_app_id: Some("app-id".to_string()),
+            ms_bot_app_password: None,
+            default_service_url: Some("https://fallback.example.com".to_string()),
         };
         let destination = default_channel_destination(&cfg).expect("channel destination");
         assert_eq!(destination.id, "team-1:channel-1");
-        assert_eq!(destination.kind.as_deref(), Some("channel"));
+        let chat = default_chat_destination(&cfg).expect("chat destination");
+        assert_eq!(chat.id, "chat-1");
 
         let activity = json!({
             "serviceUrl": "https://activity.example.com",
@@ -315,11 +456,5 @@ mod tests {
         );
         assert_eq!(get_conversation_id(&activity).as_deref(), Some("conv-1"));
         assert_eq!(get_activity_id(&activity).as_deref(), Some("activity-1"));
-
-        let empty_activity = json!({});
-        assert_eq!(
-            get_service_url(&empty_activity, &cfg).as_deref(),
-            Some("https://fallback.example.com")
-        );
     }
 }

@@ -1,21 +1,37 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Teams Bot Service Provider Config",
+  "title": "Teams Graph Provider Config",
   "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "enabled",
+    "tenant_id",
+    "client_id",
+    "graph_base_url",
+    "auth_base_url",
+    "token_scope"
+  ],
   "properties": {
-    "ms_bot_app_id": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Enable the Teams provider.",
+      "default": true
+    },
+    "tenant_id": {
       "type": "string",
-      "description": "Microsoft Bot App ID from Azure Bot registration."
+      "minLength": 1,
+      "description": "Microsoft Entra tenant ID for Graph auth."
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Microsoft Entra app registration client ID."
     },
     "public_base_url": {
       "type": "string",
       "format": "uri",
-      "description": "Public base URL for Bot Framework messaging endpoint."
-    },
-    "default_service_url": {
-      "type": "string",
-      "format": "uri",
-      "description": "Default Bot Connector service URL for proactive messages."
+      "minLength": 1,
+      "description": "Public base URL for Graph notification callbacks."
     },
     "team_id": {
       "type": "string",
@@ -24,8 +40,47 @@
     "channel_id": {
       "type": "string",
       "description": "Default channel ID if not provided in invocation."
+    },
+    "chat_id": {
+      "type": "string",
+      "description": "Default chat ID if not provided in invocation."
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Default user ID for discovery or future DM flows."
+    },
+    "graph_base_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Graph API base URL.",
+      "default": "https://graph.microsoft.com/v1.0"
+    },
+    "auth_base_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Microsoft identity authority base URL.",
+      "default": "https://login.microsoftonline.com"
+    },
+    "token_scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OAuth scope for access tokens.",
+      "default": "https://graph.microsoft.com/.default"
+    },
+    "client_secret": {
+      "type": "string",
+      "description": "Optional confidential-client secret. Falls back to secrets store if omitted.",
+      "x-redact": true
+    },
+    "refresh_token": {
+      "type": "string",
+      "description": "Optional Graph refresh token. Falls back to secrets store if omitted.",
+      "x-redact": true
+    },
+    "access_token": {
+      "type": "string",
+      "description": "Optional test/dev Graph access-token override.",
+      "x-redact": true
     }
-  },
-  "required": ["ms_bot_app_id", "public_base_url"],
-  "additionalProperties": false
+  }
 }

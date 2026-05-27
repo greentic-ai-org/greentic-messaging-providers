@@ -47,9 +47,10 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
 
     if let (Some(auth), Some(config)) = (auth_header, &cfg)
         && let Some(token) = extract_bearer_token(auth)
+        && let Some(app_id) = config.ms_bot_app_id.as_deref()
     {
         // Validate JWT (Phase 1: decode-only, no signature verification)
-        if let Err(err) = validate_jwt(&token, &config.ms_bot_app_id) {
+        if let Err(err) = validate_jwt(&token, app_id) {
             // Log warning but don't fail - allow dev/testing without full validation
             let detail = redact::error_message(&err);
             telemetry::emit(

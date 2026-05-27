@@ -3,7 +3,7 @@
   "version": "0.4.100",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Microsoft Teams messaging provider \u2014 Bot Framework with webhook ingress",
+  "description": "Microsoft Teams messaging provider \u2014 Microsoft Graph egress and Graph change notification ingress",
   "component_sources": [
     {
       "id": "ai.greentic.component-templates",
@@ -526,7 +526,7 @@
       "inline": {
         "providers": [
           {
-            "provider_type": "messaging.teams.bot",
+            "provider_type": "messaging.teams.graph",
             "capabilities": [
               "messaging"
             ],
@@ -534,9 +534,6 @@
               "send",
               "reply",
               "ingest_http",
-              "subscription_ensure",
-              "subscription_renew",
-              "subscription_delete",
               "qa-spec",
               "apply-answers",
               "i18n-keys"
@@ -555,17 +552,111 @@
       "kind": "messaging.oauth.v1",
       "version": "0.4.100",
       "inline": {
-        "auth_type": "oauth2",
-        "authorize_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "auth_type": "oauth2_device_code",
+        "device_code_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode",
         "provider_id": "teams",
-        "redirect_path": "/oauth/callback/teams",
+        "tenant_alias": "organizations",
+        "verification_uri": "https://microsoft.com/devicelogin",
         "scopes": [
-          "https://graph.microsoft.com/.default"
+          "offline_access",
+          "openid",
+          "profile",
+          "User.Read",
+          "Team.ReadBasic.All",
+          "Channel.ReadBasic.All",
+          "ChannelMessage.Send",
+          "ChannelMessage.Read.All",
+          "Chat.Read"
         ],
         "secret_keys": [
-          "TEAMS_BOT_TOKEN"
+          "MS_GRAPH_TENANT_ID",
+          "MS_GRAPH_CLIENT_ID",
+          "MS_GRAPH_REFRESH_TOKEN",
+          "MS_GRAPH_ACCESS_TOKEN"
         ],
-        "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        "token_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
+      }
+    },
+    "messaging.oauth_device_code.v1": {
+      "kind": "messaging.oauth_device_code.v1",
+      "version": "0.4.100",
+      "inline": {
+        "provider": "microsoft",
+        "label": "Connect Microsoft Teams",
+        "provider_id": "teams",
+        "tenant_alias": "organizations",
+        "device_code_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode",
+        "token_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+        "verification_uri": "https://microsoft.com/devicelogin",
+        "client_id_config_key": "client_id",
+        "client_id_secret_key": "MS_GRAPH_CLIENT_ID",
+        "scopes": [
+          "offline_access",
+          "openid",
+          "profile",
+          "User.Read",
+          "Team.ReadBasic.All",
+          "Channel.ReadBasic.All",
+          "ChannelMessage.Send",
+          "ChannelMessage.Read.All",
+          "Chat.Read"
+        ],
+        "secrets_out": {
+          "client_id": "MS_GRAPH_CLIENT_ID",
+          "refresh_token": "MS_GRAPH_REFRESH_TOKEN",
+          "access_token": "MS_GRAPH_ACCESS_TOKEN"
+        },
+        "config_out": {
+          "tenant_id": "tenant_id",
+          "client_id": "client_id",
+          "user_id": "user_id",
+          "team_id": "team_id",
+          "channel_id": "channel_id",
+          "chat_id": "chat_id"
+        },
+        "post_login_discovery": [
+          {
+            "id": "me",
+            "method": "GET",
+            "url": "https://graph.microsoft.com/v1.0/me",
+            "save": {
+              "id": "user_id",
+              "tenant_id": "tenant_id"
+            }
+          },
+          {
+            "id": "joined_teams",
+            "method": "GET",
+            "url": "https://graph.microsoft.com/v1.0/me/joinedTeams",
+            "select": {
+              "from": "value",
+              "label": "displayName",
+              "value": "id",
+              "save_as": "team_id"
+            }
+          },
+          {
+            "id": "channels",
+            "method": "GET",
+            "url_template": "https://graph.microsoft.com/v1.0/teams/{team_id}/channels",
+            "requires": [
+              "team_id"
+            ],
+            "select": {
+              "from": "value",
+              "label": "displayName",
+              "value": "id",
+              "save_as": "channel_id"
+            }
+          }
+        ],
+        "checklist": [
+          "App registration must be multi-tenant: signInAudience = AzureADMultipleOrgs",
+          "Public client/device code flow must be enabled",
+          "Tenant may require admin consent",
+          "Teams message subscriptions require delegated read scopes such as ChannelMessage.Read.All",
+          "Device/token endpoints must use organizations, not the developer tenant ID"
+        ]
       }
     },
     "messaging.provider_ingress.v1": {
@@ -576,7 +667,7 @@
           "content_types": [
             "application/json"
           ],
-          "supports_webhook_validation": false
+          "supports_webhook_validation": true
         },
         "component_ref": "messaging-ingress-teams",
         "export": "handle-webhook",
@@ -592,10 +683,25 @@
         "pattern": "sync",
         "renewal_window_hours": 24,
         "resources": [
-          "message",
-          "reaction"
+          "message"
         ],
         "world": "greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1"
+      }
+    },
+    "messaging.microsoft_app_catalog.v1": {
+      "kind": "messaging.microsoft_app_catalog.v1",
+      "version": "0.4.100",
+      "inline": {
+        "manifest_template": "assets/teams-app/manifest.template.json",
+        "icons": {
+          "color": "color.png",
+          "outline": "outline.png"
+        },
+        "install_scopes": [
+          "team",
+          "personal"
+        ],
+        "supports_requires_review": true
       }
     }
   },
@@ -609,40 +715,30 @@
       {
         "component": "messaging-provider-teams",
         "kind": "egress",
-        "name": "messaging.teams.bot"
+        "name": "messaging.teams.graph"
       }
     ]
   },
   "secret_requirements": [
-    {
-      "name": "MS_GRAPH_CLIENT_SECRET",
-      "scope": "tenant",
-      "description": "Client secret used for Graph token acquisition."
-    },
     {
       "name": "MS_GRAPH_REFRESH_TOKEN",
       "scope": "tenant",
       "description": "Refresh token used for Graph token acquisition when configured."
     },
     {
-      "name": "MS_BOT_APP_ID",
-      "scope": "tenant",
-      "description": "Microsoft Bot App ID from Azure Bot Service registration."
-    },
-    {
-      "name": "MS_BOT_APP_PASSWORD",
-      "scope": "tenant",
-      "description": "Client secret from Azure Bot Service."
-    },
-    {
       "name": "MS_GRAPH_TENANT_ID",
       "scope": "tenant",
-      "description": "Azure AD / Entra ID tenant (directory) ID."
+      "description": "Microsoft Entra tenant ID."
     },
     {
       "name": "MS_GRAPH_CLIENT_ID",
       "scope": "tenant",
-      "description": "Application (client) ID from Azure app registration."
+      "description": "Microsoft Entra application client ID."
+    },
+    {
+      "name": "MS_GRAPH_ACCESS_TOKEN",
+      "scope": "tenant",
+      "description": "Optional test-only Graph access-token override."
     }
   ],
   "capabilities_cache": [

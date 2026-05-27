@@ -1,15 +1,25 @@
 {
-  "provider": "messaging.teams.bot",
+  "provider": "messaging.teams.graph",
   "config_required": [
     "enabled",
+    "tenant_id",
+    "client_id"
+  ],
+  "config_optional": [
     "public_base_url",
-    "ms_bot_app_id"
+    "team_id",
+    "channel_id",
+    "chat_id",
+    "graph_base_url",
+    "auth_base_url",
+    "token_scope"
   ],
-  "config_optional": [],
   "secret_required": [
-    "MS_BOT_APP_PASSWORD"
+    "MS_GRAPH_REFRESH_TOKEN"
   ],
-  "secret_optional": [],
-  "oauth_required": false,
+  "secret_optional": [
+    "MS_GRAPH_ACCESS_TOKEN"
+  ],
+  "oauth_required": true,
   "subscriptions_required": false
 }

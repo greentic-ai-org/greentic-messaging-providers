@@ -1,9 +1,8 @@
 //! Slack app manifest webhook wiring (`setup_webhook`).
 //!
-//! Updates a Slack app's `event_subscriptions.request_url` and
-//! `interactivity.request_url` so that Slack delivers events to the operator's
-//! ingress endpoint. Uses Slack's `apps.manifest.export` and
-//! `apps.manifest.update` APIs with a configuration token.
+//! Creates or updates Slack app manifests for setup. The registration op creates
+//! a new Slack app from a manifest and returns its OAuth credentials; the webhook
+//! op updates an existing app's callback URLs.
 
 use provider_common::helpers::json_bytes;
 use serde_json::{Value, json};
@@ -242,6 +241,101 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
     }))
 }
 
+/// Handle `setup_app_registration` op — creates a Slack app and returns
+/// Slack-generated OAuth credentials for the subsequent Add to Slack step.
+pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
+    let parsed: Value = match serde_json::from_slice(input_json) {
+        Ok(val) => val,
+        Err(err) => {
+            return json_bytes(&json!({"ok": false, "error": format!("invalid json: {err}")}));
+        }
+    };
+    let config_token_input = config_access_token_from_input(&parsed)
+        .or_else(|| secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY));
+    let refresh_token = parsed
+        .get("slack_configuration_refresh_token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .or_else(|| secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY));
+    let Some(mut config_token) = config_token_input else {
+        return json_bytes(&json!({
+            "ok": false,
+            "error": "slack_configuration_access_token is required to create the Slack app"
+        }));
+    };
+    let public_base_url = parsed
+        .get("public_base_url")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
+        return json_bytes(
+            &json!({"ok": false, "error": "public_base_url must be an https:// URL"}),
+        );
+    }
+
+    let manifest = registration_manifest(&parsed, public_base_url);
+    let mut body = create_manifest(&config_token, &manifest);
+    if slack_error(&body).is_some_and(is_auth_error) {
+        match try_refresh_token(&config_token, refresh_token.as_deref()) {
+            Ok(new_token) => {
+                config_token = new_token;
+                body = create_manifest(&config_token, &manifest);
+            }
+            Err(err) => return err,
+        }
+    }
+    if body.get("ok").and_then(Value::as_bool) != Some(true) {
+        let err = slack_error(&body).unwrap_or("unknown");
+        return json_bytes(
+            &json!({"ok": false, "error": format!("manifest create error: {err}"), "slack_response": body}),
+        );
+    }
+
+    let app_id = first_string(
+        &body,
+        &[
+            &["app_id"],
+            &["app", "id"],
+            &["app", "app_id"],
+            &["manifest", "app_id"],
+        ],
+    );
+    let client_id = first_string(
+        &body,
+        &[
+            &["credentials", "client_id"],
+            &["app", "credentials", "client_id"],
+            &["app", "oauth_config", "client_id"],
+            &["oauth_config", "client_id"],
+            &["client_id"],
+        ],
+    );
+    let client_secret = first_string(
+        &body,
+        &[
+            &["credentials", "client_secret"],
+            &["app", "credentials", "client_secret"],
+            &["app", "oauth_config", "client_secret"],
+            &["oauth_config", "client_secret"],
+            &["client_secret"],
+        ],
+    );
+    if let Some(app_id) = app_id.as_deref() {
+        put_secret_string(DEFAULT_APP_ID_KEY, app_id);
+    }
+    json_bytes(&json!({
+        "ok": true,
+        "app_id": app_id,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "oauth_authorize_url": body.get("oauth_authorize_url").cloned().unwrap_or(Value::Null),
+        "manifest": manifest,
+        "slack_response": body,
+    }))
+}
+
 /// Result of an `apps.manifest.export` call.
 enum ExportResult {
     /// Successful export with the parsed response body.
@@ -336,6 +430,115 @@ fn config_access_token_from_input(parsed: &Value) -> Option<String> {
         }
     }
     None
+}
+
+fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
+    let provider_id = parsed
+        .get("provider_id")
+        .and_then(Value::as_str)
+        .unwrap_or("messaging-slack");
+    let tenant = parsed
+        .get("tenant")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
+    let team = parsed
+        .get("team")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
+    let name = parsed
+        .get("slack_app_name")
+        .or_else(|| parsed.get("app_name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Greentic Slack");
+    let base = public_base_url.trim_end_matches('/');
+    let ingress_url = format!("{base}/v1/messaging/ingress/{provider_id}/{tenant}/{team}");
+    let callback_url = format!("{base}/oauth/callback/slack");
+
+    json!({
+        "display_information": {
+            "name": name,
+        },
+        "features": {
+            "bot_user": {
+                "display_name": name,
+                "always_online": false,
+            },
+            "app_home": {
+                "messages_tab_enabled": true,
+                "messages_tab_read_only_enabled": false,
+            },
+        },
+        "oauth_config": {
+            "redirect_urls": [callback_url],
+            "scopes": {
+                "bot": ["chat:write", "channels:read", "channels:history", "channels:join", "im:history", "im:write"],
+            },
+        },
+        "settings": {
+            "event_subscriptions": {
+                "request_url": ingress_url,
+                "bot_events": ["message.im"],
+            },
+            "interactivity": {
+                "is_enabled": true,
+                "request_url": ingress_url,
+            },
+            "org_deploy_enabled": false,
+            "socket_mode_enabled": false,
+            "token_rotation_enabled": false,
+        },
+    })
+}
+
+fn create_manifest(config_token: &str, manifest: &Value) -> Value {
+    let resp = client::send(
+        &client::Request {
+            method: "POST".to_string(),
+            url: "https://slack.com/api/apps.manifest.create".to_string(),
+            headers: vec![
+                (
+                    "Authorization".to_string(),
+                    format!("Bearer {config_token}"),
+                ),
+                ("Content-Type".to_string(), "application/json".to_string()),
+            ],
+            body: Some(
+                serde_json::to_vec(&json!({"manifest": manifest.to_string()})).unwrap_or_default(),
+            ),
+        },
+        None,
+        None,
+    );
+    match resp {
+        Ok(resp) => serde_json::from_slice(&resp.body.unwrap_or_default()).unwrap_or(Value::Null),
+        Err(err) => {
+            json!({"ok": false, "error": format!("manifest create failed: {}", err.message)})
+        }
+    }
+}
+
+fn first_string(value: &Value, paths: &[&[&str]]) -> Option<String> {
+    paths.iter().find_map(|path| {
+        let mut current = value;
+        for key in *path {
+            current = current.get(*key)?;
+        }
+        current
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string)
+    })
+}
+
+fn slack_error(value: &Value) -> Option<&str> {
+    value.get("error").and_then(Value::as_str)
+}
+
+fn is_auth_error(err: &str) -> bool {
+    matches!(err, "invalid_auth" | "token_expired" | "token_revoked")
 }
 
 #[cfg(not(test))]
@@ -476,6 +679,36 @@ mod tests {
             "https://chat.example.com/hook"
         );
         assert_eq!(manifest["settings"]["interactivity"]["is_enabled"], true);
+    }
+
+    #[test]
+    fn registration_manifest_builds_callback_and_ingress_urls() {
+        let manifest = registration_manifest(
+            &json!({
+                "provider_id": "messaging-slack",
+                "tenant": "demo",
+                "team": "support",
+                "slack_app_name": "Greentic Demo"
+            }),
+            "https://example.com/",
+        );
+
+        assert_eq!(manifest["display_information"]["name"], "Greentic Demo");
+        assert_eq!(
+            manifest["oauth_config"]["redirect_urls"][0],
+            "https://example.com/oauth/callback/slack"
+        );
+        assert_eq!(
+            manifest["settings"]["event_subscriptions"]["request_url"],
+            "https://example.com/v1/messaging/ingress/messaging-slack/demo/support"
+        );
+        assert!(
+            manifest["oauth_config"]["scopes"]["bot"]
+                .as_array()
+                .expect("bot scopes")
+                .iter()
+                .any(|scope| scope.as_str() == Some("chat:write"))
+        );
     }
 
     #[test]

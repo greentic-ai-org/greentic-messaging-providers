@@ -32,6 +32,7 @@ find "${DEST_DIR}/skins" -mindepth 1 -maxdepth 1 -type d \
 # Keep only tenant configs that are valid entry points for this pack.
 find "${DEST_DIR}/config/tenants" -mindepth 1 -maxdepth 1 -type f \
   ! -name greentic.json \
+  ! -name default.json \
   -exec rm -f {} +
 
 python3 - "${DEST_DIR}/config/tenants/greentic.json" <<'PY'
