@@ -1,10 +1,10 @@
 provider_id: slack
 version: 1
 title: Slack provider setup
-actions:
+setup_actions:
   - id: add_to_slack
-    title: Add to Slack
-    kind: oauth_authorize
+    label: Add to Slack
+    kind: oauth_install_button
     provider_id: slack
     oauth_provider_id: slack
     authorize_url: "https://slack.com/oauth/v2/authorize"
@@ -20,6 +20,15 @@ actions:
     client_id_field: slack_client_id
     app_name_template: "{{ bundle_name }} Slack"
     default_app_name: "Greentic Slack"
+    registration:
+      component_ref: messaging-provider-slack
+      op: setup_app_registration
+      client_id_output: client_id
+      client_secret_output: client_secret
+      app_id_output: app_id
+      app_name_field: slack_app_name
+      config_access_token_field: slack_configuration_access_token
+      config_refresh_token_field: slack_configuration_refresh_token
 questions:
   - name: slack_configuration_access_token
     title: Slack Configuration Access Token
@@ -35,45 +44,5 @@ questions:
     required: true
     secret: true
     help: "Refresh token generated alongside the Slack configuration access token. Used to rotate expired access tokens automatically."
-    group: Authentication
-    docs_url: "https://api.slack.com/apps"
-  - name: public_base_url
-    title: Public base URL
-    kind: string
-    required: false
-    help: "Public-facing URL for webhook callbacks (auto-replaced by gtc start when using tunnel)"
-    placeholder: "https://xxxx.trycloudflare.com"
-    group: Connection
-    validate:
-      regex: "^https://"
-  - name: api_base_url
-    title: API base URL
-    kind: string
-    required: false
-    help: "Slack API base URL (default: https://slack.com/api)"
-    placeholder: "https://slack.com/api"
-    group: Connection
-    validate:
-      regex: "^https?://"
-  - name: slack_bot_token
-    title: Slack bot token
-    kind: string
-    required: false
-    secret: true
-    placeholder: "xoxb-your-token-here"
-    group: Authentication
-    docs_url: "https://api.slack.com/apps"
-  - name: default_channel
-    title: Default channel
-    kind: string
-    required: false
-    placeholder: "#general"
-    group: Defaults
-  - name: slack_app_id
-    title: Slack App ID
-    kind: string
-    required: false
-    help: "Find in Slack App settings -> Basic Information -> App ID"
-    placeholder: "A0XXXXXXXXX"
     group: Authentication
     docs_url: "https://api.slack.com/apps"

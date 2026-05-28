@@ -1,13 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Teams Provider-Core Config",
+  "title": "Teams Graph Provider Config",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "enabled",
     "tenant_id",
     "client_id",
-    "public_base_url",
     "graph_base_url",
     "auth_base_url",
     "token_scope"
@@ -15,23 +14,24 @@
   "properties": {
     "enabled": {
       "type": "boolean",
-      "description": "Enable the Teams provider."
+      "description": "Enable the Teams provider.",
+      "default": true
     },
     "tenant_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Azure AD tenant ID for Graph auth."
+      "description": "Microsoft Entra tenant ID for Graph auth."
     },
     "client_id": {
       "type": "string",
       "minLength": 1,
-      "description": "App registration client ID."
+      "description": "Microsoft Entra app registration client ID."
     },
     "public_base_url": {
       "type": "string",
       "format": "uri",
       "minLength": 1,
-      "description": "Public base URL for inbound webhook callbacks."
+      "description": "Public base URL for Graph notification callbacks."
     },
     "team_id": {
       "type": "string",
@@ -40,6 +40,14 @@
     "channel_id": {
       "type": "string",
       "description": "Default channel ID if not provided in invocation."
+    },
+    "chat_id": {
+      "type": "string",
+      "description": "Default chat ID if not provided in invocation."
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Default user ID for discovery or future DM flows."
     },
     "graph_base_url": {
       "type": "string",
@@ -50,7 +58,7 @@
     "auth_base_url": {
       "type": "string",
       "format": "uri",
-      "description": "AAD authority base URL.",
+      "description": "Microsoft identity authority base URL.",
       "default": "https://login.microsoftonline.com"
     },
     "token_scope": {
@@ -61,12 +69,17 @@
     },
     "client_secret": {
       "type": "string",
-      "description": "Optional client secret. Falls back to secrets store if omitted.",
+      "description": "Optional confidential-client secret. Falls back to secrets store if omitted.",
       "x-redact": true
     },
     "refresh_token": {
       "type": "string",
-      "description": "Optional refresh token. Falls back to secrets store if omitted.",
+      "description": "Optional Graph refresh token. Falls back to secrets store if omitted.",
+      "x-redact": true
+    },
+    "access_token": {
+      "type": "string",
+      "description": "Optional test/dev Graph access-token override.",
       "x-redact": true
     }
   }

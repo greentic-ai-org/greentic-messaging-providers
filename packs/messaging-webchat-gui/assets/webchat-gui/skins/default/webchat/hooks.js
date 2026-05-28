@@ -59,6 +59,8 @@ function injectMicButton() {
     'color:#059669;transition:all .15s;border-radius:50%;',
     'width:36px;height:36px;flex-shrink:0;'
   ].join('');
+  // Static local SVG markup; no user-controlled input reaches this assignment.
+  // foxguard: ignore[js/no-xss-innerhtml]
   btn.innerHTML = micSvg();
   btn.onclick = toggleMic;
 
@@ -103,6 +105,8 @@ function startMic() {
   recognition.onstart = function () {
     isListening = true;
     if (btn) {
+      // Static local SVG markup; no user-controlled input reaches this assignment.
+      // foxguard: ignore[js/no-xss-innerhtml]
       btn.innerHTML = micListeningSvg();
       btn.style.background = 'rgba(239,68,68,0.1)';
     }
@@ -157,6 +161,8 @@ function stopMic() {
   }
   var btn = document.getElementById('greentic-mic-btn');
   if (btn) {
+    // Static local SVG markup; no user-controlled input reaches this assignment.
+    // foxguard: ignore[js/no-xss-innerhtml]
     btn.innerHTML = micSvg();
     btn.style.background = 'none';
   }

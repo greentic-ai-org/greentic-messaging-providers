@@ -6,7 +6,7 @@ Provider-core Microsoft Teams messaging provider.
 - `messaging-provider-teams`
 
 ## Provider types
-- `messaging.teams.bot`
+- `messaging.teams.graph`
 
 ## Secrets
 
@@ -18,35 +18,26 @@ All secrets are stored under the URI prefix
 |-----|----------|-------------|
 | `MS_GRAPH_TENANT_ID` | Yes | Azure AD tenant ID |
 | `MS_GRAPH_CLIENT_ID` | Yes | Azure AD application (client) ID |
-| `MS_GRAPH_CLIENT_SECRET` | Confidential clients only | Client secret for `client_credentials` grant |
-| `MS_GRAPH_REFRESH_TOKEN` | Public clients only | Refresh token for delegated `authorization_code` grant |
+| `MS_GRAPH_REFRESH_TOKEN` | Yes for normal sends | Refresh token from delegated Microsoft device-code setup |
+| `MS_GRAPH_ACCESS_TOKEN` | Test only | Direct access-token override for local testing |
 
-### Public vs Confidential client
+### Device-code setup
 
-- **Public client** (e.g. mobile/desktop app registration): Uses `refresh_token` grant.
-  The Azure app must **not** have a client secret configured, and the refresh
-  request must **not** include `client_secret`. Only `tenant_id`, `client_id`,
-  and `refresh_token` are needed.
-- **Confidential client** (e.g. web app with secret): Uses `client_credentials`
-  grant. Requires `tenant_id`, `client_id`, and `client_secret`. No refresh
-  token is needed.
+The default setup path uses Microsoft OAuth device-code login against the
+`organizations` endpoint. It does not require a redirect URL, Azure Bot
+Service, Bot Framework, or a client secret.
 
-### Obtaining a refresh token (public client)
+### Obtaining a refresh token
 
 1. Register an app in Azure AD with **Delegated** permissions:
-   `ChannelMessage.Send`, `Chat.ReadWrite`, `offline_access`.
-2. Set the redirect URI to `http://localhost` and enable **public client flows**.
-3. Open this URL in a browser (replace placeholders):
-   ```
-   https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize?client_id={client_id}&response_type=code&redirect_uri=http://localhost&scope=ChannelMessage.Send+Chat.ReadWrite+offline_access
-   ```
-4. Sign in and copy the `code` parameter from the redirect URL.
-5. Exchange the code for tokens:
-   ```bash
-   curl -X POST "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token" \
-     -d "client_id={client_id}&grant_type=authorization_code&code={code}&redirect_uri=http://localhost&scope=ChannelMessage.Send+Chat.ReadWrite+offline_access"
-   ```
-6. Save the `refresh_token` from the response as the `MS_GRAPH_REFRESH_TOKEN` secret.
+   `offline_access`, `openid`, `profile`, `User.Read`, `Team.ReadBasic.All`,
+   `Channel.ReadBasic.All`, `ChannelMessage.Send`, `ChannelMessage.Read.All`,
+   and `Chat.Read`.
+2. Enable **public client/device-code flow**.
+3. Run `gtc setup` once generic device-code setup is available, or use
+   `scripts/test_teams.sh` for local validation.
+4. Save the returned `refresh_token` as `MS_GRAPH_REFRESH_TOKEN` and the app
+   client ID as `MS_GRAPH_CLIENT_ID`.
 
 ## Destination formats
 

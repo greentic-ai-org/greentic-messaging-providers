@@ -19,7 +19,7 @@ scripts/test_webchat_gui.sh 3aigent --embedded
 | [Dummy](dummy.md) | Local tests and examples | Yes, simulated | No | Test-focused | Optional dummy tokens |
 | [Email](email.md) | SMTP-style outbound email | Yes | No | HTML/text fallback | SMTP password |
 | [Slack](slack.md) | Slack channels and app messages | Yes | Yes, events/webhooks | Text fallback | Slack bot token, optional signing/config secrets |
-| [Teams](teams.md) | Microsoft Teams bot and Graph delivery | Yes | Yes, Bot Framework webhooks | Native Adaptive Cards | Azure Bot and Graph secrets |
+| [Teams](teams.md) | Microsoft Teams Graph delivery | Yes | Yes, Graph notifications | Text/html fallback | Microsoft Graph OAuth secrets |
 | [Telegram](telegram.md) | Telegram bot chats | Yes | Yes, Telegram updates | Text fallback | Telegram bot token |
 | [WebChat](webchat.md) | Direct Line-style web chat backend | Yes | Yes, Direct Line/local state | Native Adaptive Cards | JWT signing key |
 | [WebChat GUI](webchat-gui.md) | Hosted or embedded browser chat UI | Yes, via WebChat backend | Yes, via browser Direct Line flow | Native Adaptive Cards | JWT signing key |

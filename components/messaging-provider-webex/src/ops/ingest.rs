@@ -14,6 +14,8 @@ use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_oper
 use provider_common::redact;
 use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::{Value, json};
+// Webex webhook signatures are defined as HMAC-SHA1 by the provider API.
+// foxguard: ignore[rs/no-weak-hash]
 use sha1::Sha1;
 
 use super::ingest_helpers::{
@@ -113,6 +115,8 @@ fn find_header_value(
 }
 
 fn hmac_sha1_hex(secret: &[u8], body: &[u8]) -> Option<String> {
+    // Webex signs webhook payloads with HMAC-SHA1; changing this breaks provider verification.
+    // foxguard: ignore[rs/no-weak-hash]
     let mut mac = Hmac::<Sha1>::new_from_slice(secret).ok()?;
     mac.update(body);
     Some(hex_lower(&mac.finalize().into_bytes()))
@@ -499,9 +503,9 @@ mod signature_tests {
     use greentic_types::messaging::universal_dto::Header;
 
     #[test]
-    fn verifies_x_spark_signature_hmac_sha1() {
+    fn verifies_x_spark_signature_hmac_sha1() -> Result<(), String> {
         let body = br#"{"resource":"messages","event":"created"}"#;
-        let signature = hmac_sha1_hex(b"secret", body).expect("hmac");
+        let signature = hmac_sha1_hex(b"secret", body).ok_or("hmac")?;
         let headers = vec![Header {
             name: "X-Spark-Signature".to_string(),
             value: signature,
@@ -509,5 +513,6 @@ mod signature_tests {
 
         assert!(verify_webex_signature(&headers, body, "secret"));
         assert!(!verify_webex_signature(&headers, body, "wrong"));
+        Ok(())
     }
 }

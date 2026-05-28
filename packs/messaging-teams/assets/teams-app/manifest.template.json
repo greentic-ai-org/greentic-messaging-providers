@@ -1,0 +1,45 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "{{ app_id }}",
+  "packageName": "ai.greentic.teams",
+  "developer": {
+    "name": "Greentic",
+    "websiteUrl": "https://greentic.ai",
+    "privacyUrl": "https://greentic.ai/privacy",
+    "termsOfUseUrl": "https://greentic.ai/terms"
+  },
+  "name": {
+    "short": "{{ app_name }}",
+    "full": "{{ app_name }}"
+  },
+  "description": {
+    "short": "Greentic Microsoft Teams Graph connector",
+    "full": "Optional Teams app package for installing Greentic's Microsoft Graph connector in Teams. Core Graph send and receive do not require this app package."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#2F6FED",
+  "staticTabs": [
+    {
+      "entityId": "greentic-home",
+      "name": "Greentic",
+      "contentUrl": "{{ public_base_url }}/teams",
+      "websiteUrl": "{{ public_base_url }}/teams",
+      "scopes": [
+        "personal"
+      ]
+    }
+  ],
+  "validDomains": [
+    "{{ public_domain }}"
+  ],
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": []
+    }
+  }
+}

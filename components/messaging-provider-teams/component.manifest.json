@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-teams",
   "name": "messaging-provider-teams",
-  "version": "0.4.100",
+  "version": "0.5.0",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core Microsoft Teams messaging provider (Graph send).",
   "profiles": {
@@ -16,18 +16,7 @@
       "path": "schemas/messaging/teams/public.config.schema.json"
     }
   },
-  "secret_requirements": [
-    {
-      "name": "MS_BOT_APP_ID",
-      "scope": "tenant",
-      "description": "Microsoft Bot App ID from Azure Bot Service registration."
-    },
-    {
-      "name": "MS_BOT_APP_PASSWORD",
-      "scope": "tenant",
-      "description": "Client secret from Azure Bot Service."
-    }
-  ],
+  "secret_requirements": [],
   "operations": [
     {
       "name": "qa-spec",

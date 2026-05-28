@@ -6,7 +6,7 @@
 |----------|:---:|:---:|:---:|:---:|--------|
 | **Telegram** | ✅ LIVE | ✅ OK | ✅ Full | ✅ Cloudflared | **FULLY WORKING** |
 | **Slack** | ✅ LIVE | ✅ OK | ✅ Full | ⚠️ Manual (Slack portal) | **FULLY WORKING** |
-| **Teams** | ✅ LIVE | ✅ OK | ✅ Full | ⚠️ Manual (Azure Bot) | **FULLY WORKING** |
+| **Teams** | ✅ LIVE | ✅ OK | ✅ Full | ⚠️ Manual (Graph subscription) | **FULLY WORKING** |
 | **WebChat** | ✅ OK | ✅ OK | ✅ Full | N/A (Direct Line) | **FULLY WORKING** |
 | **Webex** | ✅ LIVE | ✅ Parse | ⚠️ Partial | ✅ API registered | **WORKING** (egress) |
 | **Email** | ✅ LIVE | N/A | N/A | N/A | **WORKING** (egress) |

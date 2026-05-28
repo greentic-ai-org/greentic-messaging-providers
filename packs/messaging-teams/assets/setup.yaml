@@ -1,41 +1,86 @@
 provider_id: teams
 version: 1
-title: Microsoft Teams Bot Framework provider setup
+title: Microsoft Teams Graph device-code setup
+setup_actions:
+  - id: teams-device-code
+    kind: oauth_device_code
+    provider: microsoft
+    label: Connect Microsoft Teams
+    authorize_label: "Authorise Teams"
+    finalize_label: "Verify Microsoft Teams Setup"
+    copy_label: "Copy code"
+    success_message: "Microsoft Teams setup verified successfully."
+    instructions_before_start: "Generate a Microsoft sign-in code, then continue in your browser to approve Teams access."
+    instructions_after_start:
+      - "Copy this code: {user_code}"
+      - "Click {authorize_label}, then paste in the code."
+      - "Log in with your Microsoft 365 admin account."
+      - "Approve the Teams app registration for your organization."
+      - "Return to setup and click {finalize_label}."
+    tenant_alias: organizations
+    device_code_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode
+    token_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/token
+    verification_uri: https://microsoft.com/devicelogin
+    client_id_config_key: client_id
+    client_id_secret_key: MS_GRAPH_CLIENT_ID
+    scopes:
+      - offline_access
+      - openid
+      - profile
+      - User.Read
+      - Team.ReadBasic.All
+      - Channel.ReadBasic.All
+      - ChannelMessage.Send
+      - ChannelMessage.Read.All
+      - Chat.Read
+    secrets_out:
+      client_id: MS_GRAPH_CLIENT_ID
+      refresh_token: MS_GRAPH_REFRESH_TOKEN
+      access_token: MS_GRAPH_ACCESS_TOKEN
+    config_out:
+      tenant_id: tenant_id
+      client_id: client_id
+      user_id: user_id
+      team_id: team_id
+      channel_id: channel_id
+      chat_id: chat_id
+    post_login_discovery:
+      - id: me
+        method: GET
+        url: https://graph.microsoft.com/v1.0/me
+        save:
+          id: user_id
+          tenant_id: tenant_id
+      - id: joined_teams
+        method: GET
+        url: https://graph.microsoft.com/v1.0/me/joinedTeams
+        select:
+          from: value
+          label: displayName
+          value: id
+          save_as: team_id
+      - id: channels
+        method: GET
+        url_template: https://graph.microsoft.com/v1.0/teams/{team_id}/channels
+        requires:
+          - team_id
+        select:
+          from: value
+          label: displayName
+          value: id
+          save_as: channel_id
+    checklist:
+      - "App registration must be multi-tenant: signInAudience = AzureADMultipleOrgs"
+      - Public client/device code flow must be enabled
+      - Tenant may require admin consent
+      - Teams message subscriptions require delegated read scopes such as ChannelMessage.Read.All
+      - Device/token endpoints must use organizations, not the developer tenant ID
 questions:
-  - name: ms_bot_app_id
-    title: Bot App ID
+  - name: client_id
+    title: Microsoft public client ID
     kind: string
     required: true
-    help: "Microsoft Bot App ID from Azure Bot Service registration"
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    default: "6c115a7a-f656-49c4-975a-5e831efae833"
+    help: "Public multi-tenant Microsoft application client ID used to start the device-code login. Keep the default Greentic client ID or replace it with your own public-client app registration."
+    placeholder: "6c115a7a-f656-49c4-975a-5e831efae833"
     group: Authentication
-    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
-  - name: ms_bot_app_password
-    title: Bot App Password
-    kind: string
-    required: true
-    secret: true
-    help: "Client secret from Azure Bot Service → Certificates & secrets"
-    group: Authentication
-    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
-  - name: public_base_url
-    title: Public base URL
-    kind: string
-    required: true
-    help: "Public-facing URL for Bot Framework messaging endpoint"
-    placeholder: "https://xxxx.ngrok-free.app"
-    group: Connection
-    validate:
-      regex: "^https://"
-  - name: team_id
-    title: Team ID
-    kind: string
-    required: false
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-    group: Defaults
-  - name: channel_id
-    title: Channel ID
-    kind: string
-    required: false
-    placeholder: "19:xxxxx@thread.tacv2"
-    group: Defaults

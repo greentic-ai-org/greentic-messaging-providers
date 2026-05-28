@@ -11,6 +11,8 @@
     // The i18n manifest lists locale codes that have card translations.
     // Served from the webchat-gui pack's i18n directory.
     var manifestUrl = guiBase + 'i18n/_manifest.json';
+    // GUI i18n manifest is loaded from the packaged GUI base path.
+    // foxguard: ignore[js/no-ssrf]
     fetch(manifestUrl)
       .then(function (res) { return res.ok ? res.json() : null; })
       .catch(function () { return null; })
@@ -44,6 +46,8 @@
 
       var wrapper = document.createElement('label');
       wrapper.className = 'locale-picker';
+      // Static local SVG markup; no user-controlled input reaches this assignment.
+      // foxguard: ignore[js/no-xss-innerhtml]
       wrapper.innerHTML = globeSvg;
 
       var selectEl = document.createElement('select');

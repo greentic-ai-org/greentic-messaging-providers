@@ -48,14 +48,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "slack.qa.setup.title",
     "slack.qa.upgrade.title",
     "slack.qa.remove.title",
-    "slack.qa.setup.enabled",
-    "slack.qa.setup.public_base_url",
-    "slack.qa.setup.bot_token",
-    "slack.qa.setup.default_channel",
-    "slack.qa.setup.slack_app_id",
     "slack.qa.setup.slack_configuration_access_token",
-    "slack.schema.config.slack_app_id.title",
-    "slack.schema.config.slack_app_id.description",
     "slack.schema.config.slack_configuration_access_token.title",
     "slack.schema.config.slack_configuration_access_token.description",
     "slack.qa.setup.slack_configuration_refresh_token",
@@ -74,14 +67,9 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
         "slack.qa.setup.slack_configuration_refresh_token",
         true,
     ),
-    ("enabled", "slack.qa.setup.enabled", false),
-    ("public_base_url", "slack.qa.setup.public_base_url", false),
-    ("bot_token", "slack.qa.setup.bot_token", false),
-    ("default_channel", "slack.qa.setup.default_channel", false),
-    ("slack_app_id", "slack.qa.setup.slack_app_id", false),
 ];
 
-pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "bot_token"];
+pub(crate) const DEFAULT_KEYS: &[&str] = &[];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
@@ -243,19 +231,9 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("slack.qa.setup.title", "Setup"),
     ("slack.qa.upgrade.title", "Upgrade"),
     ("slack.qa.remove.title", "Remove"),
-    ("slack.qa.setup.enabled", "Enable provider"),
-    ("slack.qa.setup.public_base_url", "Public base URL"),
-    ("slack.qa.setup.bot_token", "Bot token"),
-    ("slack.qa.setup.default_channel", "Default channel"),
-    ("slack.qa.setup.slack_app_id", "Slack App ID"),
     (
         "slack.qa.setup.slack_configuration_access_token",
         "Slack Configuration Access Token",
-    ),
-    ("slack.schema.config.slack_app_id.title", "Slack App ID"),
-    (
-        "slack.schema.config.slack_app_id.description",
-        "App ID from api.slack.com/apps (e.g. A07XXXXXX). Required for auto-configuring event subscriptions.",
     ),
     (
         "slack.schema.config.slack_configuration_access_token.title",

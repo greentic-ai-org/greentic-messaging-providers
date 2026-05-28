@@ -264,11 +264,13 @@ fn qa_spec_via_invoke_returns_valid_json() -> Result<()> {
                     spec.id, value
                 )
             });
-        assert!(
-            !questions.is_empty(),
-            "{:?} qa-spec questions should not be empty",
-            spec.id
-        );
+        if spec.id != ProviderId::Teams {
+            assert!(
+                !questions.is_empty(),
+                "{:?} qa-spec questions should not be empty",
+                spec.id
+            );
+        }
 
         for (i, q) in questions.iter().enumerate() {
             assert!(

@@ -168,7 +168,7 @@ fn request_token(url: &str, body: &[u8]) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    fn config() -> ProviderConfig {
+    fn config() -> Result<ProviderConfig, serde_json::Error> {
         serde_json::from_value(serde_json::json!({
             "public_base_url": "https://mail.example.com",
             "host": "smtp.example.com",
@@ -176,7 +176,6 @@ mod tests {
             "from_address": "bot@example.com",
             "graph_tenant_id": "tenant-default"
         }))
-        .expect("config")
     }
 
     fn user() -> AuthUserRefV1 {
@@ -190,37 +189,42 @@ mod tests {
     }
 
     #[test]
-    fn graph_token_endpoint_prefers_explicit_config_endpoint() {
-        let mut cfg = config();
+    fn graph_token_endpoint_prefers_explicit_config_endpoint() -> Result<(), String> {
+        let mut cfg = config().map_err(|err| err.to_string())?;
         cfg.graph_token_endpoint = Some("https://idp.example.com/token".to_string());
 
-        let endpoint = graph_token_endpoint(&cfg, &user()).expect("endpoint");
+        let endpoint = graph_token_endpoint(&cfg, &user())?;
 
         assert_eq!(endpoint, "https://idp.example.com/token");
+        Ok(())
     }
 
     #[test]
-    fn graph_token_endpoint_uses_user_tenant_before_config_tenant() {
+    fn graph_token_endpoint_uses_user_tenant_before_config_tenant() -> Result<(), String> {
         let mut user = user();
         user.tenant_id = Some("/tenant-user/".to_string());
-        let mut cfg = config();
+        let mut cfg = config().map_err(|err| err.to_string())?;
         cfg.graph_authority = Some("https://login.example.com/".to_string());
 
-        let endpoint = graph_token_endpoint(&cfg, &user).expect("endpoint");
+        let endpoint = graph_token_endpoint(&cfg, &user)?;
 
         assert_eq!(
             endpoint,
             "https://login.example.com/tenant-user/oauth2/v2.0/token"
         );
+        Ok(())
     }
 
     #[test]
-    fn graph_token_endpoint_requires_some_tenant() {
-        let mut cfg = config();
+    fn graph_token_endpoint_requires_some_tenant() -> Result<(), String> {
+        let mut cfg = config().map_err(|err| err.to_string())?;
         cfg.graph_tenant_id = None;
 
-        let err = graph_token_endpoint(&cfg, &user()).unwrap_err();
+        let err = graph_token_endpoint(&cfg, &user())
+            .err()
+            .ok_or_else(|| "expected missing tenant error".to_string())?;
 
         assert_eq!(err, "missing Graph tenant id");
+        Ok(())
     }
 }
