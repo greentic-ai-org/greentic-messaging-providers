@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-telegram",
-  "version": "0.4.100",
+  "version": "0.5.1",
   "supports": [
     "messaging"
   ],

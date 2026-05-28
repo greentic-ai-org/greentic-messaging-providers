@@ -10,7 +10,8 @@ use serde_json::{Value, json};
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::put_secret_string;
 use crate::{
-    DEFAULT_APP_ID_KEY, DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
+    DEFAULT_APP_ID_KEY, DEFAULT_CLIENT_ID_KEY, DEFAULT_CLIENT_SECRET_KEY,
+    DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY, DEFAULT_SIGNING_SECRET_KEY,
 };
 
 /// Rotate an expired Slack configuration token using the refresh token.
@@ -265,6 +266,10 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
             "error": "slack_configuration_access_token is required to create the Slack app"
         }));
     };
+    put_secret_string(DEFAULT_CONFIG_ACCESS_TOKEN_KEY, &config_token);
+    if let Some(refresh_token) = refresh_token.as_deref() {
+        put_secret_string(DEFAULT_CONFIG_REFRESH_TOKEN_KEY, refresh_token);
+    }
     let public_base_url = parsed
         .get("public_base_url")
         .and_then(Value::as_str)
@@ -322,14 +327,33 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
             &["client_secret"],
         ],
     );
+    let signing_secret = first_string(
+        &body,
+        &[
+            &["credentials", "signing_secret"],
+            &["app", "credentials", "signing_secret"],
+            &["app", "signing_secret"],
+            &["signing_secret"],
+        ],
+    );
     if let Some(app_id) = app_id.as_deref() {
         put_secret_string(DEFAULT_APP_ID_KEY, app_id);
+    }
+    if let Some(client_id) = client_id.as_deref() {
+        put_secret_string(DEFAULT_CLIENT_ID_KEY, client_id);
+    }
+    if let Some(client_secret) = client_secret.as_deref() {
+        put_secret_string(DEFAULT_CLIENT_SECRET_KEY, client_secret);
+    }
+    if let Some(signing_secret) = signing_secret.as_deref() {
+        put_secret_string(DEFAULT_SIGNING_SECRET_KEY, signing_secret);
     }
     json_bytes(&json!({
         "ok": true,
         "app_id": app_id,
         "client_id": client_id,
         "client_secret": client_secret,
+        "signing_secret": signing_secret,
         "oauth_authorize_url": body.get("oauth_authorize_url").cloned().unwrap_or(Value::Null),
         "manifest": manifest,
         "slack_response": body,

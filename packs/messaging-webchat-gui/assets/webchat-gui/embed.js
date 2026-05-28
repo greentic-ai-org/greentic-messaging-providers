@@ -1,5 +1,7 @@
 const template = document.createElement("template");
 
+// Static local custom-element template; no user-controlled input reaches this assignment.
+// foxguard: ignore[js/no-xss-innerhtml]
 template.innerHTML = `
   <style>
     :host {
@@ -234,6 +236,8 @@ async function discoverNativeAssets(appBaseUrl) {
   if (!nativeAssetCache.has(appBaseUrl)) {
     nativeAssetCache.set(
       appBaseUrl,
+      // Native asset discovery fetches from the configured app base URL.
+      // foxguard: ignore[js/no-ssrf]
       fetch(`${appBaseUrl}/index.html`, { cache: "no-store" })
         .then((response) => {
           if (!response.ok) throw new Error(`Failed to load ${appBaseUrl}/index.html`);

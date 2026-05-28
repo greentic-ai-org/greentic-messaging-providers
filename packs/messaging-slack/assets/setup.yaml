@@ -46,12 +46,3 @@ questions:
     help: "Refresh token generated alongside the Slack configuration access token. Used to rotate expired access tokens automatically."
     group: Authentication
     docs_url: "https://api.slack.com/apps"
-  - name: public_base_url
-    title: Public base URL
-    kind: string
-    required: false
-    help: "Public-facing URL for webhook callbacks (auto-replaced by gtc start when using tunnel)"
-    placeholder: "https://xxxx.trycloudflare.com"
-    group: Connection
-    validate:
-      regex: "^https://"

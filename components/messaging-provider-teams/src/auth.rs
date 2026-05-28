@@ -274,39 +274,42 @@ mod tests {
         assert!(VALID_ISSUERS.iter().all(|iss| iss.starts_with("https://")));
     }
 
-    fn unsigned_token(claims: Value) -> String {
+    fn unsigned_token(claims: Value) -> Result<String, serde_json::Error> {
         let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none"}"#);
-        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).expect("claims"));
-        format!("{header}.{payload}.")
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims)?);
+        Ok(format!("{header}.{payload}."))
     }
 
     #[test]
-    fn validate_jwt_accepts_expected_botframework_claims() {
+    fn validate_jwt_accepts_expected_botframework_claims() -> Result<(), String> {
         let token = unsigned_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": 4_102_444_800_u64,
             "iat": 1_u64,
             "serviceurl": "https://smba.trafficmanager.net/amer/"
-        }));
+        }))
+        .map_err(|err| err.to_string())?;
 
-        let claims = validate_jwt(&token, "bot-app-id").expect("valid claims");
+        let claims = validate_jwt(&token, "bot-app-id")?;
 
         assert_eq!(claims.aud.as_deref(), Some("bot-app-id"));
         assert_eq!(
             claims.service_url.as_deref(),
             Some("https://smba.trafficmanager.net/amer/")
         );
+        Ok(())
     }
 
     #[test]
-    fn validate_jwt_rejects_wrong_audience_expired_and_issuer() {
+    fn validate_jwt_rejects_wrong_audience_expired_and_issuer() -> Result<(), String> {
         let valid_exp = 4_102_444_800_u64;
         let wrong_audience = unsigned_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "other",
             "exp": valid_exp
-        }));
+        }))
+        .map_err(|err| err.to_string())?;
         assert!(
             validate_jwt(&wrong_audience, "bot-app-id")
                 .expect_err("audience")
@@ -317,7 +320,8 @@ mod tests {
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": 1_u64
-        }));
+        }))
+        .map_err(|err| err.to_string())?;
         assert_eq!(
             validate_jwt(&expired, "bot-app-id").expect_err("expired"),
             "token expired"
@@ -327,12 +331,14 @@ mod tests {
             "iss": "https://evil.example",
             "aud": "bot-app-id",
             "exp": valid_exp
-        }));
+        }))
+        .map_err(|err| err.to_string())?;
         assert!(
             validate_jwt(&bad_issuer, "bot-app-id")
                 .expect_err("issuer")
                 .contains("invalid issuer")
         );
+        Ok(())
     }
 
     #[test]

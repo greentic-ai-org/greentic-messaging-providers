@@ -30,7 +30,6 @@ ciborium.workspace = true
 greentic-types.workspace = true
 greentic-telemetry = { workspace = true }
 base64.workspace = true
-greentic-runner-desktop = { workspace = true, optional = true }
 
 [dev-dependencies]
 anyhow.workspace = true
@@ -44,4 +43,3 @@ once_cell.workspace = true
 
 [features]
 schema = ["schemars"]
-runner-smoke = ["dep:greentic-runner-desktop"]

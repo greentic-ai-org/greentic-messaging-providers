@@ -1,35 +1,13 @@
 {
   "name": "messaging-teams",
-  "version": "0.4.100",
+  "version": "0.5.1",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Microsoft Teams messaging provider \u2014 Microsoft Graph egress and Graph change notification ingress",
   "component_sources": [
     {
       "id": "ai.greentic.component-templates",
-      "version": "0.4.100",
-      "world": "root:component/root",
-      "supports": [
-        "messaging"
-      ],
-      "profiles": {
-        "default": "default",
-        "supported": [
-          "default"
-        ]
-      },
-      "capabilities": {
-        "wasi": {
-          "random": false,
-          "clocks": false
-        },
-        "host": {}
-      },
-      "wasm": "components/ai.greentic.component-templates.wasm"
-    },
-    {
-      "id": "ai.greentic.component-templates",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -50,8 +28,30 @@
       "wasm": "components/templates/templates.wasm"
     },
     {
+      "id": "ai.greentic.component-templates",
+      "version": "0.5.1",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/ai.greentic.component-templates.wasm"
+    },
+    {
       "id": "diagnostics___channel_check",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -73,7 +73,7 @@
     },
     {
       "id": "diagnostics___subscription_check",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -95,7 +95,7 @@
     },
     {
       "id": "diagnostics___summary",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -117,7 +117,7 @@
     },
     {
       "id": "diagnostics___token_check",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -139,7 +139,7 @@
     },
     {
       "id": "diagnostics__channel_check",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -161,7 +161,7 @@
     },
     {
       "id": "diagnostics__subscription_check",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -183,7 +183,7 @@
     },
     {
       "id": "diagnostics__summary",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -205,7 +205,7 @@
     },
     {
       "id": "diagnostics__token_check",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -227,7 +227,7 @@
     },
     {
       "id": "ingress_default___ingress_default__summary",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -249,7 +249,7 @@
     },
     {
       "id": "messaging-ingress-teams",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -271,7 +271,7 @@
     },
     {
       "id": "messaging-ingress-teams",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -293,7 +293,7 @@
     },
     {
       "id": "messaging-provider-teams",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -315,7 +315,7 @@
     },
     {
       "id": "messaging-provider-teams",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -337,7 +337,7 @@
     },
     {
       "id": "sync_subscriptions___summary",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -359,7 +359,7 @@
     },
     {
       "id": "sync_subscriptions___sync_subscriptions__summary",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -381,7 +381,7 @@
     },
     {
       "id": "templates",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -403,7 +403,7 @@
     },
     {
       "id": "verify_webhooks___summary",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -425,7 +425,7 @@
     },
     {
       "id": "verify_webhooks___verify",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -447,7 +447,7 @@
     },
     {
       "id": "verify_webhooks__verify",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -486,7 +486,7 @@
   "extensions": {
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "inline": {
         "offers": [
           {
@@ -501,7 +501,7 @@
             "setup": {
               "qa_ref": "components/messaging-provider-teams"
             },
-            "version": "0.4.100"
+            "version": "0.5.1"
           }
         ],
         "schema_version": 1
@@ -509,7 +509,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "inline": {
         "validators": [
           {
@@ -522,7 +522,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "inline": {
         "providers": [
           {
@@ -548,15 +548,29 @@
         ]
       }
     },
+    "messaging.microsoft_app_catalog.v1": {
+      "kind": "messaging.microsoft_app_catalog.v1",
+      "version": "0.5.1",
+      "inline": {
+        "icons": {
+          "color": "color.png",
+          "outline": "outline.png"
+        },
+        "install_scopes": [
+          "team",
+          "personal"
+        ],
+        "manifest_template": "assets/teams-app/manifest.template.json",
+        "supports_requires_review": true
+      }
+    },
     "messaging.oauth.v1": {
       "kind": "messaging.oauth.v1",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "inline": {
         "auth_type": "oauth2_device_code",
         "device_code_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode",
         "provider_id": "teams",
-        "tenant_alias": "organizations",
-        "verification_uri": "https://microsoft.com/devicelogin",
         "scopes": [
           "offline_access",
           "openid",
@@ -574,22 +588,72 @@
           "MS_GRAPH_REFRESH_TOKEN",
           "MS_GRAPH_ACCESS_TOKEN"
         ],
-        "token_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
+        "tenant_alias": "organizations",
+        "token_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+        "verification_uri": "https://microsoft.com/devicelogin"
       }
     },
     "messaging.oauth_device_code.v1": {
       "kind": "messaging.oauth_device_code.v1",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "inline": {
-        "provider": "microsoft",
-        "label": "Connect Microsoft Teams",
-        "provider_id": "teams",
-        "tenant_alias": "organizations",
-        "device_code_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode",
-        "token_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
-        "verification_uri": "https://microsoft.com/devicelogin",
+        "checklist": [
+          "App registration must be multi-tenant: signInAudience = AzureADMultipleOrgs",
+          "Public client/device code flow must be enabled",
+          "Tenant may require admin consent",
+          "Teams message subscriptions require delegated read scopes such as ChannelMessage.Read.All",
+          "Device/token endpoints must use organizations, not the developer tenant ID"
+        ],
         "client_id_config_key": "client_id",
         "client_id_secret_key": "MS_GRAPH_CLIENT_ID",
+        "config_out": {
+          "channel_id": "channel_id",
+          "chat_id": "chat_id",
+          "client_id": "client_id",
+          "team_id": "team_id",
+          "tenant_id": "tenant_id",
+          "user_id": "user_id"
+        },
+        "device_code_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode",
+        "label": "Connect Microsoft Teams",
+        "post_login_discovery": [
+          {
+            "id": "me",
+            "method": "GET",
+            "save": {
+              "id": "user_id",
+              "tenant_id": "tenant_id"
+            },
+            "url": "https://graph.microsoft.com/v1.0/me"
+          },
+          {
+            "id": "joined_teams",
+            "method": "GET",
+            "select": {
+              "from": "value",
+              "label": "displayName",
+              "save_as": "team_id",
+              "value": "id"
+            },
+            "url": "https://graph.microsoft.com/v1.0/me/joinedTeams"
+          },
+          {
+            "id": "channels",
+            "method": "GET",
+            "requires": [
+              "team_id"
+            ],
+            "select": {
+              "from": "value",
+              "label": "displayName",
+              "save_as": "channel_id",
+              "value": "id"
+            },
+            "url_template": "https://graph.microsoft.com/v1.0/teams/{team_id}/channels"
+          }
+        ],
+        "provider": "microsoft",
+        "provider_id": "teams",
         "scopes": [
           "offline_access",
           "openid",
@@ -602,66 +666,18 @@
           "Chat.Read"
         ],
         "secrets_out": {
+          "access_token": "MS_GRAPH_ACCESS_TOKEN",
           "client_id": "MS_GRAPH_CLIENT_ID",
-          "refresh_token": "MS_GRAPH_REFRESH_TOKEN",
-          "access_token": "MS_GRAPH_ACCESS_TOKEN"
+          "refresh_token": "MS_GRAPH_REFRESH_TOKEN"
         },
-        "config_out": {
-          "tenant_id": "tenant_id",
-          "client_id": "client_id",
-          "user_id": "user_id",
-          "team_id": "team_id",
-          "channel_id": "channel_id",
-          "chat_id": "chat_id"
-        },
-        "post_login_discovery": [
-          {
-            "id": "me",
-            "method": "GET",
-            "url": "https://graph.microsoft.com/v1.0/me",
-            "save": {
-              "id": "user_id",
-              "tenant_id": "tenant_id"
-            }
-          },
-          {
-            "id": "joined_teams",
-            "method": "GET",
-            "url": "https://graph.microsoft.com/v1.0/me/joinedTeams",
-            "select": {
-              "from": "value",
-              "label": "displayName",
-              "value": "id",
-              "save_as": "team_id"
-            }
-          },
-          {
-            "id": "channels",
-            "method": "GET",
-            "url_template": "https://graph.microsoft.com/v1.0/teams/{team_id}/channels",
-            "requires": [
-              "team_id"
-            ],
-            "select": {
-              "from": "value",
-              "label": "displayName",
-              "value": "id",
-              "save_as": "channel_id"
-            }
-          }
-        ],
-        "checklist": [
-          "App registration must be multi-tenant: signInAudience = AzureADMultipleOrgs",
-          "Public client/device code flow must be enabled",
-          "Tenant may require admin consent",
-          "Teams message subscriptions require delegated read scopes such as ChannelMessage.Read.All",
-          "Device/token endpoints must use organizations, not the developer tenant ID"
-        ]
+        "tenant_alias": "organizations",
+        "token_url": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+        "verification_uri": "https://microsoft.com/devicelogin"
       }
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "inline": {
         "capabilities": {
           "content_types": [
@@ -676,7 +692,7 @@
     },
     "messaging.subscriptions.v1": {
       "kind": "messaging.subscriptions.v1",
-      "version": "0.4.100",
+      "version": "0.5.1",
       "inline": {
         "component_ref": "messaging-ingress-teams",
         "export": "sync-subscriptions",
@@ -686,22 +702,6 @@
           "message"
         ],
         "world": "greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1"
-      }
-    },
-    "messaging.microsoft_app_catalog.v1": {
-      "kind": "messaging.microsoft_app_catalog.v1",
-      "version": "0.4.100",
-      "inline": {
-        "manifest_template": "assets/teams-app/manifest.template.json",
-        "icons": {
-          "color": "color.png",
-          "outline": "outline.png"
-        },
-        "install_scopes": [
-          "team",
-          "personal"
-        ],
-        "supports_requires_review": true
       }
     }
   },
@@ -719,28 +719,7 @@
       }
     ]
   },
-  "secret_requirements": [
-    {
-      "name": "MS_GRAPH_REFRESH_TOKEN",
-      "scope": "tenant",
-      "description": "Refresh token used for Graph token acquisition when configured."
-    },
-    {
-      "name": "MS_GRAPH_TENANT_ID",
-      "scope": "tenant",
-      "description": "Microsoft Entra tenant ID."
-    },
-    {
-      "name": "MS_GRAPH_CLIENT_ID",
-      "scope": "tenant",
-      "description": "Microsoft Entra application client ID."
-    },
-    {
-      "name": "MS_GRAPH_ACCESS_TOKEN",
-      "scope": "tenant",
-      "description": "Optional test-only Graph access-token override."
-    }
-  ],
+  "secret_requirements": [],
   "capabilities_cache": [
     {
       "component": "ai.greentic.component-templates",

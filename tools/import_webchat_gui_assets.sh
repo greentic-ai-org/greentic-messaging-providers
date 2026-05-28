@@ -54,6 +54,33 @@ if isinstance(branding, dict):
 path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 PY
 
+python3 - "${DEST_DIR}/config/tenants/default.json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = {
+    "tenant_id": "default",
+    "legacy_skin": "default",
+    "skin": "default",
+    "branding": {
+        "company_name": {"i18n": "product.greentic.short"},
+        "tagline": {"i18n": "product.greentic.long"},
+        "logo": "/skins/default/assets/logo.svg",
+    },
+    "webchat": {
+        "directline": {"token_url": "/v1/messaging/webchat/default/token"},
+        "locale": "en-US",
+    },
+    "auth": {"providers": []},
+}
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+
 js_bundle="$(basename "$(find "${DEST_DIR}/assets" -maxdepth 1 -type f -name 'index-*.js' | sort | head -n 1)")"
 css_bundle="$(basename "$(find "${DEST_DIR}/assets" -maxdepth 1 -type f -name 'index-*.css' | sort | head -n 1)")"
 

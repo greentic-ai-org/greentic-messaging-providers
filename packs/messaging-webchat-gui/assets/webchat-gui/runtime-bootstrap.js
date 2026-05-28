@@ -262,15 +262,21 @@ console.log('[runtime-bootstrap] loaded');
   var UI_STRINGS_CALLBACKS = [];
 
   function loadUiI18n(locale) {
-    var lang = locale || 'en';
+    var lang = (locale || 'en').replace(/[^a-zA-Z0-9-]/g, '') || 'en';
     var url = guiBase + 'i18n/' + lang + '.json';
+    // GUI i18n files are resolved from the packaged GUI base path with a sanitized locale.
+    // foxguard: ignore[js/no-ssrf]
     fetch(url).then(function (res) {
       if (!res.ok) {
         // Fall back to base language (ar-AE -> ar)
         var base = lang.split('-')[0];
         if (base !== lang) {
+          // GUI i18n files are resolved from the packaged GUI base path with a sanitized locale.
+          // foxguard: ignore[js/no-ssrf]
           return fetch(guiBase + 'i18n/' + base + '.json');
         }
+        // Static packaged fallback locale.
+        // foxguard: ignore[js/no-ssrf]
         return fetch(guiBase + 'i18n/en.json');
       }
       return res;
@@ -370,10 +376,28 @@ console.log('[runtime-bootstrap] loaded');
   // OAuth helper functions
   // ---------------------------------------------------------------------------
 
+  // Storage key namespace, not credential material.
+  // foxguard: ignore[js/no-hardcoded-secret]
   var OAUTH_STORAGE_PREFIX = 'greentic_oauth_';
 
   function oauthStorageKey(key) {
     return OAUTH_STORAGE_PREFIX + key;
+  }
+
+  function trustedHttpUrl(value) {
+    var url = new URL(value, window.location.href);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new Error('unsupported URL protocol');
+    }
+    return url.toString();
+  }
+
+  function sameOriginUrl(value) {
+    var url = new URL(value, window.location.href);
+    if (url.origin !== window.location.origin) {
+      throw new Error('cross-origin backend URL');
+    }
+    return url.toString();
   }
 
   function getOAuthSession() {
@@ -515,7 +539,8 @@ console.log('[runtime-bootstrap] loaded');
       if (!storedProvider.token_url) {
         throw new Error('no token_url');
       }
-      console.log('[oauth] trying direct PKCE token exchange with', storedProvider.token_url);
+      var tokenUrl = trustedHttpUrl(storedProvider.token_url);
+      console.log('[oauth] trying direct PKCE token exchange with', tokenUrl);
       var body = new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
@@ -523,7 +548,9 @@ console.log('[runtime-bootstrap] loaded');
         client_id: storedProvider.client_id,
         code_verifier: codeVerifier || ''
       });
-      return fetch(storedProvider.token_url, {
+      // OAuth token endpoints are provider-configured HTTPS URLs.
+      // foxguard: ignore[js/no-ssrf]
+      return fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString()
@@ -531,9 +558,11 @@ console.log('[runtime-bootstrap] loaded');
     }
 
     // Try server proxy first, fall back to direct PKCE exchange
-    var proxyUrl = backendBase(tenant) + '/oauth/token-exchange';
+    var proxyUrl = sameOriginUrl(backendBase(tenant) + '/oauth/token-exchange');
     console.log('[oauth] exchanging code via proxy');
 
+    // Backend proxy URL is constrained to the current origin.
+    // foxguard: ignore[js/no-ssrf]
     fetch(proxyUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -656,9 +685,11 @@ console.log('[runtime-bootstrap] loaded');
         prompt: 'select_account'
       });
 
-      var authorizeUrl = provider.auth_url + '?' + params.toString();
+      var authorizeUrl = trustedHttpUrl(provider.auth_url) + '?' + params.toString();
       console.log('[oauth] redirecting to provider:', provider.id, provider.auth_url);
-      window.location.href = authorizeUrl;
+      // OAuth authorization endpoints are provider-configured HTTP(S) URLs.
+      // foxguard: ignore[js/no-open-redirect]
+      window.location.assign(authorizeUrl);
     });
   }
 
@@ -745,9 +776,14 @@ console.log('[runtime-bootstrap] loaded');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#f8fafb;font-family:Poppins,system-ui,-apple-system,sans-serif;';
     var card = document.createElement('div');
     card.style.cssText = 'max-width:380px;width:90%;padding:48px 36px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.06);text-align:center;background:#fff;border:1px solid #e5e7eb;';
-    card.innerHTML =
-      '<h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#ef4444;">Something went wrong</h2>' +
-      '<p style="margin:0 0 28px;color:#666;font-size:14px;line-height:1.5;">' + message + '</p>';
+    var title = document.createElement('h2');
+    title.style.cssText = 'margin:0 0 8px;font-size:22px;font-weight:600;color:#ef4444;';
+    title.textContent = 'Something went wrong';
+    var detail = document.createElement('p');
+    detail.style.cssText = 'margin:0 0 28px;color:#666;font-size:14px;line-height:1.5;';
+    detail.textContent = message;
+    card.appendChild(title);
+    card.appendChild(detail);
     var retryBtn = document.createElement('button');
     retryBtn.textContent = 'Try Again';
     retryBtn.style.cssText = 'padding:12px 28px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:15px;font-weight:500;cursor:pointer;min-width:200px;';
@@ -858,7 +894,9 @@ console.log('[runtime-bootstrap] loaded');
    * Blocks SPA rendering until auth is resolved.
    */
   function checkOAuthGate() {
-    var authConfigUrl = backendBase(tenant) + '/auth/config';
+    var authConfigUrl = sameOriginUrl(backendBase(tenant) + '/auth/config');
+    // Backend auth config URL is constrained to the current origin.
+    // foxguard: ignore[js/no-ssrf]
     fetch(authConfigUrl)
       .then(function (response) {
         if (!response.ok) {
@@ -985,6 +1023,8 @@ console.log('[runtime-bootstrap] loaded');
   // an expired token. The 60s buffer matches the rate-limit window — if the
   // server ever reduces TTL below the buffer, we just always refetch (which
   // is the same behaviour as having no cache).
+  // Local storage cache key, not credential material.
+  // foxguard: ignore[js/no-hardcoded-secret]
   var TOKEN_CACHE_KEY = 'greentic_dl_token';
   var TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
 
@@ -1368,6 +1408,8 @@ console.log('[runtime-bootstrap] loaded');
     // The i18n manifest lists locale codes that have card translations.
     // Served from the webchat-gui pack's i18n directory.
     var manifestUrl = guiBase + 'i18n/_manifest.json';
+    // GUI i18n manifest is loaded from the packaged GUI base path.
+    // foxguard: ignore[js/no-ssrf]
     fetch(manifestUrl)
       .then(function (res) { return res.ok ? res.json() : null; })
       .catch(function () { return null; })
@@ -1401,6 +1443,8 @@ console.log('[runtime-bootstrap] loaded');
 
       var wrapper = document.createElement('label');
       wrapper.className = 'locale-picker';
+      // Static local SVG markup; no user-controlled input reaches this assignment.
+      // foxguard: ignore[js/no-xss-innerhtml]
       wrapper.innerHTML = globeSvg;
 
       var selectEl = document.createElement('select');
@@ -1686,7 +1730,7 @@ console.log('[runtime-bootstrap] loaded');
         if (lede) {
           var lEl = document.createElement('p');
           lEl.className = 'topbar-nav__tooltip-lede';
-          lEl.innerHTML = lede;
+          lEl.textContent = lede;
           tip.appendChild(lEl);
           hasContent = true;
         }
@@ -1713,6 +1757,8 @@ console.log('[runtime-bootstrap] loaded');
     var primary = basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json';
     var fallback = basePath + '/config/tenants/default.json';
     function load(url) {
+      // Tenant navigation files are resolved under the current page path.
+      // foxguard: ignore[js/no-ssrf]
       return fetch(url)
         .then(function (r) { return r && r.ok ? r.json() : null; })
         .catch(function () { return null; });

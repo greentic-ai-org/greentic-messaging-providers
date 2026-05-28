@@ -21,8 +21,6 @@ mod bindings {
     });
 }
 
-const BOT_APP_PASSWORD_KEY: &str = "MS_BOT_APP_PASSWORD";
-
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -103,13 +101,11 @@ struct HostState {
 }
 
 impl HostState {
-    fn with_secret(key: &str, value: &str) -> Self {
-        let mut secrets = HashMap::new();
-        secrets.insert(key.to_string(), value.to_string());
+    fn new() -> Self {
         Self {
             table: ResourceTable::new(),
             wasi_ctx: WasiCtxBuilder::new().inherit_stdio().build(),
-            secrets,
+            secrets: HashMap::new(),
             responses: RefCell::new(vec![]),
             sent_requests: RefCell::new(vec![]),
         }
@@ -205,7 +201,7 @@ fn pack_has_extension_and_schema() -> Result<()> {
     let provider = providers.first().expect("provider entry");
     assert_eq!(
         provider.get("provider_type").and_then(|v| v.as_str()),
-        Some("messaging.teams.bot")
+        Some("messaging.teams.graph")
     );
     assert_eq!(
         provider
@@ -300,7 +296,7 @@ fn invoke_send_smoke_test() -> Result<()> {
     assert!(described.operations.iter().any(|op| op.name == "run"));
     assert!(described.operations.iter().any(|op| op.name == "send"));
 
-    let state = HostState::with_secret(BOT_APP_PASSWORD_KEY, "super-secret");
+    let state = HostState::new();
     // Responses are popped (LIFO) — push send first, token second so token is consumed first.
     state
         .responses
@@ -339,9 +335,9 @@ fn invoke_send_smoke_test() -> Result<()> {
         "team_id": "team-1",
         "channel_id": "channel-1",
         "config": {
-            "ms_bot_app_id": "app-123",
-            "public_base_url": "https://example.com",
-            "default_service_url": "https://smba.trafficmanager.net/teams"
+            "tenant_id": "tenant-123",
+            "client_id": "client-123",
+            "refresh_token": "refresh-123"
         }
     });
     let input_bytes = canonical_cbor_bytes(&input);
@@ -356,7 +352,7 @@ fn invoke_send_smoke_test() -> Result<()> {
     );
     assert_eq!(
         first_json.get("provider_type"),
-        Some(&Value::String("messaging.teams.bot".into()))
+        Some(&Value::String("messaging.teams.graph".into()))
     );
     assert_eq!(
         first_json.get("message_id"),
@@ -379,8 +375,8 @@ fn invoke_send_smoke_test() -> Result<()> {
     );
     let token_body = String::from_utf8(token_req.body.as_ref().expect("token body").clone())?;
     assert!(
-        token_body.contains("grant_type=client_credentials"),
-        "token body must use client_credentials grant"
+        token_body.contains("grant_type=refresh_token"),
+        "token body must use refresh_token grant"
     );
 
     let send_req = &sent_requests[1];
@@ -392,16 +388,14 @@ fn invoke_send_smoke_test() -> Result<()> {
         "send request must include bearer token"
     );
     assert!(
-        send_req.url.contains("v3/conversations/"),
-        "send URL should target Bot Connector conversations endpoint"
-    );
-    assert!(
-        send_req.url.contains("/activities"),
-        "send URL should target activities"
+        send_req
+            .url
+            .contains("graph.microsoft.com/v1.0/teams/team-1/channels/channel-1/messages"),
+        "send URL should target Graph channel messages endpoint"
     );
     let body_json: Value = serde_json::from_slice(&send_req.body.as_ref().expect("body")[..])?;
     assert_eq!(
-        body_json.get("text"),
+        body_json.get("body").and_then(|body| body.get("content")),
         Some(&Value::String("hello teams".into()))
     );
 
@@ -432,7 +426,7 @@ fn invoke_reply_smoke_test() -> Result<()> {
     )
     .expect("link interfaces types");
 
-    let state = HostState::with_secret(BOT_APP_PASSWORD_KEY, "super-secret");
+    let state = HostState::new();
     // Responses are popped (LIFO) — push reply first, token second so token is consumed first.
     state
         .responses
@@ -468,12 +462,13 @@ fn invoke_reply_smoke_test() -> Result<()> {
 
     let input = json!({
         "text": "reply to teams",
-        "conversation_id": "19:channel-1@thread.tacv2",
+        "team_id": "team-1",
+        "channel_id": "channel-1",
         "reply_to_id": "thread-42",
         "config": {
-            "ms_bot_app_id": "app-123",
-            "public_base_url": "https://example.com",
-            "default_service_url": "https://smba.trafficmanager.net/teams"
+            "tenant_id": "tenant-123",
+            "client_id": "client-123",
+            "refresh_token": "refresh-123"
         }
     });
     let (resp,) = invoke
@@ -489,15 +484,17 @@ fn invoke_reply_smoke_test() -> Result<()> {
     );
     assert_eq!(
         resp_json.get("provider_type"),
-        Some(&Value::String("messaging.teams.bot".into()))
+        Some(&Value::String("messaging.teams.graph".into()))
     );
 
     let sent = store.data().sent_requests.borrow().clone();
     assert_eq!(sent.len(), 2, "expected token + reply requests");
     let reply_req = sent.last().expect("reply request recorded");
     assert!(
-        reply_req.url.contains("/activities/thread-42"),
-        "reply URL should target activities/replyToId endpoint"
+        reply_req.url.contains(
+            "graph.microsoft.com/v1.0/teams/team-1/channels/channel-1/messages/thread-42/replies"
+        ),
+        "reply URL should target Graph channel replies endpoint"
     );
 
     Ok(())
@@ -527,10 +524,7 @@ fn reply_requires_thread_id() -> Result<()> {
     )
     .expect("link interfaces types");
 
-    let mut store = Store::new(
-        &engine,
-        HostState::with_secret(BOT_APP_PASSWORD_KEY, "super-secret"),
-    );
+    let mut store = Store::new(&engine, HostState::new());
     let instance = linker
         .instantiate(&mut store, &component)
         .map_err(|err| anyhow::anyhow!("instantiate for reply missing thread: {err}"))?;

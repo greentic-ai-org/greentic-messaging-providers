@@ -10,13 +10,7 @@
       "default"
     ]
   },
-  "secret_requirements": [
-    {
-      "name": "MS_GRAPH_REFRESH_TOKEN",
-      "scope": "tenant",
-      "description": "Refresh token used for Graph token acquisition when configured."
-    }
-  ],
+  "secret_requirements": [],
   "capabilities": {
     "wasi": {},
     "host": {

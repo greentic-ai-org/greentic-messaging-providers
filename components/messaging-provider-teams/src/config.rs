@@ -60,18 +60,26 @@ pub(crate) struct ProviderConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ProviderConfigOut {
     pub(crate) enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) public_base_url: Option<String>,
     pub(crate) tenant_id: String,
     pub(crate) client_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) refresh_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) client_secret: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) access_token: Option<String>,
     pub(crate) graph_base_url: String,
     pub(crate) auth_base_url: String,
     pub(crate) token_scope: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) team_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) channel_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) chat_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) user_id: Option<String>,
 }
 

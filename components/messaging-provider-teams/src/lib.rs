@@ -445,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn qa_default_asks_required_minimum() {
+    fn qa_default_uses_device_code_action_without_manual_questions() {
         use bindings::exports::greentic::component::qa::Mode;
         let spec = build_qa_spec(Mode::Default);
         let keys = spec
@@ -453,7 +453,7 @@ mod tests {
             .into_iter()
             .map(|question| question.id)
             .collect::<Vec<_>>();
-        assert_eq!(keys, vec!["tenant_id", "client_id"]);
+        assert!(keys.is_empty());
     }
 
     #[test]

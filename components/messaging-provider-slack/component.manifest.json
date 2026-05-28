@@ -18,22 +18,6 @@
   },
   "secret_requirements": [
     {
-      "name": "SLACK_BOT_TOKEN",
-      "scope": "tenant",
-      "description": "Slack bot token used for chat.postMessage calls."
-    },
-    {
-      "name": "SLACK_SIGNING_SECRET",
-      "required": false,
-      "scope": "tenant",
-      "description": "Slack signing secret (optional for future webhook validation)."
-    },
-    {
-      "name": "SLACK_APP_ID",
-      "scope": "tenant",
-      "description": "Slack app ID for manifest updates during webhook registration."
-    },
-    {
       "name": "SLACK_CONFIGURATION_ACCESS_TOKEN",
       "scope": "tenant",
       "description": "Slack configuration access token for manifest updates during webhook registration."

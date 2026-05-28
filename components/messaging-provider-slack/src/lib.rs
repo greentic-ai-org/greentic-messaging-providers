@@ -29,6 +29,9 @@ pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
 pub(crate) const DEFAULT_API_BASE: &str = "https://slack.com/api";
 pub(crate) const DEFAULT_BOT_TOKEN_KEY: &str = "SLACK_BOT_TOKEN";
 pub(crate) const DEFAULT_APP_ID_KEY: &str = "SLACK_APP_ID";
+pub(crate) const DEFAULT_CLIENT_ID_KEY: &str = "SLACK_CLIENT_ID";
+pub(crate) const DEFAULT_CLIENT_SECRET_KEY: &str = "SLACK_CLIENT_SECRET";
+pub(crate) const DEFAULT_SIGNING_SECRET_KEY: &str = "SLACK_SIGNING_SECRET";
 pub(crate) const DEFAULT_CONFIG_ACCESS_TOKEN_KEY: &str = "SLACK_CONFIGURATION_ACCESS_TOKEN";
 pub(crate) const DEFAULT_CONFIG_REFRESH_TOKEN_KEY: &str = "SLACK_CONFIGURATION_REFRESH_TOKEN";
 
@@ -473,7 +476,7 @@ mod tests {
             .into_iter()
             .map(|question| question.id)
             .collect::<Vec<_>>();
-        assert_eq!(keys, vec!["public_base_url", "bot_token"]);
+        assert!(keys.is_empty());
     }
 
     #[test]

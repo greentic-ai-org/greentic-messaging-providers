@@ -6,6 +6,17 @@ setup_actions:
     kind: oauth_device_code
     provider: microsoft
     label: Connect Microsoft Teams
+    authorize_label: "Authorise Teams"
+    finalize_label: "Verify Microsoft Teams Setup"
+    copy_label: "Copy code"
+    success_message: "Microsoft Teams setup verified successfully."
+    instructions_before_start: "Generate a Microsoft sign-in code, then continue in your browser to approve Teams access."
+    instructions_after_start:
+      - "Copy this code: {user_code}"
+      - "Click {authorize_label}, then paste in the code."
+      - "Log in with your Microsoft 365 admin account."
+      - "Approve the Teams app registration for your organization."
+      - "Return to setup and click {finalize_label}."
     tenant_alias: organizations
     device_code_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode
     token_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/token
@@ -65,60 +76,11 @@ setup_actions:
       - Teams message subscriptions require delegated read scopes such as ChannelMessage.Read.All
       - Device/token endpoints must use organizations, not the developer tenant ID
 questions:
-  - name: tenant_id
-    title: Microsoft tenant ID
-    kind: string
-    required: true
-    help: "Discovered Microsoft Entra tenant ID. Device-code setup starts with the organizations endpoint, then saves the concrete tenant ID."
-    placeholder: "organizations"
-    group: Authentication
-    docs_url: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/Overview"
   - name: client_id
-    title: Microsoft client ID
+    title: Microsoft public client ID
     kind: string
     required: true
-    help: "Application client ID for the Microsoft Graph OAuth app. If supplied by hosted config/env, setup should not ask again."
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    default: "6c115a7a-f656-49c4-975a-5e831efae833"
+    help: "Public multi-tenant Microsoft application client ID used to start the device-code login. Keep the default Greentic client ID or replace it with your own public-client app registration."
+    placeholder: "6c115a7a-f656-49c4-975a-5e831efae833"
     group: Authentication
-    docs_url: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
-  - name: refresh_token
-    title: Microsoft refresh token
-    kind: string
-    required: false
-    secret: true
-    help: "Graph OAuth refresh token from Login with Microsoft; required for normal runtime sends unless access_token is supplied for testing"
-    group: Authentication
-  - name: access_token
-    title: Microsoft access token
-    kind: string
-    required: false
-    secret: true
-    help: "Optional test-only Graph access-token override"
-    group: Authentication
-  - name: public_base_url
-    title: Public base URL
-    kind: string
-    required: false
-    help: "Public HTTPS URL for Graph change-notification callbacks; not required for egress-only"
-    placeholder: "https://xxxx.trycloudflare.com"
-    group: Connection
-    validate:
-      regex: "^https://"
-  - name: team_id
-    title: Default Team ID
-    kind: string
-    required: false
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-    group: Defaults
-  - name: channel_id
-    title: Default Channel ID
-    kind: string
-    required: false
-    placeholder: "19:xxxxx@thread.tacv2"
-    group: Defaults
-  - name: chat_id
-    title: Default Chat ID
-    kind: string
-    required: false
-    placeholder: "19:xxxxx@thread.v2"
-    group: Defaults

@@ -16,28 +16,7 @@
       "path": "schemas/messaging/teams/public.config.schema.json"
     }
   },
-  "secret_requirements": [
-    {
-      "name": "MS_GRAPH_TENANT_ID",
-      "scope": "tenant",
-      "description": "Microsoft Entra tenant ID."
-    },
-    {
-      "name": "MS_GRAPH_CLIENT_ID",
-      "scope": "tenant",
-      "description": "Microsoft Entra application client ID."
-    },
-    {
-      "name": "MS_GRAPH_REFRESH_TOKEN",
-      "scope": "tenant",
-      "description": "Graph OAuth refresh token for delegated sends."
-    },
-    {
-      "name": "MS_GRAPH_ACCESS_TOKEN",
-      "scope": "tenant",
-      "description": "Optional test-only Graph access-token override."
-    }
-  ],
+  "secret_requirements": [],
   "operations": [
     {
       "name": "qa-spec",

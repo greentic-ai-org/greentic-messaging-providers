@@ -910,7 +910,9 @@ mod teams {
         )
         .expect("link interfaces");
 
-        let host = HostState::with_secret("MS_GRAPH_CLIENT_SECRET", "secret");
+        let mut host = HostState::with_secret("MS_GRAPH_CLIENT_SECRET", "secret");
+        host.secrets
+            .insert("MS_GRAPH_REFRESH_TOKEN".into(), "refresh-token".into());
         host.responses
             .borrow_mut()
             .push(bindings::greentic::http::http_client::Response {

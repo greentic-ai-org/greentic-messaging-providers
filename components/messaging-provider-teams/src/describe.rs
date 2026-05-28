@@ -68,7 +68,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.qa.setup.title",
     "teams.qa.upgrade.title",
     "teams.qa.remove.title",
-    // QA questions - Graph
+    // Config labels used outside the setup question flow.
     "teams.qa.setup.enabled",
     "teams.qa.setup.public_base_url",
     "teams.qa.setup.tenant_id",
@@ -85,24 +85,10 @@ pub(crate) const I18N_KEYS: &[&str] = &[
 ];
 
 /// QA question definitions: (id, i18n_key, required)
-pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
-    ("enabled", "teams.qa.setup.enabled", true),
-    ("tenant_id", "teams.qa.setup.tenant_id", true),
-    ("client_id", "teams.qa.setup.client_id", true),
-    ("refresh_token", "teams.qa.setup.refresh_token", false),
-    ("access_token", "teams.qa.setup.access_token", false),
-    ("public_base_url", "teams.qa.setup.public_base_url", false),
-    ("graph_base_url", "teams.qa.setup.graph_base_url", false),
-    ("auth_base_url", "teams.qa.setup.auth_base_url", false),
-    ("token_scope", "teams.qa.setup.token_scope", false),
-    ("team_id", "teams.qa.setup.team_id", false),
-    ("channel_id", "teams.qa.setup.channel_id", false),
-    ("chat_id", "teams.qa.setup.chat_id", false),
-    ("user_id", "teams.qa.setup.user_id", false),
-];
+pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[];
 
 /// Keys required for default/minimal setup.
-pub(crate) const DEFAULT_KEYS: &[&str] = &["tenant_id", "client_id"];
+pub(crate) const DEFAULT_KEYS: &[&str] = &[];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
@@ -299,7 +285,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.qa.setup.title", "Setup"),
     ("teams.qa.upgrade.title", "Upgrade"),
     ("teams.qa.remove.title", "Remove"),
-    // QA questions - Graph
+    // Config labels used outside the setup question flow.
     ("teams.qa.setup.enabled", "Enable provider"),
     ("teams.qa.setup.public_base_url", "Public base URL"),
     ("teams.qa.setup.tenant_id", "Tenant ID"),
@@ -461,6 +447,11 @@ fn config_schema() -> SchemaIr {
                 "chat_id",
                 false,
                 schema_str("teams.qa.setup.chat_id", "teams.qa.setup.chat_id"),
+            ),
+            (
+                "user_id",
+                false,
+                schema_str("teams.qa.setup.user_id", "teams.qa.setup.user_id"),
             ),
         ],
         false,
