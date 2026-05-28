@@ -1,6 +1,16 @@
 # Provider Catalog
 
-This catalog summarizes every messaging provider in this repository. Each provider has its own feature sheet with setup notes, secrets, supported message behavior, tests, and code paths.
+This catalog summarizes every messaging provider in this repository. Each
+provider has its own feature sheet with setup notes, secrets, supported message
+behavior, tests, and code paths.
+
+Start with WebChat GUI if you want to see the most visible result quickly: a
+full-page assistant, iframe-isolated web component, native web component, and
+popup widget can all be previewed locally with one command:
+
+```bash
+scripts/test_webchat_gui.sh 3aigent --embedded
+```
 
 ## Quick Comparison
 
@@ -42,4 +52,3 @@ For coding agents:
 2. Use "Owned Files" before editing.
 3. Use "Focused Checks" before broad test runs.
 4. Keep changes within provider-owned paths unless the task explicitly touches shared code.
-

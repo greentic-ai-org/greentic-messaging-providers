@@ -1,8 +1,6 @@
 name: Provider Release Orchestrator
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
     inputs:
       providers:
@@ -75,7 +73,9 @@ jobs:
           all_providers = sorted(matrix["providers"].keys())
           event_name = os.environ["GITHUB_EVENT_NAME"]
           providers_input = (os.environ.get("PROVIDERS_INPUT") or "affected").strip()
-          publish = event_name == "push" and os.environ["GITHUB_REF"] == "refs/heads/main"
+          # Releases must be explicitly requested through workflow_dispatch or
+          # scripts/publish_provider.sh.
+          publish = False
           publish_latest = False
           trigger_e2e = False
           shared_crate_changed = False

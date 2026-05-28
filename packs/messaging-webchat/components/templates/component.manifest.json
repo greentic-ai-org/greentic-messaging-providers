@@ -173,6 +173,6 @@
   "supports": [
     "messaging"
   ],
-  "version": "1.1.0",
+  "version": "0.4.100",
   "world": "root:component/root"
 }

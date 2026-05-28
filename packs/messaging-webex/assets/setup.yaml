@@ -40,3 +40,11 @@ questions:
     help: "Access token from your Webex bot"
     group: Authentication
     docs_url: "https://developer.webex.com/my-apps/new/bot"
+  - name: webhook_secret
+    title: Webex webhook secret
+    kind: string
+    required: false
+    secret: true
+    help: "Shared secret Webex uses to sign webhook requests with X-Spark-Signature"
+    group: Authentication
+    docs_url: "https://developer.webex.com/messaging/docs/api/guides/webhooks"

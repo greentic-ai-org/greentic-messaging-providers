@@ -1,0 +1,12 @@
+{
+  "name": "greentic-messaging-providers",
+  "private": true,
+  "scripts": {
+    "test:webchat-gui": "playwright test -c tests/webchat-gui/playwright.config.ts",
+    "test:webchat-gui:headed": "playwright test -c tests/webchat-gui/playwright.config.ts --headed",
+    "test:webchat-gui:update-snapshots": "WEBCHAT_GUI_VISUAL=1 playwright test -c tests/webchat-gui/playwright.config.ts --update-snapshots --project=chromium --grep @visual"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}

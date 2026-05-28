@@ -21,7 +21,7 @@ This repository now separates shared crate releases from provider pack releases.
 python3 ci/provider_matrix.py list-providers
 python3 tools/provider_versions.py validate --provider <name>
 cargo check -p messaging-provider-<name>
-PACK_FILTER=messaging-<name> PACK_VERSION=$(python3 tools/provider_versions.py provider <name>) ./ci/steps/11_build_packs.sh
+scripts/build_providers.sh <name>
 ```
 
 ## Release Shared Code
@@ -42,11 +42,29 @@ providers for shared-code changes.
 ## Release One Provider
 
 ```bash
-python3 tools/provider_versions.py set-provider slack 0.5.0
-python3 tools/provider_versions.py validate --provider slack
+scripts/change_provider_version.sh slack 0.5.0
 ```
 
-Then use `Provider Build, Test, and Publish` with:
+`scripts/change_provider_version.sh` validates the selected provider metadata
+and builds that provider locally. Pass `--no-build` for metadata-only changes.
+
+For `webchat-gui`, the focused local build preserves the browser assets already
+checked into `packs/messaging-webchat-gui`. Set
+`GREENTIC_WEBCHAT_SITE_DIR=/path/to/site/app` when the release should import a
+new WebChat SPA build before packaging.
+
+After committing and pushing the change, publish the selected provider with:
+
+```bash
+scripts/publish_provider.sh slack 0.5.0
+```
+
+The publish helper runs the same version update, validation, focused local
+build, and targeted local checks before dispatching `provider-build-publish.yml`.
+Pass `--dry-run` to upload the workflow artifact without pushing to GHCR, or
+`--publish-latest` when the release should also move `latest`.
+
+Equivalent manual workflow inputs are:
 
 - `provider=slack`
 - `publish=true`
@@ -65,6 +83,10 @@ Use `Provider Release Orchestrator` with:
 
 Use `providers=shared+all` when the run should also execute the shared crate
 publish workflow before provider fanout.
+
+Pushes to `main` do not start the orchestrator. After the merge, decide whether
+to run a focused provider release or an all-provider fanout, then start the
+manual workflow dispatch with the matching `providers` and `publish` inputs.
 
 ## Inspect GHCR Output
 

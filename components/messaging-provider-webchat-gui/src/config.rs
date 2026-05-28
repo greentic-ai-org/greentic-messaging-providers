@@ -18,6 +18,10 @@ pub(crate) fn default_skin() -> String {
     "default".to_string()
 }
 
+pub(crate) fn default_text_input_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct ProviderConfig {
@@ -36,6 +40,8 @@ pub(crate) struct ProviderConfig {
     pub(crate) presentation_mode: PresentationMode,
     #[serde(default = "default_skin")]
     pub(crate) skin: String,
+    #[serde(default = "default_text_input_enabled")]
+    pub(crate) text_input_enabled: bool,
     #[serde(default)]
     pub(crate) nav_links: Vec<Value>,
     #[serde(default)]
@@ -56,6 +62,8 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) presentation_mode: PresentationMode,
     #[serde(default = "default_skin")]
     pub(crate) skin: String,
+    #[serde(default = "default_text_input_enabled")]
+    pub(crate) text_input_enabled: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) nav_links: Vec<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -84,6 +92,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         base_url: None,
         presentation_mode: PresentationMode::Standalone,
         skin: default_skin(),
+        text_input_enabled: default_text_input_enabled(),
         nav_links: Vec::new(),
         jwt_signing_key_b64: None,
         oauth_enabled: None,
@@ -160,7 +169,9 @@ fn decode_injected_config_field(input: &Value, key: &str) -> Option<Value> {
     }
 
     match key {
-        "enabled" | "oauth_enabled" => trimmed.parse::<bool>().ok().map(Value::Bool),
+        "enabled" | "oauth_enabled" | "text_input_enabled" => {
+            trimmed.parse::<bool>().ok().map(Value::Bool)
+        }
         "nav_links" => serde_json::from_str(trimmed).ok(),
         _ => Some(Value::String(trimmed.to_string())),
     }
@@ -180,6 +191,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "base_url",
         "presentation_mode",
         "skin",
+        "text_input_enabled",
         "nav_links",
         "oauth_enabled",
         "oauth_providers",
@@ -197,6 +209,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "base_url",
         "presentation_mode",
         "skin",
+        "text_input_enabled",
         "nav_links",
         "oauth_enabled",
         "oauth_providers",
@@ -230,6 +243,7 @@ mod tests {
         .unwrap();
         assert_eq!(cfg.presentation_mode, PresentationMode::Standalone);
         assert_eq!(cfg.skin, "default");
+        assert!(cfg.text_input_enabled);
     }
 
     #[test]
@@ -270,6 +284,7 @@ mod tests {
             "route_b64": general_purpose::STANDARD.encode("webchat"),
             "presentation_mode_b64": general_purpose::STANDARD.encode("standalone"),
             "skin_b64": general_purpose::STANDARD.encode("3aigent"),
+            "text_input_enabled_b64": general_purpose::STANDARD.encode("false"),
             "nav_links_b64": general_purpose::STANDARD.encode(nav_links)
         });
 
@@ -279,6 +294,7 @@ mod tests {
         assert_eq!(cfg.route.as_deref(), Some("webchat"));
         assert_eq!(cfg.presentation_mode, PresentationMode::Standalone);
         assert_eq!(cfg.skin, "3aigent");
+        assert!(!cfg.text_input_enabled);
         assert_eq!(cfg.nav_links.len(), 1);
         assert_eq!(cfg.nav_links[0]["label"], "Docs");
     }

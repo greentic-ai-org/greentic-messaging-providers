@@ -191,6 +191,7 @@ body {
   align-items: center;
   gap: 0.875rem;
   min-width: 0;
+  margin-right: auto;
 }
 .topbar__brand {
   width: 64px;
@@ -221,7 +222,7 @@ body {
   line-height: 1.2;
 }
 .topbar-nav {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -353,6 +354,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 /* SPA's runtime-bootstrap injects a `.theme-toggle` button into
    #locale-picker-mount; style it to match the brand palette. */
@@ -629,6 +631,24 @@ button[aria-label*="Upload" i] {
   box-shadow: 0 0 0 3px var(--brand-glow) !important;
 }
 
+/* Adaptive Cards can keep dark-theme inline text colors when the 3aigent
+   theme is toggled to light after Web Chat has mounted. In light mode the
+   bubble/card background is white, so force readable card copy. */
+[data-theme="light"] .ac-adaptiveCard,
+[data-theme="light"] .ac-adaptiveCard .ac-textBlock,
+[data-theme="light"] .ac-adaptiveCard .ac-richTextBlock,
+[data-theme="light"] .ac-adaptiveCard .ac-richTextBlock span {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .ac-adaptiveCard .ac-textBlock[aria-level],
+[data-theme="light"] .ac-adaptiveCard [role="heading"],
+[data-theme="light"] .ac-adaptiveCard .ac-factTitle {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .ac-adaptiveCard .ac-factValue {
+  color: var(--text-muted) !important;
+}
+
 /* ===== ADAPTIVE CARD ACTION BUTTONS ===== */
 /* Adaptive Cards renderer styles `.ac-pushButton` outside the host config's
    color graph; in dark mode the default white pill clashes hard with our
@@ -660,4 +680,90 @@ button[aria-label*="Upload" i] {
   background: var(--brand-glow) !important;
   color: var(--brand-dark) !important;
   border-color: var(--brand) !important;
+}
+
+[data-theme="light"] .webchat__bubble__content .ac-adaptiveCard,
+[data-theme="light"] .webchat__bubble__content .ac-container,
+[data-theme="light"] .webchat__bubble__content .ac-columnSet,
+[data-theme="light"] .webchat__bubble__content .ac-column {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .webchat__bubble__content .ac-textBlock,
+[data-theme="light"] .webchat__bubble__content .ac-textBlock *,
+[data-theme="light"] .webchat__bubble__content .ac-textBlock p,
+[data-theme="light"] .webchat__bubble__content .ac-textRun,
+[data-theme="light"] .webchat__bubble__content .ac-fact .ac-factTitle {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .webchat__bubble__content .ac-fact .ac-factValue {
+  color: var(--text-secondary) !important;
+}
+
+.webchat__bubble__content .ac-adaptiveCard a,
+.webchat__bubble__content .ac-textBlock a,
+.webchat__bubble__content .ac-richTextBlock a {
+  color: var(--brand-light) !important;
+  font-weight: 500 !important;
+  text-decoration-color: var(--brand-light) !important;
+}
+
+.webchat__bubble__content .ac-adaptiveCard a:hover,
+.webchat__bubble__content .ac-textBlock a:hover,
+.webchat__bubble__content .ac-richTextBlock a:hover {
+  color: var(--brand-light) !important;
+  text-decoration-color: currentColor !important;
+}
+
+[data-theme="light"] .webchat__bubble__content .ac-adaptiveCard a,
+[data-theme="light"] .webchat__bubble__content .ac-textBlock a,
+[data-theme="light"] .webchat__bubble__content .ac-richTextBlock a {
+  color: var(--brand-dark) !important;
+  text-decoration-color: var(--brand-dark) !important;
+}
+
+[data-theme="light"] .webchat__bubble__content .ac-adaptiveCard a:hover,
+[data-theme="light"] .webchat__bubble__content .ac-textBlock a:hover,
+[data-theme="light"] .webchat__bubble__content .ac-richTextBlock a:hover {
+  color: var(--brand) !important;
+}
+
+.ac-actionSet button[disabled],
+.ac-actionSet button[aria-disabled="true"],
+.ac-actionSet button[aria-busy="true"],
+.ac-pushButton[disabled],
+.ac-pushButton[aria-disabled="true"],
+.ac-pushButton[aria-busy="true"] {
+  position: relative !important;
+  cursor: wait !important;
+  opacity: 0.72 !important;
+  padding-left: 2.125rem !important;
+  pointer-events: none !important;
+}
+
+.ac-actionSet button[disabled]::before,
+.ac-actionSet button[aria-disabled="true"]::before,
+.ac-actionSet button[aria-busy="true"]::before,
+.ac-pushButton[disabled]::before,
+.ac-pushButton[aria-disabled="true"]::before,
+.ac-pushButton[aria-busy="true"]::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 0.75rem !important;
+  top: 50% !important;
+  width: 0.875rem !important;
+  height: 0.875rem !important;
+  margin-top: -0.4375rem !important;
+  border: 2px solid currentColor !important;
+  border-right-color: transparent !important;
+  border-radius: 999px !important;
+  animation: ac-action-spin 0.75s linear infinite !important;
+  box-sizing: border-box !important;
+}
+
+@keyframes ac-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

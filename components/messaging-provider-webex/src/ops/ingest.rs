@@ -9,15 +9,21 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use greentic_types::ChannelMessageEnvelope;
 use greentic_types::messaging::universal_dto::{HttpInV1, HttpOutV1};
+use hmac::{Hmac, KeyInit, Mac};
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::{Value, json};
+use sha1::Sha1;
 
 use super::ingest_helpers::{
     build_webhook_envelope, build_webhook_metadata, fetch_action_details, fetch_message_details,
     pick_sender,
 };
+#[cfg(not(test))]
+use crate::DEFAULT_WEBHOOK_SECRET_KEY;
 use crate::config::{get_secret_string, load_config};
-use crate::{DEFAULT_API_BASE, DEFAULT_TOKEN_KEY, ProviderConfig};
+use crate::{DEFAULT_API_BASE, DEFAULT_TOKEN_KEY, PROVIDER_TYPE, ProviderConfig};
 
 pub(crate) struct IngestOutcome {
     pub(crate) envelope: ChannelMessageEnvelope,
@@ -38,8 +44,16 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         Ok(bytes) => bytes,
         Err(err) => return http_out_error(400, &format!("invalid body encoding: {err}")),
     };
-    let body_val: Value = serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
     let cfg = load_config(&json!({})).unwrap_or_default();
+    if let Some(secret) = cfg
+        .webhook_secret
+        .clone()
+        .or_else(resolve_webhook_secret_for_verification)
+        && !verify_webex_signature(&request.headers, &body_bytes, &secret)
+    {
+        return http_out_error(401, "invalid Webex webhook signature");
+    }
+    let body_val: Value = serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
     let outcome = handle_webhook_event(&body_val, &cfg);
 
     let mut normalized = json!({
@@ -60,6 +74,70 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         events: vec![outcome.envelope],
     };
     http_out_v1_bytes(&out)
+}
+
+#[cfg(not(test))]
+fn resolve_webhook_secret_for_verification() -> Option<String> {
+    get_secret_string(DEFAULT_WEBHOOK_SECRET_KEY).ok()
+}
+
+#[cfg(test)]
+fn resolve_webhook_secret_for_verification() -> Option<String> {
+    None
+}
+
+fn verify_webex_signature(
+    headers: &[greentic_types::messaging::universal_dto::Header],
+    body: &[u8],
+    secret: &str,
+) -> bool {
+    let Some(expected) = find_header_value(headers, "x-spark-signature")
+        .or_else(|| find_header_value(headers, "x-webex-signature"))
+    else {
+        return false;
+    };
+    let Some(actual) = hmac_sha1_hex(secret.as_bytes(), body) else {
+        return false;
+    };
+    constant_time_eq_hex(&actual, expected.trim())
+}
+
+fn find_header_value(
+    headers: &[greentic_types::messaging::universal_dto::Header],
+    key: &str,
+) -> Option<String> {
+    headers
+        .iter()
+        .find(|header| header.name.eq_ignore_ascii_case(key))
+        .map(|header| header.value.clone())
+}
+
+fn hmac_sha1_hex(secret: &[u8], body: &[u8]) -> Option<String> {
+    let mut mac = Hmac::<Sha1>::new_from_slice(secret).ok()?;
+    mac.update(body);
+    Some(hex_lower(&mac.finalize().into_bytes()))
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
+}
+
+fn constant_time_eq_hex(actual: &str, expected: &str) -> bool {
+    let actual = actual.as_bytes();
+    let expected = expected.as_bytes();
+    if actual.len() != expected.len() {
+        return false;
+    }
+    actual
+        .iter()
+        .zip(expected)
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        == 0
 }
 
 pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> IngestOutcome {
@@ -136,7 +214,26 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
             Ok(token) => match fetch_action_details(action_id, &api_base, &token) {
                 Ok(details) => details,
                 Err(err) => {
-                    eprintln!("webex fetch action details failed: {err}");
+                    let detail = redact::error_message(&err);
+                    telemetry::emit(
+                        Level::Warn,
+                        PROVIDER_TYPE,
+                        "webex fetch action details failed",
+                        &[
+                            Field {
+                                key: field::EVENT_KIND,
+                                value: event::DOWNSTREAM_ERROR,
+                            },
+                            Field {
+                                key: field::MESSAGE_ID,
+                                value: action_id,
+                            },
+                            Field {
+                                key: field::ERROR,
+                                value: &detail,
+                            },
+                        ],
+                    );
                     json!({})
                 }
             },
@@ -278,7 +375,26 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                     };
                 }
                 Err(err) => {
-                    println!("webex ingest fetch error for {message_id}: {err}");
+                    let detail = redact::error_message(&err);
+                    telemetry::emit(
+                        Level::Warn,
+                        PROVIDER_TYPE,
+                        "webex ingest fetch error",
+                        &[
+                            Field {
+                                key: field::EVENT_KIND,
+                                value: event::DOWNSTREAM_ERROR,
+                            },
+                            Field {
+                                key: field::MESSAGE_ID,
+                                value: &message_id,
+                            },
+                            Field {
+                                key: field::ERROR,
+                                value: &detail,
+                            },
+                        ],
+                    );
                     let session_id = webhook_room.clone().unwrap_or_else(|| message_id.clone());
                     let sender = pick_sender(&webhook_person_email, &webhook_person_id);
                     let metadata = build_webhook_metadata(
@@ -374,5 +490,24 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
         envelope,
         status: 200,
         error: None,
+    }
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::*;
+    use greentic_types::messaging::universal_dto::Header;
+
+    #[test]
+    fn verifies_x_spark_signature_hmac_sha1() {
+        let body = br#"{"resource":"messages","event":"created"}"#;
+        let signature = hmac_sha1_hex(b"secret", body).expect("hmac");
+        let headers = vec![Header {
+            name: "X-Spark-Signature".to_string(),
+            value: signature,
+        }];
+
+        assert!(verify_webex_signature(&headers, body, "secret"));
+        assert!(!verify_webex_signature(&headers, body, "wrong"));
     }
 }

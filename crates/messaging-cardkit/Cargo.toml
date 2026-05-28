@@ -1,6 +1,6 @@
 [package]
 name = "messaging-cardkit"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Greentic AI"]
 license = "MIT"
@@ -8,6 +8,7 @@ description = "Standalone MessageCard rendering + downgrade kit for operator/run
 readme = "README.md"
 
 [dependencies]
+greentic-telemetry = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }

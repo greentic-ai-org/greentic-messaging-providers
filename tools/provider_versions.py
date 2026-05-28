@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 MATRIX_PATH = ROOT / "ci" / "provider-matrix.json"
 SHARED_MANIFEST = ROOT / "crates" / "provider-common" / "Cargo.toml"
 VERSION_RE = re.compile(r'^(version\s*=\s*)"([^"]+)"', re.MULTILINE)
-YAML_VERSION_RE = re.compile(r"^(version:\s*)([^\n#]+)", re.MULTILINE)
+YAML_VERSION_RE = re.compile(r"^(\s*version:\s*)([^\n#]+)", re.MULTILINE)
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 
 def load_matrix() -> dict:
@@ -47,11 +48,21 @@ def read_pack_yaml_version(path: Path) -> str:
     return match.group(2).strip().strip('"\'')
 
 
-def write_pack_yaml_version(path: Path, version: str) -> None:
+def write_pack_yaml_version(path: Path, version: str, old_version: str | None = None) -> None:
     text = path.read_text()
+    root_version = read_pack_yaml_version(path)
     updated, count = YAML_VERSION_RE.subn(rf"\g<1>{version}", text, count=1)
-    if count != 1:
+    if count < 1:
         raise SystemExit(f"could not update pack version in {path}")
+    lines = []
+    replace_versions = {value for value in (old_version, root_version, version) if value and SEMVER_RE.match(value)}
+    for line in updated.splitlines():
+        match = YAML_VERSION_RE.match(line)
+        current = match.group(2).strip().strip('"\'') if match else ""
+        if match and current in replace_versions:
+            line = f"{match.group(1)}{version}"
+        lines.append(line)
+    updated = "\n".join(lines) + "\n"
     path.write_text(updated, encoding="utf-8")
 
 
@@ -153,12 +164,13 @@ def cmd_set_provider(args: argparse.Namespace) -> int:
     if name not in matrix["providers"]:
         raise SystemExit(f"unknown provider: {args.provider}")
     provider = matrix["providers"][name]
+    old_version = provider["version"]
     provider["version"] = args.version
     for manifest in provider["manifests"]:
         write_toml_version(ROOT / manifest, args.version)
     pack_yaml, pack_manifest = pack_paths(provider)
     if pack_yaml.exists():
-        write_pack_yaml_version(pack_yaml, args.version)
+        write_pack_yaml_version(pack_yaml, args.version, old_version)
     if pack_manifest.exists():
         update_manifest_json_versions(pack_manifest, args.version)
     write_matrix(matrix)

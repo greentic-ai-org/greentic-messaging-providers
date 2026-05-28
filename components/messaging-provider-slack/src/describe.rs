@@ -2,8 +2,7 @@ use provider_common::component_v0_6::{
     DescribePayload, QaSpec, RedactionRule, SchemaIr, schema_hash,
 };
 use provider_common::helpers::{
-    i18n_bundle_from_pairs, op, schema_bool_ir, schema_obj, schema_secret, schema_str,
-    schema_str_fmt,
+    i18n_bundle_from_pairs, op, schema_bool_ir, schema_obj, schema_str, schema_str_fmt,
 };
 
 use crate::{PROVIDER_ID, WORLD_ID};
@@ -51,30 +50,23 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "slack.qa.remove.title",
     "slack.qa.setup.enabled",
     "slack.qa.setup.public_base_url",
-    "slack.qa.setup.api_base_url",
     "slack.qa.setup.bot_token",
     "slack.qa.setup.default_channel",
     "slack.qa.setup.slack_app_id",
-    "slack.qa.setup.slack_configuration_token",
+    "slack.qa.setup.slack_configuration_access_token",
     "slack.schema.config.slack_app_id.title",
     "slack.schema.config.slack_app_id.description",
-    "slack.schema.config.slack_configuration_token.title",
-    "slack.schema.config.slack_configuration_token.description",
+    "slack.schema.config.slack_configuration_access_token.title",
+    "slack.schema.config.slack_configuration_access_token.description",
     "slack.qa.setup.slack_configuration_refresh_token",
     "slack.schema.config.slack_configuration_refresh_token.title",
     "slack.schema.config.slack_configuration_refresh_token.description",
 ];
 
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
-    ("enabled", "slack.qa.setup.enabled", true),
-    ("public_base_url", "slack.qa.setup.public_base_url", true),
-    ("api_base_url", "slack.qa.setup.api_base_url", true),
-    ("bot_token", "slack.qa.setup.bot_token", true),
-    ("default_channel", "slack.qa.setup.default_channel", false),
-    ("slack_app_id", "slack.qa.setup.slack_app_id", true),
     (
-        "slack_configuration_token",
-        "slack.qa.setup.slack_configuration_token",
+        "slack_configuration_access_token",
+        "slack.qa.setup.slack_configuration_access_token",
         true,
     ),
     (
@@ -82,6 +74,11 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
         "slack.qa.setup.slack_configuration_refresh_token",
         true,
     ),
+    ("enabled", "slack.qa.setup.enabled", false),
+    ("public_base_url", "slack.qa.setup.public_base_url", false),
+    ("bot_token", "slack.qa.setup.bot_token", false),
+    ("default_channel", "slack.qa.setup.default_channel", false),
+    ("slack_app_id", "slack.qa.setup.slack_app_id", false),
 ];
 
 pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "bot_token"];
@@ -132,7 +129,7 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 strategy: "replace".to_string(),
             },
             RedactionRule {
-                path: "$.slack_configuration_token".to_string(),
+                path: "$.slack_configuration_access_token".to_string(),
                 strategy: "replace".to_string(),
             },
             RedactionRule {
@@ -248,13 +245,12 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("slack.qa.remove.title", "Remove"),
     ("slack.qa.setup.enabled", "Enable provider"),
     ("slack.qa.setup.public_base_url", "Public base URL"),
-    ("slack.qa.setup.api_base_url", "API base URL"),
     ("slack.qa.setup.bot_token", "Bot token"),
     ("slack.qa.setup.default_channel", "Default channel"),
     ("slack.qa.setup.slack_app_id", "Slack App ID"),
     (
-        "slack.qa.setup.slack_configuration_token",
-        "Configuration token",
+        "slack.qa.setup.slack_configuration_access_token",
+        "Slack Configuration Access Token",
     ),
     ("slack.schema.config.slack_app_id.title", "Slack App ID"),
     (
@@ -262,20 +258,20 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "App ID from api.slack.com/apps (e.g. A07XXXXXX). Required for auto-configuring event subscriptions.",
     ),
     (
-        "slack.schema.config.slack_configuration_token.title",
-        "Configuration token",
+        "slack.schema.config.slack_configuration_access_token.title",
+        "Slack Configuration Access Token",
     ),
     (
-        "slack.schema.config.slack_configuration_token.description",
-        "Short-lived configuration token from api.slack.com/apps settings. Used to update your app manifest automatically.",
+        "slack.schema.config.slack_configuration_access_token.description",
+        "Short-lived configuration access token from api.slack.com/apps settings. Used to update your app manifest automatically.",
     ),
     (
         "slack.qa.setup.slack_configuration_refresh_token",
-        "Configuration refresh token",
+        "Slack Configuration Refresh Token",
     ),
     (
         "slack.schema.config.slack_configuration_refresh_token.title",
-        "Configuration refresh token",
+        "Slack Configuration Refresh Token",
     ),
     (
         "slack.schema.config.slack_configuration_refresh_token.description",
@@ -366,38 +362,6 @@ fn config_schema() -> SchemaIr {
                     "slack.schema.config.api_base_url.title",
                     "slack.schema.config.api_base_url.description",
                     "uri",
-                ),
-            ),
-            (
-                "bot_token",
-                true,
-                schema_secret(
-                    "slack.schema.config.bot_token.title",
-                    "slack.schema.config.bot_token.description",
-                ),
-            ),
-            (
-                "slack_app_id",
-                false,
-                schema_str(
-                    "slack.schema.config.slack_app_id.title",
-                    "slack.schema.config.slack_app_id.description",
-                ),
-            ),
-            (
-                "slack_configuration_token",
-                false,
-                schema_secret(
-                    "slack.schema.config.slack_configuration_token.title",
-                    "slack.schema.config.slack_configuration_token.description",
-                ),
-            ),
-            (
-                "slack_configuration_refresh_token",
-                false,
-                schema_secret(
-                    "slack.schema.config.slack_configuration_refresh_token.title",
-                    "slack.schema.config.slack_configuration_refresh_token.description",
                 ),
             ),
         ],

@@ -248,6 +248,17 @@ questions:
       - standalone
       - embed_webcomponent
 
+  - name: text_input_enabled
+    title: Text input
+    kind: boolean
+    required: false
+    default: "true"
+    help: "Enable the message input box inside the embedded Web Component. Disable it for read-only or button-driven embedded experiences."
+    group: Branding
+    visible_if:
+      field: presentation_mode
+      eq: "embed_webcomponent"
+
   - name: nav_links
     title: "Top-menu nav links"
     kind: table

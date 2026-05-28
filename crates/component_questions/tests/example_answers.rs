@@ -7,6 +7,7 @@ fn example_answers_uses_defaults() {
     let spec = QuestionsSpec {
         id: "example".to_string(),
         title: "Example".to_string(),
+        actions: vec![],
         questions: vec![
             QuestionSpecItem {
                 name: "flag".to_string(),

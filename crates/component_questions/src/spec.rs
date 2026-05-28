@@ -64,7 +64,18 @@ pub struct SetupSpec {
     #[serde(default)]
     pub title: Option<String>,
     #[serde(default)]
+    pub actions: Vec<SetupAction>,
+    #[serde(default)]
     pub questions: Vec<QuestionDef>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SetupAction {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    #[serde(flatten)]
+    pub metadata: serde_json::Map<String, Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,6 +146,8 @@ fn default_true() -> bool {
 pub struct QuestionsSpec {
     pub id: String,
     pub title: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<SetupAction>,
     pub questions: Vec<QuestionSpecItem>,
 }
 

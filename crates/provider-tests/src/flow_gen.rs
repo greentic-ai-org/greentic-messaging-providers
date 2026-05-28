@@ -102,10 +102,14 @@ pub fn greentic_flow_available() -> bool {
 
 fn flow_cmd() -> Result<Command> {
     if let Some(bin) = env::var_os("GREENTIC_FLOW_BIN") {
+        // Accepted risk: test-only helper invokes an explicit binary path without a shell.
+        // foxguard: ignore[rs/no-command-injection]
         return Ok(Command::new(bin));
     }
 
     if let Some(path) = find_in_path("greentic-flow") {
+        // Accepted risk: test-only helper invokes a PATH-resolved executable without a shell.
+        // foxguard: ignore[rs/no-command-injection]
         return Ok(Command::new(path));
     }
 

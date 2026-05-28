@@ -6,13 +6,14 @@ Webex messaging provider — Bot API with Adaptive Cards.
 - `messaging-webex`
 
 ## Providers
-- `messaging.webex.bot` (capabilities: messaging; ops: send, reply, qa-spec, apply-answers, i18n-keys)
+- `messaging.webex.bot` (capabilities: messaging; ops: send, reply, setup_webhook, qa-spec, apply-answers, i18n-keys)
 
 ## Components
 - `messaging-provider-webex` — core provider WASM (secrets-store + http-client)
 
 ## Secrets
 - `WEBEX_BOT_TOKEN` — Webex bot access token
+- `WEBEX_WEBHOOK_SECRET` — optional shared secret for Webex webhook signatures
 
 ## Flows
 - `setup_default` — configures provider via `messaging.configure` op
@@ -21,11 +22,13 @@ Webex messaging provider — Bot API with Adaptive Cards.
 ## Setup
 Inputs:
 - Config required: public_base_url
-- Config optional: default_room_id
+- Config optional: default_room_id, webhook_secret
 - Secrets required: WEBEX_BOT_TOKEN
+- Secrets optional: WEBEX_WEBHOOK_SECRET
 
 Webhooks:
-- public_base_url (registered for `messages.created`)
+- `messages.created` with `mentionedPeople=me` or `roomId=<default_room_id>`
+- `attachmentActions.created` for Adaptive Card submissions
 
 ## Extensions
 - `greentic.ext.capabilities.v1` — capability offer `messaging-webex-v1`

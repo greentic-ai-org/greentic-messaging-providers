@@ -107,6 +107,8 @@ struct SetupSpec {
     #[serde(default)]
     questions: Vec<SetupQuestionSpec>,
     #[serde(default)]
+    actions: Vec<serde_yaml::Value>,
+    #[serde(default)]
     emits_success_message: Option<bool>,
     asset_path: Option<PathBuf>,
 }
@@ -990,6 +992,7 @@ fn write_default_spec_file(path: &Path) -> Result<()> {
                 validate: None,
                 write_to: "config:public_base_url".to_string(),
             }],
+            actions: Vec::new(),
             emits_success_message: Some(true),
             asset_path: None,
         }),
@@ -1075,6 +1078,9 @@ fn write_setup_yaml(path: &Path, spec: &Spec) -> Result<()> {
         ystr("title".to_string()),
         ystr(format!("{} provider setup", provider_id(spec))),
     );
+    if !setup.actions.is_empty() {
+        payload.insert(ystr("actions".to_string()), yseq(setup.actions.clone()));
+    }
     payload.insert(ystr("questions".to_string()), yseq(questions));
 
     let contents = serde_yaml::to_string(&serde_yaml::Value::Mapping(payload))?;
@@ -1098,6 +1104,8 @@ fn run_flow_doctor(flow_path: &Path) -> Result<()> {
 }
 
 fn pack_new(out_dir: &Path, pack_id: &str) -> Result<()> {
+    // Accepted risk: this developer CLI invokes a configured binary directly without a shell.
+    // foxguard: ignore[rs/no-command-injection]
     let status = Command::new(greentic_pack_bin())
         .args(["new", "--dir"])
         .arg(out_dir)
@@ -1114,6 +1122,8 @@ fn pack_new(out_dir: &Path, pack_id: &str) -> Result<()> {
 }
 
 fn pack_update(out_dir: &Path) -> Result<()> {
+    // Accepted risk: this developer CLI invokes a configured binary directly without a shell.
+    // foxguard: ignore[rs/no-command-injection]
     let status = Command::new(greentic_pack_bin())
         .args(["update", "--in"])
         .arg(out_dir)
@@ -3273,6 +3283,7 @@ mod tests {
             },
             setup: Some(SetupSpec {
                 questions: Vec::new(),
+                actions: Vec::new(),
                 emits_success_message: Some(false),
                 asset_path: None,
             }),

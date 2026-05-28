@@ -44,6 +44,11 @@
       "default": "default",
       "description": "Visual theme folder under assets/webchat-gui/skins."
     },
+    "text_input_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the embedded Web Component should show the text input box."
+    },
     "nav_links": {
       "type": "array",
       "default": [],
