@@ -23,7 +23,9 @@ pub mod http_compat;
 pub mod lifecycle_keys;
 pub mod qa_helpers;
 pub mod qa_invoke_bridge;
+pub mod redact;
 pub mod render;
+pub mod telemetry;
 pub mod test_macros;
 
 pub use ac_converter::AdaptiveCardConverter;

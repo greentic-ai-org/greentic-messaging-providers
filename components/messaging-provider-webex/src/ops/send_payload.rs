@@ -8,6 +8,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use greentic_types::messaging::universal_dto::{ProviderPayloadV1, SendPayloadInV1};
 use greentic_types::{ChannelMessageEnvelope, Destination};
 use provider_common::helpers::{json_bytes, send_payload_error};
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, Span, event, field};
 use serde_json::{Value, json};
 
 use super::{build_webex_body, format_webex_error, summarize_card_text};
@@ -16,10 +18,21 @@ use crate::config::{detect_destination_kind, get_secret_string};
 use crate::{DEFAULT_API_BASE, DEFAULT_TOKEN_KEY, PROVIDER_TYPE};
 
 pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
+    let _span = Span::enter(event::SEND_PAYLOAD, PROVIDER_TYPE, &[]);
     let send_in = match serde_json::from_slice::<SendPayloadInV1>(input_json) {
         Ok(value) => value,
         Err(err) => {
-            return send_payload_error(&format!("invalid send_payload input: {err}"), false);
+            let detail = redact::error_message(&err.to_string());
+            telemetry::emit(
+                Level::Error,
+                PROVIDER_TYPE,
+                "invalid send_payload input",
+                &[Field {
+                    key: field::ERROR,
+                    value: &detail,
+                }],
+            );
+            return send_payload_error(&format!("invalid send_payload input: {detail}"), false);
         }
     };
     if send_in.provider_type != PROVIDER_TYPE {
@@ -48,8 +61,17 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
     let envelope = match serde_json::from_slice::<ChannelMessageEnvelope>(&body_bytes) {
         Ok(env) => env,
         Err(err) => {
-            eprintln!("webex send_payload invalid envelope: {err}");
-            return send_payload_error(&format!("invalid envelope: {err}"), false);
+            let detail = redact::error_message(&err.to_string());
+            telemetry::emit(
+                Level::Error,
+                PROVIDER_TYPE,
+                "invalid envelope",
+                &[Field {
+                    key: field::ERROR,
+                    value: &detail,
+                }],
+            );
+            return send_payload_error(&format!("invalid envelope: {detail}"), false);
         }
     };
     let text = envelope
@@ -61,9 +83,14 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
     let card_payload = provider_common::helpers::resolve_adaptive_card(&envelope);
     let card_summary = card_payload.as_ref().and_then(summarize_card_text);
     if card_payload.is_none() && text.is_none() && envelope.attachments.is_empty() {
-        eprintln!(
-            "webex send_payload missing text/card/attachments envelope metadata={:?}",
-            envelope.metadata
+        telemetry::emit(
+            Level::Warn,
+            PROVIDER_TYPE,
+            "envelope missing text/card/attachments",
+            &[Field {
+                key: field::MESSAGE_ID,
+                value: envelope.id.as_str(),
+            }],
         );
         return send_payload_error("text, adaptive_card, or attachments required", false);
     }
@@ -135,14 +162,57 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
         }
     }
     let body_req = Value::Object(body_map);
-    println!(
-        "webex send url={}/messages body={}",
-        api_base,
-        serde_json::to_string(&body_req).unwrap_or_default()
+    let body_serialised = serde_json::to_string(&body_req).unwrap_or_default();
+    let body_summary = redact::body(&body_serialised);
+    let dest_redacted = redact::user_id(dest_id);
+    telemetry::emit(
+        Level::Info,
+        PROVIDER_TYPE,
+        "webex outbound message",
+        &[
+            Field {
+                key: field::HTTP_METHOD,
+                value: "POST",
+            },
+            Field {
+                key: field::HTTP_HOST,
+                value: api_base.as_str(),
+            },
+            Field {
+                key: field::ROOM_ID,
+                value: &dest_redacted,
+            },
+            Field {
+                key: field::BODY,
+                value: &body_summary,
+            },
+        ],
     );
     let token = match get_secret_string(DEFAULT_TOKEN_KEY) {
         Ok(value) => value,
-        Err(err) => return send_payload_error(&err, false),
+        Err(err) => {
+            let detail = redact::error_message(&err);
+            telemetry::emit(
+                Level::Error,
+                PROVIDER_TYPE,
+                "secret fetch failed",
+                &[
+                    Field {
+                        key: field::EVENT_KIND,
+                        value: event::SECRET_FETCH,
+                    },
+                    Field {
+                        key: field::SECRET,
+                        value: DEFAULT_TOKEN_KEY,
+                    },
+                    Field {
+                        key: field::ERROR,
+                        value: &detail,
+                    },
+                ],
+            );
+            return send_payload_error(&err, false);
+        }
     };
     let request = client::Request {
         method,
@@ -156,11 +226,33 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
     let resp = match client::send(&request, None, None) {
         Ok(value) => value,
         Err(err) => {
-            return send_payload_error(&format!("transport error: {}", err.message), true);
+            let detail = redact::error_message(&err.message);
+            telemetry::emit(
+                Level::Error,
+                PROVIDER_TYPE,
+                "downstream transport error",
+                &[
+                    Field {
+                        key: field::EVENT_KIND,
+                        value: event::DOWNSTREAM_ERROR,
+                    },
+                    Field {
+                        key: field::HTTP_HOST,
+                        value: api_base.as_str(),
+                    },
+                    Field {
+                        key: field::ERROR,
+                        value: &detail,
+                    },
+                ],
+            );
+            return send_payload_error(&format!("transport error: {detail}"), true);
         }
     };
     if resp.status < 200 || resp.status >= 300 {
         let body = resp.body.unwrap_or_default();
+        let body_text = String::from_utf8_lossy(&body);
+        telemetry::downstream_error(PROVIDER_TYPE, api_base.as_str(), resp.status, &body_text);
         let detail = format_webex_error(resp.status, &body);
         return send_payload_error(&detail, resp.status >= 500);
     }
@@ -171,6 +263,25 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
         .get("id")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    telemetry::emit(
+        Level::Info,
+        PROVIDER_TYPE,
+        "message delivered",
+        &[
+            Field {
+                key: field::EVENT_KIND,
+                value: event::MESSAGE_DELIVERED,
+            },
+            Field {
+                key: field::MESSAGE_ID,
+                value: msg_id,
+            },
+            Field {
+                key: field::HTTP_STATUS,
+                value: "2xx",
+            },
+        ],
+    );
     json_bytes(&json!({
         "ok": true,
         "message": msg_id,

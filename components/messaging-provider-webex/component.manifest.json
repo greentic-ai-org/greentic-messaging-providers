@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-webex",
   "name": "messaging-provider-webex",
-  "version": "0.4.43",
+  "version": "0.4.101",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core Webex messaging provider (messages API).",
   "profiles": {
@@ -21,6 +21,11 @@
       "name": "WEBEX_BOT_TOKEN",
       "scope": "tenant",
       "description": "Webex bot access token used for Messages API calls."
+    },
+    {
+      "name": "WEBEX_WEBHOOK_SECRET",
+      "scope": "tenant",
+      "description": "Shared secret used to verify Webex X-Spark-Signature webhook payloads."
     }
   ],
   "operations": [

@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 ACT_BIN="${ACT_BIN:-act}"
-WORKFLOW="${WORKFLOW:-.github/workflows/build-and-publish.yml}"
+WORKFLOW="${WORKFLOW:-.github/workflows/provider-build-publish.yml}"
 EVENT="${EVENT:-workflow_dispatch}"
 JOB="${JOB:-}"
 MATRIX="${MATRIX:-}"
@@ -34,16 +34,16 @@ Usage:
 
 Defaults:
   event: workflow_dispatch
-  workflow: .github/workflows/build-and-publish.yml
+  workflow: .github/workflows/provider-build-publish.yml
   runner image: catthehacker/ubuntu:act-latest
 
 Environment overrides:
   ACT_BIN=act
-  WORKFLOW=.github/workflows/build-and-publish.yml
+  WORKFLOW=.github/workflows/provider-build-publish.yml
   EVENT=workflow_dispatch
-  JOB=validate-pack-inputs
-  MATRIX=pack:messaging-dummy
-  SINGLE=provision
+  JOB=package-provider
+  MATRIX=component:messaging-provider-dummy
+  SINGLE=messaging-provider-dummy
   QUICK=1
   ACT_IMAGE=catthehacker/ubuntu:act-latest
   ACT_PLATFORM=ubuntu-latest=catthehacker/ubuntu:act-latest
@@ -61,15 +61,14 @@ Environment overrides:
   QUICK_PACKS_DIR_REL=.tmp/quick-packs
 
 Examples:
-  ./ci/run_actions.sh
+  ./ci/run_actions.sh -- --input provider=dummy --input publish=false
+  JOB=package-provider ./ci/run_actions.sh -- --input provider=dummy --input publish=false
+  JOB=lint ./ci/run_actions.sh -- --input provider=dummy
+  JOB=build-components MATRIX=component:messaging-provider-dummy ./ci/run_actions.sh -- --input provider=dummy
   QUICK=1 ./ci/run_actions.sh
-  JOB=validate-pack-inputs ./ci/run_actions.sh
-  JOB=build-components ./ci/run_actions.sh
-  JOB=build-components SINGLE=provision ./ci/run_actions.sh
-  JOB=build-components MATRIX=component:provision ./ci/run_actions.sh
+  QUICK=1 JOB=build-components SINGLE=provision ./ci/run_actions.sh
   JOB=cargo-test QUICK=1 ./ci/run_actions.sh
-  JOB=validate-pack-inputs SINGLE=messaging-dummy ./ci/run_actions.sh
-  JOB=validate-pack-inputs MATRIX=pack:messaging-dummy ./ci/run_actions.sh
+  QUICK=1 JOB=validate-pack-inputs SINGLE=messaging-dummy ./ci/run_actions.sh
   LIST_JOBS=1 ./ci/run_actions.sh
 EOF
 }

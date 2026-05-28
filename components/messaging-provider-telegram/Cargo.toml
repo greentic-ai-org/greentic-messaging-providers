@@ -1,7 +1,7 @@
 [package]
 name = "messaging-provider-telegram"
 edition.workspace = true
-version = "1.1.0"
+version = "0.4.101"
 license.workspace = true
 publish = false
 
@@ -9,6 +9,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+greentic-telemetry = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 greentic-types.workspace = true

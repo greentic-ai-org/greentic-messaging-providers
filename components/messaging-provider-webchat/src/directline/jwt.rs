@@ -40,6 +40,7 @@ pub enum JwtError {
     InvalidSignature,
     Expired,
     NotYetValid,
+    InvalidKey,
     Json(serde_json::Error),
     Base64(base64::DecodeError),
 }
@@ -89,7 +90,7 @@ pub fn issue_token(
     let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
     let header_enc = encode_segment(&header)?;
     let payload_enc = encode_segment(&claims)?;
-    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC key length valid");
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| JwtError::InvalidKey)?;
     mac.update(header_enc.as_bytes());
     mac.update(b".");
     mac.update(payload_enc.as_bytes());
@@ -107,7 +108,7 @@ pub fn verify_token(secret: &[u8], token: &str) -> Result<TokenClaims, JwtError>
     if parts.next().is_some() {
         return Err(JwtError::InvalidFormat);
     }
-    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC key length valid");
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| JwtError::InvalidKey)?;
     mac.update(header.as_bytes());
     mac.update(b".");
     mac.update(payload.as_bytes());
@@ -135,34 +136,121 @@ pub fn verify_token(secret: &[u8], token: &str) -> Result<TokenClaims, JwtError>
 mod tests {
     use super::*;
 
-    #[test]
-    fn token_round_trip() {
-        let secret = b"super-secure-key";
-        let ctx = DirectLineContext {
+    fn sample_ctx() -> DirectLineContext {
+        DirectLineContext {
             env: "default".into(),
             tenant: "default".into(),
             team: Some("team-a".into()),
-        };
-        let (token, exp) = issue_token(secret, ctx.clone(), "user-123", None).unwrap();
+        }
+    }
+
+    fn signed_token(signing_key: &[u8], claims: TokenClaims) -> String {
+        let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
+        let header_enc = encode_segment(&header).expect("header");
+        let payload_enc = encode_segment(&claims).expect("payload");
+        let mut mac = HmacSha256::new_from_slice(signing_key).expect("hmac");
+        mac.update(header_enc.as_bytes());
+        mac.update(b".");
+        mac.update(payload_enc.as_bytes());
+        let signature_enc = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+        format!("{header_enc}.{payload_enc}.{signature_enc}")
+    }
+
+    #[test]
+    fn token_round_trip() {
+        let signing_key = b"test-hmac-key";
+        let ctx = sample_ctx();
+        let (token, exp) = issue_token(signing_key, ctx.clone(), "user-123", None).unwrap();
         assert!(token.split('.').count() == 3);
         assert!(exp > Utc::now().timestamp());
-        let claims = verify_token(secret, &token).unwrap();
+        let claims = verify_token(signing_key, &token).unwrap();
         assert_eq!(claims.sub, "user-123");
         assert_eq!(claims.ctx, ctx);
         assert!(claims.conv.is_none());
     }
 
     #[test]
+    fn verify_rejects_malformed_tokens() {
+        let signing_key = b"test-hmac-key";
+
+        assert!(matches!(
+            verify_token(signing_key, "not-enough.parts"),
+            Err(JwtError::InvalidFormat)
+        ));
+        assert!(matches!(
+            verify_token(signing_key, "too.many.parts.here"),
+            Err(JwtError::InvalidFormat)
+        ));
+        assert!(matches!(
+            verify_token(signing_key, "header.payload.not-base64!"),
+            Err(JwtError::Base64(_))
+        ));
+    }
+
+    #[test]
+    fn verify_rejects_wrong_signature() {
+        let signing_key = b"test-hmac-key";
+        let (token, _) = issue_token(signing_key, sample_ctx(), "user-123", None).unwrap();
+
+        assert!(matches!(
+            verify_token(b"wrong-hmac-key", &token),
+            Err(JwtError::InvalidSignature)
+        ));
+    }
+
+    #[test]
+    fn verify_rejects_expired_and_not_yet_valid_claims() {
+        let signing_key = b"test-hmac-key";
+        let now = Utc::now().timestamp();
+        let base = TokenClaims {
+            iss: ISS.to_string(),
+            aud: AUD.to_string(),
+            sub: "user-123".to_string(),
+            iat: now,
+            nbf: now,
+            exp: now + TTL_SECONDS,
+            ctx: sample_ctx(),
+            conv: None,
+        };
+
+        let expired = TokenClaims {
+            exp: now - 1,
+            ..base
+        };
+        let expired_token = signed_token(signing_key, expired);
+        assert!(matches!(
+            verify_token(signing_key, &expired_token),
+            Err(JwtError::Expired)
+        ));
+
+        let future = TokenClaims {
+            iat: now + 120,
+            nbf: now + 120,
+            exp: now + TTL_SECONDS,
+            ctx: sample_ctx(),
+            conv: None,
+            iss: ISS.to_string(),
+            aud: AUD.to_string(),
+            sub: "user-123".to_string(),
+        };
+        let future_token = signed_token(signing_key, future);
+        assert!(matches!(
+            verify_token(signing_key, &future_token),
+            Err(JwtError::NotYetValid)
+        ));
+    }
+
+    #[test]
     fn token_with_conv_claim() {
-        let secret = b"_another-secret-key_";
+        let signing_key = b"another-test-hmac-key";
         let ctx = DirectLineContext {
             env: "prod".into(),
             tenant: "tenant-a".into(),
             team: None,
         };
         let (token, _) =
-            issue_token(secret, ctx.clone(), "user-x", Some("conv-99".into())).unwrap();
-        let claims = verify_token(secret, &token).unwrap();
+            issue_token(signing_key, ctx.clone(), "user-x", Some("conv-99".into())).unwrap();
+        let claims = verify_token(signing_key, &token).unwrap();
         assert_eq!(claims.conv.as_deref(), Some("conv-99"));
         assert_eq!(claims.ctx, ctx);
     }

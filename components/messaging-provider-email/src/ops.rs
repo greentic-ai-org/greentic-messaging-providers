@@ -4,6 +4,8 @@ use provider_common::helpers::{
     RenderPlanConfig, decode_encode_message, encode_error, json_bytes, render_plan_common,
     send_payload_error, send_payload_success,
 };
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, field};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -35,11 +37,40 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
 
     let envelope = match serde_json::from_slice::<ChannelMessageEnvelope>(input_json) {
         Ok(env) => {
-            eprintln!("parsed envelope to={:?}", env.to);
+            let to_count = env.to.len().to_string();
+            let first_to = env
+                .to
+                .first()
+                .map(|d| redact::user_id(&d.id))
+                .unwrap_or_else(|| "<none>".to_string());
+            telemetry::emit(
+                Level::Trace,
+                PROVIDER_TYPE,
+                "envelope parsed",
+                &[
+                    Field {
+                        key: "to_count",
+                        value: &to_count,
+                    },
+                    Field {
+                        key: field::USER,
+                        value: &first_to,
+                    },
+                ],
+            );
             env
         }
         Err(err) => {
-            eprintln!("fallback envelope due to parse error: {err}");
+            let detail = redact::error_message(&err.to_string());
+            telemetry::emit(
+                Level::Warn,
+                PROVIDER_TYPE,
+                "envelope parse fallback",
+                &[Field {
+                    key: field::ERROR,
+                    value: &detail,
+                }],
+            );
             build_channel_envelope(&parsed, &cfg)
         }
     };

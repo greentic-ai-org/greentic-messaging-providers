@@ -8,9 +8,12 @@ use greentic_types::{
     Actor, Attachment, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx,
     TenantId,
 };
+use provider_common::redact;
+use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::{Value, json};
 
 use super::format_webex_error;
+use crate::PROVIDER_TYPE;
 use crate::bindings::greentic::http::http_client as client;
 
 /// Details extracted from `GET /messages/{id}`.
@@ -30,26 +33,94 @@ pub(super) fn fetch_action_details(
     token: &str,
 ) -> Result<Value, String> {
     let url = format!("{api_base}/attachment/actions/{action_id}");
-    println!("webex ingest fetching action {action_id} from {url}");
+    telemetry::emit(
+        Level::Debug,
+        PROVIDER_TYPE,
+        "webex ingest fetching action",
+        &[
+            Field {
+                key: field::EVENT_KIND,
+                value: event::DOWNSTREAM_CALL,
+            },
+            Field {
+                key: field::HTTP_METHOD,
+                value: "GET",
+            },
+            Field {
+                key: field::HTTP_HOST,
+                value: api_base,
+            },
+            Field {
+                key: field::MESSAGE_ID,
+                value: action_id,
+            },
+        ],
+    );
     let request = client::Request {
         method: "GET".to_string(),
         url: url.clone(),
         headers: vec![("Authorization".into(), format!("Bearer {token}"))],
         body: None,
     };
-    let resp = client::send(&request, None, None)
-        .map_err(|err| format!("transport error: {}", err.message))?;
-    println!(
-        "webex ingest fetch action {action_id} status={}",
-        resp.status
+    let resp = client::send(&request, None, None).map_err(|err| {
+        let detail = redact::error_message(&err.message);
+        telemetry::emit(
+            Level::Error,
+            PROVIDER_TYPE,
+            "webex ingest action transport error",
+            &[
+                Field {
+                    key: field::EVENT_KIND,
+                    value: event::DOWNSTREAM_ERROR,
+                },
+                Field {
+                    key: field::HTTP_HOST,
+                    value: api_base,
+                },
+                Field {
+                    key: field::ERROR,
+                    value: &detail,
+                },
+            ],
+        );
+        format!("transport error: {detail}")
+    })?;
+    let status_str = resp.status.to_string();
+    telemetry::emit(
+        Level::Trace,
+        PROVIDER_TYPE,
+        "webex ingest action response",
+        &[
+            Field {
+                key: field::MESSAGE_ID,
+                value: action_id,
+            },
+            Field {
+                key: field::HTTP_STATUS,
+                value: &status_str,
+            },
+        ],
     );
     if resp.status < 200 || resp.status >= 300 {
         let body = resp.body.unwrap_or_default();
+        let body_text = String::from_utf8_lossy(&body);
+        telemetry::downstream_error(PROVIDER_TYPE, api_base, resp.status, &body_text);
         return Err(format_webex_error(resp.status, &body));
     }
     let body = resp.body.unwrap_or_default();
-    let parsed: Value =
-        serde_json::from_slice(&body).map_err(|err| format!("json parse error: {err}"))?;
+    let parsed: Value = serde_json::from_slice(&body).map_err(|err| {
+        let detail = redact::error_message(&err.to_string());
+        telemetry::emit(
+            Level::Error,
+            PROVIDER_TYPE,
+            "webex ingest action json parse failed",
+            &[Field {
+                key: field::ERROR,
+                value: &detail,
+            }],
+        );
+        format!("json parse error: {detail}")
+    })?;
     Ok(parsed.get("inputs").cloned().unwrap_or(json!({})))
 }
 
@@ -59,23 +130,94 @@ pub(super) fn fetch_message_details(
     token: &str,
 ) -> Result<MessageDetails, String> {
     let url = format!("{api_base}/messages/{message_id}");
-    println!("webex ingest fetching message {message_id} from {url}");
+    telemetry::emit(
+        Level::Debug,
+        PROVIDER_TYPE,
+        "webex ingest fetching message",
+        &[
+            Field {
+                key: field::EVENT_KIND,
+                value: event::DOWNSTREAM_CALL,
+            },
+            Field {
+                key: field::HTTP_METHOD,
+                value: "GET",
+            },
+            Field {
+                key: field::HTTP_HOST,
+                value: api_base,
+            },
+            Field {
+                key: field::MESSAGE_ID,
+                value: message_id,
+            },
+        ],
+    );
     let request = client::Request {
         method: "GET".to_string(),
         url: url.clone(),
         headers: vec![("Authorization".into(), format!("Bearer {token}"))],
         body: None,
     };
-    let resp = client::send(&request, None, None)
-        .map_err(|err| format!("transport error: {}", err.message))?;
-    println!("webex ingest fetch {message_id} status={}", resp.status);
+    let resp = client::send(&request, None, None).map_err(|err| {
+        let detail = redact::error_message(&err.message);
+        telemetry::emit(
+            Level::Error,
+            PROVIDER_TYPE,
+            "webex ingest message transport error",
+            &[
+                Field {
+                    key: field::EVENT_KIND,
+                    value: event::DOWNSTREAM_ERROR,
+                },
+                Field {
+                    key: field::HTTP_HOST,
+                    value: api_base,
+                },
+                Field {
+                    key: field::ERROR,
+                    value: &detail,
+                },
+            ],
+        );
+        format!("transport error: {detail}")
+    })?;
+    let status_str = resp.status.to_string();
+    telemetry::emit(
+        Level::Trace,
+        PROVIDER_TYPE,
+        "webex ingest message response",
+        &[
+            Field {
+                key: field::MESSAGE_ID,
+                value: message_id,
+            },
+            Field {
+                key: field::HTTP_STATUS,
+                value: &status_str,
+            },
+        ],
+    );
     if resp.status < 200 || resp.status >= 300 {
         let body = resp.body.unwrap_or_default();
+        let body_text = String::from_utf8_lossy(&body);
+        telemetry::downstream_error(PROVIDER_TYPE, api_base, resp.status, &body_text);
         return Err(format_webex_error(resp.status, &body));
     }
     let body = resp.body.unwrap_or_default();
-    let message_json: Value =
-        serde_json::from_slice(&body).map_err(|err| format!("invalid message JSON: {err}"))?;
+    let message_json: Value = serde_json::from_slice(&body).map_err(|err| {
+        let detail = redact::error_message(&err.to_string());
+        telemetry::emit(
+            Level::Error,
+            PROVIDER_TYPE,
+            "webex ingest message json parse failed",
+            &[Field {
+                key: field::ERROR,
+                value: &detail,
+            }],
+        );
+        format!("invalid message JSON: {detail}")
+    })?;
     let data = message_json
         .get("result")
         .cloned()

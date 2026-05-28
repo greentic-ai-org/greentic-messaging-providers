@@ -107,6 +107,8 @@ def git_ref_exists(ref: str) -> bool:
 
 def diff_name_only(base: str, head: str) -> list[str]:
     cmd = ["git", "diff", "--name-only", f"{base}..{head}"]
+    # Accepted risk: CI invokes a fixed git subcommand with argument vector, not a shell.
+    # foxguard: ignore[py/no-command-injection]
     output = subprocess.check_output(cmd, cwd=ROOT_DIR, text=True)
     return [line.strip() for line in output.splitlines() if line.strip()]
 

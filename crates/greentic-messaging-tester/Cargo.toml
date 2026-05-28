@@ -6,6 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+greentic-telemetry = { workspace = true }
 anyhow = { workspace = true }
 base64 = { workspace = true }
 clap = { workspace = true, features = ["derive"] }

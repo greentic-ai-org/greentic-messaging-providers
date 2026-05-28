@@ -83,9 +83,9 @@
   "providers": {
     "dummy": {
       "pack": "messaging-dummy",
-      "version": "1.1.0",
+      "version": "0.4.100",
       "ghcr_target": "ghcr.io/greenticai/messaging-dummy",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "dummy",
         "required_secrets": [],
@@ -110,9 +110,9 @@
     },
     "email": {
       "pack": "messaging-email",
-      "version": "1.1.0",
+      "version": "0.4.100",
       "ghcr_target": "ghcr.io/greenticai/messaging-email",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "smtp",
         "required_secrets": [
@@ -145,9 +145,9 @@
     },
     "slack": {
       "pack": "messaging-slack",
-      "version": "1.1.0",
+      "version": "0.4.103",
       "ghcr_target": "ghcr.io/greenticai/messaging-slack",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "slack",
         "required_secrets": [
@@ -183,9 +183,9 @@
     },
     "teams": {
       "pack": "messaging-teams",
-      "version": "1.1.0",
+      "version": "0.4.100",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "microsoft-teams",
         "required_secrets": [
@@ -222,9 +222,9 @@
     },
     "telegram": {
       "pack": "messaging-telegram",
-      "version": "1.1.0",
+      "version": "0.4.101",
       "ghcr_target": "ghcr.io/greenticai/messaging-telegram",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "telegram",
         "required_secrets": [
@@ -261,9 +261,9 @@
     },
     "webchat": {
       "pack": "messaging-webchat",
-      "version": "1.1.0",
+      "version": "0.4.100",
       "ghcr_target": "ghcr.io/greenticai/messaging-webchat",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "webchat",
         "required_secrets": [
@@ -297,9 +297,9 @@
     },
     "webchat-gui": {
       "pack": "messaging-webchat-gui",
-      "version": "1.1.0",
+      "version": "0.4.111",
       "ghcr_target": "ghcr.io/greenticai/messaging-webchat-gui",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
         "external_service": "webchat-gui",
         "required_secrets": [],
@@ -323,9 +323,9 @@
     },
     "webex": {
       "pack": "messaging-webex",
-      "version": "1.1.0",
+      "version": "0.4.101",
       "ghcr_target": "ghcr.io/greenticai/messaging-webex",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "webex",
         "required_secrets": [
@@ -359,9 +359,9 @@
     },
     "whatsapp": {
       "pack": "messaging-whatsapp",
-      "version": "1.1.0",
+      "version": "0.4.100",
       "ghcr_target": "ghcr.io/greenticai/messaging-whatsapp",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.99",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "whatsapp",
         "required_secrets": [

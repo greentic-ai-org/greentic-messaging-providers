@@ -53,6 +53,7 @@ fn validate_required_and_regex() {
     let spec = QuestionsSpec {
         id: "webex-setup".to_string(),
         title: "Webex provider setup".to_string(),
+        actions: vec![],
         questions: vec![
             QuestionSpecItem {
                 name: "webhook_base_url".to_string(),

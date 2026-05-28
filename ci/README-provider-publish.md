@@ -43,19 +43,12 @@ cargo check -p messaging-provider-slack
 PACK_FILTER=messaging-slack ./ci/steps/11_build_packs.sh
 ```
 
-To manually run the fast path in GitHub Actions:
-
-1. Open `Publish Provider Fast Path`
-2. Enter a provider such as `telegram`
-3. Optionally enable `dry_run`
-
-The fast path builds and lints only the mapped provider components, pulls templates from OCI during pack sync, validates only the mapped pack, and publishes only that provider's components and pack when `dry_run` is disabled.
-
-`Provider Build, Test, and Publish` is the reusable workflow for new provider
-orchestration. It supports both `workflow_call` and `workflow_dispatch` with:
+To manually run a focused provider release in GitHub Actions, open
+`Provider Build, Test, and Publish`. It is the single reusable/direct workflow
+for one-provider builds and supports both `workflow_call` and
+`workflow_dispatch` with:
 
 - `provider`: one provider from `ci/provider-matrix.json`.
-- `provider_version`: optional override; otherwise uses matrix metadata.
 - `shared_crate_version`: optional summary metadata for rebuilds after a shared
   crate release.
 - `publish`: when `false`, builds, validates, and uploads one `.gtpack` artifact
@@ -66,18 +59,29 @@ orchestration. It supports both `workflow_call` and `workflow_dispatch` with:
   provider e2e workflow. It defaults to disabled because live external services
   can be flaky or rate-limited.
 
-Dry-run runs upload `gtpack-<pack>` as an artifact. Publish runs push only the
-selected provider's components and pack to GHCR.
+Validation-only runs upload `gtpack-<pack>` as an artifact. Publish runs push
+only the selected provider's components and pack to GHCR.
 
-`Provider Release Orchestrator` is the dependency-aware entrypoint for `main`.
+For a local one-command fast path, use:
+
+```bash
+scripts/publish_provider.sh <provider> [version]
+```
+
+The helper optionally bumps the provider version, validates metadata, builds the
+selected provider locally, runs targeted checks, and dispatches this workflow on
+the current branch. Local-only changes are not visible to GitHub Actions, so
+commit and push release fixes before using it for a real publish.
+
+`Provider Release Orchestrator` is the manual dependency-aware provider release
+entrypoint. Pushes to `main` do not start it. After merging, a maintainer can
+start it with one provider, `providers=all`, or `providers=shared+all`, and can
+choose whether that run is validation-only or publishes with `publish=true`.
+
 It uses `ci/provider_matrix.py affected` to classify changes:
 
 - docs-only: select no providers and publish nothing.
 - tooling/CI-only: select no providers by default.
 - provider-only: call the reusable workflow for only the changed provider(s).
 - shared crate: call `Publish Shared Provider Crate` first, then fan out to all
-  providers with the published shared crate version in the downstream summary.
-
-The legacy `Build, Test, and Publish Packs` workflow is retained for validation
-coverage during migration, but its monolithic publish job is disabled so it no
-longer publishes every provider for broad shared/tooling changes.
+  providers when the maintainer explicitly selects that mode.

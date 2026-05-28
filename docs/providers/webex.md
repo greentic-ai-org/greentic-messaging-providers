@@ -21,12 +21,14 @@ Common setup values include:
 - Default room ID or person destination.
 - Webex bot token secret.
 - Optional API base URL for non-default environments.
+- Optional webhook secret for Webex `X-Spark-Signature` verification.
 
 ## Secrets
 
 | Secret | Required | Purpose |
 | --- | --- | --- |
 | `WEBEX_BOT_TOKEN` | Yes | Webex bot access token used for Messages API calls. |
+| `WEBEX_WEBHOOK_SECRET` | Optional, recommended | Shared secret used to verify Webex webhook signatures. |
 
 Nightly e2e uses `E2E_WEBEX_BOT_TOKEN` and `E2E_WEBEX_ROOM_ID`.
 
@@ -59,4 +61,3 @@ PACK_FILTER=messaging-webex ./ci/steps/11_build_packs.sh
 ## Agent Notes
 
 Webex webhooks often require a second API call to fetch message text. Preserve that distinction when editing ingest behavior or writing tests.
-

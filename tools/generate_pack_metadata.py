@@ -41,16 +41,23 @@ def dedupe_requirements(requirements: Iterable[dict]) -> List[dict]:
         scope = req.get("scope") or "tenant"
         description = req.get("description") or ""
         example = req.get("example") or ""
+        required = req.get("required")
         key = (name, scope)
         existing = merged.get(key)
         if existing:
             description = existing.get("description") or description
             example = existing.get("example") or example
+            if "required" in existing and required is not None:
+                required = bool(existing["required"]) and bool(required)
+            elif "required" in existing:
+                required = existing["required"]
         merged[key] = {"name": name, "scope": scope}
         if description:
             merged[key]["description"] = description
         if example:
             merged[key]["example"] = example
+        if required is not None:
+            merged[key]["required"] = bool(required)
     return list(merged.values())
 
 

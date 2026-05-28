@@ -41,6 +41,11 @@ MEDIA_TYPE="${MEDIA_TYPE:-application/vnd.greentic.gtpack.v1+zip}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_COMPONENTS="${TARGET_COMPONENTS:-${ROOT_DIR}/target/components}"
 mkdir -p "${ROOT_DIR}/${OUT_DIR}"
+PACKS_LOCK_PATH="${ROOT_DIR}/packs.lock.json"
+PACKS_LOCK_BASE_JSON=""
+if [ -n "${PACK_FILTER}" ] && [ -f "${PACKS_LOCK_PATH}" ]; then
+  PACKS_LOCK_BASE_JSON="$(cat "${PACKS_LOCK_PATH}")"
+fi
 
 if [ -f "${ROOT_DIR}/.env" ]; then
   set -a
@@ -79,7 +84,6 @@ echo "Using templates image: ${DEFAULT_TEMPLATES_IMAGE}"
 
 command -v jq >/dev/null 2>&1 || { echo "jq is required"; exit 1; }
 command -v zip >/dev/null 2>&1 || { echo "zip is required"; exit 1; }
-command -v oras >/dev/null 2>&1 || { echo "oras is required"; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
 if ! command -v "${PACKC_BIN}" >/dev/null 2>&1; then
   echo "greentic-pack is required for building gtpack artifacts" >&2
@@ -410,6 +414,8 @@ fetch_oci_component() {
   local manifest_name="$5"
   local dest_manifest="$6"
 
+  command -v oras >/dev/null 2>&1 || { echo "oras is required for fetching OCI components" >&2; exit 1; }
+
   local ref="${image}"
   if [ -n "${digest}" ]; then
     ref="${image}@${digest}"
@@ -440,6 +446,18 @@ fetch_oci_component() {
 read_components() {
   local manifest="$1"
   jq -c '(.component_sources // .components // [])[] | if type=="string" then {id: ., wasm: ("components/" + . + ".wasm"), manifest: "", oci: {}} else {id: .id, wasm: (.wasm // ("components/" + .id + ".wasm")), manifest: (.manifest // ""), oci: (.oci // {})} end' "${manifest}"
+}
+
+target_component_wasm_name() {
+  local comp_id="$1"
+  local wasm_path="$2"
+  local fname
+  fname="$(basename "${wasm_path}")"
+  if [ "${fname}" = "component.wasm" ]; then
+    printf '%s.wasm\n' "${comp_id}"
+  else
+    printf '%s\n' "${fname}"
+  fi
 }
 
 for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
@@ -476,6 +494,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
     comp_id="$(jq -r '.id' <<<"${comp_json}")"
     wasm_path="$(jq -r '.wasm' <<<"${comp_json}")"
     fname="$(basename "${wasm_path}")"
+    target_fname="$(target_component_wasm_name "${comp_id}" "${wasm_path}")"
     is_templates_component=0
     if [ "${comp_id}" = "templates" ] || [ "${comp_id}" = "ai.greentic.component-templates" ] || [ "${fname}" = "templates.wasm" ]; then
       is_templates_component=1
@@ -483,7 +502,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
     if [ -z "${oci_image}" ] && [ "${is_templates_component}" -eq 1 ]; then
       oci_image="${DEFAULT_TEMPLATES_IMAGE}"
     fi
-    if [ -z "${oci_image}" ] && [ ! -f "${TARGET_COMPONENTS}/${fname}" ]; then
+    if [ -z "${oci_image}" ] && [ ! -f "${TARGET_COMPONENTS}/${target_fname}" ]; then
       missing_local=1
       break
     fi
@@ -499,6 +518,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
     comp_id="$(jq -r '.id' <<<"${comp_json}")"
     wasm_path="$(jq -r '.wasm' <<<"${comp_json}")"
     fname="$(basename "${wasm_path}")"
+    target_fname="$(target_component_wasm_name "${comp_id}" "${wasm_path}")"
     oci_image="$(jq -r '.oci.image // empty' <<<"${comp_json}")"
     oci_digest="$(jq -r '.oci.digest // empty' <<<"${comp_json}")"
     oci_artifact="$(jq -r '.oci.artifact // empty' <<<"${comp_json}")"
@@ -534,7 +554,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
       root_manifest_src="${ROOT_DIR}/components/${comp_id}/component.manifest.json"
     fi
 
-    src="${TARGET_COMPONENTS}/${fname}"
+    src="${TARGET_COMPONENTS}/${target_fname}"
     dest="${dir}/${wasm_path}"
     if [ ! -f "${src}" ] || { [ -n "${manifest_rel}" ] && [ ! -f "${manifest_src}" ]; }; then
       if [ -n "${oci_image}" ] && [ -n "${oci_artifact}" ]; then
@@ -692,6 +712,7 @@ PY
 )"
 
   if [ "${DRY_RUN}" -eq 0 ]; then
+    command -v oras >/dev/null 2>&1 || { echo "oras is required for publishing pack artifacts" >&2; exit 1; }
     readme_path="${dir}/README.md"
     pack_desc="$(jq -r '.description // empty' "${dir}/pack.manifest.json")"
     pack_title="$(jq -r '.name // empty' "${dir}/pack.manifest.json")"
@@ -832,5 +853,44 @@ if compgen -G "${ROOT_DIR}/${OUT_DIR}/messaging-*.gtpack" >/dev/null; then
   done
 fi
 
-echo "${packs_json}" | jq '{ packs: . }' > "${ROOT_DIR}/packs.lock.json"
+if [ -n "${PACK_FILTER}" ] && [ -n "${PACKS_LOCK_BASE_JSON}" ]; then
+  python3 - <<'PY' "${PACKS_LOCK_PATH}" "${PACKS_LOCK_BASE_JSON}" "${packs_json}"
+import json
+import sys
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+lock = json.loads(sys.argv[2])
+updates = json.loads(sys.argv[3])
+packs = lock.get("packs")
+if not isinstance(packs, list):
+    packs = []
+
+updates_by_name = {
+    entry["name"]: entry
+    for entry in updates
+    if isinstance(entry, dict) and entry.get("name")
+}
+seen = set()
+merged = []
+for entry in packs:
+    name = entry.get("name") if isinstance(entry, dict) else None
+    if name in updates_by_name:
+        merged.append(updates_by_name[name])
+        seen.add(name)
+    else:
+        merged.append(entry)
+
+for entry in updates:
+    name = entry.get("name") if isinstance(entry, dict) else None
+    if name and name not in seen:
+        merged.append(entry)
+        seen.add(name)
+
+lock["packs"] = merged
+lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+PY
+else
+  echo "${packs_json}" | jq '{ packs: . }' > "${ROOT_DIR}/packs.lock.json"
+fi
 echo "Wrote packs.lock.json"
