@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Build provider component WASMs and provider packs locally.
 #
-# Requires bash 4+ (uses `mapfile` and `declare -A`). macOS ships bash 3.2,
-# so install a modern bash first: `brew install bash`. The shebang above
-# resolves `bash` via PATH, so Homebrew's bash is picked up automatically.
+# Compatible with macOS' default Bash 3.2 and newer Bash versions.
 #
 # Usage:
 #   scripts/build_providers.sh [provider]
@@ -34,9 +32,12 @@ if [ $# -gt 1 ]; then
 fi
 
 if [ -n "${PROVIDER_FILTER}" ]; then
-  mapfile -t PROVIDERS < <(python3 ci/provider_matrix.py resolve-provider "${PROVIDER_FILTER}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])')
+  PROVIDERS=("$(python3 ci/provider_matrix.py resolve-provider "${PROVIDER_FILTER}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])')")
 else
-  mapfile -t PROVIDERS < <(python3 - <<'PY'
+  PROVIDERS=()
+  while IFS= read -r provider; do
+    PROVIDERS+=("${provider}")
+  done < <(python3 - <<'PY'
 import json
 from pathlib import Path
 
@@ -47,13 +48,30 @@ PY
 )
 fi
 
-declare -A BUILT_COMPONENTS=()
+declare -a BUILT_COMPONENTS=()
+
+component_was_built() {
+  local needle="$1"
+  local component
+  if [ "${#BUILT_COMPONENTS[@]}" -eq 0 ]; then
+    return 1
+  fi
+  for component in "${BUILT_COMPONENTS[@]}"; do
+    if [ "${component}" = "${needle}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
 
 for provider in "${PROVIDERS[@]}"; do
   resolved_json="$(python3 ci/provider_matrix.py resolve-provider "${provider}")"
   pack="$(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["pack"])')"
   version="$(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
-  mapfile -t components < <(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["components"]))')
+  components=()
+  while IFS= read -r component; do
+    components+=("${component}")
+  done < <(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["components"]))')
 
   echo "== provider: ${provider} =="
   echo "  pack      : ${pack}"
@@ -61,7 +79,7 @@ for provider in "${PROVIDERS[@]}"; do
   echo "  components: ${components[*]}"
 
   for component in "${components[@]}"; do
-    if [ -n "${BUILT_COMPONENTS[${component}]:-}" ]; then
+    if component_was_built "${component}"; then
       echo "-- component already built: ${component}"
       continue
     fi
@@ -74,7 +92,7 @@ for provider in "${PROVIDERS[@]}"; do
     if [ -f "components/${component}/component.manifest.json" ]; then
       cp "components/${component}/component.manifest.json" "target/components/${component}.manifest.json"
     fi
-    BUILT_COMPONENTS["${component}"]=1
+    BUILT_COMPONENTS+=("${component}")
   done
 
   echo "-- stage pack inputs: ${pack}"
