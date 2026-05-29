@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use glob::glob;
+use serde_json::Value as JsonValue;
 use serde_yaml_bw::Value;
 
 fn workspace_root() -> PathBuf {
@@ -103,6 +104,149 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
         registration.get("app_id_output").and_then(Value::as_str),
         Some("slack_app_id"),
         "Slack setup must persist the app id under the key setup_webhook reads at startup"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn teams_setup_persists_discovery_labels_and_modes() -> Result<()> {
+    let root = workspace_root();
+    let setup_path = root
+        .join("packs")
+        .join("messaging-teams")
+        .join("assets")
+        .join("setup.yaml");
+    let value: Value = serde_yaml_bw::from_str(&fs::read_to_string(&setup_path)?)?;
+
+    let setup_modes = value
+        .get("setup_modes")
+        .ok_or_else(|| anyhow!("teams setup.yaml missing setup_modes"))?;
+    assert!(
+        setup_modes.get("graph_channel").is_some(),
+        "Teams setup must describe Graph channel mode"
+    );
+    assert!(
+        setup_modes.get("bot_framework").is_some(),
+        "Teams setup must describe Bot Framework mode"
+    );
+
+    let action = value
+        .get("setup_actions")
+        .and_then(Value::as_sequence)
+        .and_then(|actions| actions.first())
+        .ok_or_else(|| anyhow!("teams setup.yaml missing setup action"))?;
+    let discovery = action
+        .get("post_login_discovery")
+        .and_then(Value::as_sequence)
+        .ok_or_else(|| anyhow!("teams setup.yaml missing post_login_discovery"))?;
+    let joined_teams = discovery
+        .iter()
+        .find(|step| step.get("id").and_then(Value::as_str) == Some("joined_teams"))
+        .ok_or_else(|| anyhow!("teams setup.yaml missing joined_teams discovery"))?;
+    assert_eq!(
+        joined_teams
+            .get("select")
+            .and_then(|select| select.get("save_as"))
+            .and_then(Value::as_str),
+        Some("team_id")
+    );
+    assert_eq!(
+        joined_teams
+            .get("select")
+            .and_then(|select| select.get("save_label_as"))
+            .and_then(Value::as_str),
+        Some("team_name")
+    );
+
+    let channels = discovery
+        .iter()
+        .find(|step| step.get("id").and_then(Value::as_str) == Some("channels"))
+        .ok_or_else(|| anyhow!("teams setup.yaml missing channels discovery"))?;
+    assert_eq!(
+        channels
+            .get("select")
+            .and_then(|select| select.get("save_as"))
+            .and_then(Value::as_str),
+        Some("channel_id")
+    );
+    assert_eq!(
+        channels
+            .get("select")
+            .and_then(|select| select.get("save_label_as"))
+            .and_then(Value::as_str),
+        Some("channel_name")
+    );
+
+    let desired_channel_name = value
+        .get("questions")
+        .and_then(Value::as_sequence)
+        .and_then(|questions| {
+            questions.iter().find(|question| {
+                question.get("name").and_then(Value::as_str) == Some("desired_channel_name")
+            })
+        })
+        .ok_or_else(|| anyhow!("teams setup.yaml missing desired_channel_name question"))?;
+    assert_eq!(
+        desired_channel_name
+            .get("default_from_context")
+            .and_then(Value::as_str),
+        Some("bundle_name")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn teams_subscription_manifest_declares_generic_desired_state_metadata() -> Result<()> {
+    let root = workspace_root();
+    let manifest_path = root
+        .join("packs")
+        .join("messaging-teams")
+        .join("pack.manifest.json");
+    let fixture_path = root
+        .join("packs")
+        .join("messaging-teams")
+        .join("fixtures")
+        .join("subscriptions.desired-state-metadata.expected.json");
+    let manifest: JsonValue = serde_json::from_str(&fs::read_to_string(&manifest_path)?)?;
+    let expected: JsonValue = serde_json::from_str(&fs::read_to_string(&fixture_path)?)?;
+    let desired_state = manifest
+        .get("extensions")
+        .and_then(|extensions| extensions.get("messaging.subscriptions.v1"))
+        .and_then(|extension| extension.get("inline"))
+        .and_then(|inline| inline.get("desired_state"))
+        .ok_or_else(|| anyhow!("Teams subscriptions extension missing desired_state metadata"))?;
+
+    assert_eq!(desired_state, &expected);
+    assert_eq!(
+        desired_state
+            .get("notification_url")
+            .and_then(|value| value.get("template"))
+            .and_then(JsonValue::as_str),
+        Some("{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}")
+    );
+    let templates = desired_state
+        .get("templates")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| anyhow!("Teams desired_state missing templates"))?;
+    assert!(
+        templates.iter().any(|template| {
+            template
+                .get("resource_template")
+                .and_then(JsonValue::as_str)
+                == Some("/teams/{team_id}/channels/{channel_id}/messages")
+        }),
+        "Teams desired_state must declare channel message resource format"
+    );
+    assert!(
+        templates.iter().any(|template| {
+            template
+                .get("resource_template")
+                .and_then(JsonValue::as_str)
+                == Some("/chats/{chat_id}/messages")
+        }),
+        "Teams desired_state must declare chat message resource format"
     );
 
     Ok(())

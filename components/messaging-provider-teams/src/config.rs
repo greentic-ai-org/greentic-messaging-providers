@@ -23,7 +23,12 @@ pub(crate) struct ProviderConfig {
     #[serde(default)]
     pub(crate) public_base_url: Option<String>,
 
+    #[serde(default)]
+    pub(crate) setup_mode: Option<String>,
+
+    #[serde(default)]
     pub(crate) tenant_id: String,
+    #[serde(default)]
     pub(crate) client_id: String,
 
     #[serde(default)]
@@ -43,7 +48,13 @@ pub(crate) struct ProviderConfig {
     #[serde(default)]
     pub(crate) team_id: Option<String>,
     #[serde(default)]
+    pub(crate) team_name: Option<String>,
+    #[serde(default)]
     pub(crate) channel_id: Option<String>,
+    #[serde(default)]
+    pub(crate) channel_name: Option<String>,
+    #[serde(default)]
+    pub(crate) desired_channel_name: Option<String>,
     #[serde(default)]
     pub(crate) chat_id: Option<String>,
     #[serde(default)]
@@ -54,6 +65,10 @@ pub(crate) struct ProviderConfig {
     #[serde(default)]
     pub(crate) ms_bot_app_password: Option<String>,
     #[serde(default)]
+    pub(crate) bot_display_name: Option<String>,
+    #[serde(default)]
+    pub(crate) messaging_endpoint: Option<String>,
+    #[serde(default)]
     pub(crate) default_service_url: Option<String>,
 }
 
@@ -62,7 +77,11 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) public_base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) setup_mode: Option<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) tenant_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub(crate) client_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) refresh_token: Option<String>,
@@ -76,11 +95,25 @@ pub(crate) struct ProviderConfigOut {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) team_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) team_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) channel_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) channel_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) desired_channel_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) chat_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) ms_bot_app_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) ms_bot_app_password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) bot_display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) messaging_endpoint: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -103,6 +136,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
     ProviderConfigOut {
         enabled: true,
         public_base_url: None,
+        setup_mode: None,
         tenant_id: String::new(),
         client_id: String::new(),
         refresh_token: None,
@@ -112,18 +146,37 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         auth_base_url: default_auth_base_url(),
         token_scope: default_token_scope(),
         team_id: None,
+        team_name: None,
         channel_id: None,
+        channel_name: None,
+        desired_channel_name: None,
         chat_id: None,
         user_id: None,
+        ms_bot_app_id: None,
+        ms_bot_app_password: None,
+        bot_display_name: None,
+        messaging_endpoint: None,
     }
 }
 
 pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), String> {
-    if config.tenant_id.trim().is_empty() {
-        return Err("config validation failed: tenant_id is required".to_string());
-    }
-    if config.client_id.trim().is_empty() {
-        return Err("config validation failed: client_id is required".to_string());
+    if config.setup_mode.as_deref() == Some("bot_framework") {
+        if config
+            .ms_bot_app_id
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .is_empty()
+        {
+            return Err("config validation failed: ms_bot_app_id is required".to_string());
+        }
+    } else {
+        if config.tenant_id.trim().is_empty() {
+            return Err("config validation failed: tenant_id is required".to_string());
+        }
+        if config.client_id.trim().is_empty() {
+            return Err("config validation failed: client_id is required".to_string());
+        }
     }
     if let Some(url) = config.public_base_url.as_deref()
         && !url.trim().is_empty()
@@ -142,17 +195,32 @@ pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), Stri
 }
 
 pub(crate) fn validate_provider_config(mut cfg: ProviderConfig) -> Result<ProviderConfig, String> {
+    cfg.setup_mode = normalize_optional_string(cfg.setup_mode);
     cfg.tenant_id = cfg.tenant_id.trim().to_string();
     cfg.client_id = cfg.client_id.trim().to_string();
     cfg.graph_base_url = cfg.graph_base_url.trim_end_matches('/').to_string();
     cfg.auth_base_url = cfg.auth_base_url.trim_end_matches('/').to_string();
     cfg.token_scope = cfg.token_scope.trim().to_string();
+    cfg.team_name = normalize_optional_string(cfg.team_name);
+    cfg.channel_name = normalize_optional_string(cfg.channel_name);
+    cfg.desired_channel_name = normalize_optional_string(cfg.desired_channel_name);
+    cfg.ms_bot_app_id = normalize_optional_string(cfg.ms_bot_app_id);
+    cfg.ms_bot_app_password = normalize_optional_string(cfg.ms_bot_app_password);
+    cfg.bot_display_name = normalize_optional_string(cfg.bot_display_name);
+    cfg.messaging_endpoint = normalize_optional_string(cfg.messaging_endpoint);
+    cfg.default_service_url = normalize_optional_string(cfg.default_service_url);
 
-    if cfg.tenant_id.is_empty() {
-        return Err("invalid config: tenant_id cannot be empty".to_string());
-    }
-    if cfg.client_id.is_empty() {
-        return Err("invalid config: client_id cannot be empty".to_string());
+    if cfg.setup_mode.as_deref() == Some("bot_framework") {
+        if cfg.ms_bot_app_id.as_deref().unwrap_or_default().is_empty() {
+            return Err("invalid config: ms_bot_app_id cannot be empty".to_string());
+        }
+    } else {
+        if cfg.tenant_id.is_empty() {
+            return Err("invalid config: tenant_id cannot be empty".to_string());
+        }
+        if cfg.client_id.is_empty() {
+            return Err("invalid config: client_id cannot be empty".to_string());
+        }
     }
     validate_absolute_url("graph_base_url", &cfg.graph_base_url)
         .map_err(|err| err.replace("config validation failed", "invalid config"))?;
@@ -162,6 +230,12 @@ pub(crate) fn validate_provider_config(mut cfg: ProviderConfig) -> Result<Provid
         return Err("invalid config: token_scope cannot be empty".to_string());
     }
     Ok(cfg)
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn validate_absolute_url(field: &str, value: &str) -> Result<(), String> {
@@ -222,6 +296,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
     for key in [
         "enabled",
         "public_base_url",
+        "setup_mode",
         "tenant_id",
         "client_id",
         "refresh_token",
@@ -231,11 +306,16 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "auth_base_url",
         "token_scope",
         "team_id",
+        "team_name",
         "channel_id",
+        "channel_name",
+        "desired_channel_name",
         "chat_id",
         "user_id",
         "ms_bot_app_id",
         "ms_bot_app_password",
+        "bot_display_name",
+        "messaging_endpoint",
         "default_service_url",
     ] {
         if let Some(v) = input.get(key) {
@@ -292,6 +372,7 @@ fn load_config_from_secrets() -> Result<ProviderConfig, String> {
     Ok(ProviderConfig {
         enabled: true,
         public_base_url: None,
+        setup_mode: None,
         tenant_id,
         client_id,
         refresh_token: optional_secret(DEFAULT_GRAPH_REFRESH_TOKEN_KEY),
@@ -301,11 +382,16 @@ fn load_config_from_secrets() -> Result<ProviderConfig, String> {
         auth_base_url: default_auth_base_url(),
         token_scope: default_token_scope(),
         team_id: None,
+        team_name: None,
         channel_id: None,
+        channel_name: None,
+        desired_channel_name: None,
         chat_id: None,
         user_id: None,
         ms_bot_app_id: optional_secret(DEFAULT_BOT_APP_ID_KEY),
         ms_bot_app_password: optional_secret(DEFAULT_BOT_APP_PASSWORD_KEY),
+        bot_display_name: None,
+        messaging_endpoint: None,
         default_service_url: None,
     })
 }
@@ -371,6 +457,7 @@ mod tests {
         ProviderConfigOut {
             enabled: true,
             public_base_url: Some("https://example.com".to_string()),
+            setup_mode: None,
             tenant_id: "tenant".to_string(),
             client_id: "client".to_string(),
             refresh_token: Some("refresh".to_string()),
@@ -380,9 +467,16 @@ mod tests {
             auth_base_url: DEFAULT_AUTH_BASE_URL.to_string(),
             token_scope: DEFAULT_GRAPH_TOKEN_SCOPE.to_string(),
             team_id: Some("team-1".to_string()),
+            team_name: Some("Team One".to_string()),
             channel_id: Some("channel-1".to_string()),
+            channel_name: Some("General".to_string()),
+            desired_channel_name: None,
             chat_id: Some("chat-1".to_string()),
             user_id: None,
+            ms_bot_app_id: None,
+            ms_bot_app_password: None,
+            bot_display_name: None,
+            messaging_endpoint: None,
         }
     }
 
@@ -420,11 +514,52 @@ mod tests {
             "client_id": "top-level-client",
             "refresh_token": "refresh",
             "team_id": "team-1",
-            "channel_id": "channel-1"
+            "team_name": "Team One",
+            "channel_id": "channel-1",
+            "channel_name": "General"
         }))
         .expect("top-level config");
         assert_eq!(top_level.team_id.as_deref(), Some("team-1"));
+        assert_eq!(top_level.team_name.as_deref(), Some("Team One"));
         assert_eq!(top_level.channel_id.as_deref(), Some("channel-1"));
+        assert_eq!(top_level.channel_name.as_deref(), Some("General"));
+    }
+
+    #[test]
+    fn load_config_accepts_legacy_graph_config_without_labels() {
+        let cfg = load_config(&json!({
+            "tenant_id": "tenant",
+            "client_id": "client",
+            "refresh_token": "refresh",
+            "team_id": "team-1",
+            "channel_id": "channel-1"
+        }))
+        .expect("legacy graph config");
+
+        assert_eq!(cfg.team_id.as_deref(), Some("team-1"));
+        assert_eq!(cfg.team_name, None);
+        assert_eq!(cfg.channel_id.as_deref(), Some("channel-1"));
+        assert_eq!(cfg.channel_name, None);
+    }
+
+    #[test]
+    fn load_config_accepts_bot_framework_shape() {
+        let cfg = load_config(&json!({
+            "setup_mode": "bot_framework",
+            "ms_bot_app_id": "bot-app-id",
+            "ms_bot_app_password": "bot-secret",
+            "bot_display_name": "Greentic Bot",
+            "messaging_endpoint": "https://example.com/api/messages"
+        }))
+        .expect("bot framework config");
+
+        assert_eq!(cfg.setup_mode.as_deref(), Some("bot_framework"));
+        assert_eq!(cfg.ms_bot_app_id.as_deref(), Some("bot-app-id"));
+        assert_eq!(cfg.bot_display_name.as_deref(), Some("Greentic Bot"));
+        assert_eq!(
+            cfg.messaging_endpoint.as_deref(),
+            Some("https://example.com/api/messages")
+        );
     }
 
     #[test]
@@ -432,6 +567,7 @@ mod tests {
         let cfg = ProviderConfig {
             enabled: true,
             public_base_url: None,
+            setup_mode: None,
             tenant_id: "tenant".to_string(),
             client_id: "client".to_string(),
             refresh_token: Some("refresh".to_string()),
@@ -441,11 +577,16 @@ mod tests {
             auth_base_url: DEFAULT_AUTH_BASE_URL.to_string(),
             token_scope: DEFAULT_GRAPH_TOKEN_SCOPE.to_string(),
             team_id: Some(" team-1 ".to_string()),
+            team_name: Some("Team One".to_string()),
             channel_id: Some(" channel-1 ".to_string()),
+            channel_name: Some("General".to_string()),
+            desired_channel_name: Some("General".to_string()),
             chat_id: Some(" chat-1 ".to_string()),
             user_id: None,
             ms_bot_app_id: Some("app-id".to_string()),
             ms_bot_app_password: None,
+            bot_display_name: None,
+            messaging_endpoint: None,
             default_service_url: Some("https://fallback.example.com".to_string()),
         };
         let destination = default_channel_destination(&cfg).expect("channel destination");

@@ -513,6 +513,7 @@ mod tests {
         ProviderConfig {
             enabled: true,
             public_base_url: None,
+            setup_mode: None,
             tenant_id: "tenant".to_string(),
             client_id: "client".to_string(),
             refresh_token: Some("refresh".to_string()),
@@ -522,11 +523,16 @@ mod tests {
             auth_base_url: "https://login.microsoftonline.com".to_string(),
             token_scope: "https://graph.microsoft.com/.default".to_string(),
             team_id: Some("default-team".to_string()),
+            team_name: Some("Default Team".to_string()),
             channel_id: Some("default-channel".to_string()),
+            channel_name: Some("General".to_string()),
+            desired_channel_name: Some("General".to_string()),
             chat_id: Some("default-chat".to_string()),
             user_id: None,
             ms_bot_app_id: None,
             ms_bot_app_password: None,
+            bot_display_name: None,
+            messaging_endpoint: None,
             default_service_url: None,
         }
     }
@@ -622,6 +628,41 @@ mod tests {
                 channel_id: "channel".to_string(),
                 message_id: "msg".to_string()
             }
+        );
+    }
+
+    #[test]
+    fn resolve_destination_uses_ids_not_human_labels() {
+        let mut cfg = cfg();
+        cfg.team_id = Some("team-id".to_string());
+        cfg.team_name = Some("Human Team".to_string());
+        cfg.channel_id = Some("channel-id".to_string());
+        cfg.channel_name = Some("General".to_string());
+        let envelope = build_team_envelope("hello".to_string(), None, None, None);
+
+        assert_eq!(
+            resolve_destination(&json!({}), &cfg, &envelope).expect("destination"),
+            GraphDestination::Channel {
+                team_id: "team-id".to_string(),
+                channel_id: "channel-id".to_string()
+            }
+        );
+
+        assert!(
+            resolve_destination(
+                &json!({
+                    "team_name": "Human Team",
+                    "channel_name": "General"
+                }),
+                &ProviderConfig {
+                    team_id: None,
+                    channel_id: None,
+                    ..cfg
+                },
+                &envelope
+            )
+            .expect_err("labels are not routable")
+            .contains("team_id and channel_id")
         );
     }
 

@@ -43,6 +43,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.schema.config.description",
     "teams.schema.config.enabled.title",
     "teams.schema.config.enabled.description",
+    "teams.schema.config.setup_mode.title",
+    "teams.schema.config.setup_mode.description",
     "teams.schema.config.public_base_url.title",
     "teams.schema.config.public_base_url.description",
     "teams.schema.config.tenant_id.title",
@@ -61,8 +63,22 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.schema.config.token_scope.description",
     "teams.schema.config.team_id.title",
     "teams.schema.config.team_id.description",
+    "teams.schema.config.team_name.title",
+    "teams.schema.config.team_name.description",
     "teams.schema.config.channel_id.title",
     "teams.schema.config.channel_id.description",
+    "teams.schema.config.channel_name.title",
+    "teams.schema.config.channel_name.description",
+    "teams.schema.config.desired_channel_name.title",
+    "teams.schema.config.desired_channel_name.description",
+    "teams.schema.config.ms_bot_app_id.title",
+    "teams.schema.config.ms_bot_app_id.description",
+    "teams.schema.config.ms_bot_app_password.title",
+    "teams.schema.config.ms_bot_app_password.description",
+    "teams.schema.config.bot_display_name.title",
+    "teams.schema.config.bot_display_name.description",
+    "teams.schema.config.messaging_endpoint.title",
+    "teams.schema.config.messaging_endpoint.description",
     // QA titles
     "teams.qa.default.title",
     "teams.qa.setup.title",
@@ -70,6 +86,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.qa.remove.title",
     // Config labels used outside the setup question flow.
     "teams.qa.setup.enabled",
+    "teams.qa.setup.setup_mode",
     "teams.qa.setup.public_base_url",
     "teams.qa.setup.tenant_id",
     "teams.qa.setup.client_id",
@@ -79,9 +96,16 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.qa.setup.auth_base_url",
     "teams.qa.setup.token_scope",
     "teams.qa.setup.team_id",
+    "teams.qa.setup.team_name",
     "teams.qa.setup.channel_id",
+    "teams.qa.setup.channel_name",
+    "teams.qa.setup.desired_channel_name",
     "teams.qa.setup.chat_id",
     "teams.qa.setup.user_id",
+    "teams.qa.setup.ms_bot_app_id",
+    "teams.qa.setup.ms_bot_app_password",
+    "teams.qa.setup.bot_display_name",
+    "teams.qa.setup.messaging_endpoint",
 ];
 
 /// QA question definitions: (id, i18n_key, required)
@@ -138,6 +162,10 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
             },
             RedactionRule {
                 path: "$.access_token".to_string(),
+                strategy: "replace".to_string(),
+            },
+            RedactionRule {
+                path: "$.ms_bot_app_password".to_string(),
                 strategy: "replace".to_string(),
             },
         ],
@@ -220,12 +248,17 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.schema.config.title", "Teams config"),
     (
         "teams.schema.config.description",
-        "Teams Microsoft Graph provider configuration",
+        "Teams provider configuration. graph_channel mode sends through Microsoft Graph; bot_framework mode accepts Bot Framework ingress settings.",
     ),
     ("teams.schema.config.enabled.title", "Enabled"),
     (
         "teams.schema.config.enabled.description",
         "Enable this provider",
+    ),
+    ("teams.schema.config.setup_mode.title", "Setup mode"),
+    (
+        "teams.schema.config.setup_mode.description",
+        "Teams setup mode: graph_channel for Graph channel sends or bot_framework for Bot Framework ingress",
     ),
     (
         "teams.schema.config.public_base_url.title",
@@ -275,10 +308,57 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "teams.schema.config.team_id.description",
         "Default Team identifier",
     ),
+    ("teams.schema.config.team_name.title", "Team name"),
+    (
+        "teams.schema.config.team_name.description",
+        "Human-readable display name for the selected Team. Not used for routing.",
+    ),
     ("teams.schema.config.channel_id.title", "Channel ID"),
     (
         "teams.schema.config.channel_id.description",
         "Default Channel identifier",
+    ),
+    ("teams.schema.config.channel_name.title", "Channel name"),
+    (
+        "teams.schema.config.channel_name.description",
+        "Human-readable display name for the selected Channel. Not used for routing.",
+    ),
+    (
+        "teams.schema.config.desired_channel_name.title",
+        "Suggested channel name",
+    ),
+    (
+        "teams.schema.config.desired_channel_name.description",
+        "Optional setup search/default hint. The selected channel_id remains authoritative.",
+    ),
+    ("teams.schema.config.ms_bot_app_id.title", "Bot app ID"),
+    (
+        "teams.schema.config.ms_bot_app_id.description",
+        "Azure Bot Framework app ID for bot_framework mode",
+    ),
+    (
+        "teams.schema.config.ms_bot_app_password.title",
+        "Bot app password",
+    ),
+    (
+        "teams.schema.config.ms_bot_app_password.description",
+        "Azure Bot Framework app password for bot_framework mode",
+    ),
+    (
+        "teams.schema.config.bot_display_name.title",
+        "Bot display name",
+    ),
+    (
+        "teams.schema.config.bot_display_name.description",
+        "Human-readable Teams bot name used in the Teams app manifest",
+    ),
+    (
+        "teams.schema.config.messaging_endpoint.title",
+        "Messaging endpoint",
+    ),
+    (
+        "teams.schema.config.messaging_endpoint.description",
+        "Public Bot Framework messaging endpoint for Teams app manifests",
     ),
     // QA titles
     ("teams.qa.default.title", "Default"),
@@ -287,6 +367,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.qa.remove.title", "Remove"),
     // Config labels used outside the setup question flow.
     ("teams.qa.setup.enabled", "Enable provider"),
+    ("teams.qa.setup.setup_mode", "Setup mode"),
     ("teams.qa.setup.public_base_url", "Public base URL"),
     ("teams.qa.setup.tenant_id", "Tenant ID"),
     ("teams.qa.setup.client_id", "Client ID"),
@@ -296,9 +377,22 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.qa.setup.auth_base_url", "Auth base URL"),
     ("teams.qa.setup.token_scope", "Token scope"),
     ("teams.qa.setup.team_id", "Default Team ID (optional)"),
+    ("teams.qa.setup.team_name", "Default Team name (optional)"),
     ("teams.qa.setup.channel_id", "Default Channel ID (optional)"),
+    (
+        "teams.qa.setup.channel_name",
+        "Default Channel name (optional)",
+    ),
+    (
+        "teams.qa.setup.desired_channel_name",
+        "Suggested Channel name (optional)",
+    ),
     ("teams.qa.setup.chat_id", "Default Chat ID (optional)"),
     ("teams.qa.setup.user_id", "Default User ID (optional)"),
+    ("teams.qa.setup.ms_bot_app_id", "Bot app ID"),
+    ("teams.qa.setup.ms_bot_app_password", "Bot app password"),
+    ("teams.qa.setup.bot_display_name", "Bot display name"),
+    ("teams.qa.setup.messaging_endpoint", "Messaging endpoint"),
 ];
 
 pub(crate) fn i18n_bundle(locale: String) -> Vec<u8> {
@@ -358,6 +452,14 @@ fn config_schema() -> SchemaIr {
                 schema_bool_ir(
                     "teams.schema.config.enabled.title",
                     "teams.schema.config.enabled.description",
+                ),
+            ),
+            (
+                "setup_mode",
+                false,
+                schema_str(
+                    "teams.schema.config.setup_mode.title",
+                    "teams.schema.config.setup_mode.description",
                 ),
             ),
             (
@@ -436,11 +538,35 @@ fn config_schema() -> SchemaIr {
                 ),
             ),
             (
+                "team_name",
+                false,
+                schema_str(
+                    "teams.schema.config.team_name.title",
+                    "teams.schema.config.team_name.description",
+                ),
+            ),
+            (
                 "channel_id",
                 false,
                 schema_str(
                     "teams.schema.config.channel_id.title",
                     "teams.schema.config.channel_id.description",
+                ),
+            ),
+            (
+                "channel_name",
+                false,
+                schema_str(
+                    "teams.schema.config.channel_name.title",
+                    "teams.schema.config.channel_name.description",
+                ),
+            ),
+            (
+                "desired_channel_name",
+                false,
+                schema_str(
+                    "teams.schema.config.desired_channel_name.title",
+                    "teams.schema.config.desired_channel_name.description",
                 ),
             ),
             (
@@ -452,6 +578,39 @@ fn config_schema() -> SchemaIr {
                 "user_id",
                 false,
                 schema_str("teams.qa.setup.user_id", "teams.qa.setup.user_id"),
+            ),
+            (
+                "ms_bot_app_id",
+                false,
+                schema_str(
+                    "teams.schema.config.ms_bot_app_id.title",
+                    "teams.schema.config.ms_bot_app_id.description",
+                ),
+            ),
+            (
+                "ms_bot_app_password",
+                false,
+                schema_secret(
+                    "teams.schema.config.ms_bot_app_password.title",
+                    "teams.schema.config.ms_bot_app_password.description",
+                ),
+            ),
+            (
+                "bot_display_name",
+                false,
+                schema_str(
+                    "teams.schema.config.bot_display_name.title",
+                    "teams.schema.config.bot_display_name.description",
+                ),
+            ),
+            (
+                "messaging_endpoint",
+                false,
+                schema_str_fmt(
+                    "teams.schema.config.messaging_endpoint.title",
+                    "teams.schema.config.messaging_endpoint.description",
+                    "uri",
+                ),
             ),
         ],
         false,
