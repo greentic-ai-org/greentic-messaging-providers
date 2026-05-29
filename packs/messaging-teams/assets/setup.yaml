@@ -1,6 +1,24 @@
 provider_id: teams
 version: 1
-title: Microsoft Teams Graph device-code setup
+title: Microsoft Teams setup
+setup_modes:
+  graph_channel:
+    description: "Default mode. Uses Microsoft Graph delegated tokens plus team_id/channel_id for outbound channel messages."
+    config_keys:
+      - tenant_id
+      - client_id
+      - team_id
+      - team_name
+      - channel_id
+      - channel_name
+      - desired_channel_name
+  bot_framework:
+    description: "Inbound Bot Framework mode. Uses Azure Bot credentials and a Teams app manifest messaging endpoint."
+    config_keys:
+      - ms_bot_app_id
+      - ms_bot_app_password
+      - bot_display_name
+      - messaging_endpoint
 setup_actions:
   - id: teams-device-code
     kind: oauth_device_code
@@ -42,7 +60,10 @@ setup_actions:
       client_id: client_id
       user_id: user_id
       team_id: team_id
+      team_name: team_name
       channel_id: channel_id
+      channel_name: channel_name
+      desired_channel_name: desired_channel_name
       chat_id: chat_id
     post_login_discovery:
       - id: me
@@ -59,6 +80,7 @@ setup_actions:
           label: displayName
           value: id
           save_as: team_id
+          save_label_as: team_name
       - id: channels
         method: GET
         url_template: https://graph.microsoft.com/v1.0/teams/{team_id}/channels
@@ -69,6 +91,7 @@ setup_actions:
           label: displayName
           value: id
           save_as: channel_id
+          save_label_as: channel_name
     checklist:
       - "App registration must be multi-tenant: signInAudience = AzureADMultipleOrgs"
       - Public client/device code flow must be enabled
@@ -84,3 +107,11 @@ questions:
     help: "Public multi-tenant Microsoft application client ID used to start the device-code login. Keep the default Greentic client ID or replace it with your own public-client app registration."
     placeholder: "6c115a7a-f656-49c4-975a-5e831efae833"
     group: Authentication
+  - name: desired_channel_name
+    title: Suggested channel name
+    kind: string
+    required: false
+    default_from_context: bundle_name
+    help: "Optional search/default hint for Graph channel discovery. The selected channel_id remains authoritative."
+    placeholder: "General"
+    group: Discovery

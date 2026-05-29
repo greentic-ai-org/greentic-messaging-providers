@@ -346,6 +346,7 @@ mod tests {
         let cfg = ProviderConfig {
             enabled: true,
             public_base_url: Some("https://example.com".to_string()),
+            setup_mode: None,
             tenant_id: "tenant".to_string(),
             client_id: "client".to_string(),
             refresh_token: Some("refresh".to_string()),
@@ -355,11 +356,16 @@ mod tests {
             auth_base_url: crate::DEFAULT_AUTH_BASE_URL.to_string(),
             token_scope: crate::DEFAULT_GRAPH_TOKEN_SCOPE.to_string(),
             team_id: None,
+            team_name: None,
             channel_id: None,
+            channel_name: None,
+            desired_channel_name: None,
             chat_id: None,
             user_id: None,
             ms_bot_app_id: Some(" ".to_string()),
             ms_bot_app_password: Some("secret".to_string()),
+            bot_display_name: None,
+            messaging_endpoint: None,
             default_service_url: None,
         };
 
@@ -374,6 +380,7 @@ mod tests {
         let cfg = ProviderConfig {
             enabled: true,
             public_base_url: None,
+            setup_mode: None,
             tenant_id: "tenant".to_string(),
             client_id: "client id".to_string(),
             refresh_token: Some("refresh".to_string()),
@@ -383,11 +390,16 @@ mod tests {
             auth_base_url: crate::DEFAULT_AUTH_BASE_URL.to_string(),
             token_scope: "scope value".to_string(),
             team_id: None,
+            team_name: None,
             channel_id: None,
+            channel_name: None,
+            desired_channel_name: None,
             chat_id: None,
             user_id: None,
             ms_bot_app_id: None,
             ms_bot_app_password: None,
+            bot_display_name: None,
+            messaging_endpoint: None,
             default_service_url: None,
         };
 

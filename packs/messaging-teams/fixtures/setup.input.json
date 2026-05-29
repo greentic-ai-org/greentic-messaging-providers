@@ -8,7 +8,10 @@
     "auth_base_url": "https://login.microsoftonline.com",
     "token_scope": "https://graph.microsoft.com/.default",
     "team_id": "test-team",
-    "channel_id": "test-channel"
+    "team_name": "Test Team",
+    "channel_id": "test-channel",
+    "channel_name": "General",
+    "desired_channel_name": "Test Bundle"
   },
   "secrets": {
     "MS_GRAPH_CLIENT_ID": "test-client-id",
