@@ -4,18 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
-GREENTIC_PACK_VERSION="${GREENTIC_PACK_VERSION:-0.4.123}"
-installed_pack_version=""
 if command -v greentic-pack >/dev/null 2>&1; then
-  installed_pack_version="$(greentic-pack --version | awk '{print $2}')"
   echo "Using existing greentic-pack: $(greentic-pack --version)"
-fi
-if [ -z "${installed_pack_version}" ] || [ "${installed_pack_version}" != "${GREENTIC_PACK_VERSION}" ]; then
-  if ! command -v cargo-binstall >/dev/null 2>&1; then
-    cargo install cargo-binstall --locked
-  fi
-  cargo binstall greentic-pack --version "${GREENTIC_PACK_VERSION}" --force --no-confirm --locked || \
-    cargo install greentic-pack --version "${GREENTIC_PACK_VERSION}" --force --locked
+else
+  echo "greentic-pack is required; run gtc install before building packs" >&2
+  exit 1
 fi
 
 PACK_VERSION="${PACK_VERSION:-$(python3 - <<'PY'
@@ -165,9 +158,6 @@ run_pack_doctor() {
 }
 
 if [ "${run_publish_packs}" -eq 1 ]; then
-  if ! command -v cargo-binstall >/dev/null 2>&1; then
-    cargo install cargo-binstall --locked
-  fi
   DRY_RUN=1 PACK_VERSION="${PACK_VERSION}" PACKC_BUILD_FLAGS="${PACKC_BUILD_FLAGS:-}" ./tools/build_packs_only.sh
   if compgen -G "dist/packs/messaging-*.gtpack" >/dev/null; then
     for p in dist/packs/messaging-*.gtpack; do

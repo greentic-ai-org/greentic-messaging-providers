@@ -82,6 +82,33 @@ fn secret_questions_not_inlined_in_titles() -> Result<()> {
 }
 
 #[test]
+fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
+    let root = workspace_root();
+    let setup_path = root
+        .join("packs")
+        .join("messaging-slack")
+        .join("assets")
+        .join("setup.yaml");
+    let value: Value = serde_yaml_bw::from_str(&fs::read_to_string(&setup_path)?)?;
+    let setup_actions = value
+        .get("setup_actions")
+        .and_then(Value::as_sequence)
+        .ok_or_else(|| anyhow!("slack setup.yaml missing setup_actions"))?;
+    let registration = setup_actions
+        .iter()
+        .find_map(|action| action.get("registration"))
+        .ok_or_else(|| anyhow!("slack setup.yaml missing registration action"))?;
+
+    assert_eq!(
+        registration.get("app_id_output").and_then(Value::as_str),
+        Some("slack_app_id"),
+        "Slack setup must persist the app id under the key setup_webhook reads at startup"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn webchat_gui_setup_has_presentation_mode_and_standalone_nav_links() -> Result<()> {
     let root = workspace_root();
     let setup_path = root

@@ -103,6 +103,7 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
 
     let app_id = parsed
         .get("slack_app_id")
+        .or_else(|| parsed.get("app_id"))
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -126,9 +127,7 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         (Some(a), Some(t)) => (a, t),
         _ => {
             return json_bytes(&json!({
-                "ok": true,
-                "skipped": true,
-                "reason": "slack app registration not configured",
+                "ok": false,
                 "error": "slack_app_id and slack_configuration_access_token required"
             }));
         }
@@ -351,6 +350,7 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
     json_bytes(&json!({
         "ok": true,
         "app_id": app_id,
+        "slack_app_id": app_id,
         "client_id": client_id,
         "client_secret": client_secret,
         "signing_secret": signing_secret,
@@ -771,7 +771,27 @@ mod tests {
     }
 
     #[test]
-    fn setup_webhook_skips_when_registration_values_are_missing() {
+    fn setup_webhook_accepts_legacy_app_id_field_name() {
+        let invalid_url: Value = serde_json::from_slice(&setup_webhook(
+            br#"{
+                "app_id": "A123",
+                "slack_configuration_access_token": "xoxe-access",
+                "public_base_url": "http://example.com"
+            }"#,
+        ))
+        .expect("json");
+
+        assert_eq!(invalid_url["ok"], false);
+        assert!(
+            invalid_url["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("public_base_url")
+        );
+    }
+
+    #[test]
+    fn setup_webhook_fails_when_registration_values_are_missing() {
         let out: Value = serde_json::from_slice(&setup_webhook(
             br#"{
                 "public_base_url": "https://example.com"
@@ -779,8 +799,8 @@ mod tests {
         ))
         .expect("json");
 
-        assert_eq!(out["ok"], true);
-        assert_eq!(out["skipped"], true);
+        assert_eq!(out["ok"], false);
+        assert_ne!(out["skipped"], true);
         assert!(
             out["error"]
                 .as_str()
