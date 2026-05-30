@@ -29,6 +29,11 @@ formats. The metadata names setup-answer source keys (`team_id`, `channel_id`,
 `chat_id`), the default `change_type`, notification URL template, expiration
 policy, and resource templates for channel and chat messages.
 
+The same extension declares `component_config.include` separately. Hosts should
+pass only the listed auth/client fields to `sync-subscriptions`; identifiers
+such as `team_id` and `channel_id` are desired-state template inputs, not
+subscription component config.
+
 Graph subscription creation still requires a host-supplied
 `expiration_datetime`; the pack metadata declares this requirement instead of
 embedding a fixed timestamp.

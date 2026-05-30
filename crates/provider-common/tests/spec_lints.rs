@@ -317,21 +317,81 @@ fn teams_subscription_manifest_declares_generic_desired_state_metadata() -> Resu
         .join("packs")
         .join("messaging-teams")
         .join("pack.manifest.json");
-    let fixture_path = root
+    let desired_fixture_path = root
         .join("packs")
         .join("messaging-teams")
         .join("fixtures")
         .join("subscriptions.desired-state-metadata.expected.json");
+    let component_config_fixture_path = root
+        .join("packs")
+        .join("messaging-teams")
+        .join("fixtures")
+        .join("subscriptions.component-config.expected.json");
     let manifest: JsonValue = serde_json::from_str(&fs::read_to_string(&manifest_path)?)?;
-    let expected: JsonValue = serde_json::from_str(&fs::read_to_string(&fixture_path)?)?;
-    let desired_state = manifest
+    let expected_desired_state: JsonValue =
+        serde_json::from_str(&fs::read_to_string(&desired_fixture_path)?)?;
+    let expected_component_config: JsonValue =
+        serde_json::from_str(&fs::read_to_string(&component_config_fixture_path)?)?;
+    let subscriptions = manifest
         .get("extensions")
         .and_then(|extensions| extensions.get("messaging.subscriptions.v1"))
         .and_then(|extension| extension.get("inline"))
-        .and_then(|inline| inline.get("desired_state"))
+        .ok_or_else(|| anyhow!("Teams manifest missing subscriptions extension"))?;
+    let component_config = subscriptions.get("component_config").ok_or_else(|| {
+        anyhow!("Teams subscriptions extension missing component_config metadata")
+    })?;
+    let desired_state = subscriptions
+        .get("desired_state")
         .ok_or_else(|| anyhow!("Teams subscriptions extension missing desired_state metadata"))?;
 
-    assert_eq!(desired_state, &expected);
+    assert_eq!(component_config, &expected_component_config);
+    assert_eq!(desired_state, &expected_desired_state);
+
+    let component_config_fields = component_config
+        .get("include")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| anyhow!("Teams component_config missing include list"))?;
+    for field in [
+        "tenant_id",
+        "client_id",
+        "graph_base_url",
+        "auth_base_url",
+        "token_scope",
+    ] {
+        assert!(
+            component_config_fields
+                .iter()
+                .any(|value| value.as_str() == Some(field)),
+            "Teams component_config must include {field}"
+        );
+    }
+    for field in [
+        "team_id",
+        "channel_id",
+        "chat_id",
+        "channel_name",
+        "team_name",
+    ] {
+        assert!(
+            !component_config_fields
+                .iter()
+                .any(|value| value.as_str() == Some(field)),
+            "Teams component_config must not pass desired-state field {field}"
+        );
+    }
+
+    let source_keys = desired_state
+        .get("source_keys")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| anyhow!("Teams desired_state missing source_keys"))?;
+    for field in ["team_id", "channel_id"] {
+        assert!(
+            source_keys
+                .iter()
+                .any(|value| value.as_str() == Some(field)),
+            "Teams desired_state must keep {field} available for templating"
+        );
+    }
     assert_eq!(
         desired_state
             .get("notification_url")
