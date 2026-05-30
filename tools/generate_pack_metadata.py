@@ -143,10 +143,14 @@ def include_capabilities_cache(
 ) -> None:
     cache_entries = []
     components = manifest.get("components") or []
+    seen_components = set()
     cache_out_dir = pack_dir / "components"
     cache_out_dir.mkdir(parents=True, exist_ok=True)
     for component in components:
         comp_id = component.get("id") if isinstance(component, dict) else component
+        if comp_id in seen_components:
+            continue
+        seen_components.add(comp_id)
         src = components_dir / comp_id / "capabilities_v1.json"
         if not src.exists():
             continue
@@ -238,12 +242,16 @@ def main() -> int:
 
         component_ids = []
         component_sources = []
+        seen_component_ids = set()
         for comp in pack_yaml.get("components", []) or []:
             if not isinstance(comp, dict):
                 continue
             comp_id = comp.get("id")
             if not comp_id:
                 continue
+            if comp_id in seen_component_ids:
+                continue
+            seen_component_ids.add(comp_id)
             comp_copy = dict(comp)
             comp_copy.setdefault("wasm", f"components/{comp_id}.wasm")
             comp_copy["version"] = pack_yaml.get(

@@ -416,6 +416,7 @@ for dir in "${PACKS_DIR}"/*; do
 
   echo "Syncing ${pack_name}..."
   update_pack_yaml_version "${dir}/pack.yaml"
+  python3 "${ROOT_DIR}/tools/normalize_pack_components.py" "${dir}/pack.yaml"
   ensure_helper_components_in_pack_yaml "${dir}/pack.yaml"
   python3 "${ROOT_DIR}/tools/generate_pack_metadata.py" \
     --pack-dir "${dir}" \
@@ -506,6 +507,7 @@ for dir in "${PACKS_DIR}"/*; do
     [ -z "${comp}" ] && continue
     stamp_manifest_version "${dir}/components/${comp}/component.manifest.json" "${dir}/pack.yaml" "${comp}"
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
+  python3 "${ROOT_DIR}/tools/stamp_pack_component_manifests.py" "${dir}" "${VERSION}"
 
   while IFS= read -r schema; do
     [ -z "${schema}" ] && continue
@@ -533,6 +535,7 @@ for dir in "${PACKS_DIR}"/*; do
   fi
 
   sync_pack_yaml_component_versions "${dir}"
+  python3 "${ROOT_DIR}/tools/normalize_pack_components.py" "${dir}/pack.yaml"
 done
 
 echo "Pack sync complete."
