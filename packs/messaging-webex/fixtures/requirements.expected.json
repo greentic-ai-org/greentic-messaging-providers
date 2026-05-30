@@ -1,14 +1,17 @@
 {
   "provider": "messaging.webex.bot",
   "config_required": [
-    "enabled",
-    "public_base_url"
+    "enabled"
   ],
   "config_optional": [
-    "default_room_id"
+    "public_base_url",
+    "default_room_id",
+    "default_to_person_email",
+    "api_base_url"
   ],
   "secret_required": [
-    "WEBEX_BOT_TOKEN"
+    "WEBEX_BOT_TOKEN",
+    "WEBEX_WEBHOOK_SECRET"
   ],
   "secret_optional": [],
   "oauth_required": false,

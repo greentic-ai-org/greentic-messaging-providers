@@ -78,6 +78,11 @@ for provider in "${PROVIDERS[@]}"; do
   echo "  version   : ${version}"
   echo "  components: ${components[*]}"
 
+  if [ -f "packs/${pack}/build-answer.json" ]; then
+    echo "-- validate build answer: ${pack}"
+    python3 tools/provider_build_answers.py --check "${pack}"
+  fi
+
   for component in "${components[@]}"; do
     if component_was_built "${component}"; then
       echo "-- component already built: ${component}"

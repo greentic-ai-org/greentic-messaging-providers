@@ -5,11 +5,12 @@
   "properties": {
     "default_room_id": {
       "type": "string",
-      "description": "Default room ID used when invocation omits destination."
+      "minLength": 1,
+      "description": "Optional room ID for proactive room messages. Mention-based inbound webhooks do not require this."
     },
     "default_to_person_email": {
       "type": "string",
-      "description": "Default recipient email used when invocation omits destination."
+      "description": "Optional person email destination for direct messages."
     },
     "api_base_url": {
       "type": "string",
@@ -19,10 +20,13 @@
     "public_base_url": {
       "type": "string",
       "description": "Public base URL used to build inbound webhook callback URLs."
+    },
+    "webhook_secret": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Legacy config field. New setup writes WEBEX_WEBHOOK_SECRET to the secrets store."
     }
   },
-  "required": [
-    "public_base_url"
-  ],
+  "required": [],
   "additionalProperties": false
 }

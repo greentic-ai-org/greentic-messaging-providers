@@ -13,7 +13,7 @@ Webex messaging provider — Bot API with Adaptive Cards.
 
 ## Secrets
 - `WEBEX_BOT_TOKEN` — Webex bot access token
-- `WEBEX_WEBHOOK_SECRET` — optional shared secret for Webex webhook signatures
+- `WEBEX_WEBHOOK_SECRET` — shared secret for Webex webhook signatures
 
 ## Flows
 - `setup_default` — configures provider via `messaging.configure` op
@@ -21,10 +21,9 @@ Webex messaging provider — Bot API with Adaptive Cards.
 
 ## Setup
 Inputs:
-- Config required: public_base_url
-- Config optional: default_room_id, webhook_secret
-- Secrets required: WEBEX_BOT_TOKEN
-- Secrets optional: WEBEX_WEBHOOK_SECRET
+- Config optional: public_base_url, default_room_id, default_to_person_email, api_base_url
+- Secrets required: WEBEX_BOT_TOKEN, WEBEX_WEBHOOK_SECRET
+- Setup asks only for WEBEX_BOT_TOKEN. The provider generates WEBEX_WEBHOOK_SECRET.
 
 Webhooks:
 - `messages.created` with `mentionedPeople=me` or `roomId=<default_room_id>`

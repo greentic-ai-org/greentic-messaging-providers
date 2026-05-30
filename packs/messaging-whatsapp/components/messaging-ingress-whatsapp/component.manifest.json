@@ -1,6 +1,6 @@
 {
   "id": "messaging-ingress-whatsapp",
-  "version": "0.5.1",
+  "version": "0.5.3",
   "supports": [
     "messaging"
   ],

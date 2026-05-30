@@ -9,6 +9,8 @@ use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use uuid::Uuid;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -47,6 +49,7 @@ use ops::{
 pub(crate) struct ProviderConfig {
     #[serde(default = "config::default_enabled")]
     pub enabled: bool,
+    #[serde(default)]
     pub public_base_url: String,
     #[serde(default)]
     pub default_room_id: Option<String>,
@@ -66,9 +69,12 @@ pub(crate) struct ProviderConfig {
 pub(crate) struct ProviderConfigOut {
     pub enabled: bool,
     pub public_base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_room_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_to_person_email: Option<String>,
     pub api_base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webhook_secret: Option<String>,
@@ -197,9 +203,16 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
 struct ApplyAnswersResult {
     ok: bool,
     config: Option<ProviderConfigOut>,
+    secrets_patch: Option<SecretsPatch>,
     remove: Option<RemovePlan>,
     diagnostics: Vec<String>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SecretsPatch {
+    set: BTreeMap<String, String>,
+    delete: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,6 +233,7 @@ fn apply_answers_impl(
             return canonical_cbor_bytes(&ApplyAnswersResult {
                 ok: false,
                 config: None,
+                secrets_patch: None,
                 remove: None,
                 diagnostics: Vec::new(),
                 error: Some(format!("invalid answers cbor: {err}")),
@@ -231,6 +245,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
             config: None,
+            secrets_patch: None,
             remove: Some(RemovePlan {
                 remove_all: true,
                 cleanup: vec![
@@ -247,6 +262,7 @@ fn apply_answers_impl(
     }
 
     let mut merged = existing_config_from_answers(&answers).unwrap_or_else(default_config_out);
+    let mut secrets_set = BTreeMap::new();
     let answer_obj = answers.as_object();
     let has = |key: &str| answer_obj.is_some_and(|obj| obj.contains_key(key));
 
@@ -268,8 +284,15 @@ fn apply_answers_impl(
         merged.bot_token = optional_string_from(&answers, "bot_token")
             .or_else(|| optional_string_from(&answers, "webex_bot_token"))
             .or(merged.bot_token.clone());
-        merged.webhook_secret =
-            optional_string_from(&answers, "webhook_secret").or(merged.webhook_secret.clone());
+        if let Some(token) = optional_string_from(&answers, "bot_token")
+            .or_else(|| optional_string_from(&answers, "webex_bot_token"))
+        {
+            secrets_set.insert(DEFAULT_TOKEN_KEY.to_string(), token);
+        }
+        let webhook_secret =
+            optional_string_from(&answers, "webhook_secret").unwrap_or_else(generate_secret_20);
+        merged.webhook_secret = None;
+        secrets_set.insert(DEFAULT_WEBHOOK_SECRET_KEY.to_string(), webhook_secret);
     }
 
     if mode == Mode::Upgrade {
@@ -296,9 +319,20 @@ fn apply_answers_impl(
         if has("bot_token") || has("webex_bot_token") {
             merged.bot_token = optional_string_from(&answers, "bot_token")
                 .or_else(|| optional_string_from(&answers, "webex_bot_token"));
+            if let Some(token) = merged.bot_token.clone() {
+                secrets_set.insert(DEFAULT_TOKEN_KEY.to_string(), token);
+            }
         }
         if has("webhook_secret") {
-            merged.webhook_secret = optional_string_from(&answers, "webhook_secret");
+            if let Some(secret) = optional_string_from(&answers, "webhook_secret") {
+                secrets_set.insert(DEFAULT_WEBHOOK_SECRET_KEY.to_string(), secret);
+            }
+            merged.webhook_secret = None;
+        } else if let Some(existing_secret) = merged.webhook_secret.take() {
+            secrets_set.insert(DEFAULT_WEBHOOK_SECRET_KEY.to_string(), existing_secret);
+        } else {
+            let webhook_secret = generate_secret_20();
+            secrets_set.insert(DEFAULT_WEBHOOK_SECRET_KEY.to_string(), webhook_secret);
         }
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();
@@ -309,6 +343,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,
             config: None,
+            secrets_patch: None,
             remove: None,
             diagnostics: Vec::new(),
             error: Some(error),
@@ -318,6 +353,10 @@ fn apply_answers_impl(
     canonical_cbor_bytes(&ApplyAnswersResult {
         ok: true,
         config: Some(merged),
+        secrets_patch: (!secrets_set.is_empty()).then_some(SecretsPatch {
+            set: secrets_set,
+            delete: Vec::new(),
+        }),
         remove: None,
         diagnostics: Vec::new(),
         error: None,
@@ -358,6 +397,10 @@ fn string_or_default(answers: &Value, key: &str, default: &str) -> String {
         .unwrap_or_else(|| default.to_string())
 }
 
+fn generate_secret_20() -> String {
+    Uuid::new_v4().simple().to_string()[..20].to_string()
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -371,7 +414,7 @@ mod tests {
 
     #[test]
     fn parse_config_requires_new_fields() {
-        let cfg = br#"{"enabled":true,"public_base_url":"https://example.com","api_base_url":"https://webexapis.com/v1"}"#;
+        let cfg = br#"{"enabled":true,"api_base_url":"https://webexapis.com/v1"}"#;
         let parsed = parse_config_bytes(cfg).expect("valid config");
         assert!(parsed.enabled);
     }
@@ -392,7 +435,7 @@ mod tests {
 
     #[test]
     fn parse_config_rejects_unknown() {
-        let cfg = br#"{"enabled":true,"public_base_url":"https://example.com","api_base_url":"https://webexapis.com/v1","unknown":"field"}"#;
+        let cfg = br#"{"enabled":true,"public_base_url":"https://example.com","default_room_id":"room-1","api_base_url":"https://webexapis.com/v1","webhook_secret":"secret","unknown":"field"}"#;
         let err = parse_config_bytes(cfg).unwrap_err();
         assert!(err.contains("unknown field"));
     }
@@ -451,7 +494,31 @@ mod tests {
             .into_iter()
             .map(|question| question.id)
             .collect::<Vec<_>>();
-        assert_eq!(keys, vec!["public_base_url", "bot_token"]);
+        assert_eq!(keys, vec!["bot_token"]);
+    }
+
+    #[test]
+    fn apply_answers_generates_webhook_secret_without_destination() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "enabled": true,
+            "bot_token": "token-a"
+        });
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Setup, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        assert!(out_json["config"].get("default_room_id").is_none());
+        assert!(out_json["config"].get("webhook_secret").is_none());
+        assert_eq!(
+            out_json["secrets_patch"]["set"][DEFAULT_TOKEN_KEY],
+            Value::String("token-a".to_string())
+        );
+        let generated = out_json["secrets_patch"]["set"][DEFAULT_WEBHOOK_SECRET_KEY]
+            .as_str()
+            .expect("generated webhook secret");
+        assert_eq!(generated.len(), 20);
     }
 
     #[test]
@@ -464,7 +531,8 @@ mod tests {
                 "public_base_url": "https://example.com",
                 "api_base_url": "https://webexapis.com/v1",
                 "bot_token": "token-a",
-                "default_room_id": "room-123"
+                "default_room_id": "room-123",
+                "webhook_secret": "secret-a"
             },
             "default_room_id": "room-456"
         });
@@ -480,6 +548,11 @@ mod tests {
         assert_eq!(
             config.get("default_room_id"),
             Some(&Value::String("room-456".to_string()))
+        );
+        assert!(config.get("webhook_secret").is_none());
+        assert_eq!(
+            out_json["secrets_patch"]["set"][DEFAULT_WEBHOOK_SECRET_KEY],
+            Value::String("secret-a".to_string())
         );
     }
 

@@ -1,0 +1,24 @@
+{
+  "provider": "messaging.email.microsoft_graph",
+  "config_required": [
+    "from_address"
+  ],
+  "config_optional": [
+    "public_base_url",
+    "default_to_address",
+    "graph_authority",
+    "graph_base_url",
+    "graph_token_endpoint",
+    "graph_scope"
+  ],
+  "secret_required": [
+    "FROM_ADDRESS",
+    "GRAPH_TENANT_ID",
+    "MS_GRAPH_CLIENT_ID",
+    "MS_GRAPH_REFRESH_TOKEN",
+    "MS_GRAPH_CLIENT_SECRET"
+  ],
+  "secret_optional": [],
+  "oauth_required": true,
+  "subscriptions_required": false
+}

@@ -926,7 +926,7 @@
             "id": 1,
             "input": {
               "mapping": {
-                "text": "Collect:\n- bot_access_token (required)\n- default_room_id (optional)\n- webhook_url (optional)\n"
+                "text": "Collect:\n- bot_access_token (required)\n- default_room_id (required)\n- webhook_secret (required)\n"
               }
             },
             "output": {
@@ -950,7 +950,7 @@
             "id": 6,
             "input": {
               "mapping": {
-                "text": "- Call Webex /people/me to validate token and bot identity.\n- If default_room_id set, verify membership and postability.\n- If webhook_url provided, ensure signature secret present.\n"
+                "text": "- Call Webex /people/me to validate token and bot identity.\n- Verify default_room_id membership and postability.\n- Ensure webhook_secret is present for signature verification.\n"
               }
             },
             "output": {
@@ -974,7 +974,7 @@
             "id": 0,
             "input": {
               "mapping": {
-                "text": "- Store access token via greentic-secrets.\n- Persist config: default_room_id, webhook_url, secret, inbound enabled flag.\n- Idempotent overwrite of previous values.\n"
+                "text": "- Store access token via greentic-secrets.\n- Persist config: default_room_id, webhook_secret, inbound enabled flag.\n- Idempotent overwrite of previous values.\n"
               }
             },
             "output": {

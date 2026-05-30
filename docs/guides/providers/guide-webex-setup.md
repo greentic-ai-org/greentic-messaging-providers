@@ -262,9 +262,10 @@ The webhook envelope is still created with empty text and a `webex.ingestError` 
 The `ProviderConfig` struct uses `#[serde(deny_unknown_fields)]`. Only these fields are accepted in the config object:
 - `enabled` (bool, default: true)
 - `public_base_url` (string, required)
-- `default_room_id` (string, optional)
+- `default_room_id` (string, required)
 - `default_to_person_email` (string, optional)
 - `api_base_url` (string, optional, default: `https://webexapis.com/v1`)
+- `webhook_secret` (string, required)
 - `bot_token` (string, optional -- overrides secrets store)
 
 Do not pass extra fields like `provider_id` or `webhook_url` in the config.

@@ -281,7 +281,7 @@ fn build_qa_spec(mode: bindings::exports::greentic::component::qa::Mode) -> QaSp
                 qa_q("enabled", "webex.qa.setup.enabled", true),
                 qa_q("public_base_url", "webex.qa.setup.public_base_url", true),
                 qa_q("api_base_url", "webex.qa.setup.api_base_url", true),
-                qa_q("default_room_id", "webex.qa.setup.default_room_id", false),
+                qa_q("default_room_id", "webex.qa.setup.default_room_id", true),
                 qa_q(
                     "default_to_person_email",
                     "webex.qa.setup.default_to_person_email",
@@ -403,7 +403,7 @@ fn config_schema() -> SchemaIr {
     fields.insert(
         "default_room_id".to_string(),
         SchemaField {
-            required: false,
+            required: true,
             schema: SchemaIr::String {
                 title: i18n("webex.schema.config.default_room_id.title"),
                 description: i18n("webex.schema.config.default_room_id.description"),
@@ -892,7 +892,7 @@ mod tests {
         let describe = build_describe_payload();
         assert_eq!(
             describe.schema_hash,
-            "074aca486987c019467084e02a4c5ace102a333f7755bb0e01da3620bcb8ae85"
+            "5c3c16b57f580d52472e83be7b8ae1357887bd052f1b88edf3dbc7dbd8364ff7"
         );
     }
 

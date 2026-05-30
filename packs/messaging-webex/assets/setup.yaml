@@ -2,36 +2,6 @@ provider_id: webex
 version: 1
 title: Webex provider setup
 questions:
-  - name: public_base_url
-    title: Public base URL
-    kind: string
-    required: true
-    help: "Public-facing URL for webhook callbacks"
-    placeholder: "https://xxxx.trycloudflare.com"
-    group: Connection
-    validate:
-      regex: "^https://"
-  - name: default_room_id
-    title: Default room ID
-    kind: string
-    required: false
-    placeholder: "Y2lzY29zcGFyazovL3VzL1JPT00v..."
-    group: Defaults
-  - name: default_to_person_email
-    title: Default person email
-    kind: string
-    required: false
-    placeholder: "user@example.com"
-    group: Defaults
-  - name: api_base_url
-    title: API base URL
-    kind: string
-    required: true
-    help: "Webex API base URL (default: https://webexapis.com/v1)"
-    placeholder: "https://webexapis.com/v1"
-    group: Connection
-    validate:
-      regex: "^https?://"
   - name: webex_bot_token
     title: Webex bot token
     kind: string
@@ -40,11 +10,3 @@ questions:
     help: "Access token from your Webex bot. You can generate one by creating a bot at https://developer.webex.com/my-apps."
     group: Authentication
     docs_url: "https://developer.webex.com/my-apps"
-  - name: webhook_secret
-    title: Webex webhook secret
-    kind: string
-    required: false
-    secret: true
-    help: "Shared secret Webex uses to sign webhook requests with X-Spark-Signature"
-    group: Authentication
-    docs_url: "https://developer.webex.com/messaging/docs/api/guides/webhooks"

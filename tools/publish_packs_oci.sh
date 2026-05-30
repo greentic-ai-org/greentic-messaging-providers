@@ -476,11 +476,16 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
   secrets_out="${dir}/.secret_requirements.json"
 
   update_pack_yaml_version "${dir}"
+  python3 "${ROOT_DIR}/tools/normalize_pack_components.py" "${dir}/pack.yaml"
   generate_pack_manifest "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset_entry "${dir}"
   ensure_pack_readme "${dir}"
   (cd "${dir}" && "${PACKC_BIN}" config)
+  python3 "${ROOT_DIR}/tools/normalize_pack_components.py" "${dir}/pack.yaml"
+  generate_pack_manifest "${dir}" "${secrets_out}"
+  ensure_secret_requirements_asset "${dir}" "${secrets_out}"
+  ensure_secret_requirements_asset_entry "${dir}"
 
   components=()
   while IFS= read -r comp_line; do
@@ -646,6 +651,7 @@ if manifest_path.exists():
     manifest_path.write_text(json.dumps(data, indent=2) + "\n")
 PY
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
+  python3 "${ROOT_DIR}/tools/stamp_pack_component_manifests.py" "${dir}" "${PACK_VERSION}"
 
   if [ ! -f "${dir}/pack.yaml" ]; then
     echo "Missing pack.yaml in ${dir}; greentic-pack requires pack.yaml inputs" >&2

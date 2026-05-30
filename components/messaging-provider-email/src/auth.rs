@@ -10,6 +10,7 @@ const DEFAULT_GRAPH_SCOPE: &str = "https://graph.microsoft.com/.default offline_
 const MS_GRAPH_CLIENT_ID_KEY: &str = "MS_GRAPH_CLIENT_ID";
 const MS_GRAPH_CLIENT_SECRET_KEY: &str = "MS_GRAPH_CLIENT_SECRET";
 const MS_GRAPH_REFRESH_TOKEN_KEY: &str = "MS_GRAPH_REFRESH_TOKEN";
+const GRAPH_TENANT_ID_KEY: &str = "GRAPH_TENANT_ID";
 
 pub(crate) fn acquire_graph_token(
     cfg: &ProviderConfig,
@@ -52,6 +53,11 @@ pub(crate) fn acquire_graph_token_from_store(cfg: &ProviderConfig) -> Result<Str
     let tenant_id = cfg
         .graph_tenant_id
         .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| get_secret_any_case(GRAPH_TENANT_ID_KEY).ok())
+        .or_else(|| get_secret_any_case("MS_GRAPH_TENANT_ID").ok())
+        .or_else(|| get_secret_any_case("graph_tenant_id").ok())
         .ok_or_else(|| "missing graph_tenant_id in config".to_string())?;
     let authority = cfg
         .graph_authority

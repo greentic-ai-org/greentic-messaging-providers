@@ -262,6 +262,13 @@ fn setup_answers_for_provider(provider_id: &str, spec: &QaSpec) -> Value {
         obj.entry("refresh_token".to_string())
             .or_insert_with(|| Value::String("refresh_token-value".to_string()));
     }
+    if provider_id == "webex" {
+        let obj = answers
+            .as_object_mut()
+            .expect("setup answers should be an object");
+        obj.entry("webhook_secret".to_string())
+            .or_insert_with(|| Value::String("fixture-webhook-secret".to_string()));
+    }
     answers
 }
 

@@ -2,8 +2,8 @@
   "$schema": "https://greentic-ai.github.io/greentic-component/schemas/v1/component.manifest.schema.json",
   "id": "ai.greentic.component-qa",
   "name": "component-qa",
-  "version": "0.5.1",
-  "world": "greentic:component/component@0.5.0",
+  "version": "0.5.2",
+  "world": "root:component/root",
   "describe_export": "describe",
   "default_operation": "render_text",
   "artifacts": {
@@ -146,9 +146,9 @@
     }
   ],
   "profiles": {
-    "default": "stateless",
+    "default": "default",
     "supported": [
-      "stateless"
+      "default"
     ]
   },
   "supports": [

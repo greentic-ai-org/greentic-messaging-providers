@@ -7,6 +7,8 @@ use provider_common::redact;
 use provider_common::telemetry::{self, Field, Level, Span, field};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use uuid::Uuid;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -189,9 +191,16 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
 struct ApplyAnswersResult {
     ok: bool,
     config: Option<ProviderConfigOut>,
+    secrets_patch: Option<SecretsPatch>,
     remove: Option<RemovePlan>,
     diagnostics: Vec<String>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SecretsPatch {
+    set: BTreeMap<String, String>,
+    delete: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,6 +252,7 @@ fn apply_answers_impl(
             return canonical_cbor_bytes(&ApplyAnswersResult {
                 ok: false,
                 config: None,
+                secrets_patch: None,
                 remove: None,
                 diagnostics: Vec::new(),
                 error: Some(format!("invalid answers cbor: {detail}")),
@@ -263,6 +273,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
             config: None,
+            secrets_patch: None,
             remove: Some(RemovePlan {
                 remove_all: true,
                 cleanup: vec![
@@ -277,6 +288,7 @@ fn apply_answers_impl(
     }
 
     let mut merged = existing_config_from_answers(&answers).unwrap_or_else(default_config_out);
+    let mut secrets_set = BTreeMap::new();
     let answer_obj = answers.as_object();
     let has = |key: &str| answer_obj.is_some_and(|obj| obj.contains_key(key));
 
@@ -295,9 +307,11 @@ fn apply_answers_impl(
         merged.tenant_channel_id = optional_string_from(&answers, "tenant_channel_id")
             .or(merged.tenant_channel_id.clone());
         merged.base_url = optional_string_from(&answers, "base_url").or(merged.base_url.clone());
-        merged.jwt_signing_key_b64 = optional_string_from(&answers, "jwt_signing_key")
-            .map(|value| general_purpose::STANDARD.encode(value.as_bytes()))
-            .or(merged.jwt_signing_key_b64.clone());
+        let jwt_key = optional_string_from(&answers, "jwt_signing_key")
+            .or_else(|| take_existing_jwt_key(&mut merged))
+            .unwrap_or_else(generate_secret_32);
+        secrets_set.insert("jwt_signing_key".to_string(), jwt_key);
+        merged.jwt_signing_key_b64 = None;
         merged.oauth_enabled = answers
             .get("oauth_enabled")
             .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
@@ -311,6 +325,7 @@ fn apply_answers_impl(
                     return canonical_cbor_bytes(&ApplyAnswersResult {
                         ok: false,
                         config: None,
+                        secrets_patch: None,
                         remove: None,
                         diagnostics: Vec::new(),
                         error: Some(error),
@@ -350,8 +365,14 @@ fn apply_answers_impl(
             merged.base_url = optional_string_from(&answers, "base_url");
         }
         if has("jwt_signing_key") {
-            merged.jwt_signing_key_b64 = optional_string_from(&answers, "jwt_signing_key")
-                .map(|value| general_purpose::STANDARD.encode(value.as_bytes()));
+            if let Some(jwt_key) = optional_string_from(&answers, "jwt_signing_key") {
+                secrets_set.insert("jwt_signing_key".to_string(), jwt_key);
+            }
+            merged.jwt_signing_key_b64 = None;
+        } else if let Some(jwt_key) = take_existing_jwt_key(&mut merged) {
+            secrets_set.insert("jwt_signing_key".to_string(), jwt_key);
+        } else {
+            secrets_set.insert("jwt_signing_key".to_string(), generate_secret_32());
         }
         if has("oauth_enabled") {
             merged.oauth_enabled = answers
@@ -373,6 +394,7 @@ fn apply_answers_impl(
                     return canonical_cbor_bytes(&ApplyAnswersResult {
                         ok: false,
                         config: None,
+                        secrets_patch: None,
                         remove: None,
                         diagnostics: Vec::new(),
                         error: Some(error),
@@ -401,6 +423,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,
             config: None,
+            secrets_patch: None,
             remove: None,
             diagnostics: Vec::new(),
             error: Some(error),
@@ -410,6 +433,10 @@ fn apply_answers_impl(
     canonical_cbor_bytes(&ApplyAnswersResult {
         ok: true,
         config: Some(merged),
+        secrets_patch: (!secrets_set.is_empty()).then_some(SecretsPatch {
+            set: secrets_set,
+            delete: Vec::new(),
+        }),
         remove: None,
         diagnostics: Vec::new(),
         error: None,
@@ -440,6 +467,20 @@ fn optional_string_from(answers: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn generate_secret_32() -> String {
+    Uuid::new_v4().simple().to_string()
+}
+
+fn take_existing_jwt_key(config: &mut ProviderConfigOut) -> Option<String> {
+    let encoded = config.jwt_signing_key_b64.take()?;
+    general_purpose::STANDARD
+        .decode(encoded)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn presentation_mode_from_answers(answers: &Value) -> Option<Result<PresentationMode, String>> {
@@ -588,6 +629,35 @@ mod tests {
         assert_eq!(value["config"]["presentation_mode"], "standalone");
         assert_eq!(value["config"]["skin"], "default");
         assert_eq!(value["config"]["text_input_enabled"], true);
+        assert!(value["config"].get("jwt_signing_key_b64").is_none());
+        let generated = value["secrets_patch"]["set"]["jwt_signing_key"]
+            .as_str()
+            .expect("generated jwt signing key");
+        assert_eq!(generated.len(), 32);
+    }
+
+    #[test]
+    fn apply_answers_migrates_existing_jwt_key_to_secret_patch() {
+        let value = apply_setup(json!({
+            "existing_config": {
+                "enabled": true,
+                "public_base_url": "https://chat.example.com",
+                "mode": "local_queue",
+                "route": "webchat",
+                "skin": "default",
+                "jwt_signing_key_b64": general_purpose::STANDARD.encode("existing-secret")
+            },
+            "public_base_url": "https://chat.example.com",
+            "mode": "local_queue",
+            "route": "webchat"
+        }));
+
+        assert_eq!(value["ok"], true);
+        assert!(value["config"].get("jwt_signing_key_b64").is_none());
+        assert_eq!(
+            value["secrets_patch"]["set"]["jwt_signing_key"],
+            Value::String("existing-secret".to_string())
+        );
     }
 
     #[test]
