@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn parse_config_requires_new_fields() {
-        let cfg = br#"{"enabled":true,"public_base_url":"https://example.com","api_base_url":"https://webexapis.com/v1"}"#;
+        let cfg = br#"{"enabled":true,"public_base_url":"https://example.com","default_room_id":"room-1","api_base_url":"https://webexapis.com/v1","webhook_secret":"secret"}"#;
         let parsed = parse_config_bytes(cfg).expect("valid config");
         assert!(parsed.enabled);
     }
@@ -383,7 +383,8 @@ mod tests {
                 "enabled": true,
                 "public_base_url": "https://example.com",
                 "default_room_id": "abc",
-                "api_base_url": "https://webexapis.com/v1"
+                "api_base_url": "https://webexapis.com/v1",
+                "webhook_secret": "secret"
             },
         });
         let cfg = config::load_config(&input).expect("config");
@@ -392,7 +393,7 @@ mod tests {
 
     #[test]
     fn parse_config_rejects_unknown() {
-        let cfg = br#"{"enabled":true,"public_base_url":"https://example.com","api_base_url":"https://webexapis.com/v1","unknown":"field"}"#;
+        let cfg = br#"{"enabled":true,"public_base_url":"https://example.com","default_room_id":"room-1","api_base_url":"https://webexapis.com/v1","webhook_secret":"secret","unknown":"field"}"#;
         let err = parse_config_bytes(cfg).unwrap_err();
         assert!(err.contains("unknown field"));
     }
@@ -451,7 +452,57 @@ mod tests {
             .into_iter()
             .map(|question| question.id)
             .collect::<Vec<_>>();
-        assert_eq!(keys, vec!["public_base_url", "bot_token"]);
+        assert_eq!(
+            keys,
+            vec![
+                "public_base_url",
+                "default_room_id",
+                "bot_token",
+                "webhook_secret"
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_answers_requires_room_id() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "enabled": true,
+            "public_base_url": "https://example.com",
+            "api_base_url": "https://webexapis.com/v1",
+            "webhook_secret": "secret",
+            "bot_token": "token-a"
+        });
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Setup, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(false)));
+        assert_eq!(
+            out_json.get("error").and_then(Value::as_str),
+            Some("invalid config: default_room_id cannot be empty")
+        );
+    }
+
+    #[test]
+    fn apply_answers_requires_webhook_secret() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "enabled": true,
+            "public_base_url": "https://example.com",
+            "default_room_id": "room-1",
+            "api_base_url": "https://webexapis.com/v1",
+            "bot_token": "token-a"
+        });
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Setup, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(false)));
+        assert_eq!(
+            out_json.get("error").and_then(Value::as_str),
+            Some("invalid config: webhook_secret cannot be empty")
+        );
     }
 
     #[test]
@@ -464,7 +515,8 @@ mod tests {
                 "public_base_url": "https://example.com",
                 "api_base_url": "https://webexapis.com/v1",
                 "bot_token": "token-a",
-                "default_room_id": "room-123"
+                "default_room_id": "room-123",
+                "webhook_secret": "secret-a"
             },
             "default_room_id": "room-456"
         });
@@ -480,6 +532,10 @@ mod tests {
         assert_eq!(
             config.get("default_room_id"),
             Some(&Value::String("room-456".to_string()))
+        );
+        assert_eq!(
+            config.get("webhook_secret"),
+            Some(&Value::String("secret-a".to_string()))
         );
     }
 

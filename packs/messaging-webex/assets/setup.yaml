@@ -12,17 +12,18 @@ questions:
     validate:
       regex: "^https://"
   - name: default_room_id
-    title: Default room ID
+    title: Room ID
     kind: string
-    required: false
+    required: true
+    help: "Webex room ID that the bot can read and post to."
     placeholder: "Y2lzY29zcGFyazovL3VzL1JPT00v..."
-    group: Defaults
+    group: Destination
   - name: default_to_person_email
-    title: Default person email
+    title: Person email
     kind: string
     required: false
     placeholder: "user@example.com"
-    group: Defaults
+    group: Destination
   - name: api_base_url
     title: API base URL
     kind: string
@@ -43,7 +44,7 @@ questions:
   - name: webhook_secret
     title: Webex webhook secret
     kind: string
-    required: false
+    required: true
     secret: true
     help: "Shared secret Webex uses to sign webhook requests with X-Spark-Signature"
     group: Authentication

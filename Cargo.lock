@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webex"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -4436,7 +4436,7 @@ dependencies = [
 
 [[package]]
 name = "webex"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -4448,7 +4448,7 @@ dependencies = [
 
 [[package]]
 name = "webex-webhook"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "greentic-telemetry",
  "serde",

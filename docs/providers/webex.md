@@ -18,17 +18,18 @@ Webex connects Greentic to Cisco Webex rooms and people through the Webex REST A
 Common setup values include:
 
 - Public base URL for callbacks.
-- Default room ID or person destination.
+- Room ID for the Webex room the bot can read and post to.
+- Optional person email destination for direct messages.
 - Webex bot token secret.
 - Optional API base URL for non-default environments.
-- Optional webhook secret for Webex `X-Spark-Signature` verification.
+- Webhook secret for Webex `X-Spark-Signature` verification.
 
 ## Secrets
 
 | Secret | Required | Purpose |
 | --- | --- | --- |
 | `WEBEX_BOT_TOKEN` | Yes | Webex bot access token used for Messages API calls. |
-| `WEBEX_WEBHOOK_SECRET` | Optional, recommended | Shared secret used to verify Webex webhook signatures. |
+| `WEBEX_WEBHOOK_SECRET` | Yes | Shared secret used to verify Webex webhook signatures. |
 
 Nightly e2e uses `E2E_WEBEX_BOT_TOKEN` and `E2E_WEBEX_ROOM_ID`.
 

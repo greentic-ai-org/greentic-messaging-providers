@@ -194,8 +194,8 @@ Fix: Full ingress testing requires real Webex messages. There is no workaround f
 
 **ProviderConfig validation fails with "unknown field"**
 
-Cause: The `ProviderConfig` struct uses `#[serde(deny_unknown_fields)]`. Passing `public_base_url` in config (which is valid in the schema) causes deserialization to fail.
-Fix: Only include fields that the Rust struct accepts: `default_room_id`, `default_to_person_email`, `api_base_url`.
+Cause: The `ProviderConfig` struct uses `#[serde(deny_unknown_fields)]`. Unsupported fields fail deserialization.
+Fix: Only include fields that the Rust struct accepts: `enabled`, `public_base_url`, `default_room_id`, `default_to_person_email`, `api_base_url`, `bot_token`, and `webhook_secret`. `default_room_id` and `webhook_secret` are required for Webex setup.
 
 ### WebChat
 
