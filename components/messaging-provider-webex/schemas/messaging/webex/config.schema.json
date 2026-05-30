@@ -6,7 +6,7 @@
     "default_room_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Webex room ID that the bot can read and post to."
+      "description": "Optional room ID for proactive room messages. Mention-based inbound webhooks do not require this."
     },
     "default_to_person_email": {
       "type": "string",
@@ -24,13 +24,9 @@
     "webhook_secret": {
       "type": "string",
       "minLength": 1,
-      "description": "Shared secret Webex uses to sign webhook requests with X-Spark-Signature."
+      "description": "Legacy config field. New setup writes WEBEX_WEBHOOK_SECRET to the secrets store."
     }
   },
-  "required": [
-    "public_base_url",
-    "default_room_id",
-    "webhook_secret"
-  ],
+  "required": [],
   "additionalProperties": false
 }

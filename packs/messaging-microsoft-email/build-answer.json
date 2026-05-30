@@ -1,0 +1,168 @@
+{
+  "schema_id": "greentic-messaging-provider.build-answer",
+  "schema_version": "1.0.0",
+  "provider": {
+    "id": "messaging-microsoft-email",
+    "display_name": "Microsoft Email",
+    "version": "0.5.1",
+    "kind": "application",
+    "publisher": "Greentic",
+    "description": "Microsoft Graph email messaging provider"
+  },
+  "components": [
+    {
+      "id": "messaging-provider-email",
+      "source": "components/messaging-provider-email",
+      "version": "0.5.1",
+      "world": "greentic:component/component-v0-v6-v0@0.6.1",
+      "supports": ["messaging"],
+      "profiles": {
+        "default": "default",
+        "supported": ["default"]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {
+          "secrets-store": true,
+          "http-client": true
+        }
+      },
+      "wasm": "components/messaging-provider-email/component.wasm",
+      "manifest": "components/messaging-provider-email/component.manifest.json"
+    }
+  ],
+  "assets": [
+    "secret-requirements.json",
+    "schemas/messaging/email/public.config.schema.json",
+    "fixtures/egress.request.json",
+    "fixtures/egress.expected.summary.json"
+  ],
+  "setup": {
+    "asset": "assets/setup.yaml",
+    "provider_id": "email",
+    "fields": [
+      {
+        "name": "from_address",
+        "required": true,
+        "secret": false,
+        "config_key": "from_address"
+      },
+      {
+        "name": "graph_tenant_id",
+        "required": true,
+        "secret": true,
+        "secret_key": "GRAPH_TENANT_ID"
+      },
+      {
+        "name": "ms_graph_client_id",
+        "required": true,
+        "secret": true,
+        "secret_key": "MS_GRAPH_CLIENT_ID"
+      },
+      {
+        "name": "ms_graph_refresh_token",
+        "required": true,
+        "secret": true,
+        "secret_key": "MS_GRAPH_REFRESH_TOKEN"
+      },
+      {
+        "name": "ms_graph_client_secret",
+        "required": true,
+        "secret": true,
+        "secret_key": "MS_GRAPH_CLIENT_SECRET"
+      },
+      {
+        "name": "public_base_url",
+        "required": false,
+        "secret": false,
+        "config_key": "public_base_url"
+      }
+    ]
+  },
+  "extensions": {
+    "capabilities": {
+      "offer_id": "messaging-microsoft-email-v1",
+      "cap_id": "greentic.cap.messaging.provider.v1",
+      "component_ref": "messaging-provider-email",
+      "op": "messaging.configure",
+      "priority": 100,
+      "requires_setup": true,
+      "qa_ref": "components/messaging-provider-email"
+    },
+    "validators": [
+      {
+        "component_ref": "oci://ghcr.io/greenticai/validators/messaging:0.4.19",
+        "id": "greentic.validators.messaging",
+        "world": "greentic:pack-validate/pack-validator@0.1.0"
+      }
+    ],
+    "provider": {
+      "provider_type": "messaging.email.microsoft_graph",
+      "capabilities": ["messaging"],
+      "ops": [
+        "send",
+        "reply",
+        "ingest_http",
+        "render_plan",
+        "encode",
+        "send_payload",
+        "subscription_ensure",
+        "subscription_renew",
+        "subscription_delete",
+        "qa-spec",
+        "apply-answers",
+        "i18n-keys"
+      ],
+      "config_schema_ref": "schemas/messaging/email/public.config.schema.json",
+      "runtime": {
+        "component_ref": "messaging-provider-email",
+        "export": "schema-core-api",
+        "world": "greentic:provider/schema-core@1.0.0"
+      }
+    }
+  },
+  "messaging": {
+    "adapters": [
+      {
+        "component": "messaging-provider-email",
+        "kind": "egress",
+        "name": "messaging.email.microsoft_graph"
+      }
+    ]
+  },
+  "secret_requirements": [
+    {
+      "name": "FROM_ADDRESS",
+      "scope": "tenant",
+      "description": "Microsoft Graph sender mailbox"
+    },
+    {
+      "name": "GRAPH_TENANT_ID",
+      "scope": "tenant",
+      "description": "Microsoft Entra tenant ID"
+    },
+    {
+      "name": "MS_GRAPH_CLIENT_ID",
+      "scope": "tenant",
+      "description": "Microsoft Graph OAuth client ID"
+    },
+    {
+      "name": "MS_GRAPH_REFRESH_TOKEN",
+      "scope": "tenant",
+      "description": "Microsoft Graph OAuth refresh token"
+    },
+    {
+      "name": "MS_GRAPH_CLIENT_SECRET",
+      "scope": "tenant",
+      "description": "Microsoft Graph OAuth client secret"
+    }
+  ],
+  "outputs": {
+    "pack_yaml": "pack.yaml",
+    "manifest": "pack.manifest.json",
+    "gtpack": "dist/messaging-microsoft-email.gtpack"
+  }
+}

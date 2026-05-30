@@ -14,6 +14,7 @@ use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -33,9 +34,15 @@ mod ops;
 
 pub(crate) const PROVIDER_ID: &str = "messaging-provider-email";
 pub(crate) const PROVIDER_TYPE: &str = "messaging.email.smtp";
+pub(crate) const MICROSOFT_PROVIDER_TYPE: &str = "messaging.email.microsoft_graph";
 pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
 pub(crate) const DEFAULT_GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
 pub(crate) const GRAPH_MAX_EXPIRATION_MINUTES: u32 = 4230;
+pub(crate) const FROM_ADDRESS_SECRET: &str = "FROM_ADDRESS";
+pub(crate) const GRAPH_TENANT_ID_SECRET: &str = "GRAPH_TENANT_ID";
+pub(crate) const MS_GRAPH_CLIENT_ID_SECRET: &str = "MS_GRAPH_CLIENT_ID";
+pub(crate) const MS_GRAPH_REFRESH_TOKEN_SECRET: &str = "MS_GRAPH_REFRESH_TOKEN";
+pub(crate) const MS_GRAPH_CLIENT_SECRET_SECRET: &str = "MS_GRAPH_CLIENT_SECRET";
 
 use config::{ProviderConfigOut, default_config_out, validate_config_out};
 use describe::{
@@ -170,9 +177,16 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
 struct ApplyAnswersResult {
     ok: bool,
     config: Option<ProviderConfigOut>,
+    secrets_patch: Option<SecretsPatch>,
     remove: Option<RemovePlan>,
     diagnostics: Vec<String>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SecretsPatch {
+    set: BTreeMap<String, String>,
+    delete: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,6 +207,7 @@ fn apply_answers_impl(
             return canonical_cbor_bytes(&ApplyAnswersResult {
                 ok: false,
                 config: None,
+                secrets_patch: None,
                 remove: None,
                 diagnostics: Vec::new(),
                 error: Some(format!("invalid answers cbor: {err}")),
@@ -204,6 +219,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
             config: None,
+            secrets_patch: None,
             remove: Some(RemovePlan {
                 remove_all: true,
                 cleanup: vec![
@@ -220,6 +236,7 @@ fn apply_answers_impl(
     }
 
     let mut merged = existing_config_from_answers(&answers).unwrap_or_else(default_config_out);
+    let mut secrets_set = BTreeMap::new();
     let answer_obj = answers.as_object();
     let has = |key: &str| answer_obj.is_some_and(|obj| obj.contains_key(key));
 
@@ -242,6 +259,61 @@ fn apply_answers_impl(
         merged.default_to_address =
             optional_string_from(&answers, "default_to_address").or(merged.default_to_address);
         merged.password = optional_string_from(&answers, "password").or(merged.password);
+        merged.graph_authority =
+            optional_string_from(&answers, "graph_authority").or(merged.graph_authority);
+        merged.graph_base_url =
+            optional_string_from(&answers, "graph_base_url").or(merged.graph_base_url);
+        merged.graph_token_endpoint =
+            optional_string_from(&answers, "graph_token_endpoint").or(merged.graph_token_endpoint);
+        merged.graph_scope = optional_string_from(&answers, "graph_scope").or(merged.graph_scope);
+        copy_secret_answer(
+            &answers,
+            "from_address",
+            FROM_ADDRESS_SECRET,
+            &mut secrets_set,
+        );
+        copy_secret_answer(
+            &answers,
+            "graph_tenant_id",
+            GRAPH_TENANT_ID_SECRET,
+            &mut secrets_set,
+        );
+        copy_secret_answer(
+            &answers,
+            "ms_graph_client_id",
+            MS_GRAPH_CLIENT_ID_SECRET,
+            &mut secrets_set,
+        );
+        copy_secret_answer(
+            &answers,
+            "graph_client_id",
+            MS_GRAPH_CLIENT_ID_SECRET,
+            &mut secrets_set,
+        );
+        copy_secret_answer(
+            &answers,
+            "ms_graph_refresh_token",
+            MS_GRAPH_REFRESH_TOKEN_SECRET,
+            &mut secrets_set,
+        );
+        copy_secret_answer(
+            &answers,
+            "graph_refresh_token",
+            MS_GRAPH_REFRESH_TOKEN_SECRET,
+            &mut secrets_set,
+        );
+        copy_secret_answer(
+            &answers,
+            "ms_graph_client_secret",
+            MS_GRAPH_CLIENT_SECRET_SECRET,
+            &mut secrets_set,
+        );
+        copy_secret_answer(
+            &answers,
+            "graph_client_secret",
+            MS_GRAPH_CLIENT_SECRET_SECRET,
+            &mut secrets_set,
+        );
     }
 
     if mode == Mode::Upgrade {
@@ -280,12 +352,39 @@ fn apply_answers_impl(
         if has("password") {
             merged.password = optional_string_from(&answers, "password");
         }
+        if has("graph_authority") {
+            merged.graph_authority = optional_string_from(&answers, "graph_authority");
+        }
+        if has("graph_base_url") {
+            merged.graph_base_url = optional_string_from(&answers, "graph_base_url");
+        }
+        if has("graph_token_endpoint") {
+            merged.graph_token_endpoint = optional_string_from(&answers, "graph_token_endpoint");
+        }
+        if has("graph_scope") {
+            merged.graph_scope = optional_string_from(&answers, "graph_scope");
+        }
+        for (answer_key, secret_key) in [
+            ("from_address", FROM_ADDRESS_SECRET),
+            ("graph_tenant_id", GRAPH_TENANT_ID_SECRET),
+            ("ms_graph_client_id", MS_GRAPH_CLIENT_ID_SECRET),
+            ("graph_client_id", MS_GRAPH_CLIENT_ID_SECRET),
+            ("ms_graph_refresh_token", MS_GRAPH_REFRESH_TOKEN_SECRET),
+            ("graph_refresh_token", MS_GRAPH_REFRESH_TOKEN_SECRET),
+            ("ms_graph_client_secret", MS_GRAPH_CLIENT_SECRET_SECRET),
+            ("graph_client_secret", MS_GRAPH_CLIENT_SECRET_SECRET),
+        ] {
+            if has(answer_key) {
+                copy_secret_answer(&answers, answer_key, secret_key, &mut secrets_set);
+            }
+        }
     }
 
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,
             config: None,
+            secrets_patch: None,
             remove: None,
             diagnostics: Vec::new(),
             error: Some(error),
@@ -295,6 +394,10 @@ fn apply_answers_impl(
     canonical_cbor_bytes(&ApplyAnswersResult {
         ok: true,
         config: Some(merged),
+        secrets_patch: (!secrets_set.is_empty()).then_some(SecretsPatch {
+            set: secrets_set,
+            delete: Vec::new(),
+        }),
         remove: None,
         diagnostics: Vec::new(),
         error: None,
@@ -333,6 +436,17 @@ fn string_or_default(answers: &Value, key: &str, default: &str) -> String {
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| default.to_string())
+}
+
+fn copy_secret_answer(
+    answers: &Value,
+    answer_key: &str,
+    secret_key: &str,
+    secrets_set: &mut BTreeMap<String, String>,
+) {
+    if let Some(value) = optional_string_from(answers, answer_key) {
+        secrets_set.insert(secret_key.to_string(), value);
+    }
 }
 
 // ============================================================================

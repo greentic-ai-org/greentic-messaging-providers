@@ -3,7 +3,7 @@ display_name: Email
 version: 0.5.1
 kind: application
 publisher: Greentic
-description: "Email messaging provider \u2014 Microsoft Graph API with SMTP fallback"
+description: "Legacy SMTP email messaging provider"
 components:
 - id: messaging-provider-email
   version: 0.5.1

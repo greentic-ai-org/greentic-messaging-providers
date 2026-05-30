@@ -6,11 +6,11 @@
     "default_room_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Webex room ID that the bot can read and post to."
+      "description": "Optional default Webex room ID used only for proactive outbound messages."
     },
     "default_to_person_email": {
       "type": "string",
-      "description": "Optional person email destination for direct messages."
+      "description": "Optional default person email destination used only for proactive outbound messages."
     },
     "api_base_url": {
       "type": "string",
@@ -28,9 +28,6 @@
     }
   },
   "required": [
-    "public_base_url",
-    "default_room_id",
-    "webhook_secret"
   ],
   "additionalProperties": false
 }

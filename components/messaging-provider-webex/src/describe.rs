@@ -56,33 +56,14 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.qa.remove.title",
     "webex.qa.setup.enabled",
     "webex.qa.setup.public_base_url",
-    "webex.qa.setup.default_room_id",
-    "webex.qa.setup.default_to_person_email",
     "webex.qa.setup.api_base_url",
     "webex.qa.setup.bot_token",
-    "webex.qa.setup.webhook_secret",
 ];
 
-pub(crate) const SETUP_QUESTIONS: &[QaQuestionDef] = &[
-    ("enabled", "webex.qa.setup.enabled", true),
-    ("public_base_url", "webex.qa.setup.public_base_url", true),
-    ("default_room_id", "webex.qa.setup.default_room_id", true),
-    (
-        "default_to_person_email",
-        "webex.qa.setup.default_to_person_email",
-        false,
-    ),
-    ("api_base_url", "webex.qa.setup.api_base_url", true),
-    ("bot_token", "webex.qa.setup.bot_token", true),
-    ("webhook_secret", "webex.qa.setup.webhook_secret", true),
-];
+pub(crate) const SETUP_QUESTIONS: &[QaQuestionDef] =
+    &[("bot_token", "webex.qa.setup.bot_token", true)];
 
-pub(crate) const DEFAULT_KEYS: &[&str] = &[
-    "public_base_url",
-    "default_room_id",
-    "bot_token",
-    "webhook_secret",
-];
+pub(crate) const DEFAULT_KEYS: &[&str] = &["bot_token"];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
@@ -334,7 +315,7 @@ pub(crate) fn config_schema() -> SchemaIr {
             ),
             (
                 "public_base_url",
-                true,
+                false,
                 schema_str_fmt(
                     "webex.schema.config.public_base_url.title",
                     "webex.schema.config.public_base_url.description",
@@ -343,7 +324,7 @@ pub(crate) fn config_schema() -> SchemaIr {
             ),
             (
                 "default_room_id",
-                true,
+                false,
                 schema_str(
                     "webex.schema.config.default_room_id.title",
                     "webex.schema.config.default_room_id.description",
@@ -359,7 +340,7 @@ pub(crate) fn config_schema() -> SchemaIr {
             ),
             (
                 "api_base_url",
-                true,
+                false,
                 schema_str_fmt(
                     "webex.schema.config.api_base_url.title",
                     "webex.schema.config.api_base_url.description",
@@ -376,7 +357,7 @@ pub(crate) fn config_schema() -> SchemaIr {
             ),
             (
                 "webhook_secret",
-                true,
+                false,
                 schema_secret(
                     "webex.schema.config.webhook_secret.title",
                     "webex.schema.config.webhook_secret.description",

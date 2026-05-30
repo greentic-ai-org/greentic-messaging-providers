@@ -11,10 +11,10 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use urlencoding::encode as url_encode;
 
-use crate::PROVIDER_TYPE;
 use crate::auth;
 use crate::config::{ProviderConfig, config_from_secrets, load_config};
 use crate::graph::{graph_base_url, graph_post};
+use crate::{MICROSOFT_PROVIDER_TYPE, PROVIDER_TYPE};
 use greentic_types::{
     ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
 };
@@ -345,7 +345,7 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
             return send_payload_error(&format!("invalid send_payload input: {err}"), false);
         }
     };
-    if send_in.provider_type != PROVIDER_TYPE {
+    if send_in.provider_type != PROVIDER_TYPE && send_in.provider_type != MICROSOFT_PROVIDER_TYPE {
         return send_payload_error("provider type mismatch", false);
     }
     let payload_bytes: Vec<u8> = match STANDARD.decode(&send_in.payload.body_b64) {

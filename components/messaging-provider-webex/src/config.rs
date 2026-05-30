@@ -21,34 +21,14 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
 }
 
 pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), String> {
-    if config.public_base_url.trim().is_empty() {
-        return Err("invalid config: public_base_url cannot be empty".to_string());
-    }
-    if !(config.public_base_url.starts_with("http://")
+    if !(config.public_base_url.trim().is_empty()
+        || config.public_base_url.starts_with("http://")
         || config.public_base_url.starts_with("https://"))
     {
         return Err("invalid config: public_base_url must be an absolute URL".to_string());
     }
     if config.api_base_url.trim().is_empty() {
         return Err("invalid config: api_base_url cannot be empty".to_string());
-    }
-    if config
-        .default_room_id
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .is_empty()
-    {
-        return Err("invalid config: default_room_id cannot be empty".to_string());
-    }
-    if config
-        .webhook_secret
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .is_empty()
-    {
-        return Err("invalid config: webhook_secret cannot be empty".to_string());
     }
     if !(config.api_base_url.starts_with("http://") || config.api_base_url.starts_with("https://"))
     {
@@ -118,26 +98,11 @@ pub(crate) fn override_config_from_metadata(cfg: &mut ProviderConfig, metadata: 
 }
 
 pub(crate) fn validate_provider_config(cfg: ProviderConfig) -> Result<ProviderConfig, String> {
-    if cfg.public_base_url.trim().is_empty() {
-        return Err("invalid config: public_base_url cannot be empty".to_string());
-    }
-    if cfg
-        .default_room_id
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .is_empty()
+    if !(cfg.public_base_url.trim().is_empty()
+        || cfg.public_base_url.starts_with("http://")
+        || cfg.public_base_url.starts_with("https://"))
     {
-        return Err("invalid config: default_room_id cannot be empty".to_string());
-    }
-    if cfg
-        .webhook_secret
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .is_empty()
-    {
-        return Err("invalid config: webhook_secret cannot be empty".to_string());
+        return Err("invalid config: public_base_url must be an absolute URL".to_string());
     }
     Ok(cfg)
 }
@@ -301,10 +266,7 @@ mod tests {
     fn validate_config_out_rejects_invalid_urls() {
         let mut config = valid_config_out();
         config.public_base_url = String::new();
-        assert_eq!(
-            validate_config_out(&config),
-            Err("invalid config: public_base_url cannot be empty".to_string())
-        );
+        validate_config_out(&config).expect("public_base_url is optional at setup");
 
         let mut config = valid_config_out();
         config.public_base_url = "relative".to_string();
@@ -350,18 +312,18 @@ mod tests {
         assert_eq!(defaulted.default_room_id, None);
         assert_eq!(defaulted.api_base_url.as_deref(), Some(DEFAULT_API_BASE));
 
-        let err = load_config(&json!({
+        let cfg = load_config(&json!({
             "public_base_url": "https://example.com"
         }))
-        .unwrap_err();
-        assert_eq!(err, "invalid config: default_room_id cannot be empty");
+        .expect("room is optional until proactive send");
+        assert_eq!(cfg.default_room_id, None);
 
-        let err = load_config(&json!({
+        let cfg = load_config(&json!({
             "public_base_url": "https://example.com",
             "default_room_id": "room-1"
         }))
-        .unwrap_err();
-        assert_eq!(err, "invalid config: webhook_secret cannot be empty");
+        .expect("webhook secret is supplied from secrets_patch/secret store");
+        assert_eq!(cfg.default_room_id.as_deref(), Some("room-1"));
     }
 
     #[test]

@@ -18,6 +18,7 @@ scripts/test_webchat_gui.sh 3aigent --embedded
 | --- | --- | --- | --- | --- | --- |
 | [Dummy](dummy.md) | Local tests and examples | Yes, simulated | No | Test-focused | Optional dummy tokens |
 | [Email](email.md) | SMTP-style outbound email | Yes | No | HTML/text fallback | SMTP password |
+| [Microsoft Email](microsoft-email.md) | Microsoft 365 mail through Graph | Yes | Yes, Graph webhooks | HTML/text fallback | Microsoft Graph OAuth secrets |
 | [Slack](slack.md) | Slack channels and app messages | Yes | Yes, events/webhooks | Text fallback | Slack bot token, optional signing/config secrets |
 | [Teams](teams.md) | Microsoft Teams Graph delivery | Yes | Yes, Graph notifications | Text/html fallback | Microsoft Graph OAuth secrets |
 | [Telegram](telegram.md) | Telegram bot chats | Yes | Yes, Telegram updates | Text fallback | Telegram bot token |

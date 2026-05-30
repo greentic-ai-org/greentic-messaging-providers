@@ -30,7 +30,7 @@ components:
     - default
   capabilities:
     wasi:
-      random: false
+      random: true
       clocks: false
     host: {}
   wasm: components/diagnostics___room_check.wasm
@@ -150,7 +150,7 @@ components:
     - default
   capabilities:
     wasi:
-      random: false
+      random: true
       clocks: false
     host: {}
   wasm: components/messaging-provider-webex.wasm

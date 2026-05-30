@@ -1,0 +1,20 @@
+{
+  "config_patch": {
+    "enabled": true,
+    "public_base_url": "https://example.com",
+    "host": "smtp.example.com",
+    "port": 587,
+    "username": "user@example.com",
+    "from_address": "noreply@example.com",
+    "tls_mode": "starttls"
+  },
+  "secrets_patch": {
+    "set": {
+      "password": "test-password"
+    },
+    "delete": []
+  },
+  "webhook_ops": [],
+  "subscription_ops": [],
+  "oauth_ops": []
+}

@@ -42,7 +42,7 @@
       },
       "capabilities": {
         "wasi": {
-          "random": false,
+          "random": true,
           "clocks": false
         },
         "host": {}
@@ -218,7 +218,7 @@
       },
       "capabilities": {
         "wasi": {
-          "random": false,
+          "random": true,
           "clocks": false
         },
         "host": {}

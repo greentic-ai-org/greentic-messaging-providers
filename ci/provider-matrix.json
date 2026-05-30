@@ -27,6 +27,7 @@
   "all_packs": [
     "messaging-dummy",
     "messaging-email",
+    "messaging-microsoft-email",
     "messaging-slack",
     "messaging-teams",
     "messaging-telegram",
@@ -139,6 +140,41 @@
         "components/messaging-provider-email/",
         "packs/messaging-email/",
         "ci/secrets/email.secrets-pack.yaml",
+        "crates/provider-tests/tests/provider_core_email.rs",
+        "crates/provider-tests/tests/universal_ops_email.rs"
+      ]
+    },
+    "microsoft-email": {
+      "pack": "messaging-microsoft-email",
+      "version": "0.5.1",
+      "ghcr_target": "ghcr.io/greenticai/messaging-microsoft-email",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
+      "e2e": {
+        "external_service": "microsoft-graph-mail",
+        "required_secrets": [
+          "E2E_MS_GRAPH_TENANT_ID",
+          "E2E_MS_GRAPH_CLIENT_ID",
+          "E2E_MS_GRAPH_CLIENT_SECRET",
+          "E2E_MS_GRAPH_REFRESH_TOKEN",
+          "E2E_MS_GRAPH_FROM",
+          "E2E_MS_GRAPH_TO"
+        ],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/microsoft-email",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider microsoft-email",
+        "operation": "Graph sendMail to dedicated mailbox",
+        "readback": "Graph sendMail response validation"
+      },
+      "components": [
+        "messaging-provider-email"
+      ],
+      "manifests": [
+        "components/messaging-provider-email/Cargo.toml"
+      ],
+      "paths": [
+        "components/messaging-provider-email/",
+        "packs/messaging-microsoft-email/",
+        "ci/secrets/microsoft-email.secrets-pack.yaml",
         "crates/provider-tests/tests/provider_core_email.rs",
         "crates/provider-tests/tests/universal_ops_email.rs"
       ]

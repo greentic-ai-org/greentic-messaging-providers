@@ -1,7 +1,35 @@
 provider_id: email
 version: 1
-title: Email provider setup (Microsoft Graph)
+title: Email provider setup (SMTP)
 questions:
+  - name: host
+    title: SMTP host
+    kind: string
+    required: true
+    help: "SMTP server host name"
+    placeholder: "smtp.example.com"
+    group: Connection
+  - name: port
+    title: SMTP port
+    kind: number
+    required: true
+    help: "SMTP server port"
+    placeholder: "587"
+    group: Connection
+  - name: username
+    title: SMTP username
+    kind: string
+    required: true
+    help: "SMTP account username"
+    placeholder: "mailer@example.com"
+    group: Authentication
+  - name: password
+    title: SMTP password
+    kind: string
+    required: true
+    secret: true
+    help: "SMTP account password"
+    group: Authentication
   - name: from_address
     title: From address
     kind: string
@@ -9,39 +37,13 @@ questions:
     help: "Sender email address"
     placeholder: "bot@yourdomain.com"
     group: Connection
-  - name: graph_tenant_id
-    title: Graph tenant ID
+  - name: tls_mode
+    title: TLS mode
     kind: string
     required: true
-    secret: true
-    help: "Azure AD tenant ID (Directory ID)"
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-    group: Authentication
-    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/Overview"
-  - name: ms_graph_client_id
-    title: Graph client ID
-    kind: string
-    required: true
-    secret: true
-    help: "Azure AD app registration client/application ID"
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-    group: Authentication
-    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
-  - name: ms_graph_refresh_token
-    title: Graph refresh token
-    kind: string
-    required: true
-    secret: true
-    help: "OAuth refresh token (delegated permissions, /me/sendMail)"
-    group: Authentication
-  - name: ms_graph_client_secret
-    title: Graph client secret
-    kind: string
-    required: true
-    secret: true
-    help: "App client secret from Azure → Certificates & secrets"
-    group: Authentication
-    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
+    help: "SMTP TLS mode"
+    placeholder: "starttls"
+    group: Connection
   - name: public_base_url
     title: Public base URL
     kind: string
