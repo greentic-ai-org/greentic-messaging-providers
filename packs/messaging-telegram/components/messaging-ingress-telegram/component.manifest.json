@@ -1,6 +1,6 @@
 {
   "id": "messaging-ingress-telegram",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "supports": [
     "messaging"
   ],

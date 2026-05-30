@@ -45,8 +45,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "whatsapp.schema.config.api_base_url.description",
     "whatsapp.schema.config.api_version.title",
     "whatsapp.schema.config.api_version.description",
-    "whatsapp.schema.config.token.title",
-    "whatsapp.schema.config.token.description",
+    "whatsapp.schema.config.whatsapp_token.title",
+    "whatsapp.schema.config.whatsapp_token.description",
     "whatsapp.schema.config.default_locale.title",
     "whatsapp.schema.config.default_locale.description",
     "whatsapp.qa.default.title",
@@ -59,7 +59,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "whatsapp.qa.setup.business_account_id",
     "whatsapp.qa.setup.api_base_url",
     "whatsapp.qa.setup.api_version",
-    "whatsapp.qa.setup.token",
+    "whatsapp.qa.setup.whatsapp_token",
 ];
 
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
@@ -73,10 +73,10 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
     ),
     ("api_base_url", "whatsapp.qa.setup.api_base_url", true),
     ("api_version", "whatsapp.qa.setup.api_version", true),
-    ("token", "whatsapp.qa.setup.token", false),
+    ("whatsapp_token", "whatsapp.qa.setup.whatsapp_token", true),
 ];
 
-pub(crate) const DEFAULT_KEYS: &[&str] = &["phone_number_id", "public_base_url"];
+pub(crate) const DEFAULT_KEYS: &[&str] = &["phone_number_id", "public_base_url", "whatsapp_token"];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
@@ -245,9 +245,12 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "whatsapp.schema.config.api_version.description",
         "WhatsApp Cloud API version",
     ),
-    ("whatsapp.schema.config.token.title", "Access token"),
     (
-        "whatsapp.schema.config.token.description",
+        "whatsapp.schema.config.whatsapp_token.title",
+        "WhatsApp access token",
+    ),
+    (
+        "whatsapp.schema.config.whatsapp_token.description",
         "Access token for WhatsApp API calls",
     ),
     (
@@ -271,7 +274,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ),
     ("whatsapp.qa.setup.api_base_url", "API base URL"),
     ("whatsapp.qa.setup.api_version", "API version"),
-    ("whatsapp.qa.setup.token", "Access token"),
+    ("whatsapp.qa.setup.whatsapp_token", "WhatsApp access token"),
 ];
 
 fn input_schema() -> SchemaIr {
@@ -372,11 +375,11 @@ fn config_schema() -> SchemaIr {
                 ),
             ),
             (
-                "token",
+                "whatsapp_token",
                 false,
                 schema_secret(
-                    "whatsapp.schema.config.token.title",
-                    "whatsapp.schema.config.token.description",
+                    "whatsapp.schema.config.whatsapp_token.title",
+                    "whatsapp.schema.config.whatsapp_token.description",
                 ),
             ),
             (

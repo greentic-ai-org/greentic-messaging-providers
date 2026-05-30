@@ -110,6 +110,75 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
 }
 
 #[test]
+fn provider_setup_contract_declares_runtime_secret_mappings() -> Result<()> {
+    let root = workspace_root();
+    let expected = [
+        (
+            "messaging-telegram",
+            vec![("telegram_bot_token", "TELEGRAM_BOT_TOKEN")],
+        ),
+        (
+            "messaging-slack",
+            vec![
+                ("bot_token", "SLACK_BOT_TOKEN"),
+                (
+                    "slack_configuration_access_token",
+                    "SLACK_CONFIGURATION_ACCESS_TOKEN",
+                ),
+                (
+                    "slack_configuration_refresh_token",
+                    "SLACK_CONFIGURATION_REFRESH_TOKEN",
+                ),
+            ],
+        ),
+        (
+            "messaging-whatsapp",
+            vec![
+                ("whatsapp_token", "WHATSAPP_TOKEN"),
+                ("whatsapp_verify_token", "WHATSAPP_VERIFY_TOKEN"),
+            ],
+        ),
+    ];
+
+    for (pack, mappings) in expected {
+        let manifest_path = root.join("packs").join(pack).join("pack.manifest.json");
+        let manifest: JsonValue = serde_json::from_str(&fs::read_to_string(&manifest_path)?)?;
+        let providers = manifest
+            .get("extensions")
+            .and_then(|extensions| extensions.get("greentic.provider-extension.v1"))
+            .and_then(|extension| extension.get("inline"))
+            .and_then(|inline| inline.get("providers"))
+            .and_then(JsonValue::as_array)
+            .ok_or_else(|| anyhow!("{pack} manifest missing provider extension"))?;
+        let contract = providers
+            .first()
+            .and_then(|provider| provider.get("setup_contract"))
+            .ok_or_else(|| anyhow!("{pack} provider missing setup_contract"))?;
+        assert_eq!(
+            contract.get("version").and_then(JsonValue::as_u64),
+            Some(1),
+            "{pack} setup_contract must be versioned"
+        );
+        let secrets_out = contract
+            .get("secrets_out")
+            .and_then(JsonValue::as_array)
+            .ok_or_else(|| anyhow!("{pack} setup_contract missing secrets_out"))?;
+
+        for (answer_key, secret_key) in mappings {
+            assert!(
+                secrets_out.iter().any(|mapping| {
+                    mapping.get("answer_key").and_then(JsonValue::as_str) == Some(answer_key)
+                        && mapping.get("secret_key").and_then(JsonValue::as_str) == Some(secret_key)
+                }),
+                "{pack} setup_contract must map {answer_key} to {secret_key}"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn teams_setup_persists_discovery_labels_and_modes() -> Result<()> {
     let root = workspace_root();
     let setup_path = root

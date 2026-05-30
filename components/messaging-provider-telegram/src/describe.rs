@@ -45,8 +45,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "telegram.schema.config.default_chat_id.description",
     "telegram.schema.config.api_base_url.title",
     "telegram.schema.config.api_base_url.description",
-    "telegram.schema.config.bot_token.title",
-    "telegram.schema.config.bot_token.description",
+    "telegram.schema.config.telegram_bot_token.title",
+    "telegram.schema.config.telegram_bot_token.description",
     "telegram.qa.default.title",
     "telegram.qa.setup.title",
     "telegram.qa.upgrade.title",
@@ -55,7 +55,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "telegram.qa.setup.public_base_url",
     "telegram.qa.setup.default_chat_id",
     "telegram.qa.setup.api_base_url",
-    "telegram.qa.setup.bot_token",
+    "telegram.qa.setup.telegram_bot_token",
 ];
 
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
@@ -67,10 +67,14 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
         false,
     ),
     ("api_base_url", "telegram.qa.setup.api_base_url", false),
-    ("bot_token", "telegram.qa.setup.bot_token", true),
+    (
+        "telegram_bot_token",
+        "telegram.qa.setup.telegram_bot_token",
+        true,
+    ),
 ];
 
-pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "bot_token"];
+pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "telegram_bot_token"];
 
 pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("telegram.op.run.title", "Run"),
@@ -163,9 +167,12 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "telegram.schema.config.api_base_url.description",
         "Telegram Bot API base URL",
     ),
-    ("telegram.schema.config.bot_token.title", "Bot token"),
     (
-        "telegram.schema.config.bot_token.description",
+        "telegram.schema.config.telegram_bot_token.title",
+        "Telegram bot token",
+    ),
+    (
+        "telegram.schema.config.telegram_bot_token.description",
         "Bot token for Telegram API calls",
     ),
     ("telegram.qa.default.title", "Default"),
@@ -176,7 +183,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("telegram.qa.setup.public_base_url", "Public base URL"),
     ("telegram.qa.setup.default_chat_id", "Default chat ID"),
     ("telegram.qa.setup.api_base_url", "API base URL"),
-    ("telegram.qa.setup.bot_token", "Bot token"),
+    ("telegram.qa.setup.telegram_bot_token", "Telegram bot token"),
 ];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
@@ -349,11 +356,11 @@ fn config_schema() -> SchemaIr {
                 ),
             ),
             (
-                "bot_token",
+                "telegram_bot_token",
                 false,
                 schema_secret(
-                    "telegram.schema.config.bot_token.title",
-                    "telegram.schema.config.bot_token.description",
+                    "telegram.schema.config.telegram_bot_token.title",
+                    "telegram.schema.config.telegram_bot_token.description",
                 ),
             ),
         ],

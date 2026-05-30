@@ -16,7 +16,7 @@ pub(crate) struct ProviderConfig {
     pub(crate) api_base_url: Option<String>,
     #[serde(default)]
     pub(crate) api_version: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "access_token", alias = "whatsapp_token")]
     pub(crate) token: Option<String>,
     #[serde(default)]
     pub(crate) default_locale: Option<String>,
@@ -30,6 +30,7 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) business_account_id: Option<String>,
     pub(crate) api_base_url: String,
     pub(crate) api_version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) default_locale: Option<String>,
@@ -105,10 +106,16 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "api_base_url",
         "api_version",
         "token",
+        "access_token",
+        "whatsapp_token",
         "default_locale",
     ] {
         if let Some(v) = input.get(key) {
-            partial.insert(key.to_string(), v.clone());
+            let target_key = match key {
+                "access_token" | "whatsapp_token" => "token",
+                _ => key,
+            };
+            partial.insert(target_key.to_string(), v.clone());
         }
     }
     if !partial.is_empty() {
