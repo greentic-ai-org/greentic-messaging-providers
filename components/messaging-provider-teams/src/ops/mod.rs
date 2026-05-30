@@ -7,6 +7,7 @@
 //! - `render`  — `render_plan` (step 1; Tier A via `capabilities_for("teams")`)
 //! - `encode`  — `encode_op` (step 2)
 //! - `send`    — `send_payload`, `handle_send`, `handle_reply` (step 3 + legacy)
+//! - `provision` — setup-time Teams channel desired-state helpers
 //! - `ingest`  — `ingest_http` + Bot Framework activity/card-action handling
 //!
 //! `build_team_envelope` is shared between `send` and `ingest` because both
@@ -14,11 +15,15 @@
 
 mod encode;
 mod ingest;
+mod provision;
 mod render;
 mod send;
 
 pub(crate) use encode::encode_op;
 pub(crate) use ingest::ingest_http;
+#[cfg(test)]
+pub(crate) use provision::with_http_send_mock;
+pub(crate) use provision::{ensure_channel, maybe_ensure_channel_config};
 pub(crate) use render::render_plan;
 pub(crate) use send::{handle_reply, handle_send, send_payload};
 

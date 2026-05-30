@@ -41,7 +41,12 @@ Graph channel setup persists machine IDs and display labels:
 | `team_name` | Human-readable selected Team display name |
 | `channel_id` | Authoritative Microsoft Graph Channel ID used for routing |
 | `channel_name` | Human-readable selected Channel display name |
-| `desired_channel_name` | Optional setup search/default hint, often seeded from the bundle name |
+| `desired_channel_name` | Desired standard channel name, often seeded from the bundle name |
+
+During `apply_answers`, the provider lists existing channels in the selected
+Team, reuses an exact case-insensitive display-name match, and otherwise
+creates a standard channel with Microsoft Graph `POST /teams/{team_id}/channels`.
+The resulting `channel_id` and `channel_name` are returned in the setup config.
 
 Only `team_id` and `channel_id` are used to build Graph message URLs. Names are
 stored for diagnostics, setup summaries, and user-facing display; they are not
@@ -67,8 +72,8 @@ authoritative channel or chat ID.
 
 1. Register an app in Azure AD with **Delegated** permissions:
    `offline_access`, `openid`, `profile`, `User.Read`, `Team.ReadBasic.All`,
-   `Channel.ReadBasic.All`, `ChannelMessage.Send`, `ChannelMessage.Read.All`,
-   and `Chat.Read`.
+   `Channel.ReadBasic.All`, `Channel.Create`, `ChannelMessage.Send`,
+   `ChannelMessage.Read.All`, and `Chat.Read`.
 2. Enable **public client/device-code flow**.
 3. Run `gtc setup` once generic device-code setup is available, or use
    `scripts/test_teams.sh` for local validation.

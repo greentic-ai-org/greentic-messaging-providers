@@ -147,4 +147,28 @@ if [ "${cargo_test_rc}" -ne 0 ]; then
 fi
 rm -f "${cargo_test_log}"
 
+provider_version_overrides="$(python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+workspace_version = os.environ["PACK_VERSION"]
+matrix = json.loads(Path("ci/provider-matrix.json").read_text())
+for provider, spec in matrix.get("providers", {}).items():
+    version = spec.get("version")
+    pack = spec.get("pack")
+    if pack and version and version != workspace_version:
+        print(provider)
+PY
+)"
+if [ -n "${provider_version_overrides}" ]; then
+  echo "==> Restoring provider-specific pack versions"
+  while IFS= read -r provider; do
+    [ -n "${provider}" ] || continue
+    bash scripts/build_providers.sh "${provider}"
+  done <<EOF
+${provider_version_overrides}
+EOF
+fi
+
 echo "All checks completed."

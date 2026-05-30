@@ -34,11 +34,16 @@ Useful delegated permissions:
 - `User.Read`
 - `Team.ReadBasic.All`
 - `Channel.ReadBasic.All`
+- `Channel.Create`
 - `ChannelMessage.Send`
 - `ChannelMessage.Read.All`
 - `Chat.Read`
 
 Some tenants require admin consent for `ChannelMessage.Read.All` and other read scopes. If using the `.default` scope for runtime refresh, preconfigure the app permissions in Entra and grant consent there.
+
+`Channel.Create` is needed when setup creates the desired standard channel in
+the selected Team. The signed-in user must also be allowed by Teams policy to
+create channels there.
 
 ### Manual/Test
 
@@ -48,6 +53,7 @@ Provide:
 - `client_id`
 - `refresh_token`, or test-only `access_token`
 - optional default `team_id` + `channel_id`
+- optional desired channel name for setup-time channel creation
 - optional default `chat_id`
 
 ## Runtime Config

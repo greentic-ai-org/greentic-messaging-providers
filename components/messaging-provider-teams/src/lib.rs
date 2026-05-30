@@ -52,7 +52,10 @@ use config::{ProviderConfigOut, default_config_out, validate_config_out};
 use describe::{
     DEFAULT_KEYS, I18N_KEYS, I18N_PAIRS, SETUP_QUESTIONS, build_describe_payload, build_qa_spec,
 };
-use ops::{encode_op, handle_reply, handle_send, ingest_http, render_plan, send_payload};
+use ops::{
+    encode_op, ensure_channel, handle_reply, handle_send, ingest_http, maybe_ensure_channel_config,
+    render_plan, send_payload,
+};
 
 // ============================================================================
 // Component trait implementations
@@ -158,6 +161,7 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
     match op {
         "run" | "send" => handle_send(input_json),
         "reply" => handle_reply(input_json),
+        "ensure_channel" | "ensure-channel" => ensure_channel(input_json),
         "ingest_http" => ingest_http(input_json),
         "render_plan" => render_plan(input_json),
         "encode" => encode_op(input_json),
@@ -344,6 +348,23 @@ fn apply_answers_impl(
         }
     }
 
+    let channel_created = if mode == Mode::Setup || mode == Mode::Default {
+        match maybe_ensure_channel_config(&mut merged) {
+            Ok(created) => created,
+            Err(error) => {
+                return canonical_cbor_bytes(&ApplyAnswersResult {
+                    ok: false,
+                    config: None,
+                    remove: None,
+                    diagnostics: Vec::new(),
+                    error: Some(error),
+                });
+            }
+        }
+    } else {
+        false
+    };
+
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,
@@ -358,7 +379,11 @@ fn apply_answers_impl(
         ok: true,
         config: Some(merged),
         remove: None,
-        diagnostics: Vec::new(),
+        diagnostics: if channel_created {
+            vec!["created Teams channel from desired_channel_name".to_string()]
+        } else {
+            Vec::new()
+        },
         error: None,
     })
 }
@@ -537,6 +562,7 @@ mod tests {
             "setup_mode": "graph_channel",
             "tenant_id": "tenant",
             "client_id": "client",
+            "access_token": "token",
             "team_id": "team-123",
             "team_name": "Engineering",
             "channel_id": "19:general@thread.tacv2",
@@ -544,8 +570,37 @@ mod tests {
             "desired_channel_name": "Engineering Updates"
         });
 
-        let out =
-            <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers));
+        let out = crate::ops::with_http_send_mock(
+            |req| {
+                if req.method == "GET" {
+                    assert_eq!(
+                        req.url,
+                        "https://graph.microsoft.com/v1.0/teams/team-123/channels"
+                    );
+                    return Ok(crate::bindings::greentic::http::http_client::Response {
+                        status: 200,
+                        headers: vec![],
+                        body: Some(br#"{"value":[{"id":"19:general@thread.tacv2","displayName":"General"}]}"#.to_vec()),
+                    });
+                }
+                assert_eq!(req.method, "POST");
+                assert_eq!(
+                    req.url,
+                    "https://graph.microsoft.com/v1.0/teams/team-123/channels"
+                );
+                let body: Value = serde_json::from_slice(req.body.as_deref().unwrap_or_default())
+                    .expect("create body");
+                assert_eq!(body["displayName"], "Engineering Updates");
+                Ok(crate::bindings::greentic::http::http_client::Response {
+                    status: 201,
+                    headers: vec![],
+                    body: Some(
+                        br#"{"id":"19:engineering-updates@thread.tacv2","displayName":"Engineering Updates"}"#.to_vec(),
+                    ),
+                })
+            },
+            || <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers)),
+        );
         let out_json: Value = decode_cbor(&out).expect("decode apply output");
         assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
         let config = out_json.get("config").expect("config object");
@@ -559,15 +614,21 @@ mod tests {
         );
         assert_eq!(
             config.get("channel_id"),
-            Some(&Value::String("19:general@thread.tacv2".to_string()))
+            Some(&Value::String(
+                "19:engineering-updates@thread.tacv2".to_string()
+            ))
         );
         assert_eq!(
             config.get("channel_name"),
-            Some(&Value::String("General".to_string()))
+            Some(&Value::String("Engineering Updates".to_string()))
         );
         assert_eq!(
             config.get("desired_channel_name"),
             Some(&Value::String("Engineering Updates".to_string()))
+        );
+        assert_eq!(
+            out_json.get("diagnostics"),
+            Some(&json!(["created Teams channel from desired_channel_name"]))
         );
     }
 

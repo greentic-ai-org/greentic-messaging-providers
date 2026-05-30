@@ -156,7 +156,7 @@ fn input_string(parsed: &Value, key: &str) -> Option<String> {
 
 fn build_target_url(public_base_url: &str, tenant: &str, channel: &str) -> String {
     format!(
-        "{}/v1/messaging/webex/{}/{}/webhook",
+        "{}/v1/messaging/ingress/messaging-webex/{}/{}",
         public_base_url.trim_end_matches('/'),
         url_segment(tenant),
         url_segment(channel),
@@ -468,10 +468,10 @@ mod tests {
     }
 
     #[test]
-    fn target_url_uses_webex_route_shape() {
+    fn target_url_uses_standard_provider_ingress_route() {
         assert_eq!(
             build_target_url("https://host.example/", "tenant a", "channel/b"),
-            "https://host.example/v1/messaging/webex/tenant%20a/channel%2Fb/webhook"
+            "https://host.example/v1/messaging/ingress/messaging-webex/tenant%20a/channel%2Fb"
         );
     }
 }
