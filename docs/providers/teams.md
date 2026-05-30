@@ -21,6 +21,8 @@ Common setup values include:
 - Graph refresh token from device-code login.
 - Optional test-only access token.
 - Default team/channel or chat destination.
+- Desired channel name. Setup should create this standard Teams channel when it
+  is missing, then persist the returned channel ID.
 - Public base URL only when enabling Graph change-notification ingress.
 
 ## Secrets
@@ -52,8 +54,12 @@ Default setup uses the Microsoft `organizations` device-code endpoints and does 
 Default delegated scopes:
 
 ```text
-offline_access openid profile User.Read Team.ReadBasic.All Channel.ReadBasic.All ChannelMessage.Send ChannelMessage.Read.All Chat.Read
+offline_access openid profile User.Read Team.ReadBasic.All Channel.ReadBasic.All Channel.Create ChannelMessage.Send ChannelMessage.Read.All Chat.Read
 ```
+
+`Channel.Create` is required only for setup-time creation of a missing desired
+standard channel. The signed-in user must also be allowed by Teams policy to
+create channels in the selected Team.
 
 ## Limitations
 

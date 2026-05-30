@@ -18,6 +18,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.op.send.description",
     "teams.op.reply.title",
     "teams.op.reply.description",
+    "teams.op.ensure_channel.title",
+    "teams.op.ensure_channel.description",
     "teams.op.ingest_http.title",
     "teams.op.ingest_http.description",
     "teams.op.render_plan.title",
@@ -131,6 +133,11 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 "teams.op.reply.description",
             ),
             op(
+                "ensure_channel",
+                "teams.op.ensure_channel.title",
+                "teams.op.ensure_channel.description",
+            ),
+            op(
                 "ingest_http",
                 "teams.op.ingest_http.title",
                 "teams.op.ingest_http.description",
@@ -199,6 +206,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "teams.op.reply.description",
         "Reply in a Teams channel thread via Microsoft Graph",
+    ),
+    ("teams.op.ensure_channel.title", "Ensure Channel"),
+    (
+        "teams.op.ensure_channel.description",
+        "Create the desired Teams channel when it is missing",
     ),
     ("teams.op.ingest_http.title", "Ingest HTTP"),
     (
@@ -325,11 +337,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ),
     (
         "teams.schema.config.desired_channel_name.title",
-        "Suggested channel name",
+        "Desired channel name",
     ),
     (
         "teams.schema.config.desired_channel_name.description",
-        "Optional setup search/default hint. The selected channel_id remains authoritative.",
+        "Desired standard channel name for setup-time create-if-missing provisioning. The resulting channel_id remains authoritative.",
     ),
     ("teams.schema.config.ms_bot_app_id.title", "Bot app ID"),
     (

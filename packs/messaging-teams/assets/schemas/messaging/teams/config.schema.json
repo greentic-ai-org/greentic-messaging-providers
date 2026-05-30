@@ -71,7 +71,7 @@
     },
     "desired_channel_name": {
       "type": "string",
-      "description": "Optional setup search/default hint for channel discovery. The selected channel_id remains authoritative."
+      "description": "Desired standard channel name for setup-time create-if-missing provisioning. The resulting channel_id remains authoritative."
     },
     "chat_id": {
       "type": "string",

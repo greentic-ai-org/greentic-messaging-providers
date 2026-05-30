@@ -12,6 +12,26 @@ setup_modes:
       - channel_id
       - channel_name
       - desired_channel_name
+    provisioning:
+      teams_channel:
+        op: apply-answers
+        component_ref: messaging-provider-teams
+        mode: create_if_missing
+        source_keys:
+          team_id: team_id
+          desired_channel_name: desired_channel_name
+        output_keys:
+          channel_id: channel_id
+          channel_name: channel_name
+        graph:
+          method: POST
+          resource_template: /teams/{team_id}/channels
+          body_template:
+            displayName: "{desired_channel_name}"
+            membershipType: standard
+          required_scopes:
+            delegated:
+              - Channel.Create
   bot_framework:
     description: "Inbound Bot Framework mode. Uses Azure Bot credentials and a Teams app manifest messaging endpoint."
     config_keys:
@@ -48,6 +68,7 @@ setup_actions:
       - User.Read
       - Team.ReadBasic.All
       - Channel.ReadBasic.All
+      - Channel.Create
       - ChannelMessage.Send
       - ChannelMessage.Read.All
       - Chat.Read
@@ -97,6 +118,7 @@ setup_actions:
       - Public client/device code flow must be enabled
       - Tenant may require admin consent
       - Teams message subscriptions require delegated read scopes such as ChannelMessage.Read.All
+      - Creating a missing Teams channel requires delegated Channel.Create and a signed-in user allowed to create channels in the selected Team
       - Device/token endpoints must use organizations, not the developer tenant ID
 questions:
   - name: client_id
@@ -108,10 +130,10 @@ questions:
     placeholder: "6c115a7a-f656-49c4-975a-5e831efae833"
     group: Authentication
   - name: desired_channel_name
-    title: Suggested channel name
+    title: Desired channel name
     kind: string
     required: false
     default_from_context: bundle_name
-    help: "Optional search/default hint for Graph channel discovery. The selected channel_id remains authoritative."
+    help: "Optional desired channel name. Setup hosts should create this standard channel when it is missing; the resulting channel_id remains authoritative."
     placeholder: "General"
     group: Discovery
