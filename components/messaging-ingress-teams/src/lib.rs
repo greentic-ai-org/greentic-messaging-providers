@@ -533,7 +533,11 @@ fn list_subscriptions(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(graph_status_error("list subscriptions", resp.status, resp.body));
+        return Err(graph_status_error(
+            "list subscriptions",
+            resp.status,
+            resp.body,
+        ));
     }
     let body = resp.body.unwrap_or_default();
     let json: Value = serde_json::from_slice(&body)
@@ -612,7 +616,11 @@ fn create_subscription(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(graph_status_error("create subscription", resp.status, resp.body));
+        return Err(graph_status_error(
+            "create subscription",
+            resp.status,
+            resp.body,
+        ));
     }
     let body = resp.body.unwrap_or_default();
     let json: Value =
@@ -658,7 +666,11 @@ fn renew_subscription(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(graph_status_error("renew subscription", resp.status, resp.body));
+        return Err(graph_status_error(
+            "renew subscription",
+            resp.status,
+            resp.body,
+        ));
     }
     Ok(())
 }
