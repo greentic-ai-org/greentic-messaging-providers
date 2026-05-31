@@ -169,28 +169,49 @@ fn webhook_specs(
     room_id: Option<&str>,
     secret: Option<&str>,
 ) -> Vec<WebhookSpec> {
-    let messages_filter = room_id
-        .map(|room| format!("roomId={room}"))
-        .unwrap_or_else(|| "mentionedPeople=me".to_string());
+    let message_specs = room_id
+        .map(|room| {
+            vec![WebhookSpec {
+                name: format!("greentic-webex-{instance}-messages-created"),
+                target_url: target_url.to_string(),
+                resource: "messages",
+                event: "created",
+                filter: Some(format!("roomId={room}")),
+                secret: secret.map(ToOwned::to_owned),
+            }]
+        })
+        .unwrap_or_else(|| {
+            vec![
+                WebhookSpec {
+                    name: format!("greentic-webex-{instance}-messages-created-mentioned"),
+                    target_url: target_url.to_string(),
+                    resource: "messages",
+                    event: "created",
+                    filter: Some("mentionedPeople=me".to_string()),
+                    secret: secret.map(ToOwned::to_owned),
+                },
+                WebhookSpec {
+                    name: format!("greentic-webex-{instance}-messages-created-direct"),
+                    target_url: target_url.to_string(),
+                    resource: "messages",
+                    event: "created",
+                    filter: Some("roomType=direct".to_string()),
+                    secret: secret.map(ToOwned::to_owned),
+                },
+            ]
+        });
     let actions_filter = room_id.map(|room| format!("roomId={room}"));
-    vec![
-        WebhookSpec {
-            name: format!("greentic-webex-{instance}-messages-created"),
-            target_url: target_url.to_string(),
-            resource: "messages",
-            event: "created",
-            filter: Some(messages_filter),
-            secret: secret.map(ToOwned::to_owned),
-        },
-        WebhookSpec {
+    message_specs
+        .into_iter()
+        .chain(std::iter::once(WebhookSpec {
             name: format!("greentic-webex-{instance}-attachment-actions-created"),
             target_url: target_url.to_string(),
             resource: "attachmentActions",
             event: "created",
             filter: actions_filter,
             secret: secret.map(ToOwned::to_owned),
-        },
-    ]
+        }))
+        .collect()
 }
 
 fn list_webhooks(api_base: &str, token: &str) -> Result<Vec<Value>, String> {
@@ -395,7 +416,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builds_messages_created_payload_with_mentioned_people_filter() {
+    fn builds_message_webhooks_for_mentions_and_direct_rooms() {
         let specs = webhook_specs(
             "demo-default",
             "https://example.com/hook",
@@ -403,16 +424,42 @@ mod tests {
             Some("secret"),
         );
         let payload = create_webhook_payload(&specs[0]);
+        let direct_payload = create_webhook_payload(&specs[1]);
 
         assert_eq!(
             payload["name"],
-            "greentic-webex-demo-default-messages-created"
+            "greentic-webex-demo-default-messages-created-mentioned"
         );
         assert_eq!(payload["targetUrl"], "https://example.com/hook");
         assert_eq!(payload["resource"], "messages");
         assert_eq!(payload["event"], "created");
         assert_eq!(payload["filter"], "mentionedPeople=me");
         assert_eq!(payload["secret"], "secret");
+
+        assert_eq!(
+            direct_payload["name"],
+            "greentic-webex-demo-default-messages-created-direct"
+        );
+        assert_eq!(direct_payload["resource"], "messages");
+        assert_eq!(direct_payload["event"], "created");
+        assert_eq!(direct_payload["filter"], "roomType=direct");
+        assert_eq!(direct_payload["secret"], "secret");
+    }
+
+    #[test]
+    fn builds_single_room_scoped_message_webhook_when_room_configured() {
+        let specs = webhook_specs(
+            "demo-room",
+            "https://example.com/hook",
+            Some("room-1"),
+            None,
+        );
+        let payload = create_webhook_payload(&specs[0]);
+
+        assert_eq!(payload["name"], "greentic-webex-demo-room-messages-created");
+        assert_eq!(payload["resource"], "messages");
+        assert_eq!(payload["event"], "created");
+        assert_eq!(payload["filter"], "roomId=room-1");
     }
 
     #[test]
