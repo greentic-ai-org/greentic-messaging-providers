@@ -426,6 +426,34 @@ fn teams_subscription_manifest_declares_generic_desired_state_metadata() -> Resu
 }
 
 #[test]
+fn pack_local_dist_directories_do_not_contain_stale_gtpack_artifacts() -> Result<()> {
+    let root = workspace_root();
+    let mut stale_artifacts = Vec::new();
+    for entry in glob(root.join("packs/*/dist/*.gtpack").to_str().unwrap())? {
+        stale_artifacts.push(entry?);
+    }
+
+    if !stale_artifacts.is_empty() {
+        let list = stale_artifacts
+            .iter()
+            .map(|path| {
+                path.strip_prefix(&root)
+                    .unwrap_or(path)
+                    .display()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n  ");
+        return Err(anyhow!(
+            "pack-local dist directories must not contain stale .gtpack artifacts; \
+             use dist/packs as the single built pack output directory:\n  {list}"
+        ));
+    }
+
+    Ok(())
+}
+
+#[test]
 fn teams_pack_manifest_declares_channel_provisioning_contract() -> Result<()> {
     let root = workspace_root();
     let manifest_path = root
