@@ -75,17 +75,7 @@ pub(super) fn build_webex_body(
 ) -> serde_json::Map<String, Value> {
     let mut map = serde_json::Map::new();
     if let Some(card) = card_payload {
-        // Webex supports AC up to v1.3 — cap the version and strip
-        // unsupported top-level properties that cause 400 errors.
-        let mut card = card.clone();
-        if let Some(obj) = card.as_object_mut() {
-            let ver = obj.get("version").and_then(Value::as_str).unwrap_or("1.0");
-            if ver != "1.0" && ver != "1.1" && ver != "1.2" && ver != "1.3" {
-                obj.insert("version".into(), Value::String("1.3".to_string()));
-            }
-            obj.remove("speak");
-            obj.remove("$schema");
-        }
+        let card = normalize_adaptive_card_for_webex(card);
         let attachment = serde_json::json!({
             "contentType": "application/vnd.microsoft.card.adaptive",
             "content": card,
@@ -98,6 +88,68 @@ pub(super) fn build_webex_body(
     }
     map.insert("markdown".into(), Value::String(markdown.to_string()));
     map
+}
+
+fn normalize_adaptive_card_for_webex(card: &Value) -> Value {
+    let mut card = card.clone();
+    if let Some(obj) = card.as_object_mut() {
+        let ver = obj.get("version").and_then(Value::as_str).unwrap_or("1.0");
+        if ver != "1.0" && ver != "1.1" && ver != "1.2" && ver != "1.3" {
+            obj.insert("version".into(), Value::String("1.3".to_string()));
+        }
+        obj.remove("speak");
+        obj.remove("$schema");
+        obj.remove("rtl");
+    }
+    normalize_adaptive_card_value(&mut card);
+    card
+}
+
+fn normalize_adaptive_card_value(value: &mut Value) {
+    match value {
+        Value::Object(obj) => {
+            for key in ["isVisible", "wrap", "isSubtle", "bleed", "separator"] {
+                if let Some(Value::String(text)) = obj.get(key) {
+                    let normalized = match text.as_str() {
+                        "true" => Some(true),
+                        "false" => Some(false),
+                        _ => None,
+                    };
+                    if let Some(boolean) = normalized {
+                        obj.insert(key.to_string(), Value::Bool(boolean));
+                    }
+                }
+            }
+
+            for child in obj.values_mut() {
+                normalize_adaptive_card_value(child);
+            }
+        }
+        Value::Array(items) => {
+            for item in items.iter_mut() {
+                normalize_adaptive_card_value(item);
+            }
+            items.retain(|item| !is_webex_content_image(item));
+        }
+        _ => {}
+    }
+}
+
+fn is_webex_content_image(value: &Value) -> bool {
+    let Some(obj) = value.as_object() else {
+        return false;
+    };
+    let is_image = obj.get("type").and_then(Value::as_str) == Some("Image");
+    let is_webex_content = obj
+        .get("url")
+        .and_then(Value::as_str)
+        .is_some_and(is_webex_content_url);
+    is_image && is_webex_content
+}
+
+fn is_webex_content_url(url: &str) -> bool {
+    url.starts_with("https://webexapis.com/v1/contents/")
+        || url.starts_with("https://api.ciscospark.com/v1/contents/")
 }
 
 /// Format a non-2xx Webex API response into a diagnostic error string.
@@ -144,7 +196,8 @@ mod tests {
                 "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
                 "type": "AdaptiveCard",
                 "version": "1.5",
-                "speak": "ignored"
+                "speak": "ignored",
+                "rtl": false
             })),
             None,
             "fallback",
@@ -156,6 +209,63 @@ mod tests {
         assert_eq!(content["version"], "1.3");
         assert!(content.get("$schema").is_none());
         assert!(content.get("speak").is_none());
+        assert!(content.get("rtl").is_none());
+    }
+
+    #[test]
+    fn build_webex_body_coerces_adaptive_card_boolean_strings() {
+        let body = build_webex_body(
+            Some(&json!({
+                "type": "AdaptiveCard",
+                "version": "1.3",
+                "body": [{
+                    "type": "Container",
+                    "isVisible": "true",
+                    "items": [
+                        {"type": "TextBlock", "text": "Wrapped", "wrap": "true"},
+                        {"type": "TextBlock", "text": "Subtle", "isSubtle": "false"}
+                    ]
+                }]
+            })),
+            None,
+            "fallback",
+        );
+
+        let content = &body["attachments"][0]["content"];
+        assert_eq!(content["body"][0]["isVisible"], true);
+        assert_eq!(content["body"][0]["items"][0]["wrap"], true);
+        assert_eq!(content["body"][0]["items"][1]["isSubtle"], false);
+    }
+
+    #[test]
+    fn build_webex_body_removes_webex_content_images_but_keeps_public_images() {
+        let body = build_webex_body(
+            Some(&json!({
+                "type": "AdaptiveCard",
+                "version": "1.3",
+                "body": [{
+                    "type": "ColumnSet",
+                    "columns": [{
+                        "type": "Column",
+                        "items": [
+                            {"type": "Image", "url": "https://webexapis.com/v1/contents/private"},
+                            {"type": "Image", "url": "https://www.gstatic.com/webp/gallery/1.jpg"}
+                        ]
+                    }]
+                }]
+            })),
+            None,
+            "fallback",
+        );
+
+        let items = body["attachments"][0]["content"]["body"][0]["columns"][0]["items"]
+            .as_array()
+            .expect("column items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0]["url"],
+            "https://www.gstatic.com/webp/gallery/1.jpg"
+        );
     }
 
     #[test]
