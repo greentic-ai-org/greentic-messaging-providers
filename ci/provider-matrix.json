@@ -219,7 +219,7 @@
     },
     "teams": {
       "pack": "messaging-teams",
-      "version": "0.5.5",
+      "version": "0.5.6",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -359,7 +359,7 @@
     },
     "webex": {
       "pack": "messaging-webex",
-      "version": "0.5.4",
+      "version": "0.5.5",
       "ghcr_target": "ghcr.io/greenticai/messaging-webex",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Start a local Webex tester UI with a cloudflared public URL.
 #
-# The page lets you enter the Webex setup values, registers the Webex webhook,
-# sends test messages, and displays incoming webhook calls routed through
-# greentic-messaging-tester ingress.
+# The page asks only for a Webex bot token, registers the Webex webhook with an
+# internally generated secret, captures the first inbound room/person, and lets
+# you test sending back to that captured conversation.
 #
 # Usage:
 #   scripts/test_webex.sh [--port <port>] [--no-build] [--no-open]
@@ -78,6 +78,8 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
+import string
 import subprocess
 import threading
 import time
@@ -92,6 +94,7 @@ TESTER = Path(os.environ["GREENTIC_TESTER_BIN"]).resolve()
 VALUES = WORK / "webex-values.json"
 EVENTS = WORK / "events.jsonl"
 PUBLIC_URL_FILE = WORK / "public-url.txt"
+CONVERSATION = WORK / "conversation.json"
 
 EVENT_LOCK = threading.Lock()
 
@@ -104,7 +107,7 @@ def public_url() -> str:
 
 
 def webhook_path(tenant: str = "default", channel: str = "default") -> str:
-    return f"/v1/messaging/webex/{quote(tenant or 'default', safe='')}/{quote(channel or 'default', safe='')}/webhook"
+    return f"/v1/messaging/ingress/messaging-webex/{quote(tenant or 'default', safe='')}/{quote(channel or 'default', safe='')}"
 
 
 def callback_url(tenant: str = "default", channel: str = "default") -> str:
@@ -137,6 +140,108 @@ def read_events() -> list[dict]:
         except json.JSONDecodeError:
             pass
     return out
+
+
+def generated_secret() -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(20))
+
+
+def existing_webhook_secret() -> str:
+    if VALUES.exists():
+        try:
+            values = json.loads(VALUES.read_text(encoding="utf-8"))
+            secret = values.get("secrets", {}).get("WEBEX_WEBHOOK_SECRET")
+            if isinstance(secret, str) and len(secret) == 20:
+                return secret
+        except json.JSONDecodeError:
+            pass
+    return generated_secret()
+
+
+def read_conversation() -> dict:
+    if not CONVERSATION.exists():
+        return {}
+    try:
+        value = json.loads(CONVERSATION.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def write_conversation(value: dict) -> None:
+    CONVERSATION.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+
+
+def is_webex_bot_email(value: object) -> bool:
+    return isinstance(value, str) and value.lower().endswith("@webex.bot")
+
+
+def update_conversation_from_result(result: dict) -> dict:
+    parsed = result.get("json")
+    if not isinstance(parsed, dict):
+        return read_conversation()
+    envelopes = parsed.get("ingress_envelopes")
+    if not isinstance(envelopes, list):
+        envelopes = parsed.get("envelopes")
+    if not isinstance(envelopes, list):
+        return read_conversation()
+    current = read_conversation()
+    for envelope in envelopes:
+        if not isinstance(envelope, dict):
+            continue
+        metadata = envelope.get("metadata") if isinstance(envelope.get("metadata"), dict) else {}
+        room_id = metadata.get("webex.roomId") or envelope.get("session_id")
+        person_email = metadata.get("webex.personEmail")
+        person_id = metadata.get("webex.personId")
+        message_id = metadata.get("webex.messageId")
+        is_bot_sender = is_webex_bot_email(person_email)
+        if room_id:
+            current["room_id"] = room_id
+        if person_email and not is_bot_sender:
+            current["person_email"] = person_email
+        if person_id and not is_bot_sender:
+            current["person_id"] = person_id
+        if message_id:
+            current["message_id"] = message_id
+        if is_bot_sender:
+            current["last_bot_email"] = person_email
+        current["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if current:
+        write_conversation(current)
+    return current
+
+
+def update_conversation_from_webhook_body(body_text: str) -> dict:
+    try:
+        parsed = json.loads(body_text)
+    except json.JSONDecodeError:
+        return read_conversation()
+    if not isinstance(parsed, dict):
+        return read_conversation()
+    data = parsed.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    current = read_conversation()
+    room_id = data.get("roomId")
+    person_email = data.get("personEmail")
+    person_id = data.get("personId")
+    message_id = data.get("id")
+    is_bot_sender = is_webex_bot_email(person_email)
+    if room_id:
+        current["room_id"] = room_id
+    if person_email and not is_bot_sender:
+        current["person_email"] = person_email
+    if person_id and not is_bot_sender:
+        current["person_id"] = person_id
+    if message_id:
+        current["message_id"] = message_id
+    if is_bot_sender:
+        current["last_bot_email"] = person_email
+    if room_id or person_email or person_id or message_id:
+        current["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        write_conversation(current)
+    return current
 
 
 def redact_text(text: str) -> str:
@@ -185,14 +290,12 @@ def values_from_form(data: dict) -> dict:
         "enabled": True,
         "public_base_url": public_url(),
         "api_base_url": "https://webexapis.com/v1",
-        "default_room_id": data.get("default_room_id") or None,
-        "default_to_person_email": data.get("default_to_person_email") or None,
-        "webhook_secret": data.get("webhook_secret") or None,
     }
     return {
         "config": config,
         "secrets": {
             "WEBEX_BOT_TOKEN": data.get("bot_token") or "",
+            "WEBEX_WEBHOOK_SECRET": existing_webhook_secret(),
         },
         "http": "real",
         "state": {},
@@ -241,18 +344,19 @@ def page_html() -> bytes:
       <strong>Webhook URL:</strong>
       <code id="webhookUrl">{callback_url() or "waiting for cloudflared..."}</code>
     </div>
+    <div class="row">
+      <strong>Last inbound:</strong>
+      <code id="conversation">waiting for first Webex message...</code>
+    </div>
   </section>
   <section>
     <h2>Setup</h2>
     <div class="grid">
       <label>Webex bot token*<input id="bot_token" type="password" autocomplete="off" placeholder="Bearer token"></label>
-      <label>Webhook secret<input id="webhook_secret" type="password" autocomplete="off" placeholder="Optional shared secret"></label>
-      <label>Default room ID<input id="default_room_id" autocomplete="off" placeholder="Y2lz..."></label>
-      <label>Default person email<input id="default_to_person_email" autocomplete="off" placeholder="user@example.com"></label>
       <label>Tenant<input id="tenant" value="default"></label>
       <label>Channel<input id="channel" value="default"></label>
     </div>
-    <p class="muted">API base URL is not requested here; Webex defaults to https://webexapis.com/v1.</p>
+    <p class="muted">The tester generates a 20-character webhook secret internally. Room and person defaults are intentionally omitted; send a message to the bot first so the provider can capture the room/person context.</p>
     <div class="row">
       <button id="registerBtn">Register webhook with Webex</button>
       <button id="saveBtn" type="button">Save values only</button>
@@ -261,7 +365,7 @@ def page_html() -> bytes:
   <section>
     <h2>Send</h2>
     <div class="grid">
-      <label>Destination ID<input id="send_to" placeholder="Room ID, person ID, or email"></label>
+      <label>Destination ID<input id="send_to" placeholder="Leave blank to use last inbound room"></label>
       <label>Destination kind<select id="send_kind">
         <option value="room">Room</option>
         <option value="person">Person ID</option>
@@ -269,7 +373,11 @@ def page_html() -> bytes:
       </select></label>
       <label>Message<textarea id="send_text" rows="3">Hello from Greentic Webex tester</textarea></label>
     </div>
-    <button id="sendBtn">Send Webex message</button>
+    <div class="row">
+      <button id="sendBtn">Send Webex message</button>
+      <button id="useLastRoomBtn" type="button">Use last room</button>
+      <button id="useLastPersonBtn" type="button">Use last person</button>
+    </div>
   </section>
   <section>
     <h2>Incoming Webhooks</h2>
@@ -285,14 +393,16 @@ def page_html() -> bytes:
   </section>
 </main>
 <script>
-const ids = ["bot_token","webhook_secret","default_room_id","default_to_person_email","tenant","channel","send_to","send_kind","send_text"];
-for (const id of ids) {{
+const formIds = ["bot_token","tenant","channel","send_to","send_kind","send_text"];
+const persistedIds = ["tenant","channel","send_to","send_kind","send_text"];
+localStorage.removeItem("webexTester.bot_token");
+for (const id of persistedIds) {{
   const saved = localStorage.getItem("webexTester." + id);
   if (saved !== null) document.getElementById(id).value = saved;
   document.getElementById(id).addEventListener("input", e => localStorage.setItem("webexTester." + id, e.target.value));
 }}
 function formValues() {{
-  return Object.fromEntries(ids.map(id => [id, document.getElementById(id).value.trim()]));
+  return Object.fromEntries(formIds.map(id => [id, document.getElementById(id).value.trim()]));
 }}
 async function post(path, body) {{
   const res = await fetch(path, {{ method: "POST", headers: {{ "content-type": "application/json" }}, body: JSON.stringify(body) }});
@@ -306,10 +416,30 @@ async function refresh() {{
   document.getElementById("events").textContent = JSON.stringify(data.events, null, 2);
   document.getElementById("publicUrl").textContent = data.public_url || "waiting for cloudflared...";
   document.getElementById("webhookUrl").textContent = data.webhook_url || "waiting for cloudflared...";
+  const conv = data.conversation || {{}};
+  document.getElementById("conversation").textContent = Object.keys(conv).length ? JSON.stringify(conv) : "waiting for first Webex message...";
+  window.lastWebexConversation = conv;
 }}
 document.getElementById("saveBtn").onclick = () => post("/api/save", formValues());
 document.getElementById("registerBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/register", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("sendBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/send", formValues()); }} finally {{ e.target.disabled = false; }} }};
+document.getElementById("useLastRoomBtn").onclick = () => {{
+  const conv = window.lastWebexConversation || {{}};
+  if (conv.room_id) {{
+    document.getElementById("send_to").value = conv.room_id;
+    document.getElementById("send_kind").value = "room";
+  }}
+}};
+document.getElementById("useLastPersonBtn").onclick = () => {{
+  const conv = window.lastWebexConversation || {{}};
+  if (conv.person_email) {{
+    document.getElementById("send_to").value = conv.person_email;
+    document.getElementById("send_kind").value = "email";
+  }} else if (conv.person_id) {{
+    document.getElementById("send_to").value = conv.person_id;
+    document.getElementById("send_kind").value = "person";
+  }}
+}};
 document.getElementById("refreshBtn").onclick = refresh;
 setInterval(refresh, 3000);
 refresh();
@@ -353,7 +483,12 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         if self.path == "/api/events":
-            self.send_json({"public_url": public_url(), "webhook_url": callback_url(), "events": read_events()})
+            self.send_json({
+                "public_url": public_url(),
+                "webhook_url": callback_url(),
+                "conversation": read_conversation(),
+                "events": read_events(),
+            })
             return
         self.send_error(404)
 
@@ -376,8 +511,6 @@ class Handler(BaseHTTPRequestHandler):
                 "--values", str(VALUES),
                 "--public-base-url", target,
             ]
-            if data.get("webhook_secret"):
-                args.extend(["--secret-token", data["webhook_secret"]])
             result = run_tester(args)
             append_event("register", {"target": target, "result": result})
             self.send_json(result, 200 if result["ok"] else 500)
@@ -386,14 +519,21 @@ class Handler(BaseHTTPRequestHandler):
             data = self.read_json()
             values = clean_values(values_from_form(data))
             VALUES.write_text(json.dumps(values, indent=2) + "\n", encoding="utf-8")
-            target = data.get("send_to") or values.get("config", {}).get("default_room_id") or values.get("config", {}).get("default_to_person_email") or ""
+            conversation = read_conversation()
+            target = data.get("send_to") or conversation.get("room_id") or conversation.get("person_email") or conversation.get("person_id") or ""
             target_kind = data.get("send_kind") or ("email" if "@" in target else "room")
+            if not data.get("send_to") and conversation.get("room_id"):
+                target_kind = "room"
+            elif not data.get("send_to") and conversation.get("person_email"):
+                target_kind = "email"
+            elif not data.get("send_to") and conversation.get("person_id"):
+                target_kind = "person"
             if not target:
                 result = {
                     "ok": False,
                     "status": 2,
                     "stdout": "",
-                    "stderr": "Destination ID is required. Use a room ID, person ID, or person email.\n",
+                    "stderr": "No destination is known yet. Send a message to the Webex bot first, or enter a room ID, person ID, or person email.\n",
                     "json": None,
                 }
                 append_event("send", {"target": target, "target_kind": target_kind, "result": result})
@@ -410,12 +550,13 @@ class Handler(BaseHTTPRequestHandler):
             append_event("send", {"target": target, "target_kind": target_kind, "result": result})
             self.send_json(result, 200 if result["ok"] else 500)
             return
-        if path.startswith("/v1/messaging/webex/") and path.endswith("/webhook"):
+        if path.startswith("/v1/messaging/ingress/messaging-webex/"):
             length = int(self.headers.get("content-length") or "0")
             raw = self.rfile.read(length) if length else b""
             body_text = raw.decode("utf-8", errors="replace")
             headers = {k: v for k, v in self.headers.items()}
-            append_event("webhook-received", {"path": path, "headers": headers, "body": body_text})
+            conversation = update_conversation_from_webhook_body(body_text)
+            append_event("webhook-received", {"path": path, "headers": headers, "body": body_text, "conversation": conversation})
             http_in = {
                 "method": "POST",
                 "path": path,
@@ -431,7 +572,8 @@ class Handler(BaseHTTPRequestHandler):
                 "--http-in", str(http_path),
                 "--public-base-url", public_url(),
             ])
-            append_event("ingress", {"http_in": str(http_path), "result": result})
+            conversation = update_conversation_from_result(result) or conversation
+            append_event("ingress", {"http_in": str(http_path), "conversation": conversation, "result": result})
             self.send_json({"ok": result["ok"]}, 200 if result["ok"] else 500)
             return
         self.send_error(404)
@@ -489,10 +631,10 @@ if [ -z "${PUBLIC_URL}" ]; then
 fi
 
 LOCAL_URL="http://127.0.0.1:${PORT}/"
-WEBHOOK_URL="${PUBLIC_URL}/v1/messaging/webex/default/default/webhook"
+WEBHOOK_URL="${PUBLIC_URL}/v1/messaging/ingress/messaging-webex/default/default"
 echo "Webex tester UI: ${LOCAL_URL}"
 echo "Public URL: ${PUBLIC_URL}"
-echo "Default Webex webhook URL: ${WEBHOOK_URL}"
+echo "Default Webex ingress URL: ${WEBHOOK_URL}"
 echo "Logs: ${WORK_DIR}"
 
 if [ "${OPEN_BROWSER}" -eq 1 ]; then
