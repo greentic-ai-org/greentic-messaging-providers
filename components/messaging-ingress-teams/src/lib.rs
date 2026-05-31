@@ -39,6 +39,7 @@ struct SubscriptionSpec {
     resource: String,
     change_type: String,
     expiration_datetime: Option<String>,
+    lifecycle_notification_url: Option<String>,
     client_state: Option<String>,
 }
 
@@ -177,6 +178,10 @@ fn parse_desired_subscriptions(state: &Value) -> Result<Vec<SubscriptionSpec>, S
                 .get("expiration_datetime")
                 .and_then(Value::as_str)
                 .map(|s| s.to_string());
+            let lifecycle_notification_url = entry
+                .get("lifecycle_notification_url")
+                .and_then(Value::as_str)
+                .map(|s| s.to_string());
             let client_state = entry
                 .get("client_state")
                 .and_then(Value::as_str)
@@ -185,6 +190,7 @@ fn parse_desired_subscriptions(state: &Value) -> Result<Vec<SubscriptionSpec>, S
                 resource,
                 change_type: change_type.to_string(),
                 expiration_datetime,
+                lifecycle_notification_url,
                 client_state,
             })
         })
@@ -527,7 +533,7 @@ fn list_subscriptions(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(format!("graph returned status {}", resp.status));
+        return Err(graph_status_error("list subscriptions", resp.status, resp.body));
     }
     let body = resp.body.unwrap_or_default();
     let json: Value = serde_json::from_slice(&body)
@@ -580,6 +586,10 @@ fn create_subscription(
     let mut payload = json!({
         "changeType": spec.change_type,
         "notificationUrl": webhook_url,
+        "lifecycleNotificationUrl": spec
+            .lifecycle_notification_url
+            .as_deref()
+            .unwrap_or(webhook_url),
         "resource": spec.resource,
         "expirationDateTime": expiration,
     });
@@ -602,7 +612,7 @@ fn create_subscription(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(format!("create subscription status {}", resp.status));
+        return Err(graph_status_error("create subscription", resp.status, resp.body));
     }
     let body = resp.body.unwrap_or_default();
     let json: Value =
@@ -648,9 +658,19 @@ fn renew_subscription(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(format!("renew subscription status {}", resp.status));
+        return Err(graph_status_error("renew subscription", resp.status, resp.body));
     }
     Ok(())
+}
+
+fn graph_status_error(action: &str, status: u16, body: Option<Vec<u8>>) -> String {
+    let body = body.unwrap_or_default();
+    let body_text = String::from_utf8_lossy(&body).trim().to_string();
+    if body_text.is_empty() {
+        format!("{action} status {status}")
+    } else {
+        format!("{action} status {status}: {body_text}")
+    }
 }
 
 fn write_state(state: &Value) -> Result<(), String> {
@@ -685,7 +705,11 @@ mod tests {
     fn parse_desired_subscriptions_defaults_change_type() {
         let state = json!({
             "desired_subscriptions": [
-                {"resource": "teams/team-1/channels/channel-1/messages", "expiration_datetime": "2026-01-01T00:00:00Z"}
+                {
+                    "resource": "teams/team-1/channels/channel-1/messages",
+                    "expiration_datetime": "2026-01-01T00:00:00Z",
+                    "lifecycle_notification_url": "https://example.com/lifecycle"
+                }
             ]
         });
 
@@ -696,6 +720,10 @@ mod tests {
         assert_eq!(
             desired[0].resource,
             "teams/team-1/channels/channel-1/messages"
+        );
+        assert_eq!(
+            desired[0].lifecycle_notification_url.as_deref(),
+            Some("https://example.com/lifecycle")
         );
     }
 
@@ -746,6 +774,7 @@ mod tests {
             resource: "users/me/messages".to_string(),
             change_type: "created".to_string(),
             expiration_datetime: None,
+            lifecycle_notification_url: None,
             client_state: None,
         };
         let existing = vec![
@@ -786,6 +815,18 @@ mod tests {
         assert_eq!(out[0]["id"], "sub-1");
         assert_eq!(out[0]["resource"], "teams/t/channels/c/messages");
         assert_eq!(out[0]["notification_url"], "https://chat.example.com/hook");
+    }
+
+    #[test]
+    fn graph_status_error_includes_response_body() {
+        let err = graph_status_error(
+            "create subscription",
+            400,
+            Some(br#"{"error":{"message":"lifecycleNotificationUrl is required"}}"#.to_vec()),
+        );
+
+        assert!(err.contains("create subscription status 400"));
+        assert!(err.contains("lifecycleNotificationUrl is required"));
     }
 
     #[test]

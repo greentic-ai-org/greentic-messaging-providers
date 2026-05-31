@@ -163,7 +163,7 @@ def graph_datetime(dt):
 
 
 def default_subscription_expiration():
-    return graph_datetime(datetime.now(timezone.utc) + timedelta(minutes=45))
+    return graph_datetime(datetime.now(timezone.utc) + timedelta(days=2))
 
 
 def parse_graph_datetime(value):
@@ -442,6 +442,7 @@ def write_provider_values():
 def subscription_body(data):
     cfg = state()["config"]
     public = public_url().rstrip("/")
+    ingress_url = f"{public}/v1/messaging/ingress/messaging-teams/default/default"
     resource = data.get("resource")
     if not resource:
         if data.get("chat_id") or cfg.get("chat_id"):
@@ -451,17 +452,32 @@ def subscription_body(data):
     expiration = data.get("expiration") or default_subscription_expiration()
     body = {
         "changeType": data.get("change_type") or "created",
-        "notificationUrl": data.get("notification_url") or f"{public}/v1/messaging/ingress/messaging-teams/default/default",
+        "notificationUrl": data.get("notification_url") or ingress_url,
+        "lifecycleNotificationUrl": data.get("lifecycle_notification_url") or ingress_url,
         "resource": resource,
         "expirationDateTime": expiration,
         "clientState": data.get("client_state") or "greentic-teams-test",
     }
-    try:
-        if parse_graph_datetime(expiration) > datetime.now(timezone.utc) + timedelta(minutes=55):
-            body["lifecycleNotificationUrl"] = data.get("lifecycle_notification_url") or f"{public}/v1/messaging/ingress/messaging-teams/default/default"
-    except ValueError:
-        pass
     return body
+
+
+def validate_subscription_body(body):
+    warnings = []
+    lifecycle_url = body.get("lifecycleNotificationUrl")
+    if not lifecycle_url:
+        warnings.append("lifecycleNotificationUrl is required for Teams message subscriptions longer than 1 hour.")
+    elif lifecycle_url != body.get("notificationUrl"):
+        warnings.append("lifecycleNotificationUrl differs from notificationUrl; verify both endpoints handle validationToken and lifecycle events.")
+    try:
+        expiration = parse_graph_datetime(body.get("expirationDateTime", ""))
+        now = datetime.now(timezone.utc)
+        if expiration > now + timedelta(days=3):
+            warnings.append("Teams chatMessage subscriptions are limited to 4320 minutes; choose an expiration within 3 days.")
+        if expiration > now + timedelta(hours=1) and not lifecycle_url:
+            warnings.append("Microsoft Graph will reject this Teams subscription because expiration is more than 1 hour without lifecycleNotificationUrl.")
+    except ValueError:
+        warnings.append("expirationDateTime is not a valid Graph timestamp.")
+    return {"ok": not warnings, "warnings": warnings, "body": body}
 
 
 def adaptive_card_payload(text):
@@ -610,21 +626,22 @@ button{margin:4px 6px 4px 0;padding:8px 12px} pre{white-space:pre-wrap;backgroun
 <section><h2>Connect Microsoft Teams</h2><button onclick="deviceStart()">Start device login</button><button onclick="deviceComplete()">Poll and finish login</button><button onclick="refreshToken()">Refresh token</button><details><summary>Advanced OAuth settings</summary><div class="row"><label>Tenant authority<input id="tenant_id"></label><label>Client ID<input id="client_id"></label></div><label>Scopes<input id="scopes"></label></details><pre id="oauth"></pre></section>
 <section><h2>Discovery</h2><button onclick="api('/api/discover/setup',collect(),'discover')">Discover setup data</button><button onclick="api('/api/discover/me',{})">Get me</button><button onclick="api('/api/discover/teams',{})">List joined teams</button><label>Team ID<input id="team_id"></label><button onclick="api('/api/discover/channels',{team_id:val('team_id')})">List channels</button><label>Channel ID<input id="channel_id"></label><label>Chat ID<input id="chat_id"></label><pre id="discover"></pre></section>
 <section><h2>Send</h2><label>Kind<select id="kind"><option>channel</option><option>chat</option></select></label><label>Card text<textarea id="text">Hello from Greentic Teams tester</textarea></label><button onclick="directGraph()">Send adaptive card</button><pre id="send"></pre></section>
-<section><h2>Subscriptions</h2><label>Client state<input id="client_state" value="greentic-teams-test"></label><label>Expiration<input id="expiration"></label><button onclick="subCreate()">Create subscription</button><button onclick="simulateValidation()">Simulate validationToken</button><pre id="subs"></pre></section>
+<section><h2>Subscriptions</h2><label>Client state<input id="client_state" value="greentic-teams-test"></label><label>Expiration<input id="expiration"></label><label>Lifecycle notification URL<input id="lifecycle_notification_url"></label><button onclick="subPreview()">Preview subscription body</button><button onclick="subCreate()">Create subscription</button><button onclick="simulateValidation()">Simulate validationToken</button><pre id="subs"></pre></section>
 <section><h2>Incoming Events</h2><pre id="events"></pre></section>
 <script>
-const ids=["tenant_id","client_id","team_id","channel_id","chat_id","scopes","kind","text","client_state","expiration"];
+const ids=["tenant_id","client_id","team_id","channel_id","chat_id","scopes","kind","text","client_state","expiration","lifecycle_notification_url"];
 function val(id){const el=document.getElementById(id);return el?el.value:""}
 function set(id,v){document.getElementById(id).textContent=typeof v==="string"?v:JSON.stringify(v,null,2)}
 function targetFor(path,target){return target||(path.includes("discover")?"discover":path.includes("subscription")?"subs":path.includes("send")?"send":"oauth")}
 async function api(path,body,target){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();set(targetFor(path,target),j);return j}
 function mergeScopes(v,required){const seen=new Set();const out=[];((v||'')+' '+(required||'')).split(/\\s+/).filter(Boolean).forEach(s=>{const k=s.toLowerCase();if(!seen.has(k)){seen.add(k);out.push(s)}});return out.join(' ')}
-async function load(){const r=await fetch('/api/state');const s=await r.json();document.getElementById('public').textContent=s.public_url||'';document.getElementById('ingress').textContent=(s.public_url||'')+'/v1/messaging/ingress/messaging-teams/default/default';const c=s.values.config||{};const sec=s.values.secrets||{};ids.forEach(id=>{if(document.getElementById(id)&&c[id])document.getElementById(id).value=c[id]});if(document.getElementById('tenant_id'))document.getElementById('tenant_id').value=c.device_login_tenant||c.auth_tenant_alias||'organizations';const scopeEl=document.getElementById('scopes');scopeEl.value=mergeScopes(scopeEl.value||c.oauth_scopes||localStorage.scopes||s.default_scopes,s.default_scopes);localStorage.scopes=scopeEl.value;if(!document.getElementById('expiration').value)document.getElementById('expiration').value=s.default_subscription_expiration;set('events',s.events)}
-function collect(){return {tenant_id:val('tenant_id'),client_id:val('client_id'),scopes:val('scopes'),team_id:val('team_id'),channel_id:val('channel_id'),chat_id:val('chat_id'),kind:val('kind'),text:val('text'),client_state:val('client_state'),expiration:val('expiration')}}
+async function load(){const r=await fetch('/api/state');const s=await r.json();const ingress=(s.public_url||'')+'/v1/messaging/ingress/messaging-teams/default/default';document.getElementById('public').textContent=s.public_url||'';document.getElementById('ingress').textContent=ingress;const c=s.values.config||{};const sec=s.values.secrets||{};ids.forEach(id=>{if(document.getElementById(id)&&c[id])document.getElementById(id).value=c[id]});if(document.getElementById('tenant_id'))document.getElementById('tenant_id').value=c.device_login_tenant||c.auth_tenant_alias||'organizations';const scopeEl=document.getElementById('scopes');scopeEl.value=mergeScopes(scopeEl.value||c.oauth_scopes||localStorage.scopes||s.default_scopes,s.default_scopes);localStorage.scopes=scopeEl.value;if(!document.getElementById('expiration').value)document.getElementById('expiration').value=s.default_subscription_expiration;if(!document.getElementById('lifecycle_notification_url').value)document.getElementById('lifecycle_notification_url').value=ingress;set('events',s.events)}
+function collect(){return {tenant_id:val('tenant_id'),client_id:val('client_id'),scopes:val('scopes'),team_id:val('team_id'),channel_id:val('channel_id'),chat_id:val('chat_id'),kind:val('kind'),text:val('text'),client_state:val('client_state'),expiration:val('expiration'),lifecycle_notification_url:val('lifecycle_notification_url')}}
 async function deviceStart(){localStorage.scopes=val('scopes');const j=await api('/api/device/start',collect(),'oauth');const url=j.verification_uri||j.verification_url||j.login_url||'https://microsoft.com/devicelogin';if(url) window.open(url,'_blank','noopener')}
 async function deviceComplete(){await api('/api/device/complete',collect(),'oauth')}
 async function refreshToken(){await api('/api/token/refresh',collect(),'oauth')}
 async function directGraph(){await api('/api/send/direct',collect(),'send')}
+async function subPreview(){await api('/api/subscriptions/preview',collect(),'subs')}
 async function subCreate(){await api('/api/subscriptions/create',collect(),'subs')}
 async function simulateValidation(){const r=await fetch('/v1/messaging/ingress/messaging-teams/default/default?validationToken=hello-graph',{method:'POST'});set('subs',await r.text())}
 setInterval(load,2000);load();
@@ -706,9 +723,16 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     path = f"/teams/{data.get('team_id')}/channels/{data.get('channel_id')}/messages"
                 self.send_json(graph_request("POST", path, token(), adaptive_card_payload(data.get("text")))); return
+            if parsed.path == "/api/subscriptions/preview":
+                body = subscription_body(data)
+                self.send_json(validate_subscription_body(body)); return
             if parsed.path == "/api/subscriptions/create":
                 try:
-                    self.send_json(graph_request("POST", "/subscriptions", token(), subscription_body(data)))
+                    body = subscription_body(data)
+                    validation = validate_subscription_body(body)
+                    if validation["warnings"]:
+                        append_event("subscription_body_warning", validation)
+                    self.send_json(graph_request("POST", "/subscriptions", token(), body))
                 except Exception as exc:
                     self.send_json({"ok": False, **graph_error_hint(exc)}, 500)
                 return

@@ -399,6 +399,27 @@ fn teams_subscription_manifest_declares_generic_desired_state_metadata() -> Resu
             .and_then(JsonValue::as_str),
         Some("{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}")
     );
+    assert_eq!(
+        desired_state
+            .get("lifecycle_notification_url")
+            .and_then(|value| value.get("template"))
+            .and_then(JsonValue::as_str),
+        Some("{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}")
+    );
+    assert_eq!(
+        desired_state
+            .get("lifecycle_notification_url")
+            .and_then(|value| value.get("required_when_expiration_over_minutes"))
+            .and_then(JsonValue::as_i64),
+        Some(60)
+    );
+    assert_eq!(
+        desired_state
+            .get("expiration_policy")
+            .and_then(|value| value.get("max_minutes"))
+            .and_then(JsonValue::as_i64),
+        Some(4320)
+    );
     let templates = desired_state
         .get("templates")
         .and_then(JsonValue::as_array)
@@ -420,6 +441,15 @@ fn teams_subscription_manifest_declares_generic_desired_state_metadata() -> Resu
                 == Some("/chats/{chat_id}/messages")
         }),
         "Teams desired_state must declare chat message resource format"
+    );
+    assert!(
+        templates.iter().all(|template| {
+            template
+                .get("lifecycle_notification_url")
+                .and_then(JsonValue::as_str)
+                == Some("{lifecycle_notification_url}")
+        }),
+        "Teams desired_state templates must pass lifecycle_notification_url to Graph subscriptions"
     );
 
     Ok(())
