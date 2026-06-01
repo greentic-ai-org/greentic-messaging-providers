@@ -16,9 +16,9 @@ questions:
     title: Mode
     kind: string
     required: true
-    default: "local_queue"
+    default: "websocket"
     help: "WebChat connection mode"
-    placeholder: "local_queue"
+    placeholder: "websocket"
     group: Connection
   - name: route
     title: Route

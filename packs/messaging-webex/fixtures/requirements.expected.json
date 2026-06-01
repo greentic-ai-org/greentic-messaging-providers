@@ -10,8 +10,7 @@
     "api_base_url"
   ],
   "secret_required": [
-    "WEBEX_BOT_TOKEN",
-    "WEBEX_WEBHOOK_SECRET"
+    "WEBEX_BOT_TOKEN"
   ],
   "secret_optional": [],
   "oauth_required": false,

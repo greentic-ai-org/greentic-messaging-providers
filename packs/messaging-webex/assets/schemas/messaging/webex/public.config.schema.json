@@ -20,11 +20,6 @@
     "public_base_url": {
       "type": "string",
       "description": "Public base URL used to build inbound webhook callback URLs."
-    },
-    "webhook_secret": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Shared secret Webex uses to sign webhook requests with X-Spark-Signature."
     }
   },
   "required": [

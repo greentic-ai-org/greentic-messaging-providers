@@ -1,5 +1,5 @@
 {
-  "mode": "local_queue",
+  "mode": "websocket",
   "config": {
     "public_base_url": "<value>"
   },

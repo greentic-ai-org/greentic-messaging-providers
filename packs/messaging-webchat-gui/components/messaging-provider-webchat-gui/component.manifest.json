@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-webchat-gui",
-  "version": "0.5.2",
+  "version": "0.5.4",
   "supports": [
     "messaging"
   ],
@@ -20,12 +20,7 @@
       }
     }
   },
-  "secret_requirements": [
-    {
-      "name": "jwt_signing_key",
-      "required": true
-    }
-  ],
+  "secret_requirements": [],
   "operations": [],
   "resources": {},
   "dev_flows": {}
