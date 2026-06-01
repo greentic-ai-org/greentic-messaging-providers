@@ -79,7 +79,7 @@ pub(crate) fn default_enabled() -> bool {
 }
 
 pub(crate) fn default_mode() -> String {
-    "local_queue".to_string()
+    "websocket".to_string()
 }
 
 pub(crate) fn default_config_out() -> ProviderConfigOut {
@@ -237,13 +237,13 @@ mod tests {
     fn presentation_mode_defaults_to_standalone() {
         let cfg: ProviderConfig = serde_json::from_value(json!({
             "public_base_url": "https://example.com",
-            "mode": "local_queue",
             "route": "webchat"
         }))
         .unwrap();
         assert_eq!(cfg.presentation_mode, PresentationMode::Standalone);
         assert_eq!(cfg.skin, "default");
         assert!(cfg.text_input_enabled);
+        assert_eq!(cfg.mode, "websocket");
     }
 
     #[test]

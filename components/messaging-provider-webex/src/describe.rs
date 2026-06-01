@@ -46,8 +46,6 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.schema.config.api_base_url.description",
     "webex.schema.config.bot_token.title",
     "webex.schema.config.bot_token.description",
-    "webex.schema.config.webhook_secret.title",
-    "webex.schema.config.webhook_secret.description",
     "webex.schema.config.default_locale.title",
     "webex.schema.config.default_locale.description",
     "webex.qa.default.title",
@@ -109,16 +107,10 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
         input_schema: input_schema.clone(),
         output_schema: output_schema.clone(),
         config_schema: config_schema.clone(),
-        redactions: vec![
-            RedactionRule {
-                path: "$.bot_token".to_string(),
-                strategy: "replace".to_string(),
-            },
-            RedactionRule {
-                path: "$.webhook_secret".to_string(),
-                strategy: "replace".to_string(),
-            },
-        ],
+        redactions: vec![RedactionRule {
+            path: "$.bot_token".to_string(),
+            strategy: "replace".to_string(),
+        }],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
     }
 }
@@ -231,11 +223,6 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "webex.schema.config.bot_token.description",
         "Bot token for Webex API calls",
     ),
-    ("webex.schema.config.webhook_secret.title", "Webhook secret"),
-    (
-        "webex.schema.config.webhook_secret.description",
-        "Secret used by Webex to sign webhook delivery payloads",
-    ),
     ("webex.schema.config.default_locale.title", "Default locale"),
     (
         "webex.schema.config.default_locale.description",
@@ -251,7 +238,6 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("webex.qa.setup.default_to_person_email", "Person email"),
     ("webex.qa.setup.api_base_url", "API base URL"),
     ("webex.qa.setup.bot_token", "Bot token"),
-    ("webex.qa.setup.webhook_secret", "Webhook secret"),
 ];
 
 pub(crate) fn i18n_bundle(locale: String) -> Vec<u8> {
@@ -353,14 +339,6 @@ pub(crate) fn config_schema() -> SchemaIr {
                 schema_secret(
                     "webex.schema.config.bot_token.title",
                     "webex.schema.config.bot_token.description",
-                ),
-            ),
-            (
-                "webhook_secret",
-                false,
-                schema_secret(
-                    "webex.schema.config.webhook_secret.title",
-                    "webex.schema.config.webhook_secret.description",
                 ),
             ),
             (

@@ -50,6 +50,13 @@ site should style the chat directly.
 `skin` is only the visual theme folder, for example `default` or `3aigent`.
 Use `presentation_mode`, `mode`, and `render` for behavior.
 
+## Setup Defaults
+
+- `mode` defaults to `websocket` so the hosted GUI uses the push-capable
+  Direct Line transport unless a bundle explicitly opts into another mode.
+- `jwt_signing_key` is generated during setup and persisted as a tenant secret.
+  Operators should not be prompted to provide it manually for a normal setup.
+
 ## Local Preview
 
 ```bash

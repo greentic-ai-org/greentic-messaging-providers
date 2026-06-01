@@ -409,7 +409,7 @@ fn generate_secret_20() -> String {
 mod tests {
     use super::*;
     use config::parse_config_bytes;
-    use provider_common::component_v0_6::schema_hash;
+    use provider_common::component_v0_6::{SchemaIr, schema_hash};
     use std::collections::BTreeSet;
 
     #[test]
@@ -465,6 +465,23 @@ mod tests {
                 &describe.config_schema
             )
         );
+    }
+
+    #[test]
+    fn describe_hides_generated_webhook_secret() {
+        let describe = build_describe_payload();
+        let fields = match describe.config_schema {
+            SchemaIr::Object { fields, .. } => fields,
+            _ => panic!("config schema should be an object"),
+        };
+        assert!(!fields.contains_key("webhook_secret"));
+        assert!(
+            !describe
+                .redactions
+                .iter()
+                .any(|rule| rule.path == "$.webhook_secret")
+        );
+        assert!(!I18N_KEYS.iter().any(|key| key.contains("webhook_secret")));
     }
 
     #[test]

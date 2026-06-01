@@ -17,6 +17,21 @@ copy_if_present() {
   return 1
 }
 
+pack_selected() {
+  local pack_name="$1"
+  if [ -z "${PACK_FILTER:-}" ]; then
+    return 0
+  fi
+  python3 - <<'PY' "${PACK_FILTER}" "${pack_name}"
+import sys
+
+raw = sys.argv[1]
+name = sys.argv[2]
+items = [part.strip() for chunk in raw.split(",") for part in chunk.split() if part.strip()]
+raise SystemExit(0 if name in items else 1)
+PY
+}
+
 stage_core_component() {
   local name="$1"
   local target_src="${TARGET_COMPONENTS_DIR}/${name}.wasm"
@@ -44,6 +59,7 @@ stage_templates_component() {
     fi
     for pack in "${ROOT_DIR}/packs"/*; do
       [ -d "${pack}" ] || continue
+      pack_selected "$(basename "${pack}")" || continue
       local dest_dir="${pack}/components/templates"
       mkdir -p "${dest_dir}"
       cp -f "${wasm_src}" "${dest_dir}/templates.wasm"
