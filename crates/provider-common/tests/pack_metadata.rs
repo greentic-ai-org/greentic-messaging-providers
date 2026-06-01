@@ -283,6 +283,11 @@ fn generated_runtime_secret_metadata_is_declared_for_seedable_provider_secrets()
     let root = workspace_root();
     let expected = [
         (
+            "messaging-slack",
+            "slack_signing_secret",
+            "SLACK_SIGNING_SECRET",
+        ),
+        (
             "messaging-webex",
             "webex_webhook_secret",
             "WEBEX_WEBHOOK_SECRET",
@@ -298,17 +303,6 @@ fn generated_runtime_secret_metadata_is_declared_for_seedable_provider_secrets()
     for (pack, secret_name, alias) in expected {
         let manifest_path = root.join("packs").join(pack).join("pack.manifest.json");
         let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
-        let requirements = manifest
-            .get("secret_requirements")
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("{pack} missing secret_requirements"))?;
-        let requirement = requirements
-            .iter()
-            .find(|value| value.get("name").and_then(Value::as_str) == Some(secret_name))
-            .ok_or_else(|| anyhow!("{pack} missing generated secret {secret_name}"))?;
-        let generated = requirement
-            .get("generated")
-            .ok_or_else(|| anyhow!("{pack} {secret_name} missing generated policy"))?;
         let extension_secret = manifest
             .get("extensions")
             .and_then(|value| value.get("greentic.generated-secrets.v1"))
@@ -324,22 +318,15 @@ fn generated_runtime_secret_metadata_is_declared_for_seedable_provider_secrets()
                 anyhow!("{pack} missing greentic.generated-secrets.v1 entry for {secret_name}")
             })?;
 
-        assert_eq!(
-            requirement.get("required").and_then(Value::as_bool),
-            Some(true)
-        );
-        assert_eq!(
-            requirement.get("scope").and_then(Value::as_str),
-            Some("tenant")
-        );
+        let requirements = manifest
+            .get("secret_requirements")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{pack} missing secret_requirements"))?;
         assert!(
-            requirement
-                .get("aliases")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .any(|value| value.as_str() == Some(alias)),
-            "{pack} {secret_name} must declare env alias {alias}"
+            !requirements
+                .iter()
+                .any(|value| value.get("name").and_then(Value::as_str) == Some(secret_name)),
+            "{pack} generated secret {secret_name} must not be in secret_requirements; setup treats those as user-provided"
         );
         assert!(
             extension_secret
@@ -351,34 +338,33 @@ fn generated_runtime_secret_metadata_is_declared_for_seedable_provider_secrets()
             "{pack} generated-secret extension must declare env alias {alias}"
         );
         assert_eq!(
-            generated.get("policy").and_then(Value::as_str),
-            Some("random")
-        );
-        assert_eq!(
             extension_secret.get("policy").and_then(Value::as_str),
             Some("random")
         );
-        assert_eq!(generated.get("length").and_then(Value::as_u64), Some(20));
         assert_eq!(
-            generated.get("encoding").and_then(Value::as_str),
+            extension_secret.get("length").and_then(Value::as_u64),
+            Some(20)
+        );
+        assert_eq!(
+            extension_secret.get("encoding").and_then(Value::as_str),
             Some("raw_text")
         );
         assert_eq!(
-            generated
+            extension_secret
                 .get("scope")
                 .and_then(|value| value.get("level"))
                 .and_then(Value::as_str),
             Some("tenant")
         );
         assert_eq!(
-            generated
+            extension_secret
                 .get("scope")
                 .and_then(|value| value.get("team"))
                 .and_then(Value::as_str),
             Some("_")
         );
         assert_eq!(
-            generated
+            extension_secret
                 .get("regenerate_if_present")
                 .and_then(Value::as_bool),
             Some(false)
