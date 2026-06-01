@@ -16,7 +16,27 @@
       "path": "schemas/messaging/webchat-gui/public.config.schema.json"
     }
   },
-  "secret_requirements": [],
+  "secret_requirements": [
+    {
+      "name": "jwt_signing_key",
+      "aliases": [
+        "JWT_SIGNING_KEY"
+      ],
+      "required": true,
+      "scope": "tenant",
+      "description": "Secret key used for Direct Line JWT token signing and verification.",
+      "generated": {
+        "policy": "random",
+        "length": 20,
+        "encoding": "raw_text",
+        "scope": {
+          "level": "tenant",
+          "team": "_"
+        },
+        "regenerate_if_present": false
+      }
+    }
+  ],
   "capabilities": {
     "wasi": {},
     "host": {

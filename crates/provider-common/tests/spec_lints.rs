@@ -99,11 +99,25 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
         .iter()
         .find_map(|action| action.get("registration"))
         .ok_or_else(|| anyhow!("slack setup.yaml missing registration action"))?;
+    let oauth_action = setup_actions
+        .iter()
+        .find(|action| action.get("id").and_then(Value::as_str) == Some("add_to_slack"))
+        .ok_or_else(|| anyhow!("slack setup.yaml missing add_to_slack action"))?;
 
     assert_eq!(
         registration.get("app_id_output").and_then(Value::as_str),
         Some("slack_app_id"),
         "Slack setup must persist the app id under the key setup_webhook reads at startup"
+    );
+    assert_eq!(
+        registration.get("client_id_output").and_then(Value::as_str),
+        Some("slack_client_id"),
+        "Slack registration must persist the OAuth client id under the key Add to Slack reads"
+    );
+    assert_eq!(
+        oauth_action.get("client_id_field").and_then(Value::as_str),
+        registration.get("client_id_output").and_then(Value::as_str),
+        "Slack Add to Slack button must use the registered OAuth client id output"
     );
 
     Ok(())

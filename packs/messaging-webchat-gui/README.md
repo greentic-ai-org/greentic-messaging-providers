@@ -56,6 +56,8 @@ Use `presentation_mode`, `mode`, and `render` for behavior.
   Direct Line transport unless a bundle explicitly opts into another mode.
 - `jwt_signing_key` is generated during setup and persisted as a tenant secret.
   Operators should not be prompted to provide it manually for a normal setup.
+- The pack declares `jwt_signing_key` as a generated tenant-wide runtime secret
+  so hosts can seed it generically for existing bundles.
 
 ## Local Preview
 
