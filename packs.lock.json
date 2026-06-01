@@ -59,9 +59,9 @@
     {
       "name": "messaging-webex",
       "file": "dist/packs/messaging-webex.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webex:0.5.6",
-      "digest": "sha256:b32ee79bfe39252c32307f8dcab363b29a3cecedc368c53919822c936ee82de8",
-      "built_at": "2026-06-01T07:03:04Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webex:0.5.7",
+      "digest": "sha256:20f59845e87e884cfe6cc2c84f3a485aba5ada63c8e835f611b1f706787e6720",
+      "built_at": "2026-06-01T10:23:09Z"
     },
     {
       "name": "messaging-whatsapp",
