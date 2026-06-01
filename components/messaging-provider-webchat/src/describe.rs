@@ -813,14 +813,6 @@ fn config_schema() -> SchemaIr {
                 ),
             ),
             (
-                "jwt_signing_key",
-                false,
-                schema_secret(
-                    "webchat.schema.config.jwt_signing_key.title",
-                    "webchat.schema.config.jwt_signing_key.description",
-                ),
-            ),
-            (
                 "oauth_google_client_id",
                 false,
                 schema_str(

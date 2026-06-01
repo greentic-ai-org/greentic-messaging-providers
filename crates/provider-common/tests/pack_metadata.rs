@@ -229,7 +229,16 @@ fn gtpack_contains_secret_requirements_metadata() -> Result<()> {
         );
         for field in actual_req.keys() {
             assert!(
-                matches!(field.as_str(), "name" | "scope" | "description" | "example"),
+                matches!(
+                    field.as_str(),
+                    "name"
+                        | "scope"
+                        | "description"
+                        | "example"
+                        | "required"
+                        | "aliases"
+                        | "generated"
+                ),
                 "unexpected field {} in requirement {:?}",
                 field,
                 key
@@ -263,6 +272,116 @@ fn gtpack_contains_secret_requirements_metadata() -> Result<()> {
             !cache_bytes.is_empty(),
             "capabilities cache file {} should be present",
             path
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn generated_runtime_secret_metadata_is_declared_for_seedable_provider_secrets() -> Result<()> {
+    let root = workspace_root();
+    let expected = [
+        (
+            "messaging-webex",
+            "webex_webhook_secret",
+            "WEBEX_WEBHOOK_SECRET",
+        ),
+        (
+            "messaging-webchat-gui",
+            "jwt_signing_key",
+            "JWT_SIGNING_KEY",
+        ),
+        ("messaging-webchat", "jwt_signing_key", "JWT_SIGNING_KEY"),
+    ];
+
+    for (pack, secret_name, alias) in expected {
+        let manifest_path = root.join("packs").join(pack).join("pack.manifest.json");
+        let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+        let requirements = manifest
+            .get("secret_requirements")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{pack} missing secret_requirements"))?;
+        let requirement = requirements
+            .iter()
+            .find(|value| value.get("name").and_then(Value::as_str) == Some(secret_name))
+            .ok_or_else(|| anyhow!("{pack} missing generated secret {secret_name}"))?;
+        let generated = requirement
+            .get("generated")
+            .ok_or_else(|| anyhow!("{pack} {secret_name} missing generated policy"))?;
+        let extension_secret = manifest
+            .get("extensions")
+            .and_then(|value| value.get("greentic.generated-secrets.v1"))
+            .and_then(|value| value.get("inline"))
+            .and_then(|value| value.get("secrets"))
+            .and_then(Value::as_array)
+            .and_then(|secrets| {
+                secrets
+                    .iter()
+                    .find(|value| value.get("key").and_then(Value::as_str) == Some(secret_name))
+            })
+            .ok_or_else(|| {
+                anyhow!("{pack} missing greentic.generated-secrets.v1 entry for {secret_name}")
+            })?;
+
+        assert_eq!(
+            requirement.get("required").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            requirement.get("scope").and_then(Value::as_str),
+            Some("tenant")
+        );
+        assert!(
+            requirement
+                .get("aliases")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|value| value.as_str() == Some(alias)),
+            "{pack} {secret_name} must declare env alias {alias}"
+        );
+        assert!(
+            extension_secret
+                .get("aliases")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|value| value.as_str() == Some(alias)),
+            "{pack} generated-secret extension must declare env alias {alias}"
+        );
+        assert_eq!(
+            generated.get("policy").and_then(Value::as_str),
+            Some("random")
+        );
+        assert_eq!(
+            extension_secret.get("policy").and_then(Value::as_str),
+            Some("random")
+        );
+        assert_eq!(generated.get("length").and_then(Value::as_u64), Some(20));
+        assert_eq!(
+            generated.get("encoding").and_then(Value::as_str),
+            Some("raw_text")
+        );
+        assert_eq!(
+            generated
+                .get("scope")
+                .and_then(|value| value.get("level"))
+                .and_then(Value::as_str),
+            Some("tenant")
+        );
+        assert_eq!(
+            generated
+                .get("scope")
+                .and_then(|value| value.get("team"))
+                .and_then(Value::as_str),
+            Some("_")
+        );
+        assert_eq!(
+            generated
+                .get("regenerate_if_present")
+                .and_then(Value::as_bool),
+            Some(false)
         );
     }
 

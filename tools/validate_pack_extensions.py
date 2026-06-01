@@ -14,6 +14,12 @@ from typing import Any, Dict, Tuple
 
 PROVIDER_EXTENSION_ID = "greentic.provider-extension.v1"
 
+GENERATED_SECRET_REQUIREMENTS = {
+    "messaging-webex": ("webex_webhook_secret", "WEBEX_WEBHOOK_SECRET"),
+    "messaging-webchat-gui": ("jwt_signing_key", "JWT_SIGNING_KEY"),
+    "messaging-webchat": ("jwt_signing_key", "JWT_SIGNING_KEY"),
+}
+
 
 class CBORDecoder:
     """
@@ -149,6 +155,73 @@ def validate_pack(path: Path) -> None:
 
     if path.stem == "messaging-teams":
         validate_teams_subscription_desired_state(path, manifest)
+
+    if path.stem in GENERATED_SECRET_REQUIREMENTS:
+        secret_name, alias = GENERATED_SECRET_REQUIREMENTS[path.stem]
+        validate_generated_secret_requirement(path, manifest, secret_name, alias)
+
+
+def validate_generated_secret_requirement(
+    path: Path, manifest: Dict[str, Any], secret_name: str, alias: str
+) -> None:
+    generated_extension = (
+        (manifest.get("extensions") or {})
+        .get("greentic.generated-secrets.v1", {})
+        .get("inline", {})
+        .get("secrets")
+    )
+    if isinstance(generated_extension, list):
+        for candidate in generated_extension:
+            if isinstance(candidate, dict) and candidate.get("key") == secret_name:
+                validate_generated_secret_policy(path, candidate, secret_name, alias)
+                return
+
+    requirements = manifest.get("secret_requirements")
+    if not isinstance(requirements, list):
+        raise ValueError(f"{path} manifest missing secret_requirements list")
+    requirement = None
+    for candidate in requirements:
+        if isinstance(candidate, dict) and candidate.get("name") == secret_name:
+            requirement = candidate
+            break
+    if requirement is None:
+        raise ValueError(f"{path} missing generated secret requirement {secret_name}")
+
+    validate_generated_secret_policy(path, requirement, secret_name, alias)
+
+
+def validate_generated_secret_policy(
+    path: Path, requirement: Dict[str, Any], secret_name: str, alias: str
+) -> None:
+    aliases = requirement.get("aliases")
+    if not isinstance(aliases, list) or alias not in aliases:
+        raise ValueError(f"{path} {secret_name} missing alias {alias}")
+    if requirement.get("required") is not True:
+        raise ValueError(f"{path} {secret_name} must be required")
+    scope_value = requirement.get("scope")
+    if isinstance(scope_value, dict):
+        if scope_value.get("level") != "tenant" or scope_value.get("team") != "_":
+            raise ValueError(f"{path} {secret_name} must use tenant-wide team=_ scope")
+    elif scope_value != "tenant":
+        raise ValueError(f"{path} {secret_name} must use tenant requirement scope")
+
+    generated = requirement.get("generated")
+    if not isinstance(generated, dict):
+        generated = requirement
+    expected = {
+        "policy": "random",
+        "length": 20,
+        "encoding": "raw_text",
+        "regenerate_if_present": False,
+    }
+    for key, value in expected.items():
+        if generated.get(key) != value:
+            raise ValueError(
+                f"{path} {secret_name} generated.{key}={generated.get(key)!r}, expected {value!r}"
+            )
+    scope = generated.get("scope")
+    if not isinstance(scope, dict) or scope.get("level") != "tenant" or scope.get("team") != "_":
+        raise ValueError(f"{path} {secret_name} generated scope must be tenant-wide team=_")
 
 
 def validate_teams_subscription_desired_state(path: Path, manifest: Dict[str, Any]) -> None:

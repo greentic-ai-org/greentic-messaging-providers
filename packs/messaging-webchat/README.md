@@ -23,6 +23,9 @@ Inputs:
 - Config required: `public_base_url`
 - Config optional: `ingress_path`
 - Secrets required: `jwt_signing_key`
+- Setup does not ask for `jwt_signing_key`. The provider emits it through
+  `secrets_patch`, and the pack declares it as a generated tenant-wide runtime
+  secret so hosts can seed it generically for existing bundles.
 
 ## Direct Line (polling) contract
 

@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-webchat-gui",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "supports": [
     "messaging"
   ],
