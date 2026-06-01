@@ -1,12 +1,16 @@
 //! WebChat GUI messaging provider component.
 
 use base64::{Engine as _, engine::general_purpose};
-use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
-use provider_common::helpers::json_bytes;
+use provider_common::component_v0_6::{
+    DescribePayload, SchemaIr, canonical_cbor_bytes, decode_cbor, schema_hash,
+};
+use provider_common::helpers::{i18n_bundle_from_pairs, json_bytes};
 use provider_common::redact;
 use provider_common::telemetry::{self, Field, Level, Span, field};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use uuid::Uuid;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -17,6 +21,7 @@ mod bindings {
 }
 
 pub(crate) mod config;
+#[allow(dead_code)]
 #[path = "../../messaging-provider-webchat/src/describe.rs"]
 mod describe;
 pub(crate) mod directline;
@@ -40,7 +45,7 @@ struct Component;
 
 impl bindings::exports::greentic::component::descriptor::Guest for Component {
     fn describe() -> Vec<u8> {
-        canonical_cbor_bytes(&build_describe_payload())
+        canonical_cbor_bytes(&build_gui_describe_payload())
     }
 }
 
@@ -93,17 +98,17 @@ impl bindings::exports::greentic::component::qa::Guest for Component {
 
 impl bindings::exports::greentic::component::component_i18n::Guest for Component {
     fn i18n_keys() -> Vec<String> {
-        describe::i18n_keys_vec()
+        filtered_i18n_keys()
     }
 
     fn i18n_bundle(locale: String) -> Vec<u8> {
-        describe::i18n_bundle(locale)
+        i18n_bundle_from_pairs(locale, &filtered_i18n_pairs())
     }
 }
 
 impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest for Component {
     fn describe() -> Vec<u8> {
-        serde_json::to_vec(&build_describe_payload()).unwrap_or_default()
+        serde_json::to_vec(&build_gui_describe_payload()).unwrap_or_default()
     }
 
     fn validate_config(config_json: Vec<u8>) -> Vec<u8> {
@@ -127,8 +132,8 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
             "webchat",
             SETUP_QUESTIONS,
             DEFAULT_KEYS,
-            I18N_KEYS,
-            I18N_PAIRS,
+            &filtered_i18n_key_refs(),
+            &filtered_i18n_pairs(),
             apply_answers_bridge,
         ) {
             return result;
@@ -138,6 +143,51 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
 }
 
 bindings::export!(Component with_types_in bindings);
+
+fn build_gui_describe_payload() -> DescribePayload {
+    let mut payload = build_describe_payload();
+    if let SchemaIr::Object { fields, .. } = &mut payload.config_schema {
+        fields.remove("jwt_signing_key");
+    }
+    payload
+        .redactions
+        .retain(|rule| rule.path != "$.jwt_signing_key");
+    payload.schema_hash = schema_hash(
+        &payload.input_schema,
+        &payload.output_schema,
+        &payload.config_schema,
+    );
+    payload
+}
+
+fn is_generated_secret_i18n_key(key: &str) -> bool {
+    key.contains("jwt_signing_key")
+}
+
+fn filtered_i18n_keys() -> Vec<String> {
+    I18N_KEYS
+        .iter()
+        .copied()
+        .filter(|key| !is_generated_secret_i18n_key(key))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn filtered_i18n_key_refs() -> Vec<&'static str> {
+    I18N_KEYS
+        .iter()
+        .copied()
+        .filter(|key| !is_generated_secret_i18n_key(key))
+        .collect()
+}
+
+fn filtered_i18n_pairs() -> Vec<(&'static str, &'static str)> {
+    I18N_PAIRS
+        .iter()
+        .copied()
+        .filter(|(key, _)| !is_generated_secret_i18n_key(key))
+        .collect()
+}
 
 fn apply_answers_bridge(mode: &str, answers_cbor: Vec<u8>) -> Vec<u8> {
     use bindings::exports::greentic::component::qa::Mode;
@@ -189,9 +239,16 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
 struct ApplyAnswersResult {
     ok: bool,
     config: Option<ProviderConfigOut>,
+    secrets_patch: Option<SecretsPatch>,
     remove: Option<RemovePlan>,
     diagnostics: Vec<String>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SecretsPatch {
+    set: BTreeMap<String, String>,
+    delete: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,6 +300,7 @@ fn apply_answers_impl(
             return canonical_cbor_bytes(&ApplyAnswersResult {
                 ok: false,
                 config: None,
+                secrets_patch: None,
                 remove: None,
                 diagnostics: Vec::new(),
                 error: Some(format!("invalid answers cbor: {detail}")),
@@ -263,6 +321,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
             config: None,
+            secrets_patch: None,
             remove: Some(RemovePlan {
                 remove_all: true,
                 cleanup: vec![
@@ -277,6 +336,7 @@ fn apply_answers_impl(
     }
 
     let mut merged = existing_config_from_answers(&answers).unwrap_or_else(default_config_out);
+    let mut secrets_set = BTreeMap::new();
     let answer_obj = answers.as_object();
     let has = |key: &str| answer_obj.is_some_and(|obj| obj.contains_key(key));
 
@@ -295,9 +355,11 @@ fn apply_answers_impl(
         merged.tenant_channel_id = optional_string_from(&answers, "tenant_channel_id")
             .or(merged.tenant_channel_id.clone());
         merged.base_url = optional_string_from(&answers, "base_url").or(merged.base_url.clone());
-        merged.jwt_signing_key_b64 = optional_string_from(&answers, "jwt_signing_key")
-            .map(|value| general_purpose::STANDARD.encode(value.as_bytes()))
-            .or(merged.jwt_signing_key_b64.clone());
+        let jwt_key = optional_string_from(&answers, "jwt_signing_key")
+            .or_else(|| take_existing_jwt_key(&mut merged))
+            .unwrap_or_else(generate_secret_20);
+        secrets_set.insert("jwt_signing_key".to_string(), jwt_key);
+        merged.jwt_signing_key_b64 = None;
         merged.oauth_enabled = answers
             .get("oauth_enabled")
             .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
@@ -311,6 +373,7 @@ fn apply_answers_impl(
                     return canonical_cbor_bytes(&ApplyAnswersResult {
                         ok: false,
                         config: None,
+                        secrets_patch: None,
                         remove: None,
                         diagnostics: Vec::new(),
                         error: Some(error),
@@ -350,8 +413,14 @@ fn apply_answers_impl(
             merged.base_url = optional_string_from(&answers, "base_url");
         }
         if has("jwt_signing_key") {
-            merged.jwt_signing_key_b64 = optional_string_from(&answers, "jwt_signing_key")
-                .map(|value| general_purpose::STANDARD.encode(value.as_bytes()));
+            if let Some(jwt_key) = optional_string_from(&answers, "jwt_signing_key") {
+                secrets_set.insert("jwt_signing_key".to_string(), jwt_key);
+            }
+            merged.jwt_signing_key_b64 = None;
+        } else if let Some(jwt_key) = take_existing_jwt_key(&mut merged) {
+            secrets_set.insert("jwt_signing_key".to_string(), jwt_key);
+        } else {
+            secrets_set.insert("jwt_signing_key".to_string(), generate_secret_20());
         }
         if has("oauth_enabled") {
             merged.oauth_enabled = answers
@@ -373,6 +442,7 @@ fn apply_answers_impl(
                     return canonical_cbor_bytes(&ApplyAnswersResult {
                         ok: false,
                         config: None,
+                        secrets_patch: None,
                         remove: None,
                         diagnostics: Vec::new(),
                         error: Some(error),
@@ -401,6 +471,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,
             config: None,
+            secrets_patch: None,
             remove: None,
             diagnostics: Vec::new(),
             error: Some(error),
@@ -410,6 +481,10 @@ fn apply_answers_impl(
     canonical_cbor_bytes(&ApplyAnswersResult {
         ok: true,
         config: Some(merged),
+        secrets_patch: (!secrets_set.is_empty()).then_some(SecretsPatch {
+            set: secrets_set,
+            delete: Vec::new(),
+        }),
         remove: None,
         diagnostics: Vec::new(),
         error: None,
@@ -440,6 +515,25 @@ fn optional_string_from(answers: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn generate_secret_20() -> String {
+    Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(20)
+        .collect()
+}
+
+fn take_existing_jwt_key(config: &mut ProviderConfigOut) -> Option<String> {
+    let encoded = config.jwt_signing_key_b64.take()?;
+    general_purpose::STANDARD
+        .decode(encoded)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn presentation_mode_from_answers(answers: &Value) -> Option<Result<PresentationMode, String>> {
@@ -580,14 +674,64 @@ mod tests {
     fn apply_answers_defaults_to_standalone() {
         let value = apply_setup(json!({
             "public_base_url": "https://chat.example.com",
-            "mode": "local_queue",
             "route": "webchat",
             "skin": "default"
         }));
         assert_eq!(value["ok"], true);
+        assert_eq!(value["config"]["mode"], "websocket");
         assert_eq!(value["config"]["presentation_mode"], "standalone");
         assert_eq!(value["config"]["skin"], "default");
         assert_eq!(value["config"]["text_input_enabled"], true);
+        assert!(value["config"].get("jwt_signing_key_b64").is_none());
+        let generated = value["secrets_patch"]["set"]["jwt_signing_key"]
+            .as_str()
+            .expect("generated jwt signing key");
+        assert_eq!(generated.len(), 20);
+    }
+
+    #[test]
+    fn describe_hides_generated_jwt_signing_key() {
+        let payload = build_gui_describe_payload();
+        let fields = match payload.config_schema {
+            SchemaIr::Object { fields, .. } => fields,
+            _ => panic!("config schema should be an object"),
+        };
+        assert!(!fields.contains_key("jwt_signing_key"));
+        assert!(
+            !payload
+                .redactions
+                .iter()
+                .any(|rule| rule.path == "$.jwt_signing_key")
+        );
+        assert!(
+            !filtered_i18n_keys()
+                .iter()
+                .any(|key| key.contains("jwt_signing_key"))
+        );
+    }
+
+    #[test]
+    fn apply_answers_migrates_existing_jwt_key_to_secret_patch() {
+        let value = apply_setup(json!({
+            "existing_config": {
+                "enabled": true,
+                "public_base_url": "https://chat.example.com",
+                "mode": "local_queue",
+                "route": "webchat",
+                "skin": "default",
+                "jwt_signing_key_b64": general_purpose::STANDARD.encode("existing-secret")
+            },
+            "public_base_url": "https://chat.example.com",
+            "mode": "local_queue",
+            "route": "webchat"
+        }));
+
+        assert_eq!(value["ok"], true);
+        assert!(value["config"].get("jwt_signing_key_b64").is_none());
+        assert_eq!(
+            value["secrets_patch"]["set"]["jwt_signing_key"],
+            Value::String("existing-secret".to_string())
+        );
     }
 
     #[test]

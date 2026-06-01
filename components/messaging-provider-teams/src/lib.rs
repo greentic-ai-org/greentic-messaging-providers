@@ -1,9 +1,9 @@
 //! Teams messaging provider component.
 //!
-//! Uses Bot Framework / Bot Service for messaging instead of Microsoft Graph API.
+//! Uses Microsoft Graph for outbound messaging.
 //!
 //! Implementation details are split across submodules:
-//! - `auth`: Bot Framework authentication (token acquisition, JWT validation)
+//! - `auth`: Microsoft Graph token acquisition and legacy JWT helpers
 //! - `config`: Configuration parsing and validation
 //! - `describe`: Provider description and QA specs
 //! - `ops`: Core operations (send, reply, render_plan, encode, send_payload)
@@ -28,10 +28,20 @@ mod ops;
 
 // Provider identification
 pub(crate) const PROVIDER_ID: &str = "messaging-provider-teams";
-pub(crate) const PROVIDER_TYPE: &str = "messaging.teams.bot";
+pub(crate) const PROVIDER_TYPE: &str = "messaging.teams.graph";
 pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
 
-// Bot Service constants
+// Microsoft Graph constants
+pub(crate) const DEFAULT_GRAPH_TENANT_ID_KEY: &str = "MS_GRAPH_TENANT_ID";
+pub(crate) const DEFAULT_GRAPH_CLIENT_ID_KEY: &str = "MS_GRAPH_CLIENT_ID";
+pub(crate) const DEFAULT_GRAPH_REFRESH_TOKEN_KEY: &str = "MS_GRAPH_REFRESH_TOKEN";
+pub(crate) const DEFAULT_GRAPH_CLIENT_SECRET_KEY: &str = "MS_GRAPH_CLIENT_SECRET";
+pub(crate) const DEFAULT_GRAPH_ACCESS_TOKEN_KEY: &str = "MS_GRAPH_ACCESS_TOKEN";
+pub(crate) const DEFAULT_GRAPH_BASE_URL: &str = "https://graph.microsoft.com/v1.0";
+pub(crate) const DEFAULT_AUTH_BASE_URL: &str = "https://login.microsoftonline.com";
+pub(crate) const DEFAULT_GRAPH_TOKEN_SCOPE: &str = "https://graph.microsoft.com/.default";
+
+// Legacy Bot Service constants retained for old ingress/JWT compatibility.
 pub(crate) const DEFAULT_BOT_APP_ID_KEY: &str = "MS_BOT_APP_ID";
 pub(crate) const DEFAULT_BOT_APP_PASSWORD_KEY: &str = "MS_BOT_APP_PASSWORD";
 pub(crate) const DEFAULT_BOT_TOKEN_ENDPOINT: &str =
@@ -42,7 +52,10 @@ use config::{ProviderConfigOut, default_config_out, validate_config_out};
 use describe::{
     DEFAULT_KEYS, I18N_KEYS, I18N_PAIRS, SETUP_QUESTIONS, build_describe_payload, build_qa_spec,
 };
-use ops::{encode_op, handle_reply, handle_send, ingest_http, render_plan, send_payload};
+use ops::{
+    encode_op, ensure_channel, handle_reply, handle_send, ingest_http, maybe_ensure_channel_config,
+    render_plan, send_payload,
+};
 
 // ============================================================================
 // Component trait implementations
@@ -148,6 +161,7 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
     match op {
         "run" | "send" => handle_send(input_json),
         "reply" => handle_reply(input_json),
+        "ensure_channel" | "ensure-channel" => ensure_channel(input_json),
         "ingest_http" => ingest_http(input_json),
         "render_plan" => render_plan(input_json),
         "encode" => encode_op(input_json),
@@ -224,15 +238,40 @@ fn apply_answers_impl(
             .and_then(Value::as_bool)
             .unwrap_or(merged.enabled);
         merged.public_base_url =
-            string_or_default(&answers, "public_base_url", &merged.public_base_url);
-        merged.ms_bot_app_id = string_or_default(&answers, "ms_bot_app_id", &merged.ms_bot_app_id);
-        merged.ms_bot_app_password = optional_string_from(&answers, "ms_bot_app_password")
-            .or(merged.ms_bot_app_password.clone());
-        merged.default_service_url = optional_string_from(&answers, "default_service_url")
-            .or(merged.default_service_url.clone());
+            optional_string_from(&answers, "public_base_url").or(merged.public_base_url.clone());
+        merged.setup_mode =
+            optional_string_from(&answers, "setup_mode").or(merged.setup_mode.clone());
+        merged.tenant_id = string_or_default(&answers, "tenant_id", &merged.tenant_id);
+        merged.client_id = string_or_default(&answers, "client_id", &merged.client_id);
+        merged.refresh_token =
+            optional_string_from(&answers, "refresh_token").or(merged.refresh_token.clone());
+        merged.client_secret =
+            optional_string_from(&answers, "client_secret").or(merged.client_secret.clone());
+        merged.access_token =
+            optional_string_from(&answers, "access_token").or(merged.access_token.clone());
+        merged.graph_base_url =
+            string_or_default(&answers, "graph_base_url", &merged.graph_base_url);
+        merged.auth_base_url = string_or_default(&answers, "auth_base_url", &merged.auth_base_url);
+        merged.token_scope = string_or_default(&answers, "token_scope", &merged.token_scope);
         merged.team_id = optional_string_from(&answers, "team_id").or(merged.team_id.clone());
+        merged.team_name = optional_string_from(&answers, "team_name").or(merged.team_name.clone());
         merged.channel_id =
             optional_string_from(&answers, "channel_id").or(merged.channel_id.clone());
+        merged.channel_name =
+            optional_string_from(&answers, "channel_name").or(merged.channel_name.clone());
+        merged.desired_channel_name = optional_string_from(&answers, "desired_channel_name")
+            .or_else(|| optional_string_from(&answers, "channel_name"))
+            .or(merged.desired_channel_name.clone());
+        merged.chat_id = optional_string_from(&answers, "chat_id").or(merged.chat_id.clone());
+        merged.user_id = optional_string_from(&answers, "user_id").or(merged.user_id.clone());
+        merged.ms_bot_app_id =
+            optional_string_from(&answers, "ms_bot_app_id").or(merged.ms_bot_app_id.clone());
+        merged.ms_bot_app_password = optional_string_from(&answers, "ms_bot_app_password")
+            .or(merged.ms_bot_app_password.clone());
+        merged.bot_display_name =
+            optional_string_from(&answers, "bot_display_name").or(merged.bot_display_name.clone());
+        merged.messaging_endpoint = optional_string_from(&answers, "messaging_endpoint")
+            .or(merged.messaging_endpoint.clone());
     }
 
     if mode == Mode::Upgrade {
@@ -243,26 +282,88 @@ fn apply_answers_impl(
                 .unwrap_or(merged.enabled);
         }
         if has("public_base_url") {
-            merged.public_base_url =
-                string_or_default(&answers, "public_base_url", &merged.public_base_url);
+            merged.public_base_url = optional_string_from(&answers, "public_base_url");
         }
-        if has("ms_bot_app_id") {
-            merged.ms_bot_app_id =
-                string_or_default(&answers, "ms_bot_app_id", &merged.ms_bot_app_id);
+        if has("setup_mode") {
+            merged.setup_mode = optional_string_from(&answers, "setup_mode");
         }
-        if has("ms_bot_app_password") {
-            merged.ms_bot_app_password = optional_string_from(&answers, "ms_bot_app_password");
+        if has("tenant_id") {
+            merged.tenant_id = string_or_default(&answers, "tenant_id", &merged.tenant_id);
         }
-        if has("default_service_url") {
-            merged.default_service_url = optional_string_from(&answers, "default_service_url");
+        if has("client_id") {
+            merged.client_id = string_or_default(&answers, "client_id", &merged.client_id);
+        }
+        if has("refresh_token") {
+            merged.refresh_token = optional_string_from(&answers, "refresh_token");
+        }
+        if has("client_secret") {
+            merged.client_secret = optional_string_from(&answers, "client_secret");
+        }
+        if has("access_token") {
+            merged.access_token = optional_string_from(&answers, "access_token");
+        }
+        if has("graph_base_url") {
+            merged.graph_base_url =
+                string_or_default(&answers, "graph_base_url", &merged.graph_base_url);
+        }
+        if has("auth_base_url") {
+            merged.auth_base_url =
+                string_or_default(&answers, "auth_base_url", &merged.auth_base_url);
+        }
+        if has("token_scope") {
+            merged.token_scope = string_or_default(&answers, "token_scope", &merged.token_scope);
         }
         if has("team_id") {
             merged.team_id = optional_string_from(&answers, "team_id");
         }
+        if has("team_name") {
+            merged.team_name = optional_string_from(&answers, "team_name");
+        }
         if has("channel_id") {
             merged.channel_id = optional_string_from(&answers, "channel_id");
         }
+        if has("channel_name") {
+            merged.channel_name = optional_string_from(&answers, "channel_name");
+        }
+        if has("desired_channel_name") {
+            merged.desired_channel_name = optional_string_from(&answers, "desired_channel_name");
+        }
+        if has("chat_id") {
+            merged.chat_id = optional_string_from(&answers, "chat_id");
+        }
+        if has("user_id") {
+            merged.user_id = optional_string_from(&answers, "user_id");
+        }
+        if has("ms_bot_app_id") {
+            merged.ms_bot_app_id = optional_string_from(&answers, "ms_bot_app_id");
+        }
+        if has("ms_bot_app_password") {
+            merged.ms_bot_app_password = optional_string_from(&answers, "ms_bot_app_password");
+        }
+        if has("bot_display_name") {
+            merged.bot_display_name = optional_string_from(&answers, "bot_display_name");
+        }
+        if has("messaging_endpoint") {
+            merged.messaging_endpoint = optional_string_from(&answers, "messaging_endpoint");
+        }
     }
+
+    let channel_created = if mode == Mode::Setup || mode == Mode::Default {
+        match maybe_ensure_channel_config(&mut merged) {
+            Ok(created) => created,
+            Err(error) => {
+                return canonical_cbor_bytes(&ApplyAnswersResult {
+                    ok: false,
+                    config: None,
+                    remove: None,
+                    diagnostics: Vec::new(),
+                    error: Some(error),
+                });
+            }
+        }
+    } else {
+        false
+    };
 
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
@@ -278,7 +379,11 @@ fn apply_answers_impl(
         ok: true,
         config: Some(merged),
         remove: None,
-        diagnostics: Vec::new(),
+        diagnostics: if channel_created {
+            vec!["created Teams channel from desired_channel_name".to_string()]
+        } else {
+            Vec::new()
+        },
         error: None,
     })
 }
@@ -330,11 +435,11 @@ mod tests {
 
     #[test]
     fn parse_config_requires_new_fields() {
-        let cfg =
-            br#"{"enabled":true,"ms_bot_app_id":"app-id","public_base_url":"https://example.com"}"#;
+        let cfg = br#"{"enabled":true,"tenant_id":"tenant","client_id":"client","refresh_token":"refresh"}"#;
         let parsed = parse_config_bytes(cfg).expect("valid config");
         assert!(parsed.enabled);
-        assert_eq!(parsed.ms_bot_app_id, "app-id");
+        assert_eq!(parsed.tenant_id, "tenant");
+        assert_eq!(parsed.client_id, "client");
     }
 
     #[test]
@@ -342,8 +447,9 @@ mod tests {
         let input = json!({
             "config": {
                 "enabled": true,
-                "ms_bot_app_id": "app-id",
-                "public_base_url": "https://example.com",
+                "tenant_id": "tenant",
+                "client_id": "client",
+                "refresh_token": "refresh",
                 "team_id": "team-abc"
             },
         });
@@ -353,7 +459,7 @@ mod tests {
 
     #[test]
     fn parse_config_rejects_unknown() {
-        let cfg = br#"{"enabled":true,"ms_bot_app_id":"app-id","public_base_url":"https://example.com","unknown":"field"}"#;
+        let cfg = br#"{"enabled":true,"tenant_id":"tenant","client_id":"client","refresh_token":"refresh","unknown":"field"}"#;
         let err = parse_config_bytes(cfg).unwrap_err();
         assert!(err.contains("unknown field"));
     }
@@ -404,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    fn qa_default_asks_required_minimum() {
+    fn qa_default_uses_device_code_action_without_manual_questions() {
         use bindings::exports::greentic::component::qa::Mode;
         let spec = build_qa_spec(Mode::Default);
         let keys = spec
@@ -412,7 +518,7 @@ mod tests {
             .into_iter()
             .map(|question| question.id)
             .collect::<Vec<_>>();
-        assert_eq!(keys, vec!["ms_bot_app_id", "public_base_url"]);
+        assert!(keys.is_empty());
     }
 
     #[test]
@@ -422,10 +528,13 @@ mod tests {
         let answers = json!({
             "existing_config": {
                 "enabled": true,
-                "ms_bot_app_id": "app-id",
-                "public_base_url": "https://example.com",
+                "tenant_id": "tenant",
+                "client_id": "client",
+                "refresh_token": "secret-a",
                 "team_id": "team-123",
-                "ms_bot_app_password": "secret-a"
+                "graph_base_url": "https://graph.microsoft.com/v1.0",
+                "auth_base_url": "https://login.microsoftonline.com",
+                "token_scope": "https://graph.microsoft.com/.default"
             },
             "team_id": "team-456"
         });
@@ -434,13 +543,153 @@ mod tests {
         let out_json: Value = decode_cbor(&out).expect("decode apply output");
         assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
         let config = out_json.get("config").expect("config object");
+        assert_eq!(config.get("ms_bot_app_password"), None);
         assert_eq!(
-            config.get("ms_bot_app_password"),
+            config.get("refresh_token"),
             Some(&Value::String("secret-a".to_string()))
         );
         assert_eq!(
             config.get("team_id"),
             Some(&Value::String("team-456".to_string()))
+        );
+    }
+
+    #[test]
+    fn apply_answers_persists_graph_selection_labels() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "setup_mode": "graph_channel",
+            "tenant_id": "tenant",
+            "client_id": "client",
+            "access_token": "token",
+            "team_id": "team-123",
+            "team_name": "Engineering",
+            "channel_id": "19:general@thread.tacv2",
+            "channel_name": "General",
+            "desired_channel_name": "Engineering Updates"
+        });
+
+        let out = crate::ops::with_http_send_mock(
+            |req| {
+                if req.method == "GET" {
+                    assert_eq!(
+                        req.url,
+                        "https://graph.microsoft.com/v1.0/teams/team-123/channels"
+                    );
+                    return Ok(crate::bindings::greentic::http::http_client::Response {
+                        status: 200,
+                        headers: vec![],
+                        body: Some(br#"{"value":[{"id":"19:general@thread.tacv2","displayName":"General"}]}"#.to_vec()),
+                    });
+                }
+                assert_eq!(req.method, "POST");
+                assert_eq!(
+                    req.url,
+                    "https://graph.microsoft.com/v1.0/teams/team-123/channels"
+                );
+                let body: Value = serde_json::from_slice(req.body.as_deref().unwrap_or_default())
+                    .expect("create body");
+                assert_eq!(body["displayName"], "Engineering Updates");
+                Ok(crate::bindings::greentic::http::http_client::Response {
+                    status: 201,
+                    headers: vec![],
+                    body: Some(
+                        br#"{"id":"19:engineering-updates@thread.tacv2","displayName":"Engineering Updates"}"#.to_vec(),
+                    ),
+                })
+            },
+            || <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers)),
+        );
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        let config = out_json.get("config").expect("config object");
+        assert_eq!(
+            config.get("team_id"),
+            Some(&Value::String("team-123".to_string()))
+        );
+        assert_eq!(
+            config.get("team_name"),
+            Some(&Value::String("Engineering".to_string()))
+        );
+        assert_eq!(
+            config.get("channel_id"),
+            Some(&Value::String(
+                "19:engineering-updates@thread.tacv2".to_string()
+            ))
+        );
+        assert_eq!(
+            config.get("channel_name"),
+            Some(&Value::String("Engineering Updates".to_string()))
+        );
+        assert_eq!(
+            config.get("desired_channel_name"),
+            Some(&Value::String("Engineering Updates".to_string()))
+        );
+        assert_eq!(
+            out_json.get("diagnostics"),
+            Some(&json!(["created Teams channel from desired_channel_name"]))
+        );
+    }
+
+    #[test]
+    fn apply_answers_accepts_channel_name_as_default_hint_without_channel_id_override() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "tenant_id": "tenant",
+            "client_id": "client",
+            "team_id": "team-id",
+            "channel_id": "channel-id",
+            "channel_name": "Bundle Display Name"
+        });
+
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        let config = out_json.get("config").expect("config object");
+        assert_eq!(
+            config.get("channel_id"),
+            Some(&Value::String("channel-id".to_string()))
+        );
+        assert_eq!(
+            config.get("channel_name"),
+            Some(&Value::String("Bundle Display Name".to_string()))
+        );
+        assert_eq!(
+            config.get("desired_channel_name"),
+            Some(&Value::String("Bundle Display Name".to_string()))
+        );
+    }
+
+    #[test]
+    fn apply_answers_accepts_bot_framework_config_shape() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "setup_mode": "bot_framework",
+            "ms_bot_app_id": "bot-app-id",
+            "ms_bot_app_password": "bot-secret",
+            "bot_display_name": "Greentic Bot",
+            "messaging_endpoint": "https://example.com/api/messages"
+        });
+
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        let config = out_json.get("config").expect("config object");
+        assert_eq!(
+            config.get("setup_mode"),
+            Some(&Value::String("bot_framework".to_string()))
+        );
+        assert_eq!(
+            config.get("ms_bot_app_id"),
+            Some(&Value::String("bot-app-id".to_string()))
+        );
+        assert_eq!(
+            config.get("bot_display_name"),
+            Some(&Value::String("Greentic Bot".to_string()))
         );
     }
 
@@ -467,6 +716,8 @@ mod tests {
         use bindings::exports::greentic::component::qa::Mode;
         let answers = json!({
             "ms_bot_app_id": "app-id",
+            "tenant_id": "tenant",
+            "client_id": "client",
             "public_base_url": "not-a-url"
         });
         let out =

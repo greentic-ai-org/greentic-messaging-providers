@@ -21,10 +21,8 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
 }
 
 pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), String> {
-    if config.public_base_url.trim().is_empty() {
-        return Err("invalid config: public_base_url cannot be empty".to_string());
-    }
-    if !(config.public_base_url.starts_with("http://")
+    if !(config.public_base_url.trim().is_empty()
+        || config.public_base_url.starts_with("http://")
         || config.public_base_url.starts_with("https://"))
     {
         return Err("invalid config: public_base_url must be an absolute URL".to_string());
@@ -100,8 +98,11 @@ pub(crate) fn override_config_from_metadata(cfg: &mut ProviderConfig, metadata: 
 }
 
 pub(crate) fn validate_provider_config(cfg: ProviderConfig) -> Result<ProviderConfig, String> {
-    if cfg.public_base_url.trim().is_empty() {
-        return Err("invalid config: public_base_url cannot be empty".to_string());
+    if !(cfg.public_base_url.trim().is_empty()
+        || cfg.public_base_url.starts_with("http://")
+        || cfg.public_base_url.starts_with("https://"))
+    {
+        return Err("invalid config: public_base_url must be an absolute URL".to_string());
     }
     Ok(cfg)
 }
@@ -265,10 +266,7 @@ mod tests {
     fn validate_config_out_rejects_invalid_urls() {
         let mut config = valid_config_out();
         config.public_base_url = String::new();
-        assert_eq!(
-            validate_config_out(&config),
-            Err("invalid config: public_base_url cannot be empty".to_string())
-        );
+        validate_config_out(&config).expect("public_base_url is optional at setup");
 
         let mut config = valid_config_out();
         config.public_base_url = "relative".to_string();
@@ -290,7 +288,8 @@ mod tests {
         let nested = load_config(&json!({
             "config": {
                 "public_base_url": "https://example.com",
-                "default_room_id": "nested-room"
+                "default_room_id": "nested-room",
+                "webhook_secret": "secret"
             }
         }))
         .expect("nested config");
@@ -298,6 +297,8 @@ mod tests {
 
         let top_level = load_config(&json!({
             "public_base_url": "https://example.com",
+            "default_room_id": "room-1",
+            "webhook_secret": "secret",
             "default_to_person_email": "person@example.com"
         }))
         .expect("top-level config");
@@ -308,7 +309,21 @@ mod tests {
 
         let defaulted = load_config(&json!({})).expect("default config");
         assert_eq!(defaulted.public_base_url, "https://invalid.local");
+        assert_eq!(defaulted.default_room_id, None);
         assert_eq!(defaulted.api_base_url.as_deref(), Some(DEFAULT_API_BASE));
+
+        let cfg = load_config(&json!({
+            "public_base_url": "https://example.com"
+        }))
+        .expect("room is optional until proactive send");
+        assert_eq!(cfg.default_room_id, None);
+
+        let cfg = load_config(&json!({
+            "public_base_url": "https://example.com",
+            "default_room_id": "room-1"
+        }))
+        .expect("webhook secret is supplied from secrets_patch/secret store");
+        assert_eq!(cfg.default_room_id.as_deref(), Some("room-1"));
     }
 
     #[test]

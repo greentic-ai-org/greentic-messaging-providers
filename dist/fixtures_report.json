@@ -5,6 +5,9 @@
   "messaging-email": {
     "errors": []
   },
+  "messaging-microsoft-email": {
+    "errors": []
+  },
   "messaging-provider-bundle": {
     "errors": []
   },

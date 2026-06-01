@@ -7,6 +7,7 @@
 //! - `render`  — `render_plan` (step 1; Tier A via `capabilities_for("teams")`)
 //! - `encode`  — `encode_op` (step 2)
 //! - `send`    — `send_payload`, `handle_send`, `handle_reply` (step 3 + legacy)
+//! - `provision` — setup-time Teams channel desired-state helpers
 //! - `ingest`  — `ingest_http` + Bot Framework activity/card-action handling
 //!
 //! `build_team_envelope` is shared between `send` and `ingest` because both
@@ -14,11 +15,15 @@
 
 mod encode;
 mod ingest;
+mod provision;
 mod render;
 mod send;
 
 pub(crate) use encode::encode_op;
 pub(crate) use ingest::ingest_http;
+#[cfg(test)]
+pub(crate) use provision::with_http_send_mock;
+pub(crate) use provision::{ensure_channel, maybe_ensure_channel_config};
 pub(crate) use render::render_plan;
 pub(crate) use send::{handle_reply, handle_send, send_payload};
 
@@ -108,8 +113,8 @@ mod tests {
             reply_scope: None,
             from: None,
             to: vec![Destination {
-                id: "conv-1".to_string(),
-                kind: Some("conversation".to_string()),
+                id: "team-1:channel-1".to_string(),
+                kind: Some("channel".to_string()),
             }],
             correlation_id: None,
             text: Some("hello".to_string()),
@@ -122,14 +127,8 @@ mod tests {
 
     fn with_config(mut value: Value) -> Vec<u8> {
         let obj = value.as_object_mut().expect("object");
-        obj.insert(
-            "public_base_url".to_string(),
-            Value::String("https://example.com".to_string()),
-        );
-        obj.insert(
-            "ms_bot_app_id".to_string(),
-            Value::String("app-id".to_string()),
-        );
+        obj.insert("tenant_id".to_string(), Value::String("tenant".to_string()));
+        obj.insert("client_id".to_string(), Value::String("client".to_string()));
         serde_json::to_vec(&value).expect("bytes")
     }
 
@@ -138,13 +137,11 @@ mod tests {
     }
 
     #[test]
-    fn handle_send_requires_service_url_before_network() {
+    fn handle_send_does_not_require_bot_service_url() {
         let body = parse_json(handle_send(&with_config(envelope_json())));
         assert_eq!(
             body.get("error").and_then(Value::as_str),
-            Some(
-                "service_url required (from metadata.serviceUrl, config.default_service_url, or Activity)"
-            )
+            Some("MS_GRAPH_REFRESH_TOKEN or MS_GRAPH_ACCESS_TOKEN is required for Graph auth")
         );
     }
 
@@ -162,11 +159,12 @@ mod tests {
         let body = parse_json(handle_reply(&with_config(json!({
             "text": "hello",
             "reply_to_id": "activity-1",
-            "conversation_id": "conv-1"
+            "team_id": "team-1",
+            "channel_id": "channel-1"
         }))));
         assert_eq!(
             body.get("error").and_then(Value::as_str),
-            Some("service_url required")
+            Some("MS_GRAPH_REFRESH_TOKEN or MS_GRAPH_ACCESS_TOKEN is required for Graph auth")
         );
     }
 

@@ -1,12 +1,16 @@
 # Messaging Provider Teams Component
 
-Provider-core Microsoft Teams messaging provider.
+Provider-core Microsoft Teams messaging provider. Outbound messaging uses
+Microsoft Graph. Bot Framework fields are retained for inbound Teams bot
+activities.
 
 ## Component ID
 - `messaging-provider-teams`
 
 ## Provider types
-- `messaging.teams.bot`
+- `messaging.teams.graph`
+- `messaging.teams.bot` is accepted by `send_payload` for compatibility, but
+  outbound delivery still resolves a Graph destination.
 
 ## Secrets
 
@@ -18,35 +22,63 @@ All secrets are stored under the URI prefix
 |-----|----------|-------------|
 | `MS_GRAPH_TENANT_ID` | Yes | Azure AD tenant ID |
 | `MS_GRAPH_CLIENT_ID` | Yes | Azure AD application (client) ID |
-| `MS_GRAPH_CLIENT_SECRET` | Confidential clients only | Client secret for `client_credentials` grant |
-| `MS_GRAPH_REFRESH_TOKEN` | Public clients only | Refresh token for delegated `authorization_code` grant |
+| `MS_GRAPH_REFRESH_TOKEN` | Yes for normal sends | Refresh token from delegated Microsoft device-code setup |
+| `MS_GRAPH_ACCESS_TOKEN` | Test only | Direct access-token override for local testing |
 
-### Public vs Confidential client
+## Setup modes
 
-- **Public client** (e.g. mobile/desktop app registration): Uses `refresh_token` grant.
-  The Azure app must **not** have a client secret configured, and the refresh
-  request must **not** include `client_secret`. Only `tenant_id`, `client_id`,
-  and `refresh_token` are needed.
-- **Confidential client** (e.g. web app with secret): Uses `client_credentials`
-  grant. Requires `tenant_id`, `client_id`, and `client_secret`. No refresh
-  token is needed.
+### `graph_channel`
 
-### Obtaining a refresh token (public client)
+The default setup path uses Microsoft OAuth device-code login against the
+`organizations` endpoint. It does not require a redirect URL, Azure Bot
+Service, Bot Framework, or a client secret.
+
+Graph channel setup persists machine IDs and display labels:
+
+| Key | Purpose |
+|-----|---------|
+| `team_id` | Authoritative Microsoft Graph Team ID used for routing |
+| `team_name` | Human-readable selected Team display name |
+| `channel_id` | Authoritative Microsoft Graph Channel ID used for routing |
+| `channel_name` | Human-readable selected Channel display name |
+| `desired_channel_name` | Desired standard channel name, often seeded from the bundle name |
+
+During `apply_answers`, the provider lists existing channels in the selected
+Team, reuses an exact case-insensitive display-name match, and otherwise
+creates a standard channel with Microsoft Graph `POST /teams/{team_id}/channels`.
+The resulting `channel_id` and `channel_name` are returned in the setup config.
+
+Only `team_id` and `channel_id` are used to build Graph message URLs. Names are
+stored for diagnostics, setup summaries, and user-facing display; they are not
+unique and must not be used as routing identifiers.
+
+### `bot_framework`
+
+Bot Framework mode is for inbound Teams bot activities and Teams app manifest
+configuration. It accepts:
+
+| Key | Purpose |
+|-----|---------|
+| `ms_bot_app_id` | Azure Bot app ID |
+| `ms_bot_app_password` | Azure Bot app password |
+| `bot_display_name` | Human-readable Teams bot name |
+| `messaging_endpoint` | Public Bot Framework messaging endpoint |
+
+This mode does not remove the existing `ingest_http` Bot Framework behavior.
+It also does not make Graph sends work without Graph credentials and an
+authoritative channel or chat ID.
+
+### Obtaining a refresh token
 
 1. Register an app in Azure AD with **Delegated** permissions:
-   `ChannelMessage.Send`, `Chat.ReadWrite`, `offline_access`.
-2. Set the redirect URI to `http://localhost` and enable **public client flows**.
-3. Open this URL in a browser (replace placeholders):
-   ```
-   https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize?client_id={client_id}&response_type=code&redirect_uri=http://localhost&scope=ChannelMessage.Send+Chat.ReadWrite+offline_access
-   ```
-4. Sign in and copy the `code` parameter from the redirect URL.
-5. Exchange the code for tokens:
-   ```bash
-   curl -X POST "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token" \
-     -d "client_id={client_id}&grant_type=authorization_code&code={code}&redirect_uri=http://localhost&scope=ChannelMessage.Send+Chat.ReadWrite+offline_access"
-   ```
-6. Save the `refresh_token` from the response as the `MS_GRAPH_REFRESH_TOKEN` secret.
+   `offline_access`, `openid`, `profile`, `User.Read`, `Team.ReadBasic.All`,
+   `Channel.ReadBasic.All`, `Channel.Create`, `ChannelMessage.Send`,
+   `ChannelMessage.Read.All`, and `Chat.Read`.
+2. Enable **public client/device-code flow**.
+3. Run `gtc setup` once generic device-code setup is available, or use
+   `scripts/test_teams.sh` for local validation.
+4. Save the returned `refresh_token` as `MS_GRAPH_REFRESH_TOKEN` and the app
+   client ID as `MS_GRAPH_CLIENT_ID`.
 
 ## Destination formats
 

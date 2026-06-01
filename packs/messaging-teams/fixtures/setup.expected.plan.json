@@ -1,21 +1,22 @@
 {
   "config_patch": {
     "enabled": true,
-    "public_base_url": "https://example.com",
-    "ms_bot_app_id": "test-app-id"
+    "tenant_id": "test-tenant",
+    "client_id": "test-client-id",
+    "graph_base_url": "https://graph.microsoft.com/v1.0",
+    "auth_base_url": "https://login.microsoftonline.com",
+    "token_scope": "https://graph.microsoft.com/.default",
+    "team_id": "test-team",
+    "channel_id": "test-channel"
   },
   "secrets_patch": {
     "set": {
-      "MS_BOT_APP_PASSWORD": "test-app-password"
+      "MS_GRAPH_CLIENT_ID": "test-client-id",
+      "MS_GRAPH_REFRESH_TOKEN": "test-refresh-token"
     },
     "delete": []
   },
-  "webhook_ops": [
-    {
-      "op": "register",
-      "url": "https://example.com"
-    }
-  ],
+  "webhook_ops": [],
   "subscription_ops": [],
   "oauth_ops": []
 }

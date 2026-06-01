@@ -6,7 +6,8 @@
   },
   "secrets_patch": {
     "set": {
-      "SLACK_BOT_TOKEN": "xoxb-test-token"
+      "SLACK_CONFIGURATION_ACCESS_TOKEN": "xoxe-access-token",
+      "SLACK_CONFIGURATION_REFRESH_TOKEN": "xoxe-refresh-token"
     },
     "delete": []
   },

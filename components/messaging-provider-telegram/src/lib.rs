@@ -9,6 +9,7 @@ use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -157,9 +158,16 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
 struct ApplyAnswersResult {
     ok: bool,
     config: Option<ProviderConfigOut>,
+    secrets_patch: Option<SecretsPatch>,
     remove: Option<RemovePlan>,
     diagnostics: Vec<String>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SecretsPatch {
+    set: BTreeMap<String, String>,
+    delete: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,6 +188,7 @@ fn apply_answers_impl(
             return canonical_cbor_bytes(&ApplyAnswersResult {
                 ok: false,
                 config: None,
+                secrets_patch: None,
                 remove: None,
                 diagnostics: Vec::new(),
                 error: Some(format!("invalid answers cbor: {err}")),
@@ -191,6 +200,7 @@ fn apply_answers_impl(
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: true,
             config: None,
+            secrets_patch: None,
             remove: Some(RemovePlan {
                 remove_all: true,
                 cleanup: vec![
@@ -207,6 +217,7 @@ fn apply_answers_impl(
     }
 
     let mut merged = existing_config_from_answers(&answers).unwrap_or_else(default_config_out);
+    let mut secrets_set = BTreeMap::new();
     let answer_obj = answers.as_object();
     let has = |key: &str| answer_obj.is_some_and(|obj| obj.contains_key(key));
 
@@ -223,7 +234,13 @@ fn apply_answers_impl(
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();
         }
-        merged.bot_token = optional_string_from(&answers, "bot_token").or(merged.bot_token.clone());
+        collect_secret_answer(
+            &answers,
+            "telegram_bot_token",
+            TOKEN_SECRET,
+            &mut secrets_set,
+        );
+        collect_secret_answer(&answers, "bot_token", TOKEN_SECRET, &mut secrets_set);
     }
 
     if mode == Mode::Upgrade {
@@ -243,18 +260,41 @@ fn apply_answers_impl(
         if has("api_base_url") {
             merged.api_base_url = string_or_default(&answers, "api_base_url", &merged.api_base_url);
         }
+        if has("telegram_bot_token") {
+            collect_secret_answer(
+                &answers,
+                "telegram_bot_token",
+                TOKEN_SECRET,
+                &mut secrets_set,
+            );
+            merged.bot_token = None;
+        }
         if has("bot_token") {
-            merged.bot_token = optional_string_from(&answers, "bot_token");
+            collect_secret_answer(&answers, "bot_token", TOKEN_SECRET, &mut secrets_set);
+            merged.bot_token = None;
         }
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();
         }
     }
 
+    if let Some(token) = merged
+        .bot_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        secrets_set
+            .entry(TOKEN_SECRET.to_string())
+            .or_insert_with(|| token.to_string());
+        merged.bot_token = None;
+    }
+
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,
             config: None,
+            secrets_patch: None,
             remove: None,
             diagnostics: Vec::new(),
             error: Some(error),
@@ -264,6 +304,10 @@ fn apply_answers_impl(
     canonical_cbor_bytes(&ApplyAnswersResult {
         ok: true,
         config: Some(merged),
+        secrets_patch: (!secrets_set.is_empty()).then_some(SecretsPatch {
+            set: secrets_set,
+            delete: Vec::new(),
+        }),
         remove: None,
         diagnostics: Vec::new(),
         error: None,
@@ -276,6 +320,17 @@ fn existing_config_from_answers(answers: &Value) -> Option<ProviderConfigOut> {
         .cloned()
         .or_else(|| answers.get("config").cloned())
         .and_then(|value| serde_json::from_value::<ProviderConfigOut>(value).ok())
+}
+
+fn collect_secret_answer(
+    answers: &Value,
+    answer_key: &str,
+    secret_key: &str,
+    secrets_set: &mut BTreeMap<String, String>,
+) {
+    if let Some(value) = optional_string_from(answers, answer_key) {
+        secrets_set.insert(secret_key.to_string(), value);
+    }
 }
 
 fn optional_string_from(answers: &Value, key: &str) -> Option<String> {
@@ -369,7 +424,7 @@ mod tests {
             .into_iter()
             .map(|question| question.id)
             .collect::<Vec<_>>();
-        assert_eq!(keys, vec!["public_base_url", "bot_token"]);
+        assert_eq!(keys, vec!["public_base_url", "telegram_bot_token"]);
     }
 
     #[test]
@@ -395,13 +450,33 @@ mod tests {
             config.get("public_base_url"),
             Some(&Value::String("https://example.com".to_string()))
         );
+        assert!(config.get("bot_token").is_none());
         assert_eq!(
-            config.get("bot_token"),
-            Some(&Value::String("token-a".to_string()))
+            out_json["secrets_patch"]["set"][TOKEN_SECRET],
+            Value::String("token-a".to_string())
         );
         assert_eq!(
             config.get("default_chat_id"),
             Some(&Value::String("456".to_string()))
+        );
+    }
+
+    #[test]
+    fn apply_answers_maps_runtime_secret_aliases() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "public_base_url": "https://example.com",
+            "telegram_bot_token": "token-a"
+        });
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Setup, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        assert!(out_json["config"].get("bot_token").is_none());
+        assert_eq!(
+            out_json["secrets_patch"]["set"][TOKEN_SECRET],
+            Value::String("token-a".to_string())
         );
     }
 

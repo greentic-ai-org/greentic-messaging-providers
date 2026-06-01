@@ -5,14 +5,11 @@ pack:
   publisher: Greentic
   kind: application
 provider:
-  provider_type: messaging.teams.bot
+  provider_type: messaging.teams.graph
   provider_id: teams
   ops:
   - send
   - reply
-  - subscription_ensure
-  - subscription_renew
-  - subscription_delete
   - qa-spec
   - apply-answers
   - i18n-keys

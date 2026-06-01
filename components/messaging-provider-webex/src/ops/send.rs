@@ -399,6 +399,14 @@ mod tests {
             Value::String("https://example.com".to_string()),
         );
         obj.insert("bot_token".to_string(), Value::String("token".to_string()));
+        obj.insert(
+            "default_room_id".to_string(),
+            Value::String("room-1".to_string()),
+        );
+        obj.insert(
+            "webhook_secret".to_string(),
+            Value::String("secret".to_string()),
+        );
         serde_json::to_vec(&value).expect("bytes")
     }
 

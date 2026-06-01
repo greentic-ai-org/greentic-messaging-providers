@@ -1,4 +1,4 @@
-//! Provider description and QA specs for Teams Bot Service.
+//! Provider description and QA specs for Teams Microsoft Graph.
 
 use provider_common::component_v0_6::{
     DescribePayload, QaSpec, RedactionRule, SchemaIr, schema_hash,
@@ -18,6 +18,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.op.send.description",
     "teams.op.reply.title",
     "teams.op.reply.description",
+    "teams.op.ensure_channel.title",
+    "teams.op.ensure_channel.description",
     "teams.op.ingest_http.title",
     "teams.op.ingest_http.description",
     "teams.op.render_plan.title",
@@ -38,59 +40,81 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.schema.output.ok.description",
     "teams.schema.output.message_id.title",
     "teams.schema.output.message_id.description",
-    // Config schema - Bot Service
+    // Config schema - Graph
     "teams.schema.config.title",
     "teams.schema.config.description",
     "teams.schema.config.enabled.title",
     "teams.schema.config.enabled.description",
+    "teams.schema.config.setup_mode.title",
+    "teams.schema.config.setup_mode.description",
     "teams.schema.config.public_base_url.title",
     "teams.schema.config.public_base_url.description",
+    "teams.schema.config.tenant_id.title",
+    "teams.schema.config.tenant_id.description",
+    "teams.schema.config.client_id.title",
+    "teams.schema.config.client_id.description",
+    "teams.schema.config.refresh_token.title",
+    "teams.schema.config.refresh_token.description",
+    "teams.schema.config.access_token.title",
+    "teams.schema.config.access_token.description",
+    "teams.schema.config.graph_base_url.title",
+    "teams.schema.config.graph_base_url.description",
+    "teams.schema.config.auth_base_url.title",
+    "teams.schema.config.auth_base_url.description",
+    "teams.schema.config.token_scope.title",
+    "teams.schema.config.token_scope.description",
+    "teams.schema.config.team_id.title",
+    "teams.schema.config.team_id.description",
+    "teams.schema.config.team_name.title",
+    "teams.schema.config.team_name.description",
+    "teams.schema.config.channel_id.title",
+    "teams.schema.config.channel_id.description",
+    "teams.schema.config.channel_name.title",
+    "teams.schema.config.channel_name.description",
+    "teams.schema.config.desired_channel_name.title",
+    "teams.schema.config.desired_channel_name.description",
     "teams.schema.config.ms_bot_app_id.title",
     "teams.schema.config.ms_bot_app_id.description",
     "teams.schema.config.ms_bot_app_password.title",
     "teams.schema.config.ms_bot_app_password.description",
-    "teams.schema.config.default_service_url.title",
-    "teams.schema.config.default_service_url.description",
-    "teams.schema.config.team_id.title",
-    "teams.schema.config.team_id.description",
-    "teams.schema.config.channel_id.title",
-    "teams.schema.config.channel_id.description",
+    "teams.schema.config.bot_display_name.title",
+    "teams.schema.config.bot_display_name.description",
+    "teams.schema.config.messaging_endpoint.title",
+    "teams.schema.config.messaging_endpoint.description",
     // QA titles
     "teams.qa.default.title",
     "teams.qa.setup.title",
     "teams.qa.upgrade.title",
     "teams.qa.remove.title",
-    // QA questions - Bot Service
+    // Config labels used outside the setup question flow.
     "teams.qa.setup.enabled",
+    "teams.qa.setup.setup_mode",
     "teams.qa.setup.public_base_url",
+    "teams.qa.setup.tenant_id",
+    "teams.qa.setup.client_id",
+    "teams.qa.setup.refresh_token",
+    "teams.qa.setup.access_token",
+    "teams.qa.setup.graph_base_url",
+    "teams.qa.setup.auth_base_url",
+    "teams.qa.setup.token_scope",
+    "teams.qa.setup.team_id",
+    "teams.qa.setup.team_name",
+    "teams.qa.setup.channel_id",
+    "teams.qa.setup.channel_name",
+    "teams.qa.setup.desired_channel_name",
+    "teams.qa.setup.chat_id",
+    "teams.qa.setup.user_id",
     "teams.qa.setup.ms_bot_app_id",
     "teams.qa.setup.ms_bot_app_password",
-    "teams.qa.setup.default_service_url",
-    "teams.qa.setup.team_id",
-    "teams.qa.setup.channel_id",
+    "teams.qa.setup.bot_display_name",
+    "teams.qa.setup.messaging_endpoint",
 ];
 
 /// QA question definitions: (id, i18n_key, required)
-pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
-    ("enabled", "teams.qa.setup.enabled", true),
-    ("public_base_url", "teams.qa.setup.public_base_url", true),
-    ("ms_bot_app_id", "teams.qa.setup.ms_bot_app_id", true),
-    (
-        "ms_bot_app_password",
-        "teams.qa.setup.ms_bot_app_password",
-        true,
-    ),
-    (
-        "default_service_url",
-        "teams.qa.setup.default_service_url",
-        false,
-    ),
-    ("team_id", "teams.qa.setup.team_id", false),
-    ("channel_id", "teams.qa.setup.channel_id", false),
-];
+pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[];
 
-/// Keys required for default/minimal setup
-pub(crate) const DEFAULT_KEYS: &[&str] = &["ms_bot_app_id", "public_base_url"];
+/// Keys required for default/minimal setup.
+pub(crate) const DEFAULT_KEYS: &[&str] = &[];
 
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
@@ -107,6 +131,11 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 "reply",
                 "teams.op.reply.title",
                 "teams.op.reply.description",
+            ),
+            op(
+                "ensure_channel",
+                "teams.op.ensure_channel.title",
+                "teams.op.ensure_channel.description",
             ),
             op(
                 "ingest_http",
@@ -128,15 +157,25 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 "teams.op.send_payload.title",
                 "teams.op.send_payload.description",
             ),
-            // Note: subscription_* operations removed - Bot Service handles subscriptions automatically
+            // Subscription sync is provided by the Teams ingress component.
         ],
         input_schema: input_schema.clone(),
         output_schema: output_schema.clone(),
         config_schema: config_schema.clone(),
-        redactions: vec![RedactionRule {
-            path: "$.ms_bot_app_password".to_string(),
-            strategy: "replace".to_string(),
-        }],
+        redactions: vec![
+            RedactionRule {
+                path: "$.refresh_token".to_string(),
+                strategy: "replace".to_string(),
+            },
+            RedactionRule {
+                path: "$.access_token".to_string(),
+                strategy: "replace".to_string(),
+            },
+            RedactionRule {
+                path: "$.ms_bot_app_password".to_string(),
+                strategy: "replace".to_string(),
+            },
+        ],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
     }
 }
@@ -161,17 +200,22 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.op.send.title", "Send"),
     (
         "teams.op.send.description",
-        "Send a Teams message via Bot Connector API",
+        "Send a Teams message via Microsoft Graph",
     ),
     ("teams.op.reply.title", "Reply"),
     (
         "teams.op.reply.description",
-        "Reply in a Teams thread via Bot Connector API",
+        "Reply in a Teams channel thread via Microsoft Graph",
+    ),
+    ("teams.op.ensure_channel.title", "Ensure Channel"),
+    (
+        "teams.op.ensure_channel.description",
+        "Create the desired Teams channel when it is missing",
     ),
     ("teams.op.ingest_http.title", "Ingest HTTP"),
     (
         "teams.op.ingest_http.description",
-        "Normalize Bot Framework Activity payload",
+        "Normalize Microsoft Graph change notification payload",
     ),
     ("teams.op.render_plan.title", "Render Plan"),
     (
@@ -181,12 +225,12 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.op.encode.title", "Encode"),
     (
         "teams.op.encode.description",
-        "Encode universal payload for Teams Bot Connector API",
+        "Encode universal payload for Teams Graph API",
     ),
     ("teams.op.send_payload.title", "Send Payload"),
     (
         "teams.op.send_payload.description",
-        "Send encoded payload to Bot Connector API",
+        "Send encoded payload to Microsoft Graph",
     ),
     // Input schema
     ("teams.schema.input.title", "Teams input"),
@@ -210,18 +254,23 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.schema.output.message_id.title", "Message ID"),
     (
         "teams.schema.output.message_id.description",
-        "Bot Framework activity identifier",
+        "Microsoft Graph message identifier",
     ),
-    // Config schema - Bot Service
+    // Config schema - Graph
     ("teams.schema.config.title", "Teams config"),
     (
         "teams.schema.config.description",
-        "Teams Bot Service provider configuration",
+        "Teams provider configuration. graph_channel mode sends through Microsoft Graph; bot_framework mode accepts Bot Framework ingress settings.",
     ),
     ("teams.schema.config.enabled.title", "Enabled"),
     (
         "teams.schema.config.enabled.description",
         "Enable this provider",
+    ),
+    ("teams.schema.config.setup_mode.title", "Setup mode"),
+    (
+        "teams.schema.config.setup_mode.description",
+        "Teams setup mode: graph_channel for Graph channel sends or bot_framework for Bot Framework ingress",
     ),
     (
         "teams.schema.config.public_base_url.title",
@@ -229,55 +278,133 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ),
     (
         "teams.schema.config.public_base_url.description",
-        "Public URL for Bot Framework messaging endpoint",
+        "Public URL for Graph notification callbacks",
     ),
-    ("teams.schema.config.ms_bot_app_id.title", "Bot App ID"),
+    ("teams.schema.config.tenant_id.title", "Tenant ID"),
     (
-        "teams.schema.config.ms_bot_app_id.description",
-        "Microsoft Bot App ID from Azure Bot registration",
+        "teams.schema.config.tenant_id.description",
+        "Microsoft Entra tenant ID",
     ),
+    ("teams.schema.config.client_id.title", "Client ID"),
     (
-        "teams.schema.config.ms_bot_app_password.title",
-        "Bot App Password",
+        "teams.schema.config.client_id.description",
+        "Microsoft Entra application client ID",
     ),
+    ("teams.schema.config.refresh_token.title", "Refresh token"),
     (
-        "teams.schema.config.ms_bot_app_password.description",
-        "Microsoft Bot App Password (client secret)",
+        "teams.schema.config.refresh_token.description",
+        "Graph OAuth refresh token",
     ),
+    ("teams.schema.config.access_token.title", "Access token"),
     (
-        "teams.schema.config.default_service_url.title",
-        "Default Service URL",
+        "teams.schema.config.access_token.description",
+        "Optional test/dev Graph access token override",
     ),
+    ("teams.schema.config.graph_base_url.title", "Graph base URL"),
     (
-        "teams.schema.config.default_service_url.description",
-        "Default Bot Connector service URL for proactive messages",
+        "teams.schema.config.graph_base_url.description",
+        "Microsoft Graph API base URL",
+    ),
+    ("teams.schema.config.auth_base_url.title", "Auth base URL"),
+    (
+        "teams.schema.config.auth_base_url.description",
+        "Microsoft identity platform authority base URL",
+    ),
+    ("teams.schema.config.token_scope.title", "Token scope"),
+    (
+        "teams.schema.config.token_scope.description",
+        "OAuth token scope for Graph access tokens",
     ),
     ("teams.schema.config.team_id.title", "Team ID"),
     (
         "teams.schema.config.team_id.description",
         "Default Team identifier",
     ),
+    ("teams.schema.config.team_name.title", "Team name"),
+    (
+        "teams.schema.config.team_name.description",
+        "Human-readable display name for the selected Team. Not used for routing.",
+    ),
     ("teams.schema.config.channel_id.title", "Channel ID"),
     (
         "teams.schema.config.channel_id.description",
         "Default Channel identifier",
+    ),
+    ("teams.schema.config.channel_name.title", "Channel name"),
+    (
+        "teams.schema.config.channel_name.description",
+        "Human-readable display name for the selected Channel. Not used for routing.",
+    ),
+    (
+        "teams.schema.config.desired_channel_name.title",
+        "Desired channel name",
+    ),
+    (
+        "teams.schema.config.desired_channel_name.description",
+        "Desired standard channel name for setup-time create-if-missing provisioning. The resulting channel_id remains authoritative.",
+    ),
+    ("teams.schema.config.ms_bot_app_id.title", "Bot app ID"),
+    (
+        "teams.schema.config.ms_bot_app_id.description",
+        "Azure Bot Framework app ID for bot_framework mode",
+    ),
+    (
+        "teams.schema.config.ms_bot_app_password.title",
+        "Bot app password",
+    ),
+    (
+        "teams.schema.config.ms_bot_app_password.description",
+        "Azure Bot Framework app password for bot_framework mode",
+    ),
+    (
+        "teams.schema.config.bot_display_name.title",
+        "Bot display name",
+    ),
+    (
+        "teams.schema.config.bot_display_name.description",
+        "Human-readable Teams bot name used in the Teams app manifest",
+    ),
+    (
+        "teams.schema.config.messaging_endpoint.title",
+        "Messaging endpoint",
+    ),
+    (
+        "teams.schema.config.messaging_endpoint.description",
+        "Public Bot Framework messaging endpoint for Teams app manifests",
     ),
     // QA titles
     ("teams.qa.default.title", "Default"),
     ("teams.qa.setup.title", "Setup"),
     ("teams.qa.upgrade.title", "Upgrade"),
     ("teams.qa.remove.title", "Remove"),
-    // QA questions - Bot Service
+    // Config labels used outside the setup question flow.
     ("teams.qa.setup.enabled", "Enable provider"),
+    ("teams.qa.setup.setup_mode", "Setup mode"),
     ("teams.qa.setup.public_base_url", "Public base URL"),
-    ("teams.qa.setup.ms_bot_app_id", "Microsoft Bot App ID"),
-    ("teams.qa.setup.ms_bot_app_password", "Bot App Password"),
-    (
-        "teams.qa.setup.default_service_url",
-        "Default service URL (optional)",
-    ),
+    ("teams.qa.setup.tenant_id", "Tenant ID"),
+    ("teams.qa.setup.client_id", "Client ID"),
+    ("teams.qa.setup.refresh_token", "Refresh token"),
+    ("teams.qa.setup.access_token", "Access token"),
+    ("teams.qa.setup.graph_base_url", "Graph base URL"),
+    ("teams.qa.setup.auth_base_url", "Auth base URL"),
+    ("teams.qa.setup.token_scope", "Token scope"),
     ("teams.qa.setup.team_id", "Default Team ID (optional)"),
+    ("teams.qa.setup.team_name", "Default Team name (optional)"),
     ("teams.qa.setup.channel_id", "Default Channel ID (optional)"),
+    (
+        "teams.qa.setup.channel_name",
+        "Default Channel name (optional)",
+    ),
+    (
+        "teams.qa.setup.desired_channel_name",
+        "Suggested Channel name (optional)",
+    ),
+    ("teams.qa.setup.chat_id", "Default Chat ID (optional)"),
+    ("teams.qa.setup.user_id", "Default User ID (optional)"),
+    ("teams.qa.setup.ms_bot_app_id", "Bot app ID"),
+    ("teams.qa.setup.ms_bot_app_password", "Bot app password"),
+    ("teams.qa.setup.bot_display_name", "Bot display name"),
+    ("teams.qa.setup.messaging_endpoint", "Messaging endpoint"),
 ];
 
 pub(crate) fn i18n_bundle(locale: String) -> Vec<u8> {
@@ -340,8 +467,16 @@ fn config_schema() -> SchemaIr {
                 ),
             ),
             (
+                "setup_mode",
+                false,
+                schema_str(
+                    "teams.schema.config.setup_mode.title",
+                    "teams.schema.config.setup_mode.description",
+                ),
+            ),
+            (
                 "public_base_url",
-                true,
+                false,
                 schema_str_fmt(
                     "teams.schema.config.public_base_url.title",
                     "teams.schema.config.public_base_url.description",
@@ -349,8 +484,116 @@ fn config_schema() -> SchemaIr {
                 ),
             ),
             (
-                "ms_bot_app_id",
+                "tenant_id",
                 true,
+                schema_str(
+                    "teams.schema.config.tenant_id.title",
+                    "teams.schema.config.tenant_id.description",
+                ),
+            ),
+            (
+                "client_id",
+                true,
+                schema_str(
+                    "teams.schema.config.client_id.title",
+                    "teams.schema.config.client_id.description",
+                ),
+            ),
+            (
+                "refresh_token",
+                false,
+                schema_secret(
+                    "teams.schema.config.refresh_token.title",
+                    "teams.schema.config.refresh_token.description",
+                ),
+            ),
+            (
+                "access_token",
+                false,
+                schema_secret(
+                    "teams.schema.config.access_token.title",
+                    "teams.schema.config.access_token.description",
+                ),
+            ),
+            (
+                "graph_base_url",
+                false,
+                schema_str_fmt(
+                    "teams.schema.config.graph_base_url.title",
+                    "teams.schema.config.graph_base_url.description",
+                    "uri",
+                ),
+            ),
+            (
+                "auth_base_url",
+                false,
+                schema_str_fmt(
+                    "teams.schema.config.auth_base_url.title",
+                    "teams.schema.config.auth_base_url.description",
+                    "uri",
+                ),
+            ),
+            (
+                "token_scope",
+                false,
+                schema_str(
+                    "teams.schema.config.token_scope.title",
+                    "teams.schema.config.token_scope.description",
+                ),
+            ),
+            (
+                "team_id",
+                false,
+                schema_str(
+                    "teams.schema.config.team_id.title",
+                    "teams.schema.config.team_id.description",
+                ),
+            ),
+            (
+                "team_name",
+                false,
+                schema_str(
+                    "teams.schema.config.team_name.title",
+                    "teams.schema.config.team_name.description",
+                ),
+            ),
+            (
+                "channel_id",
+                false,
+                schema_str(
+                    "teams.schema.config.channel_id.title",
+                    "teams.schema.config.channel_id.description",
+                ),
+            ),
+            (
+                "channel_name",
+                false,
+                schema_str(
+                    "teams.schema.config.channel_name.title",
+                    "teams.schema.config.channel_name.description",
+                ),
+            ),
+            (
+                "desired_channel_name",
+                false,
+                schema_str(
+                    "teams.schema.config.desired_channel_name.title",
+                    "teams.schema.config.desired_channel_name.description",
+                ),
+            ),
+            (
+                "chat_id",
+                false,
+                schema_str("teams.qa.setup.chat_id", "teams.qa.setup.chat_id"),
+            ),
+            (
+                "user_id",
+                false,
+                schema_str("teams.qa.setup.user_id", "teams.qa.setup.user_id"),
+            ),
+            (
+                "ms_bot_app_id",
+                false,
                 schema_str(
                     "teams.schema.config.ms_bot_app_id.title",
                     "teams.schema.config.ms_bot_app_id.description",
@@ -365,28 +608,20 @@ fn config_schema() -> SchemaIr {
                 ),
             ),
             (
-                "default_service_url",
+                "bot_display_name",
+                false,
+                schema_str(
+                    "teams.schema.config.bot_display_name.title",
+                    "teams.schema.config.bot_display_name.description",
+                ),
+            ),
+            (
+                "messaging_endpoint",
                 false,
                 schema_str_fmt(
-                    "teams.schema.config.default_service_url.title",
-                    "teams.schema.config.default_service_url.description",
+                    "teams.schema.config.messaging_endpoint.title",
+                    "teams.schema.config.messaging_endpoint.description",
                     "uri",
-                ),
-            ),
-            (
-                "team_id",
-                false,
-                schema_str(
-                    "teams.schema.config.team_id.title",
-                    "teams.schema.config.team_id.description",
-                ),
-            ),
-            (
-                "channel_id",
-                false,
-                schema_str(
-                    "teams.schema.config.channel_id.title",
-                    "teams.schema.config.channel_id.description",
                 ),
             ),
         ],

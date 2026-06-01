@@ -13,7 +13,7 @@ Webex messaging provider — Bot API with Adaptive Cards.
 
 ## Secrets
 - `WEBEX_BOT_TOKEN` — Webex bot access token
-- `WEBEX_WEBHOOK_SECRET` — optional shared secret for Webex webhook signatures
+- `WEBEX_WEBHOOK_SECRET` — shared secret for Webex webhook signatures
 
 ## Flows
 - `setup_default` — configures provider via `messaging.configure` op
@@ -21,14 +21,15 @@ Webex messaging provider — Bot API with Adaptive Cards.
 
 ## Setup
 Inputs:
-- Config required: public_base_url
-- Config optional: default_room_id, webhook_secret
-- Secrets required: WEBEX_BOT_TOKEN
-- Secrets optional: WEBEX_WEBHOOK_SECRET
+- Config optional: public_base_url, default_room_id, default_to_person_email, api_base_url
+- Secrets required at runtime: WEBEX_BOT_TOKEN, WEBEX_WEBHOOK_SECRET
+- Setup asks only for WEBEX_BOT_TOKEN. The provider generates WEBEX_WEBHOOK_SECRET.
+- default_room_id/default_to_person_email are legacy proactive-send fallbacks. Direct bot conversations do not need them; replies should use the room/person metadata captured from the inbound Webex webhook.
 
 Webhooks:
 - `messages.created` with `mentionedPeople=me` or `roomId=<default_room_id>`
 - `attachmentActions.created` for Adaptive Card submissions
+- `messages.created` events authored by Webex bot accounts are acknowledged but ignored so outbound bot replies are not reprocessed as inbound user messages.
 
 ## Extensions
 - `greentic.ext.capabilities.v1` — capability offer `messaging-webex-v1`

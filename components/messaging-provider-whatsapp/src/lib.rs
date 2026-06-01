@@ -3,8 +3,9 @@ use provider_common::helpers::{
     cbor_json_invoke_bridge, existing_config_from_answers, json_bytes, optional_string_from,
     schema_core_describe, schema_core_healthcheck, schema_core_validate_config, string_or_default,
 };
-use provider_common::qa_helpers::ApplyAnswersResult;
+use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -28,6 +29,76 @@ const WORLD_ID: &str = "component-v0-v6-v0";
 const DEFAULT_API_BASE: &str = "https://graph.facebook.com";
 const DEFAULT_API_VERSION: &str = "v19.0";
 const DEFAULT_TOKEN_KEY: &str = "WHATSAPP_TOKEN";
+
+#[derive(Debug, Clone, Serialize)]
+struct ApplyAnswersResult {
+    ok: bool,
+    config: Option<ProviderConfigOut>,
+    secrets_patch: Option<SecretsPatch>,
+    remove: Option<RemovePlan>,
+    diagnostics: Vec<String>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SecretsPatch {
+    set: BTreeMap<String, String>,
+    delete: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RemovePlan {
+    remove_all: bool,
+    cleanup: Vec<String>,
+}
+
+impl ApplyAnswersResult {
+    fn decode_error(error: String) -> Self {
+        Self {
+            ok: false,
+            config: None,
+            secrets_patch: None,
+            remove: None,
+            diagnostics: Vec::new(),
+            error: Some(error),
+        }
+    }
+
+    fn validation_error(error: String) -> Self {
+        Self::decode_error(error)
+    }
+
+    fn success(config: ProviderConfigOut, secrets_set: BTreeMap<String, String>) -> Self {
+        Self {
+            ok: true,
+            config: Some(config),
+            secrets_patch: (!secrets_set.is_empty()).then_some(SecretsPatch {
+                set: secrets_set,
+                delete: Vec::new(),
+            }),
+            remove: None,
+            diagnostics: Vec::new(),
+            error: None,
+        }
+    }
+
+    fn remove_default() -> Self {
+        Self {
+            ok: true,
+            config: None,
+            secrets_patch: None,
+            remove: Some(RemovePlan {
+                remove_all: true,
+                cleanup: provider_common::qa_helpers::DEFAULT_REMOVE_CLEANUP
+                    .iter()
+                    .map(|step| (*step).to_string())
+                    .collect(),
+            }),
+            diagnostics: Vec::new(),
+            error: None,
+        }
+    }
+}
 
 struct Component;
 
@@ -113,17 +184,18 @@ fn apply_answers_impl(mode: &str, answers_cbor: Vec<u8>) -> Vec<u8> {
     let answers: Value = match decode_cbor(&answers_cbor) {
         Ok(value) => value,
         Err(err) => {
-            return canonical_cbor_bytes(&ApplyAnswersResult::<ProviderConfigOut>::decode_error(
-                format!("invalid answers cbor: {err}"),
-            ));
+            return canonical_cbor_bytes(&ApplyAnswersResult::decode_error(format!(
+                "invalid answers cbor: {err}"
+            )));
         }
     };
 
     if mode == "remove" {
-        return canonical_cbor_bytes(&ApplyAnswersResult::<ProviderConfigOut>::remove_default());
+        return canonical_cbor_bytes(&ApplyAnswersResult::remove_default());
     }
 
     let mut merged = existing_config_from_answers(&answers).unwrap_or_else(default_config_out);
+    let mut secrets_set = BTreeMap::new();
     let answer_obj = answers.as_object();
     let has = |key: &str| answer_obj.is_some_and(|obj| obj.contains_key(key));
 
@@ -146,7 +218,19 @@ fn apply_answers_impl(mode: &str, answers_cbor: Vec<u8>) -> Vec<u8> {
         if merged.api_version.trim().is_empty() {
             merged.api_version = DEFAULT_API_VERSION.to_string();
         }
-        merged.token = optional_string_from(&answers, "token").or(merged.token.clone());
+        collect_secret_answer(
+            &answers,
+            "whatsapp_token",
+            DEFAULT_TOKEN_KEY,
+            &mut secrets_set,
+        );
+        collect_secret_answer(
+            &answers,
+            "access_token",
+            DEFAULT_TOKEN_KEY,
+            &mut secrets_set,
+        );
+        collect_secret_answer(&answers, "token", DEFAULT_TOKEN_KEY, &mut secrets_set);
     }
 
     if mode == "upgrade" {
@@ -173,8 +257,27 @@ fn apply_answers_impl(mode: &str, answers_cbor: Vec<u8>) -> Vec<u8> {
         if has("api_version") {
             merged.api_version = string_or_default(&answers, "api_version", &merged.api_version);
         }
+        if has("whatsapp_token") {
+            collect_secret_answer(
+                &answers,
+                "whatsapp_token",
+                DEFAULT_TOKEN_KEY,
+                &mut secrets_set,
+            );
+            merged.token = None;
+        }
+        if has("access_token") {
+            collect_secret_answer(
+                &answers,
+                "access_token",
+                DEFAULT_TOKEN_KEY,
+                &mut secrets_set,
+            );
+            merged.token = None;
+        }
         if has("token") {
-            merged.token = optional_string_from(&answers, "token");
+            collect_secret_answer(&answers, "token", DEFAULT_TOKEN_KEY, &mut secrets_set);
+            merged.token = None;
         }
         if merged.api_base_url.trim().is_empty() {
             merged.api_base_url = DEFAULT_API_BASE.to_string();
@@ -184,13 +287,34 @@ fn apply_answers_impl(mode: &str, answers_cbor: Vec<u8>) -> Vec<u8> {
         }
     }
 
-    if let Err(error) = validate_config_out(&merged) {
-        return canonical_cbor_bytes(&ApplyAnswersResult::<ProviderConfigOut>::validation_error(
-            error,
-        ));
+    if let Some(token) = merged
+        .token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        secrets_set
+            .entry(DEFAULT_TOKEN_KEY.to_string())
+            .or_insert_with(|| token.to_string());
+        merged.token = None;
     }
 
-    canonical_cbor_bytes(&ApplyAnswersResult::success(merged))
+    if let Err(error) = validate_config_out(&merged) {
+        return canonical_cbor_bytes(&ApplyAnswersResult::validation_error(error));
+    }
+
+    canonical_cbor_bytes(&ApplyAnswersResult::success(merged, secrets_set))
+}
+
+fn collect_secret_answer(
+    answers: &Value,
+    answer_key: &str,
+    secret_key: &str,
+    secrets_set: &mut BTreeMap<String, String>,
+) {
+    if let Some(value) = optional_string_from(answers, answer_key) {
+        secrets_set.insert(secret_key.to_string(), value);
+    }
 }
 
 fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
@@ -249,8 +373,8 @@ mod tests {
         i18n_keys: I18N_KEYS,
         world_id: WORLD_ID,
         provider_id: PROVIDER_ID,
-        schema_hash: "31837e4b20141730d62652092825e5ad641048cdbab052c0697990074ee7d5c3",
-        qa_default_keys: ["phone_number_id", "public_base_url"],
+        schema_hash: "d5031fcc55b6ff6f88e29f7888a6043c6288ea39a3e155f62f964fd48671ef02",
+        qa_default_keys: ["phone_number_id", "public_base_url", "whatsapp_token"],
         mode_type: bindings::exports::greentic::component::qa::Mode,
         component_type: Component,
         qa_guest_path: bindings::exports::greentic::component::qa::Guest,
@@ -287,6 +411,33 @@ mod tests {
             config.get("business_account_id"),
             Some(&Value::String("new-business".to_string()))
         );
+        assert!(config.get("token").is_none());
+        assert_eq!(
+            out_json["secrets_patch"]["set"][DEFAULT_TOKEN_KEY],
+            Value::String("token-a".to_string())
+        );
+    }
+
+    #[test]
+    fn apply_answers_maps_runtime_secret_aliases() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        for key in ["whatsapp_token", "access_token", "token"] {
+            let answers = json!({
+                "phone_number_id": "123",
+                "public_base_url": "https://example.com",
+                key: "token-a"
+            });
+            let out =
+                <Component as QaGuest>::apply_answers(Mode::Setup, canonical_cbor_bytes(&answers));
+            let out_json: Value = decode_cbor(&out).expect("decode apply output");
+            assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+            assert!(out_json["config"].get("token").is_none());
+            assert_eq!(
+                out_json["secrets_patch"]["set"][DEFAULT_TOKEN_KEY],
+                Value::String("token-a".to_string())
+            );
+        }
     }
 
     /// Helper: build a minimal EncodeInV1 JSON with given metadata, text, and attachments.

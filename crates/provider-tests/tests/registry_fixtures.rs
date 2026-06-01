@@ -68,9 +68,8 @@ const PROVIDERS: &[ProviderSpec] = &[
     },
 ];
 
-const PROVIDERS_REQUIRING_SECRET_PROMPTS: &[&str] = &[
-    "dummy", "email", "slack", "teams", "telegram", "webex", "whatsapp",
-];
+const PROVIDERS_REQUIRING_SECRET_PROMPTS: &[&str] =
+    &["dummy", "email", "slack", "telegram", "webex", "whatsapp"];
 
 struct ProviderFixtureBytes {
     describe: Vec<u8>,
@@ -239,6 +238,38 @@ fn setup_answers_from_spec(spec: &QaSpec) -> Value {
         map.insert(q.id.clone(), sample_answer_for_key(&q.id));
     }
     serde_json::to_value(map).unwrap_or_else(|_| json!({}))
+}
+
+fn setup_answers_for_provider(provider_id: &str, spec: &QaSpec) -> Value {
+    let mut answers = setup_answers_from_spec(spec);
+    if provider_id == "slack" {
+        let obj = answers
+            .as_object_mut()
+            .expect("setup answers should be an object");
+        obj.entry("public_base_url".to_string())
+            .or_insert_with(|| Value::String("https://example.test".to_string()));
+        obj.entry("default_channel".to_string())
+            .or_insert_with(|| Value::String("default_channel-value".to_string()));
+    }
+    if provider_id == "teams" {
+        let obj = answers
+            .as_object_mut()
+            .expect("setup answers should be an object");
+        obj.entry("tenant_id".to_string())
+            .or_insert_with(|| Value::String("tenant_id-value".to_string()));
+        obj.entry("client_id".to_string())
+            .or_insert_with(|| Value::String("client_id-value".to_string()));
+        obj.entry("refresh_token".to_string())
+            .or_insert_with(|| Value::String("refresh_token-value".to_string()));
+    }
+    if provider_id == "webex" {
+        let obj = answers
+            .as_object_mut()
+            .expect("setup answers should be an object");
+        obj.entry("webhook_secret".to_string())
+            .or_insert_with(|| Value::String("fixture-webhook-secret".to_string()));
+    }
+    answers
 }
 
 fn setup_answers_with_invalid_urls(spec: &QaSpec) -> Value {
@@ -498,7 +529,8 @@ fn generate_provider_fixtures(spec: ProviderSpec) -> Result<ProviderFixtureBytes
             qa_spec.mode
         ));
     }
-    let apply_setup_config = harness.call_apply_setup(setup_answers_from_spec(&qa_spec))?;
+    let apply_setup_config =
+        harness.call_apply_setup(setup_answers_for_provider(spec.id, &qa_spec))?;
     Ok(ProviderFixtureBytes {
         describe,
         qa_setup,
@@ -693,7 +725,7 @@ fn fixture_resolver_flow_add_update_remove_smoke() -> Result<()> {
         let qa_setup_bytes = harness.call_qa_setup()?;
         let qa_setup: QaSpec =
             decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
-        let setup_answers = setup_answers_from_spec(&qa_setup);
+        let setup_answers = setup_answers_for_provider(spec.id, &qa_setup);
         let setup_bytes = harness.call_apply(QaMode::Setup, setup_answers)?;
         let setup_value: Value =
             decode_cbor(&setup_bytes).map_err(|e| anyhow!("decode setup apply: {e}"))?;
@@ -886,7 +918,10 @@ fn fixture_resolver_legacy_key_migration_smoke() -> Result<()> {
         let qa_setup_bytes = harness.call_qa_setup()?;
         let qa_setup: QaSpec =
             decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
-        let setup_bytes = harness.call_apply(QaMode::Setup, setup_answers_from_spec(&qa_setup))?;
+        let setup_bytes = harness.call_apply(
+            QaMode::Setup,
+            setup_answers_for_provider(spec.id, &qa_setup),
+        )?;
         let setup_value: Value =
             decode_cbor(&setup_bytes).map_err(|e| anyhow!("decode setup apply: {e}"))?;
         let setup_config = apply_result_config(&setup_value)?;
@@ -991,7 +1026,7 @@ fn fixture_resolver_legacy_key_migration_smoke() -> Result<()> {
         let qa_upgrade_bytes = harness.call_qa(QaMode::Upgrade)?;
         let qa_upgrade: QaSpec =
             decode_cbor(&qa_upgrade_bytes).map_err(|e| anyhow!("decode qa upgrade: {e}"))?;
-        let mut fallback_answers = setup_answers_from_spec(&qa_upgrade);
+        let mut fallback_answers = setup_answers_for_provider(spec.id, &qa_upgrade);
         if let Some(map) = fallback_answers.as_object_mut() {
             map.insert("existing_config".to_string(), json!({}));
         }

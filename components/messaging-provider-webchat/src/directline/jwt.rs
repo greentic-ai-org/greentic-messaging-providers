@@ -144,29 +144,30 @@ mod tests {
         }
     }
 
-    fn signed_token(signing_key: &[u8], claims: TokenClaims) -> String {
+    fn signed_token(signing_key: &[u8], claims: TokenClaims) -> Result<String, JwtError> {
         let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
-        let header_enc = encode_segment(&header).expect("header");
-        let payload_enc = encode_segment(&claims).expect("payload");
-        let mut mac = HmacSha256::new_from_slice(signing_key).expect("hmac");
+        let header_enc = encode_segment(&header)?;
+        let payload_enc = encode_segment(&claims)?;
+        let mut mac = HmacSha256::new_from_slice(signing_key).map_err(|_| JwtError::InvalidKey)?;
         mac.update(header_enc.as_bytes());
         mac.update(b".");
         mac.update(payload_enc.as_bytes());
         let signature_enc = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
-        format!("{header_enc}.{payload_enc}.{signature_enc}")
+        Ok(format!("{header_enc}.{payload_enc}.{signature_enc}"))
     }
 
     #[test]
-    fn token_round_trip() {
+    fn token_round_trip() -> Result<(), JwtError> {
         let signing_key = b"test-hmac-key";
         let ctx = sample_ctx();
-        let (token, exp) = issue_token(signing_key, ctx.clone(), "user-123", None).unwrap();
+        let (token, exp) = issue_token(signing_key, ctx.clone(), "user-123", None)?;
         assert!(token.split('.').count() == 3);
         assert!(exp > Utc::now().timestamp());
-        let claims = verify_token(signing_key, &token).unwrap();
+        let claims = verify_token(signing_key, &token)?;
         assert_eq!(claims.sub, "user-123");
         assert_eq!(claims.ctx, ctx);
         assert!(claims.conv.is_none());
+        Ok(())
     }
 
     #[test]
@@ -188,18 +189,19 @@ mod tests {
     }
 
     #[test]
-    fn verify_rejects_wrong_signature() {
+    fn verify_rejects_wrong_signature() -> Result<(), JwtError> {
         let signing_key = b"test-hmac-key";
-        let (token, _) = issue_token(signing_key, sample_ctx(), "user-123", None).unwrap();
+        let (token, _) = issue_token(signing_key, sample_ctx(), "user-123", None)?;
 
         assert!(matches!(
             verify_token(b"wrong-hmac-key", &token),
             Err(JwtError::InvalidSignature)
         ));
+        Ok(())
     }
 
     #[test]
-    fn verify_rejects_expired_and_not_yet_valid_claims() {
+    fn verify_rejects_expired_and_not_yet_valid_claims() -> Result<(), JwtError> {
         let signing_key = b"test-hmac-key";
         let now = Utc::now().timestamp();
         let base = TokenClaims {
@@ -217,7 +219,7 @@ mod tests {
             exp: now - 1,
             ..base
         };
-        let expired_token = signed_token(signing_key, expired);
+        let expired_token = signed_token(signing_key, expired)?;
         assert!(matches!(
             verify_token(signing_key, &expired_token),
             Err(JwtError::Expired)
@@ -233,15 +235,16 @@ mod tests {
             aud: AUD.to_string(),
             sub: "user-123".to_string(),
         };
-        let future_token = signed_token(signing_key, future);
+        let future_token = signed_token(signing_key, future)?;
         assert!(matches!(
             verify_token(signing_key, &future_token),
             Err(JwtError::NotYetValid)
         ));
+        Ok(())
     }
 
     #[test]
-    fn token_with_conv_claim() {
+    fn token_with_conv_claim() -> Result<(), JwtError> {
         let signing_key = b"another-test-hmac-key";
         let ctx = DirectLineContext {
             env: "prod".into(),
@@ -249,9 +252,10 @@ mod tests {
             team: None,
         };
         let (token, _) =
-            issue_token(signing_key, ctx.clone(), "user-x", Some("conv-99".into())).unwrap();
-        let claims = verify_token(signing_key, &token).unwrap();
+            issue_token(signing_key, ctx.clone(), "user-x", Some("conv-99".into()))?;
+        let claims = verify_token(signing_key, &token)?;
         assert_eq!(claims.conv.as_deref(), Some("conv-99"));
         assert_eq!(claims.ctx, ctx);
+        Ok(())
     }
 }

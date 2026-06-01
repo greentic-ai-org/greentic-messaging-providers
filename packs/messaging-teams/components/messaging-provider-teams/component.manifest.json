@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-teams",
-  "version": "0.4.100",
+  "version": "0.5.8",
   "supports": [
     "messaging"
   ],

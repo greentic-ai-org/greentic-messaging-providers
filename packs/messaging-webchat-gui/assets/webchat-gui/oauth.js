@@ -7,10 +7,28 @@
   var originalFetch = rt.originalFetch || window.fetch.bind(window);
   var uiT = rt.uiT || function(k, fb) { return fb || k; };
 
+  // Storage key namespace, not credential material.
+  // foxguard: ignore[js/no-hardcoded-secret]
   var OAUTH_STORAGE_PREFIX = 'greentic_oauth_';
 
   function oauthStorageKey(key) {
     return OAUTH_STORAGE_PREFIX + key;
+  }
+
+  function trustedHttpUrl(value) {
+    var url = new URL(value, window.location.href);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new Error('unsupported URL protocol');
+    }
+    return url.toString();
+  }
+
+  function sameOriginUrl(value) {
+    var url = new URL(value, window.location.href);
+    if (url.origin !== window.location.origin) {
+      throw new Error('cross-origin backend URL');
+    }
+    return url.toString();
   }
 
   function getOAuthSession() {
@@ -132,7 +150,8 @@
       if (!storedProvider.token_url) {
         throw new Error('no token_url');
       }
-      console.log('[oauth] trying direct PKCE token exchange with', storedProvider.token_url);
+      var tokenUrl = trustedHttpUrl(storedProvider.token_url);
+      console.log('[oauth] trying direct PKCE token exchange with', tokenUrl);
       var body = new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
@@ -140,7 +159,9 @@
         client_id: storedProvider.client_id,
         code_verifier: codeVerifier || ''
       });
-      return fetch(storedProvider.token_url, {
+      // OAuth token endpoints are provider-configured HTTPS URLs.
+      // foxguard: ignore[js/no-ssrf]
+      return fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString()
@@ -148,9 +169,11 @@
     }
 
     // Try server proxy first, fall back to direct PKCE exchange
-    var proxyUrl = backendBase(tenant) + '/oauth/token-exchange';
+    var proxyUrl = sameOriginUrl(backendBase(tenant) + '/oauth/token-exchange');
     console.log('[oauth] exchanging code via proxy');
 
+    // Backend proxy URL is constrained to the current origin.
+    // foxguard: ignore[js/no-ssrf]
     fetch(proxyUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -273,9 +296,11 @@
         prompt: 'select_account'
       });
 
-      var authorizeUrl = provider.auth_url + '?' + params.toString();
+      var authorizeUrl = trustedHttpUrl(provider.auth_url) + '?' + params.toString();
       console.log('[oauth] redirecting to provider:', provider.id, provider.auth_url);
-      window.location.href = authorizeUrl;
+      // OAuth authorization endpoints are provider-configured HTTPS URLs.
+      // foxguard: ignore[js/no-open-redirect]
+      window.location.assign(authorizeUrl);
     });
   }
 
@@ -465,7 +490,9 @@
    * Blocks SPA rendering until auth is resolved.
    */
   function checkOAuthGate() {
-    var authConfigUrl = backendBase(tenant) + '/auth/config';
+    var authConfigUrl = sameOriginUrl(backendBase(tenant) + '/auth/config');
+    // Backend auth config URL is constrained to the current origin.
+    // foxguard: ignore[js/no-ssrf]
     fetch(authConfigUrl)
       .then(function (response) {
         if (!response.ok) {
@@ -662,7 +689,10 @@
 
     // Otherwise fetch from server
     var baseUrl = window.location.href.split('#')[0].split('?')[0].replace(/\/v1\/web\/.*/, '');
-    fetch(baseUrl + '/oauth/authorize')
+    var authorizeEndpoint = sameOriginUrl(baseUrl + '/oauth/authorize');
+    // Backend authorize URL is constrained to the current origin.
+    // foxguard: ignore[js/no-ssrf]
+    fetch(authorizeEndpoint)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.authorize_url) {

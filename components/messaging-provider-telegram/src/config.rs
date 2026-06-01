@@ -13,7 +13,7 @@ pub(crate) struct ProviderConfig {
     pub(crate) default_chat_id: Option<String>,
     #[serde(default)]
     pub(crate) api_base_url: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "telegram_bot_token")]
     pub(crate) bot_token: Option<String>,
 }
 
@@ -23,6 +23,7 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) public_base_url: String,
     pub(crate) default_chat_id: Option<String>,
     pub(crate) api_base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) bot_token: Option<String>,
 }
 
@@ -91,6 +92,9 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         partial.insert("api_base_url".into(), v.clone());
     }
     if let Some(v) = input.get("bot_token") {
+        partial.insert("bot_token".into(), v.clone());
+    }
+    if let Some(v) = input.get("telegram_bot_token") {
         partial.insert("bot_token".into(), v.clone());
     }
     if !partial.is_empty() {

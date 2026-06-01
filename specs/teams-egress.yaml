@@ -5,7 +5,7 @@ pack:
   publisher: Greentic
   kind: application
 provider:
-  provider_type: messaging.teams.bot
+  provider_type: messaging.teams.graph
   provider_id: teams
   ops:
     - send
@@ -29,17 +29,17 @@ setup:
     - key: tenant_id
       prompt: Tenant ID
       kind: string
-      required: true
+      required: false
       write_to: config:tenant_id
     - key: client_id
       prompt: Client ID
       kind: string
-      required: true
+      required: false
       write_to: config:client_id
     - key: public_base_url
       prompt: Public base URL
       kind: string
-      required: true
+      required: false
       help: "Example: https://xxxx.trycloudflare.com"
       validate:
         regex: "^https://"
@@ -54,15 +54,15 @@ setup:
       kind: string
       required: false
       write_to: config:channel_id
-    - key: client_secret
-      prompt: Client secret
+    - key: graph_client_id
+      prompt: Graph client ID
       kind: string
-      required: true
-      write_to: secrets:MS_GRAPH_CLIENT_SECRET
+      required: false
+      write_to: secrets:MS_GRAPH_CLIENT_ID
     - key: refresh_token
       prompt: Refresh token
       kind: string
-      required: false
+      required: true
       write_to: secrets:MS_GRAPH_REFRESH_TOKEN
   emits_success_message: true
 requirements:

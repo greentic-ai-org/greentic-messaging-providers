@@ -7,11 +7,15 @@ use serde_json::Value;
 pub(crate) struct ProviderConfig {
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
+    #[serde(default)]
     pub(crate) public_base_url: String,
+    #[serde(default)]
     pub(crate) host: String,
     #[serde(default = "default_port")]
     pub(crate) port: u16,
+    #[serde(default)]
     pub(crate) username: String,
+    #[serde(default)]
     pub(crate) from_address: String,
     #[serde(default = "default_tls")]
     pub(crate) tls_mode: String,
@@ -51,6 +55,14 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) tls_mode: String,
     pub(crate) default_to_address: Option<String>,
     pub(crate) password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) graph_authority: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) graph_base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) graph_token_endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) graph_scope: Option<String>,
 }
 
 pub(crate) fn default_port() -> u16 {
@@ -123,26 +135,22 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         tls_mode: default_tls(),
         default_to_address: None,
         password: None,
+        graph_authority: None,
+        graph_base_url: None,
+        graph_token_endpoint: None,
+        graph_scope: None,
     }
 }
 
 pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), String> {
-    if config.public_base_url.trim().is_empty() {
-        return Err("config validation failed: public_base_url is required".to_string());
-    }
-    if config.host.trim().is_empty() {
-        return Err("config validation failed: host is required".to_string());
-    }
-    if config.username.trim().is_empty() {
-        return Err("config validation failed: username is required".to_string());
-    }
     if config.from_address.trim().is_empty() {
         return Err("config validation failed: from_address is required".to_string());
     }
     if config.port == 0 {
         return Err("config validation failed: port must be greater than zero".to_string());
     }
-    if !(config.public_base_url.starts_with("http://")
+    if !(config.public_base_url.trim().is_empty()
+        || config.public_base_url.starts_with("http://")
         || config.public_base_url.starts_with("https://"))
     {
         return Err(
@@ -153,15 +161,6 @@ pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), Stri
 }
 
 pub(crate) fn validate_provider_config(cfg: ProviderConfig) -> Result<ProviderConfig, String> {
-    if cfg.public_base_url.trim().is_empty() {
-        return Err("invalid config: public_base_url cannot be empty".to_string());
-    }
-    if cfg.host.trim().is_empty() {
-        return Err("invalid config: host cannot be empty".to_string());
-    }
-    if cfg.username.trim().is_empty() {
-        return Err("invalid config: username cannot be empty".to_string());
-    }
     if cfg.from_address.trim().is_empty() {
         return Err("invalid config: from_address cannot be empty".to_string());
     }
@@ -182,15 +181,22 @@ pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
     let graph_tenant_id = auth::get_secret_any_case("graph_tenant_id")
         .or_else(|_| auth::get_secret_any_case("GRAPH_TENANT_ID"))
         .or_else(|_| auth::get_secret_any_case("ms_graph_tenant_id"))
+        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_TENANT_ID"))
         .ok();
     let graph_client_id = auth::get_secret_any_case("ms_graph_client_id")
         .or_else(|_| auth::get_secret_any_case("graph_client_id"))
+        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_CLIENT_ID"))
+        .or_else(|_| auth::get_secret_any_case("GRAPH_CLIENT_ID"))
         .ok();
     let graph_client_secret = auth::get_secret_any_case("ms_graph_client_secret")
         .or_else(|_| auth::get_secret_any_case("graph_client_secret"))
+        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_CLIENT_SECRET"))
+        .or_else(|_| auth::get_secret_any_case("GRAPH_CLIENT_SECRET"))
         .ok();
     let graph_refresh_token = auth::get_secret_any_case("ms_graph_refresh_token")
         .or_else(|_| auth::get_secret_any_case("graph_refresh_token"))
+        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_REFRESH_TOKEN"))
+        .or_else(|_| auth::get_secret_any_case("GRAPH_REFRESH_TOKEN"))
         .ok();
     if from_address.is_empty() {
         return Err("from_address not found in secrets (seed 'from_address' secret)".to_string());

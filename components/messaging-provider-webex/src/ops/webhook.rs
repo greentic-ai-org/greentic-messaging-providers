@@ -13,6 +13,8 @@ use crate::config::load_config;
 #[cfg(not(test))]
 use crate::{DEFAULT_TOKEN_KEY, DEFAULT_WEBHOOK_SECRET_KEY};
 
+type HttpSend<'a> = dyn FnMut(&client::Request) -> Result<client::Response, client::HostError> + 'a;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WebhookSpec {
     name: String,
@@ -21,6 +23,15 @@ struct WebhookSpec {
     event: &'static str,
     filter: Option<String>,
     secret: Option<String>,
+}
+
+struct WebhookSetup<'a> {
+    api_base: &'a str,
+    token: &'a str,
+    target_url: &'a str,
+    instance: &'a str,
+    room_id: Option<&'a str>,
+    secret: Option<&'a str>,
 }
 
 /// Handle `setup_webhook` op.
@@ -55,39 +66,96 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
     let secret = input_string(&parsed, "webhook_secret")
         .or_else(|| cfg.as_ref().and_then(|c| c.webhook_secret.clone()))
         .or_else(resolve_webhook_secret);
+    let mut send = |request: &client::Request| client::send(request, None, None);
+    let result = setup_webhook_with_sender(
+        WebhookSetup {
+            api_base: &api_base,
+            token: &token,
+            target_url: &target_url,
+            instance: &instance,
+            room_id: room_id.as_deref(),
+            secret: secret.as_deref(),
+        },
+        &parsed,
+        &mut send,
+    );
+    json_bytes(&result)
+}
+
+fn setup_webhook_with_sender(
+    setup: WebhookSetup<'_>,
+    parsed: &Value,
+    send: &mut HttpSend<'_>,
+) -> Value {
+    let bot_person_id = if setup.room_id.is_none() {
+        match input_string(parsed, "bot_person_id")
+            .or_else(|| input_string(parsed, "webex_bot_person_id"))
+            .map(Ok)
+            .unwrap_or_else(|| fetch_bot_person_id(setup.api_base, setup.token, send))
+        {
+            Ok(id) => Some(id),
+            Err(err) => return json!({"ok": false, "error": err}),
+        }
+    } else {
+        None
+    };
 
     let specs = webhook_specs(
-        &instance,
-        &target_url,
-        room_id.as_deref(),
-        secret.as_deref(),
+        setup.instance,
+        setup.target_url,
+        setup.room_id,
+        bot_person_id.as_deref(),
+        setup.secret,
     );
-    let existing = match list_webhooks(&api_base, &token) {
+    let existing = match list_webhooks(setup.api_base, setup.token, send) {
         Ok(list) => list,
         Err(err) => {
-            return json_bytes(&json!({
+            return json!({
                 "ok": false,
                 "error": format!("list webex webhooks failed: {err}")
-            }));
+            });
         }
     };
 
     let mut all_ok = true;
     let mut results = Vec::new();
-    for spec in specs {
-        let result = reconcile_webhook(&api_base, &token, &existing, &spec);
+    let stale = stale_webhooks_for_instance(&existing, &specs, setup.instance);
+    for wh in &stale {
+        let result = delete_webhook(setup.api_base, setup.token, wh, send);
         if result.get("ok").and_then(Value::as_bool) != Some(true) {
             all_ok = false;
         }
         results.push(result);
     }
 
-    json_bytes(&json!({
+    let stale_ids: std::collections::HashSet<String> = stale
+        .iter()
+        .filter_map(|wh| wh.get("id").and_then(Value::as_str).map(ToOwned::to_owned))
+        .collect();
+    let active_existing: Vec<Value> = existing
+        .iter()
+        .filter(|wh| {
+            wh.get("id")
+                .and_then(Value::as_str)
+                .is_none_or(|id| !stale_ids.contains(id))
+        })
+        .cloned()
+        .collect();
+
+    for spec in specs {
+        let result = reconcile_webhook(setup.api_base, setup.token, &active_existing, &spec, send);
+        if result.get("ok").and_then(Value::as_bool) != Some(true) {
+            all_ok = false;
+        }
+        results.push(result);
+    }
+
+    json!({
         "ok": all_ok,
-        "target_url": target_url,
-        "webhook_url": target_url,
+        "target_url": setup.target_url,
+        "webhook_url": setup.target_url,
         "webhooks": results,
-    }))
+    })
 }
 
 fn resolve_token(parsed: &Value, cfg: Option<&crate::ProviderConfig>) -> Result<String, String> {
@@ -156,7 +224,7 @@ fn input_string(parsed: &Value, key: &str) -> Option<String> {
 
 fn build_target_url(public_base_url: &str, tenant: &str, channel: &str) -> String {
     format!(
-        "{}/v1/messaging/webex/{}/{}/webhook",
+        "{}/v1/messaging/ingress/messaging-webex/{}/{}",
         public_base_url.trim_end_matches('/'),
         url_segment(tenant),
         url_segment(channel),
@@ -167,43 +235,93 @@ fn webhook_specs(
     instance: &str,
     target_url: &str,
     room_id: Option<&str>,
+    bot_person_id: Option<&str>,
     secret: Option<&str>,
 ) -> Vec<WebhookSpec> {
-    let messages_filter = room_id
-        .map(|room| format!("roomId={room}"))
-        .unwrap_or_else(|| "mentionedPeople=me".to_string());
+    let message_specs = room_id
+        .map(|room| {
+            vec![WebhookSpec {
+                name: format!("greentic-webex-{instance}-messages-created"),
+                target_url: target_url.to_string(),
+                resource: "messages",
+                event: "created",
+                filter: Some(format!("roomId={room}")),
+                secret: secret.map(ToOwned::to_owned),
+            }]
+        })
+        .unwrap_or_else(|| {
+            vec![
+                WebhookSpec {
+                    name: format!("greentic-webex-{instance}-messages-mentioned-created"),
+                    target_url: target_url.to_string(),
+                    resource: "messages",
+                    event: "created",
+                    filter: bot_person_id.map(|id| format!("mentionedPeople={id}")),
+                    secret: secret.map(ToOwned::to_owned),
+                },
+                WebhookSpec {
+                    name: format!("greentic-webex-{instance}-messages-direct-created"),
+                    target_url: target_url.to_string(),
+                    resource: "messages",
+                    event: "created",
+                    filter: Some("roomType=direct".to_string()),
+                    secret: secret.map(ToOwned::to_owned),
+                },
+            ]
+        });
     let actions_filter = room_id.map(|room| format!("roomId={room}"));
-    vec![
-        WebhookSpec {
-            name: format!("greentic-webex-{instance}-messages-created"),
-            target_url: target_url.to_string(),
-            resource: "messages",
-            event: "created",
-            filter: Some(messages_filter),
-            secret: secret.map(ToOwned::to_owned),
-        },
-        WebhookSpec {
+    message_specs
+        .into_iter()
+        .chain(std::iter::once(WebhookSpec {
             name: format!("greentic-webex-{instance}-attachment-actions-created"),
             target_url: target_url.to_string(),
             resource: "attachmentActions",
             event: "created",
             filter: actions_filter,
             secret: secret.map(ToOwned::to_owned),
-        },
-    ]
+        }))
+        .collect()
 }
 
-fn list_webhooks(api_base: &str, token: &str) -> Result<Vec<Value>, String> {
-    let resp = client::send(
-        &client::Request {
-            method: "GET".to_string(),
-            url: format!("{api_base}/webhooks"),
-            headers: vec![("Authorization".to_string(), format!("Bearer {token}"))],
-            body: None,
-        },
-        None,
-        None,
-    )
+fn fetch_bot_person_id(
+    api_base: &str,
+    token: &str,
+    send: &mut HttpSend<'_>,
+) -> Result<String, String> {
+    let resp = send(&client::Request {
+        method: "GET".to_string(),
+        url: format!("{api_base}/people/me"),
+        headers: vec![("Authorization".to_string(), format!("Bearer {token}"))],
+        body: None,
+    })
+    .map_err(|e| format!("http error: {}", e.message))?;
+    let body_bytes = resp.body.unwrap_or_default();
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
+    if !(200..300).contains(&(resp.status as u32)) {
+        return Err(format!(
+            "status {} body={}",
+            resp.status,
+            String::from_utf8_lossy(&body_bytes)
+        ));
+    }
+    body.get("id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| "people/me response did not include bot person id".to_string())
+}
+
+fn list_webhooks(
+    api_base: &str,
+    token: &str,
+    send: &mut HttpSend<'_>,
+) -> Result<Vec<Value>, String> {
+    let resp = send(&client::Request {
+        method: "GET".to_string(),
+        url: format!("{api_base}/webhooks"),
+        headers: vec![("Authorization".to_string(), format!("Bearer {token}"))],
+        body: None,
+    })
     .map_err(|e| format!("http error: {}", e.message))?;
     let body_bytes = resp.body.unwrap_or_default();
     let body: Value = serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
@@ -221,30 +339,74 @@ fn list_webhooks(api_base: &str, token: &str) -> Result<Vec<Value>, String> {
         .unwrap_or_default())
 }
 
-fn reconcile_webhook(api_base: &str, token: &str, existing: &[Value], spec: &WebhookSpec) -> Value {
+fn stale_webhooks_for_instance(
+    existing: &[Value],
+    specs: &[WebhookSpec],
+    instance: &str,
+) -> Vec<Value> {
+    let keep_indexes = current_webhook_indexes(existing, specs);
+    existing
+        .iter()
+        .enumerate()
+        .filter(|(idx, wh)| {
+            is_greentic_webex_webhook_for_instance(wh, instance) && !keep_indexes.contains(idx)
+        })
+        .map(|(_, wh)| wh.clone())
+        .collect()
+}
+
+fn current_webhook_indexes(
+    existing: &[Value],
+    specs: &[WebhookSpec],
+) -> std::collections::HashSet<usize> {
+    let mut keep = std::collections::HashSet::new();
+    for spec in specs {
+        if let Some((idx, _)) = existing
+            .iter()
+            .enumerate()
+            .find(|(idx, wh)| !keep.contains(idx) && existing_matches(wh, spec))
+        {
+            keep.insert(idx);
+        }
+    }
+    keep
+}
+
+fn is_greentic_webex_webhook_for_instance(wh: &Value, instance: &str) -> bool {
+    let expected_prefix = format!("greentic-webex-{instance}-");
+    wh.get("name")
+        .and_then(Value::as_str)
+        .is_some_and(|name| name.starts_with(&expected_prefix))
+}
+
+fn reconcile_webhook(
+    api_base: &str,
+    token: &str,
+    existing: &[Value],
+    spec: &WebhookSpec,
+    send: &mut HttpSend<'_>,
+) -> Value {
     let found = existing.iter().find(|wh| same_owned_webhook(wh, spec));
     match found {
         Some(wh) if existing_matches(wh, spec) => json!({
             "ok": true,
-            "action": "reuse",
+            "action": "keep",
             "webhook_id": wh.get("id").and_then(Value::as_str).unwrap_or_default(),
             "name": spec.name,
             "resource": spec.resource,
             "event": spec.event,
             "filter": spec.filter,
             "targetUrl": spec.target_url,
+            "http_status": 200,
         }),
         Some(wh) => {
-            let webhook_id = wh.get("id").and_then(Value::as_str).unwrap_or_default();
-            if !webhook_id.is_empty() {
-                let delete = delete_webhook(api_base, token, webhook_id, spec);
-                if delete.get("ok").and_then(Value::as_bool) != Some(true) {
-                    return delete;
-                }
+            let delete = delete_webhook(api_base, token, wh, send);
+            if delete.get("ok").and_then(Value::as_bool) != Some(true) {
+                return delete;
             }
-            create_webhook(api_base, token, spec, "replace")
+            create_webhook(api_base, token, spec, "update", send)
         }
-        None => create_webhook(api_base, token, spec, "create"),
+        None => create_webhook(api_base, token, spec, "create", send),
     }
 }
 
@@ -260,21 +422,23 @@ fn existing_matches(wh: &Value, spec: &WebhookSpec) -> bool {
         && wh.get("targetUrl").and_then(Value::as_str) == Some(spec.target_url.as_str())
 }
 
-fn create_webhook(api_base: &str, token: &str, spec: &WebhookSpec, action: &str) -> Value {
+fn create_webhook(
+    api_base: &str,
+    token: &str,
+    spec: &WebhookSpec,
+    action: &str,
+    send: &mut HttpSend<'_>,
+) -> Value {
     let body = create_webhook_payload(spec);
-    let resp = match client::send(
-        &client::Request {
-            method: "POST".to_string(),
-            url: format!("{api_base}/webhooks"),
-            headers: vec![
-                ("Authorization".to_string(), format!("Bearer {token}")),
-                ("Content-Type".to_string(), "application/json".to_string()),
-            ],
-            body: Some(serde_json::to_vec(&body).unwrap_or_default()),
-        },
-        None,
-        None,
-    ) {
+    let resp = match send(&client::Request {
+        method: "POST".to_string(),
+        url: format!("{api_base}/webhooks"),
+        headers: vec![
+            ("Authorization".to_string(), format!("Bearer {token}")),
+            ("Content-Type".to_string(), "application/json".to_string()),
+        ],
+        body: Some(serde_json::to_vec(&body).unwrap_or_default()),
+    }) {
         Ok(r) => r,
         Err(e) => {
             return json!({
@@ -288,26 +452,48 @@ fn create_webhook(api_base: &str, token: &str, spec: &WebhookSpec, action: &str)
     response_result(action, spec, resp)
 }
 
-fn delete_webhook(api_base: &str, token: &str, webhook_id: &str, spec: &WebhookSpec) -> Value {
-    let resp = match client::send(
-        &client::Request {
-            method: "DELETE".to_string(),
-            url: format!("{api_base}/webhooks/{webhook_id}"),
-            headers: vec![("Authorization".to_string(), format!("Bearer {token}"))],
-            body: None,
-        },
-        None,
-        None,
-    ) {
+fn delete_webhook(api_base: &str, token: &str, webhook: &Value, send: &mut HttpSend<'_>) -> Value {
+    let webhook_id = webhook
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let resource = value_str(webhook, "resource");
+    let event = value_str(webhook, "event");
+    let name = value_str(webhook, "name");
+    let filter = value_str(webhook, "filter");
+    let target_url = value_str(webhook, "targetUrl");
+    if webhook_id.is_empty() {
+        return json!({
+            "ok": false,
+            "action": "delete",
+            "webhook_id": "",
+            "name": name,
+            "resource": resource,
+            "event": event,
+            "filter": if filter.is_empty() { Value::Null } else { Value::String(filter.to_string()) },
+            "targetUrl": target_url,
+            "error": "cannot delete Webex webhook without id",
+        });
+    }
+
+    let resp = match send(&client::Request {
+        method: "DELETE".to_string(),
+        url: format!("{api_base}/webhooks/{webhook_id}"),
+        headers: vec![("Authorization".to_string(), format!("Bearer {token}"))],
+        body: None,
+    }) {
         Ok(r) => r,
         Err(e) => {
             return json!({
                 "ok": false,
                 "action": "delete",
                 "webhook_id": webhook_id,
-                "resource": spec.resource,
-                "event": spec.event,
-                "error": format!("delete {}.{} failed: {}", spec.resource, spec.event, e.message)
+                "name": name,
+                "resource": resource,
+                "event": event,
+                "filter": if filter.is_empty() { Value::Null } else { Value::String(filter.to_string()) },
+                "targetUrl": target_url,
+                "error": format!("delete {resource}.{event} failed: {}", e.message)
             });
         }
     };
@@ -316,8 +502,11 @@ fn delete_webhook(api_base: &str, token: &str, webhook_id: &str, spec: &WebhookS
         "ok": ok,
         "action": "delete",
         "webhook_id": webhook_id,
-        "resource": spec.resource,
-        "event": spec.event,
+        "name": name,
+        "resource": resource,
+        "event": event,
+        "filter": if filter.is_empty() { Value::Null } else { Value::String(filter.to_string()) },
+        "targetUrl": target_url,
         "http_status": resp.status,
         "webex_response": parse_response_body(resp.body),
     })
@@ -394,25 +583,160 @@ fn url_segment(input: &str) -> String {
 mod tests {
     use super::*;
 
+    const API_BASE: &str = "https://webexapis.com/v1";
+    const TARGET_URL: &str =
+        "https://current.example/v1/messaging/ingress/messaging-webex/demo/default";
+    const INSTANCE: &str = "demo-default";
+    const BOT_PERSON_ID: &str = "bot-person-123";
+
+    #[derive(Debug)]
+    struct RecordedRequest {
+        method: String,
+        url: String,
+        body: Value,
+    }
+
+    fn response(status: u16, body: Value) -> client::Response {
+        client::Response {
+            status,
+            headers: Vec::new(),
+            body: Some(serde_json::to_vec(&body).expect("response body")),
+        }
+    }
+
+    fn run_setup_with_existing(existing: Vec<Value>) -> (Value, Vec<RecordedRequest>) {
+        let mut requests = Vec::new();
+        let mut created = 0usize;
+        let parsed = json!({});
+        let result = {
+            let mut send = |request: &client::Request| {
+                let body = request
+                    .body
+                    .as_ref()
+                    .and_then(|bytes| serde_json::from_slice(bytes).ok())
+                    .unwrap_or(Value::Null);
+                requests.push(RecordedRequest {
+                    method: request.method.clone(),
+                    url: request.url.clone(),
+                    body,
+                });
+
+                if request.method == "GET" && request.url == format!("{API_BASE}/people/me") {
+                    return Ok(response(200, json!({"id": BOT_PERSON_ID})));
+                }
+                if request.method == "GET" && request.url == format!("{API_BASE}/webhooks") {
+                    return Ok(response(200, json!({"items": existing})));
+                }
+                if request.method == "POST" && request.url == format!("{API_BASE}/webhooks") {
+                    created += 1;
+                    return Ok(response(200, json!({"id": format!("created-{created}")})));
+                }
+                if request.method == "DELETE"
+                    && request.url.starts_with(&format!("{API_BASE}/webhooks/"))
+                {
+                    return Ok(response(204, Value::Null));
+                }
+                Err(client::HostError {
+                    code: "unexpected-request".to_string(),
+                    message: format!("{} {}", request.method, request.url),
+                })
+            };
+
+            setup_webhook_with_sender(
+                WebhookSetup {
+                    api_base: API_BASE,
+                    token: "token",
+                    target_url: TARGET_URL,
+                    instance: INSTANCE,
+                    room_id: None,
+                    secret: Some("secret"),
+                },
+                &parsed,
+                &mut send,
+            )
+        };
+        (result, requests)
+    }
+
+    fn current_webhook(name: &str, resource: &str, event: &str, filter: Option<&str>) -> Value {
+        webhook_value(
+            &format!("id-{name}"),
+            name,
+            resource,
+            event,
+            filter,
+            TARGET_URL,
+        )
+    }
+
+    fn webhook_value(
+        id: &str,
+        name: &str,
+        resource: &str,
+        event: &str,
+        filter: Option<&str>,
+        target_url: &str,
+    ) -> Value {
+        let mut value = json!({
+            "id": id,
+            "name": name,
+            "resource": resource,
+            "event": event,
+            "targetUrl": target_url,
+        });
+        if let Some(filter) = filter {
+            value["filter"] = json!(filter);
+        }
+        value
+    }
+
     #[test]
-    fn builds_messages_created_payload_with_mentioned_people_filter() {
+    fn builds_message_webhooks_for_mentions_and_direct_rooms() {
         let specs = webhook_specs(
             "demo-default",
             "https://example.com/hook",
             None,
+            Some("bot-123"),
             Some("secret"),
         );
         let payload = create_webhook_payload(&specs[0]);
+        let direct_payload = create_webhook_payload(&specs[1]);
 
         assert_eq!(
             payload["name"],
-            "greentic-webex-demo-default-messages-created"
+            "greentic-webex-demo-default-messages-mentioned-created"
         );
         assert_eq!(payload["targetUrl"], "https://example.com/hook");
         assert_eq!(payload["resource"], "messages");
         assert_eq!(payload["event"], "created");
-        assert_eq!(payload["filter"], "mentionedPeople=me");
+        assert_eq!(payload["filter"], "mentionedPeople=bot-123");
         assert_eq!(payload["secret"], "secret");
+
+        assert_eq!(
+            direct_payload["name"],
+            "greentic-webex-demo-default-messages-direct-created"
+        );
+        assert_eq!(direct_payload["resource"], "messages");
+        assert_eq!(direct_payload["event"], "created");
+        assert_eq!(direct_payload["filter"], "roomType=direct");
+        assert_eq!(direct_payload["secret"], "secret");
+    }
+
+    #[test]
+    fn builds_single_room_scoped_message_webhook_when_room_configured() {
+        let specs = webhook_specs(
+            "demo-room",
+            "https://example.com/hook",
+            Some("room-1"),
+            None,
+            None,
+        );
+        let payload = create_webhook_payload(&specs[0]);
+
+        assert_eq!(payload["name"], "greentic-webex-demo-room-messages-created");
+        assert_eq!(payload["resource"], "messages");
+        assert_eq!(payload["event"], "created");
+        assert_eq!(payload["filter"], "roomId=room-1");
     }
 
     #[test]
@@ -421,6 +745,7 @@ mod tests {
             "demo-room",
             "https://example.com/hook",
             Some("room-1"),
+            None,
             None,
         );
         let payload = create_webhook_payload(&specs[1]);
@@ -437,7 +762,14 @@ mod tests {
 
     #[test]
     fn reuses_existing_matching_webhook() {
-        let spec = webhook_specs("demo", "https://example.com/hook", None, None).remove(0);
+        let spec = webhook_specs(
+            "demo",
+            "https://example.com/hook",
+            None,
+            Some("bot-123"),
+            None,
+        )
+        .remove(0);
         let existing = json!({
             "id": "wh-1",
             "name": spec.name,
@@ -449,6 +781,180 @@ mod tests {
 
         assert!(same_owned_webhook(&existing, &spec));
         assert!(existing_matches(&existing, &spec));
+    }
+
+    #[test]
+    fn setup_creates_mention_direct_and_action_webhooks_when_none_exist() {
+        let (result, requests) = run_setup_with_existing(Vec::new());
+
+        assert_eq!(result["ok"], true);
+        let webhooks = result["webhooks"].as_array().expect("webhook results");
+        assert_eq!(webhooks.len(), 3);
+        assert!(webhooks.iter().all(|item| item["action"] == "create"));
+
+        let post_bodies: Vec<&Value> = requests
+            .iter()
+            .filter(|request| request.method == "POST")
+            .map(|request| &request.body)
+            .collect();
+        assert_eq!(post_bodies.len(), 3);
+        assert!(post_bodies.iter().any(|body| {
+            body["name"] == "greentic-webex-demo-default-messages-mentioned-created"
+                && body["resource"] == "messages"
+                && body["event"] == "created"
+                && body["filter"] == format!("mentionedPeople={BOT_PERSON_ID}")
+                && body["targetUrl"] == TARGET_URL
+        }));
+        assert!(post_bodies.iter().any(|body| {
+            body["name"] == "greentic-webex-demo-default-messages-direct-created"
+                && body["resource"] == "messages"
+                && body["event"] == "created"
+                && body["filter"] == "roomType=direct"
+                && body["targetUrl"] == TARGET_URL
+        }));
+        assert!(post_bodies.iter().any(|body| {
+            body["name"] == "greentic-webex-demo-default-attachment-actions-created"
+                && body["resource"] == "attachmentActions"
+                && body["event"] == "created"
+                && body.get("filter").is_none()
+                && body["targetUrl"] == TARGET_URL
+        }));
+    }
+
+    #[test]
+    fn setup_keeps_existing_current_webhooks_without_duplicates() {
+        let existing = vec![
+            current_webhook(
+                "greentic-webex-demo-default-messages-mentioned-created",
+                "messages",
+                "created",
+                Some(&format!("mentionedPeople={BOT_PERSON_ID}")),
+            ),
+            current_webhook(
+                "greentic-webex-demo-default-messages-direct-created",
+                "messages",
+                "created",
+                Some("roomType=direct"),
+            ),
+            current_webhook(
+                "greentic-webex-demo-default-attachment-actions-created",
+                "attachmentActions",
+                "created",
+                None,
+            ),
+        ];
+        let (result, requests) = run_setup_with_existing(existing);
+
+        assert_eq!(result["ok"], true);
+        let webhooks = result["webhooks"].as_array().expect("webhook results");
+        assert_eq!(webhooks.len(), 3);
+        assert!(webhooks.iter().all(|item| item["action"] == "keep"));
+        assert!(!requests.iter().any(|request| request.method == "POST"));
+        assert!(!requests.iter().any(|request| request.method == "DELETE"));
+    }
+
+    #[test]
+    fn setup_deletes_stale_greentic_webhooks_and_preserves_unrelated_webhooks() {
+        let existing = vec![
+            webhook_value(
+                "old-mention",
+                "greentic-webex-demo-default-messages-created-mentioned",
+                "messages",
+                "created",
+                Some("mentionedPeople=me"),
+                "https://old.example/v1/messaging/ingress/messaging-webex/default/default",
+            ),
+            webhook_value(
+                "old-direct",
+                "greentic-webex-demo-default-messages-direct-created",
+                "messages",
+                "created",
+                Some("roomType=direct"),
+                "https://old.example/v1/messaging/ingress/messaging-webex/default/default",
+            ),
+            webhook_value(
+                "manual",
+                "manual-experiment",
+                "messages",
+                "created",
+                None,
+                "https://old.example/hook",
+            ),
+        ];
+        let (result, requests) = run_setup_with_existing(existing);
+
+        assert_eq!(result["ok"], true);
+        let deletes: Vec<&RecordedRequest> = requests
+            .iter()
+            .filter(|request| request.method == "DELETE")
+            .collect();
+        assert_eq!(deletes.len(), 2);
+        assert!(
+            deletes
+                .iter()
+                .any(|request| request.url.ends_with("/webhooks/old-mention"))
+        );
+        assert!(
+            deletes
+                .iter()
+                .any(|request| request.url.ends_with("/webhooks/old-direct"))
+        );
+        assert!(
+            !deletes
+                .iter()
+                .any(|request| request.url.ends_with("/webhooks/manual"))
+        );
+
+        let webhooks = result["webhooks"].as_array().expect("webhook results");
+        assert_eq!(
+            webhooks
+                .iter()
+                .filter(|item| item["action"] == "delete")
+                .count(),
+            2
+        );
+        assert_eq!(
+            webhooks
+                .iter()
+                .filter(|item| item["action"] == "create")
+                .count(),
+            3
+        );
+    }
+
+    #[test]
+    fn setup_deletes_duplicate_current_webhooks_but_keeps_one() {
+        let duplicate_name = "greentic-webex-demo-default-messages-direct-created";
+        let existing = vec![
+            webhook_value(
+                "direct-1",
+                duplicate_name,
+                "messages",
+                "created",
+                Some("roomType=direct"),
+                TARGET_URL,
+            ),
+            webhook_value(
+                "direct-2",
+                duplicate_name,
+                "messages",
+                "created",
+                Some("roomType=direct"),
+                TARGET_URL,
+            ),
+        ];
+        let (result, requests) = run_setup_with_existing(existing);
+
+        assert_eq!(result["ok"], true);
+        assert!(requests.iter().any(
+            |request| request.method == "DELETE" && request.url.ends_with("/webhooks/direct-2")
+        ));
+        let webhooks = result["webhooks"].as_array().expect("webhook results");
+        assert!(
+            webhooks
+                .iter()
+                .any(|item| { item["name"] == duplicate_name && item["action"] == "keep" })
+        );
     }
 
     #[test]
@@ -468,10 +974,10 @@ mod tests {
     }
 
     #[test]
-    fn target_url_uses_webex_route_shape() {
+    fn target_url_uses_standard_provider_ingress_route() {
         assert_eq!(
             build_target_url("https://host.example/", "tenant a", "channel/b"),
-            "https://host.example/v1/messaging/webex/tenant%20a/channel%2Fb/webhook"
+            "https://host.example/v1/messaging/ingress/messaging-webex/tenant%20a/channel%2Fb"
         );
     }
 }

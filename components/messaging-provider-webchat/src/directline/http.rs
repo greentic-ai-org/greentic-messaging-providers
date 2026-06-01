@@ -1081,12 +1081,13 @@ mod tests {
         query: Option<&str>,
         body: Option<&Value>,
         headers: Vec<Header>,
-    ) -> HttpInV1 {
+    ) -> Result<HttpInV1, String> {
         let body_b64 = match body {
-            Some(payload) => general_purpose::STANDARD.encode(serde_json::to_vec(payload).unwrap()),
+            Some(payload) => general_purpose::STANDARD
+                .encode(serde_json::to_vec(payload).map_err(|err| err.to_string())?),
             None => String::new(),
         };
-        HttpInV1 {
+        Ok(HttpInV1 {
             method: method.to_string(),
             path: path.to_string(),
             query: query.map(|value| value.to_string()),
@@ -1095,18 +1096,18 @@ mod tests {
             route_hint: None,
             binding_id: None,
             config: None,
-        }
+        })
     }
 
-    fn decode_body(response: &HttpOutV1) -> Value {
+    fn decode_body(response: &HttpOutV1) -> Result<Value, String> {
         let bytes = general_purpose::STANDARD
             .decode(&response.body_b64)
-            .expect("base64 decode");
-        serde_json::from_slice(&bytes).expect("valid json")
+            .map_err(|err| err.to_string())?;
+        serde_json::from_slice(&bytes).map_err(|err| err.to_string())
     }
 
     #[test]
-    fn directline_polling_flow() {
+    fn directline_polling_flow() -> Result<(), String> {
         let mut state = InMemoryStateStore::new();
         let mut secrets = TestSecretStore::new();
         secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
@@ -1117,11 +1118,13 @@ mod tests {
             Some("env=default&tenant=default"),
             Some(&json!({"user": {"id": "alice"}})),
             vec![],
-        );
+        )?;
         let token_response = handle_directline_request(&token_request, &mut state, &secrets);
         assert_eq!(token_response.status, 200);
-        let token_body = decode_body(&token_response);
-        let user_token = token_body["token"].as_str().expect("token returned");
+        let token_body = decode_body(&token_response)?;
+        let user_token = token_body["token"]
+            .as_str()
+            .ok_or("token returned")?;
 
         let conversation_request = build_request(
             "POST",
@@ -1132,17 +1135,17 @@ mod tests {
                 name: "Authorization".into(),
                 value: format!("Bearer {user_token}"),
             }],
-        );
+        )?;
         let conversation_response =
             handle_directline_request(&conversation_request, &mut state, &secrets);
         assert_eq!(conversation_response.status, 201);
-        let conversation_body = decode_body(&conversation_response);
+        let conversation_body = decode_body(&conversation_response)?;
         let conversation_id = conversation_body["conversationId"]
             .as_str()
-            .expect("conversation id");
+            .ok_or("conversation id")?;
         let conv_token = conversation_body["token"]
             .as_str()
-            .expect("conversation token");
+            .ok_or("conversation token")?;
 
         let reuse_response = handle_directline_request(
             &build_request(
@@ -1154,7 +1157,7 @@ mod tests {
                     name: "Authorization".into(),
                     value: format!("Bearer {conv_token}"),
                 }],
-            ),
+            )?,
             &mut state,
             &secrets,
         );
@@ -1175,12 +1178,12 @@ mod tests {
                     name: "Authorization".into(),
                     value: format!("Bearer {conv_token}"),
                 }],
-            ),
+            )?,
             &mut state,
             &secrets,
         );
         assert_eq!(post_activity_response.status, 201);
-        let posted = decode_body(&post_activity_response);
+        let posted = decode_body(&post_activity_response)?;
         assert!(posted.get("id").is_some());
 
         let get_response = handle_directline_request(
@@ -1193,13 +1196,15 @@ mod tests {
                     name: "Authorization".into(),
                     value: format!("Bearer {conv_token}"),
                 }],
-            ),
+            )?,
             &mut state,
             &secrets,
         );
         assert_eq!(get_response.status, 200);
-        let get_body = decode_body(&get_response);
-        let activities = get_body["activities"].as_array().unwrap();
+        let get_body = decode_body(&get_response)?;
+        let activities = get_body["activities"]
+            .as_array()
+            .ok_or("activities returned")?;
         assert_eq!(activities.len(), 1);
         assert_eq!(get_body["watermark"], Value::String("1".to_string()));
 
@@ -1213,13 +1218,16 @@ mod tests {
                     name: "Authorization".into(),
                     value: format!("Bearer {conv_token}"),
                 }],
-            ),
+            )?,
             &mut state,
             &secrets,
         );
         assert_eq!(empty_response.status, 200);
-        let empty_body = decode_body(&empty_response);
-        assert!(empty_body["activities"].as_array().unwrap().is_empty());
+        let empty_body = decode_body(&empty_response)?;
+        assert!(empty_body["activities"]
+            .as_array()
+            .ok_or("activities returned")?
+            .is_empty());
         assert_eq!(empty_body["watermark"], Value::String("1".to_string()));
 
         let refresh_response = handle_directline_request(
@@ -1232,12 +1240,12 @@ mod tests {
                     name: "Authorization".into(),
                     value: format!("Bearer {conv_token}"),
                 }],
-            ),
+            )?,
             &mut state,
             &secrets,
         );
         assert_eq!(refresh_response.status, 200);
-        let refresh_body = decode_body(&refresh_response);
+        let refresh_body = decode_body(&refresh_response)?;
         assert_eq!(
             refresh_body["conversationId"],
             Value::String(conversation_id.to_string())
@@ -1254,14 +1262,15 @@ mod tests {
                     name: "Authorization".into(),
                     value: format!("Bearer {conv_token}"),
                 }],
-            ),
+            )?,
             &mut state,
             &secrets,
         );
         assert_eq!(wrong_conv_response.status, 403);
+        Ok(())
     }
 
-    fn token_request_with_ip(client_ip: &str) -> HttpInV1 {
+    fn token_request_with_ip(client_ip: &str) -> Result<HttpInV1, String> {
         build_request(
             "POST",
             "/v3/directline/tokens/generate",
@@ -1283,7 +1292,7 @@ mod tests {
     }
 
     #[test]
-    fn anonymous_visitors_with_distinct_ips_get_independent_buckets() {
+    fn anonymous_visitors_with_distinct_ips_get_independent_buckets() -> Result<(), String> {
         let mut state = InMemoryStateStore::new();
         let mut secrets = TestSecretStore::new();
         secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
@@ -1292,7 +1301,7 @@ mod tests {
         // succeed because the bucket only fills for that IP.
         for _ in 0..RATE_LIMIT_REQUESTS_DEFAULT {
             let resp = handle_directline_request(
-                &token_request_with_ip("203.0.113.10"),
+                &token_request_with_ip("203.0.113.10")?,
                 &mut state,
                 &secrets,
             );
@@ -1304,7 +1313,7 @@ mod tests {
         // both anonymous visitors collapsed onto the same `anonymous`
         // bucket key.
         let other_ip_resp = handle_directline_request(
-            &token_request_with_ip("198.51.100.20"),
+            &token_request_with_ip("198.51.100.20")?,
             &mut state,
             &secrets,
         );
@@ -1312,10 +1321,11 @@ mod tests {
             other_ip_resp.status, 200,
             "distinct anonymous IP must not share rate-limit bucket"
         );
+        Ok(())
     }
 
     #[test]
-    fn xff_chain_uses_first_hop_for_bucket() {
+    fn xff_chain_uses_first_hop_for_bucket() -> Result<(), String> {
         let mut state = InMemoryStateStore::new();
         let mut secrets = TestSecretStore::new();
         secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
@@ -1323,7 +1333,7 @@ mod tests {
         for _ in 0..RATE_LIMIT_REQUESTS_DEFAULT {
             assert_eq!(
                 handle_directline_request(
-                    &token_request_with_ip("203.0.113.10, 10.0.0.1"),
+                    &token_request_with_ip("203.0.113.10, 10.0.0.1")?,
                     &mut state,
                     &secrets,
                 )
@@ -1335,15 +1345,16 @@ mod tests {
         // Same first hop, different proxy chain — must be the *same*
         // bucket because identity is decided by the leftmost hop only.
         let blocked = handle_directline_request(
-            &token_request_with_ip("203.0.113.10, 10.0.0.99"),
+            &token_request_with_ip("203.0.113.10, 10.0.0.99")?,
             &mut state,
             &secrets,
         );
         assert_eq!(blocked.status, 429);
+        Ok(())
     }
 
     #[test]
-    fn rate_limit_response_includes_retry_after_header() {
+    fn rate_limit_response_includes_retry_after_header() -> Result<(), String> {
         let mut state = InMemoryStateStore::new();
         let mut secrets = TestSecretStore::new();
         secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
@@ -1351,7 +1362,7 @@ mod tests {
         for _ in 0..RATE_LIMIT_REQUESTS_DEFAULT {
             assert_eq!(
                 handle_directline_request(
-                    &token_request_with_ip("203.0.113.55"),
+                    &token_request_with_ip("203.0.113.55")?,
                     &mut state,
                     &secrets,
                 )
@@ -1360,22 +1371,26 @@ mod tests {
             );
         }
 
-        let blocked =
-            handle_directline_request(&token_request_with_ip("203.0.113.55"), &mut state, &secrets);
+        let blocked = handle_directline_request(
+            &token_request_with_ip("203.0.113.55")?,
+            &mut state,
+            &secrets,
+        );
         assert_eq!(blocked.status, 429);
         let retry_after = header_value(&blocked, "Retry-After")
-            .expect("Retry-After header must be present on 429");
+            .ok_or("Retry-After header must be present on 429")?;
         let secs: i64 = retry_after
             .parse()
-            .expect("Retry-After must be integer seconds");
+            .map_err(|err| format!("Retry-After must be integer seconds: {err}"))?;
         assert!(
             (1..=RATE_LIMIT_WINDOW_SECONDS_DEFAULT).contains(&secs),
             "Retry-After should be within current window, got {secs}"
         );
 
-        let body = decode_body(&blocked);
+        let body = decode_body(&blocked)?;
         assert_eq!(body["error"], "rate_limited");
         assert!(body.get("retry_after").is_some());
+        Ok(())
     }
 
     #[test]
@@ -1410,7 +1425,7 @@ mod tests {
     }
 
     #[test]
-    fn determine_subject_prefers_user_id_over_ip() {
+    fn determine_subject_prefers_user_id_over_ip() -> Result<(), String> {
         let request = build_request(
             "POST",
             "/v3/directline/tokens/generate",
@@ -1420,18 +1435,20 @@ mod tests {
                 name: "X-Forwarded-For".into(),
                 value: "203.0.113.10".into(),
             }],
-        );
-        let body = decode_json_body(&request).unwrap();
+        )?;
+        let body = decode_json_body(&request).map_err(|out| format!("status {}", out.status))?;
         let subject = determine_rate_limit_subject(&request, &body);
         assert_eq!(subject, RateLimitSubject::User("guest-abc".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn determine_subject_falls_back_to_anonymous_without_ip() {
-        let request = build_request("POST", "/v3/directline/tokens/generate", None, None, vec![]);
-        let body = decode_json_body(&request).unwrap();
+    fn determine_subject_falls_back_to_anonymous_without_ip() -> Result<(), String> {
+        let request = build_request("POST", "/v3/directline/tokens/generate", None, None, vec![])?;
+        let body = decode_json_body(&request).map_err(|out| format!("status {}", out.status))?;
         let subject = determine_rate_limit_subject(&request, &body);
         assert_eq!(subject, RateLimitSubject::Anonymous);
+        Ok(())
     }
 
     #[test]
@@ -1456,7 +1473,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_user_id_falls_through_to_ip_bucket() {
+    fn empty_user_id_falls_through_to_ip_bucket() -> Result<(), String> {
         // Pre-fix bug: a body with `"user":{"id":""}` would be accepted as
         // the literal user id "" → `webchat:rate:tokens:..::` shared
         // bucket. Now we trim and treat empty as missing.
@@ -1469,11 +1486,12 @@ mod tests {
                 name: "X-Real-IP".into(),
                 value: "203.0.113.77".into(),
             }],
-        );
-        let body = decode_json_body(&request).unwrap();
+        )?;
+        let body = decode_json_body(&request).map_err(|out| format!("status {}", out.status))?;
         match determine_rate_limit_subject(&request, &body) {
             RateLimitSubject::Ip(_) => {}
             other => panic!("expected Ip bucket, got {other:?}"),
         }
+        Ok(())
     }
 }

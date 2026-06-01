@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-webchat-gui",
   "name": "messaging-provider-webchat-gui",
-  "version": "0.4.110",
+  "version": "0.5.1",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core WebChat GUI messaging provider (Direct Line backend + hosted GUI metadata).",
   "profiles": {
@@ -16,14 +16,7 @@
       "path": "schemas/messaging/webchat-gui/public.config.schema.json"
     }
   },
-  "secret_requirements": [
-    {
-      "name": "jwt_signing_key",
-      "required": true,
-      "scope": "tenant",
-      "description": "Secret key used for Direct Line JWT token signing and verification."
-    }
-  ],
+  "secret_requirements": [],
   "capabilities": {
     "wasi": {},
     "host": {

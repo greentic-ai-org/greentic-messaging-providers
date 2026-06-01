@@ -16,13 +16,7 @@
       "path": "schemas/messaging/email/public.config.schema.json"
     }
   },
-  "secret_requirements": [
-    {
-      "name": "EMAIL_PASSWORD",
-      "scope": "tenant",
-      "description": "SMTP password secret key"
-    }
-  ],
+  "secret_requirements": [],
   "operations": [
     {
       "name": "qa-spec",

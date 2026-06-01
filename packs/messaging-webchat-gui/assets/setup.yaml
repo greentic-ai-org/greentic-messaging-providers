@@ -16,9 +16,9 @@ questions:
     title: Mode
     kind: string
     required: true
-    default: "local_queue"
+    default: "websocket"
     help: "WebChat connection mode"
-    placeholder: "local_queue"
+    placeholder: "websocket"
     group: Connection
   - name: route
     title: Route
@@ -32,14 +32,6 @@ questions:
     kind: string
     required: false
     group: Connection
-  - name: jwt_signing_key
-    title: JWT signing key
-    kind: string
-    required: true
-    secret: true
-    help: "Secret key used to sign Direct Line tokens. Use any random string (e.g. openssl rand -hex 32)."
-    placeholder: "paste-your-key-here"
-    group: Authentication
   - name: base_url
     title: Base URL
     kind: string

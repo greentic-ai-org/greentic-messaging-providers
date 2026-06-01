@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-email",
   "name": "messaging-provider-email",
-  "version": "0.4.100",
+  "version": "0.5.1",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core SMTP email sender (simulated).",
   "profiles": {
@@ -16,13 +16,7 @@
       "path": "schemas/messaging/email/public.config.schema.json"
     }
   },
-  "secret_requirements": [
-    {
-      "name": "EMAIL_PASSWORD",
-      "scope": "tenant",
-      "description": "SMTP password secret key"
-    }
-  ],
+  "secret_requirements": [],
   "operations": [
     {
       "name": "qa-spec",

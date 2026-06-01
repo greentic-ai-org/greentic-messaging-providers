@@ -1,0 +1,54 @@
+{
+  "source": "setup_answers",
+  "output_key": "desired_subscriptions",
+  "source_keys": [
+    "team_id",
+    "channel_id",
+    "chat_id"
+  ],
+  "defaults": {
+    "change_type": "created"
+  },
+  "notification_url": {
+    "template": "{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}",
+    "state_key": "notification_url"
+  },
+  "lifecycle_notification_url": {
+    "template": "{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}",
+    "state_key": "lifecycle_notification_url",
+    "required_when_expiration_over_minutes": 60,
+    "description": "Microsoft Graph Teams chatMessage subscriptions require lifecycleNotificationUrl when expirationDateTime is more than 1 hour in the future."
+  },
+  "expiration_policy": {
+    "state_key": "expiration_datetime",
+    "required": true,
+    "host_supplied": true,
+    "max_minutes": 4320,
+    "description": "Microsoft Graph subscriptions require an expirationDateTime on create and renewal."
+  },
+  "templates": [
+    {
+      "id": "teams_channel_messages",
+      "when_all": [
+        "team_id",
+        "channel_id"
+      ],
+      "resource_template": "/teams/{team_id}/channels/{channel_id}/messages",
+      "change_type": "created",
+      "expiration_datetime": "{expiration_datetime}",
+      "notification_url": "{notification_url}",
+      "lifecycle_notification_url": "{lifecycle_notification_url}"
+    },
+    {
+      "id": "teams_chat_messages",
+      "when_all": [
+        "chat_id"
+      ],
+      "resource_template": "/chats/{chat_id}/messages",
+      "change_type": "created",
+      "expiration_datetime": "{expiration_datetime}",
+      "notification_url": "{notification_url}",
+      "lifecycle_notification_url": "{lifecycle_notification_url}"
+    }
+  ]
+}

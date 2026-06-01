@@ -18,7 +18,6 @@ use urlencoding::encode;
 const DEFAULT_GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
 const DEFAULT_AUTH_BASE: &str = "https://login.microsoftonline.com";
 const DEFAULT_TOKEN_SCOPE: &str = "https://graph.microsoft.com/.default";
-const DEFAULT_CLIENT_SECRET_KEY: &str = "MS_GRAPH_CLIENT_SECRET";
 const DEFAULT_REFRESH_TOKEN_KEY: &str = "MS_GRAPH_REFRESH_TOKEN";
 const STATE_KEY: &str = "messaging.teams.subscriptions";
 
@@ -40,6 +39,7 @@ struct SubscriptionSpec {
     resource: String,
     change_type: String,
     expiration_datetime: Option<String>,
+    lifecycle_notification_url: Option<String>,
     client_state: Option<String>,
 }
 
@@ -55,10 +55,20 @@ struct ExistingSubscription {
 struct Component;
 
 impl IngressGuest for Component {
-    fn handle_webhook(_headers_json: String, body_json: String) -> Result<String, String> {
+    fn handle_webhook(headers_json: String, body_json: String) -> Result<String, String> {
+        if let Some(token) = validation_token_from_headers(&headers_json) {
+            return Ok(token);
+        }
         let parsed: Value = serde_json::from_str(&body_json)
             .map_err(|_| "validation error: invalid body".to_string())?;
-        let normalized = json!({ "ok": true, "event": parsed });
+        let expected_client_state = expected_client_state_from_headers(&headers_json);
+        let events = normalize_graph_notifications(&parsed, expected_client_state.as_deref())?;
+        let normalized = json!({
+            "ok": true,
+            "provider": "messaging.teams.graph",
+            "event": parsed,
+            "events": events,
+        });
         serde_json::to_string(&normalized)
             .map_err(|_| "other error: serialization failed".to_string())
     }
@@ -154,7 +164,12 @@ fn parse_desired_subscriptions(state: &Value) -> Result<Vec<SubscriptionSpec>, S
             let resource = entry
                 .get("resource")
                 .and_then(Value::as_str)
-                .ok_or_else(|| "desired_subscriptions.resource required".to_string())?;
+                .map(ToOwned::to_owned)
+                .or_else(|| build_subscription_resource(&entry))
+                .ok_or_else(|| {
+                    "desired_subscriptions.resource or team_id/channel_id/chat_id required"
+                        .to_string()
+                })?;
             let change_type = entry
                 .get("change_type")
                 .and_then(Value::as_str)
@@ -163,14 +178,19 @@ fn parse_desired_subscriptions(state: &Value) -> Result<Vec<SubscriptionSpec>, S
                 .get("expiration_datetime")
                 .and_then(Value::as_str)
                 .map(|s| s.to_string());
+            let lifecycle_notification_url = entry
+                .get("lifecycle_notification_url")
+                .and_then(Value::as_str)
+                .map(|s| s.to_string());
             let client_state = entry
                 .get("client_state")
                 .and_then(Value::as_str)
                 .map(|s| s.to_string());
             Ok(SubscriptionSpec {
-                resource: resource.to_string(),
+                resource,
                 change_type: change_type.to_string(),
                 expiration_datetime,
+                lifecycle_notification_url,
                 client_state,
             })
         })
@@ -200,6 +220,236 @@ fn existing_subscriptions_to_json(existing: &[ExistingSubscription]) -> Value {
     Value::Array(list)
 }
 
+fn validation_token_from_headers(headers_json: &str) -> Option<String> {
+    let headers: Value = serde_json::from_str(headers_json).ok()?;
+    for key in ["validationToken", "validation_token"] {
+        if let Some(token) = headers.get(key).and_then(Value::as_str)
+            && !token.is_empty()
+        {
+            return Some(token.to_string());
+        }
+    }
+    for key in ["query", "query_string", "raw_query"] {
+        if let Some(query) = headers.get(key).and_then(Value::as_str)
+            && let Some(token) = query_param_value(query, "validationToken")
+        {
+            return Some(token);
+        }
+    }
+    if let Some(url) = headers.get("url").and_then(Value::as_str)
+        && let Some((_, query)) = url.split_once('?')
+        && let Some(token) = query_param_value(query, "validationToken")
+    {
+        return Some(token);
+    }
+    None
+}
+
+fn expected_client_state_from_headers(headers_json: &str) -> Option<String> {
+    let headers: Value = serde_json::from_str(headers_json).ok()?;
+    headers
+        .get("expected_client_state")
+        .or_else(|| headers.get("client_state"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn query_param_value(query: &str, name: &str) -> Option<String> {
+    query.split('&').find_map(|part| {
+        let (key, value) = part.split_once('=')?;
+        if key == name {
+            Some(urlencoding::decode(value).ok()?.into_owned())
+        } else {
+            None
+        }
+    })
+}
+
+fn normalize_graph_notifications(
+    body: &Value,
+    expected_client_state: Option<&str>,
+) -> Result<Value, String> {
+    let notifications = body
+        .get("value")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "validation error: Graph notification value[] required".to_string())?;
+    let mut events = Vec::new();
+    for notification in notifications {
+        if let Some(expected) = expected_client_state {
+            let actual = notification
+                .get("clientState")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if actual != expected {
+                return Err("validation error: Graph clientState mismatch".to_string());
+            }
+        }
+        events.push(normalize_notification(notification));
+    }
+    Ok(Value::Array(events))
+}
+
+fn normalize_notification(notification: &Value) -> Value {
+    let resource = notification
+        .get("resource")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let resource_data = notification.get("resourceData").unwrap_or(&Value::Null);
+    let ids = parse_graph_resource(resource);
+    let message_id = resource_data
+        .get("id")
+        .and_then(Value::as_str)
+        .or(ids.message_id.as_deref())
+        .unwrap_or_default();
+    let body = resource_data.get("body").unwrap_or(&Value::Null);
+    let content = body
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let content_type = body
+        .get("contentType")
+        .and_then(Value::as_str)
+        .unwrap_or("text");
+    let text = if content_type.eq_ignore_ascii_case("html") {
+        strip_html(content)
+    } else {
+        content.to_string()
+    };
+    let destination = if let Some(chat_id) = ids.chat_id.as_ref() {
+        json!({"kind": "chat", "id": chat_id})
+    } else if let (Some(team_id), Some(channel_id)) =
+        (ids.team_id.as_ref(), ids.channel_id.as_ref())
+    {
+        json!({"kind": "channel", "id": format!("{team_id}:{channel_id}")})
+    } else {
+        Value::Null
+    };
+
+    json!({
+        "provider": "messaging.teams.graph",
+        "source": "teams",
+        "provider_message_id": if message_id.is_empty() { Value::Null } else { Value::String(format!("teams:{message_id}")) },
+        "message_id": message_id,
+        "text": text,
+        "from": graph_from(resource_data),
+        "to": destination,
+        "metadata": {
+            "graph_resource": resource,
+            "change_type": notification.get("changeType").and_then(Value::as_str).unwrap_or_default(),
+            "subscription_id": notification.get("subscriptionId").and_then(Value::as_str).unwrap_or_default(),
+            "tenant_id": notification.get("tenantId").and_then(Value::as_str).unwrap_or_default(),
+            "team_id": ids.team_id,
+            "channel_id": ids.channel_id,
+            "chat_id": ids.chat_id,
+            "webUrl": resource_data.get("webUrl").and_then(Value::as_str).unwrap_or_default(),
+            "replyToId": resource_data.get("replyToId").and_then(Value::as_str).unwrap_or_default(),
+            "body_content": content,
+            "body_content_type": content_type
+        }
+    })
+}
+
+#[derive(Default)]
+struct ResourceIds {
+    team_id: Option<String>,
+    channel_id: Option<String>,
+    chat_id: Option<String>,
+    message_id: Option<String>,
+}
+
+fn parse_graph_resource(resource: &str) -> ResourceIds {
+    let parts: Vec<&str> = resource.trim_matches('/').split('/').collect();
+    let mut ids = ResourceIds::default();
+    let mut i = 0;
+    while i < parts.len() {
+        match parts[i] {
+            "teams" if i + 1 < parts.len() => {
+                ids.team_id = Some(parts[i + 1].to_string());
+                i += 2;
+            }
+            "channels" if i + 1 < parts.len() => {
+                ids.channel_id = Some(parts[i + 1].to_string());
+                i += 2;
+            }
+            "chats" if i + 1 < parts.len() => {
+                ids.chat_id = Some(parts[i + 1].to_string());
+                i += 2;
+            }
+            "messages" if i + 1 < parts.len() => {
+                ids.message_id = Some(parts[i + 1].to_string());
+                i += 2;
+            }
+            "replies" if i + 1 < parts.len() => {
+                ids.message_id = Some(parts[i + 1].to_string());
+                i += 2;
+            }
+            _ => i += 1,
+        }
+    }
+    ids
+}
+
+fn graph_from(resource_data: &Value) -> Value {
+    resource_data.get("from").cloned().unwrap_or(Value::Null)
+}
+
+fn strip_html(input: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for ch in input.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    out
+}
+
+fn build_subscription_resource(entry: &Value) -> Option<String> {
+    let chat_id = entry
+        .get("chat_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(chat_id) = chat_id {
+        return Some(chat_message_resource(chat_id));
+    }
+    let team_id = entry
+        .get("team_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let channel_id = entry
+        .get("channel_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    if let Some(message_id) = entry
+        .get("message_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(channel_reply_resource(team_id, channel_id, message_id))
+    } else {
+        Some(channel_message_resource(team_id, channel_id))
+    }
+}
+
+fn channel_message_resource(team_id: &str, channel_id: &str) -> String {
+    format!("/teams/{team_id}/channels/{channel_id}/messages")
+}
+
+fn channel_reply_resource(team_id: &str, channel_id: &str, message_id: &str) -> String {
+    format!("/teams/{team_id}/channels/{channel_id}/messages/{message_id}/replies")
+}
+
+fn chat_message_resource(chat_id: &str) -> String {
+    format!("/chats/{chat_id}/messages")
+}
+
 fn find_matching<'a>(
     existing: &'a [ExistingSubscription],
     desired: &SubscriptionSpec,
@@ -227,24 +477,13 @@ fn acquire_token(cfg: &ProviderConfig) -> Result<String, String> {
         .clone()
         .unwrap_or_else(|| DEFAULT_TOKEN_SCOPE.to_string());
 
-    if let Ok(refresh_token) = get_secret(DEFAULT_REFRESH_TOKEN_KEY) {
-        let mut form = format!(
-            "client_id={}&grant_type=refresh_token&refresh_token={}&scope={}",
-            encode(&cfg.client_id),
-            encode(&refresh_token),
-            encode(&scope)
-        );
-        if let Ok(secret) = get_secret(DEFAULT_CLIENT_SECRET_KEY) {
-            form.push_str(&format!("&client_secret={}", encode(&secret)));
-        }
-        return send_token_request(&token_url, &form);
-    }
-
-    let client_secret = get_secret(DEFAULT_CLIENT_SECRET_KEY)?;
+    let refresh_token = get_secret(DEFAULT_REFRESH_TOKEN_KEY).map_err(|_| {
+        "MS_GRAPH_REFRESH_TOKEN is required for Teams Graph subscriptions".to_string()
+    })?;
     let form = format!(
-        "client_id={}&client_secret={}&grant_type=client_credentials&scope={}",
+        "client_id={}&grant_type=refresh_token&refresh_token={}&scope={}",
         encode(&cfg.client_id),
-        encode(&client_secret),
+        encode(&refresh_token),
         encode(&scope)
     );
     send_token_request(&token_url, &form)
@@ -294,7 +533,11 @@ fn list_subscriptions(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(format!("graph returned status {}", resp.status));
+        return Err(graph_status_error(
+            "list subscriptions",
+            resp.status,
+            resp.body,
+        ));
     }
     let body = resp.body.unwrap_or_default();
     let json: Value = serde_json::from_slice(&body)
@@ -347,6 +590,10 @@ fn create_subscription(
     let mut payload = json!({
         "changeType": spec.change_type,
         "notificationUrl": webhook_url,
+        "lifecycleNotificationUrl": spec
+            .lifecycle_notification_url
+            .as_deref()
+            .unwrap_or(webhook_url),
         "resource": spec.resource,
         "expirationDateTime": expiration,
     });
@@ -369,7 +616,11 @@ fn create_subscription(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(format!("create subscription status {}", resp.status));
+        return Err(graph_status_error(
+            "create subscription",
+            resp.status,
+            resp.body,
+        ));
     }
     let body = resp.body.unwrap_or_default();
     let json: Value =
@@ -415,9 +666,23 @@ fn renew_subscription(
     let resp = client::send(&request, None, None)
         .map_err(|e| format!("transport error: {}", e.message))?;
     if resp.status < 200 || resp.status >= 300 {
-        return Err(format!("renew subscription status {}", resp.status));
+        return Err(graph_status_error(
+            "renew subscription",
+            resp.status,
+            resp.body,
+        ));
     }
     Ok(())
+}
+
+fn graph_status_error(action: &str, status: u16, body: Option<Vec<u8>>) -> String {
+    let body = body.unwrap_or_default();
+    let body_text = String::from_utf8_lossy(&body).trim().to_string();
+    if body_text.is_empty() {
+        format!("{action} status {status}")
+    } else {
+        format!("{action} status {status}: {body_text}")
+    }
 }
 
 fn write_state(state: &Value) -> Result<(), String> {
@@ -452,7 +717,11 @@ mod tests {
     fn parse_desired_subscriptions_defaults_change_type() {
         let state = json!({
             "desired_subscriptions": [
-                {"resource": "teams/team-1/channels/channel-1/messages", "expiration_datetime": "2026-01-01T00:00:00Z"}
+                {
+                    "resource": "teams/team-1/channels/channel-1/messages",
+                    "expiration_datetime": "2026-01-01T00:00:00Z",
+                    "lifecycle_notification_url": "https://example.com/lifecycle"
+                }
             ]
         });
 
@@ -463,6 +732,10 @@ mod tests {
         assert_eq!(
             desired[0].resource,
             "teams/team-1/channels/channel-1/messages"
+        );
+        assert_eq!(
+            desired[0].lifecycle_notification_url.as_deref(),
+            Some("https://example.com/lifecycle")
         );
     }
 
@@ -485,8 +758,26 @@ mod tests {
 
         assert_eq!(
             parse_desired_subscriptions(&state).expect_err("resource required"),
-            "desired_subscriptions.resource required"
+            "desired_subscriptions.resource or team_id/channel_id/chat_id required"
         );
+    }
+
+    #[test]
+    fn parse_desired_subscriptions_builds_channel_and_chat_resources() {
+        let state = json!({
+            "desired_subscriptions": [
+                {"team_id": "team-1", "channel_id": "channel-1"},
+                {"chat_id": "chat-1"}
+            ]
+        });
+
+        let desired = parse_desired_subscriptions(&state).expect("desired");
+
+        assert_eq!(
+            desired[0].resource,
+            "/teams/team-1/channels/channel-1/messages"
+        );
+        assert_eq!(desired[1].resource, "/chats/chat-1/messages");
     }
 
     #[test]
@@ -495,6 +786,7 @@ mod tests {
             resource: "users/me/messages".to_string(),
             change_type: "created".to_string(),
             expiration_datetime: None,
+            lifecycle_notification_url: None,
             client_state: None,
         };
         let existing = vec![
@@ -538,15 +830,94 @@ mod tests {
     }
 
     #[test]
-    fn webhook_normalizes_bot_activity() {
+    fn graph_status_error_includes_response_body() {
+        let err = graph_status_error(
+            "create subscription",
+            400,
+            Some(br#"{"error":{"message":"lifecycleNotificationUrl is required"}}"#.to_vec()),
+        );
+
+        assert!(err.contains("create subscription status 400"));
+        assert!(err.contains("lifecycleNotificationUrl is required"));
+    }
+
+    #[test]
+    fn webhook_returns_validation_token_plain_text() {
         let out = <Component as IngressGuest>::handle_webhook(
-            "{}".to_string(),
-            r#"{"type":"message","text":"hello"}"#.to_string(),
+            r#"{"query":"validationToken=hello%20graph"}"#.to_string(),
+            String::new(),
+        )
+        .expect("token");
+
+        assert_eq!(out, "hello graph");
+    }
+
+    #[test]
+    fn webhook_normalizes_graph_channel_notification() {
+        let out = <Component as IngressGuest>::handle_webhook(
+            r#"{"expected_client_state":"state-1"}"#.to_string(),
+            json!({
+                "value": [{
+                    "subscriptionId": "sub-1",
+                    "clientState": "state-1",
+                    "changeType": "created",
+                    "tenantId": "tenant-1",
+                    "resource": "/teams/team-1/channels/channel-1/messages/message-1",
+                    "resourceData": {
+                        "id": "message-1",
+                        "body": {
+                            "contentType": "html",
+                            "content": "<b>hello</b>"
+                        },
+                        "from": {"user": {"id": "user-1"}},
+                        "webUrl": "https://teams.example/message"
+                    }
+                }]
+            })
+            .to_string(),
         )
         .expect("normalized");
         let parsed: Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(parsed["ok"], true);
-        assert_eq!(parsed["event"]["text"], "hello");
+        assert_eq!(parsed["events"][0]["text"], "hello");
+        assert_eq!(
+            parsed["events"][0]["provider_message_id"],
+            "teams:message-1"
+        );
+        assert_eq!(
+            parsed["events"][0]["to"],
+            json!({"kind": "channel", "id": "team-1:channel-1"})
+        );
+    }
+
+    #[test]
+    fn webhook_rejects_client_state_mismatch() {
+        let err = <Component as IngressGuest>::handle_webhook(
+            r#"{"expected_client_state":"expected"}"#.to_string(),
+            json!({
+                "value": [{
+                    "clientState": "actual",
+                    "resource": "/chats/chat-1/messages/message-1"
+                }]
+            })
+            .to_string(),
+        )
+        .expect_err("mismatch");
+
+        assert!(err.contains("clientState mismatch"));
+    }
+
+    #[test]
+    fn resource_builders_match_graph_paths() {
+        assert_eq!(
+            channel_message_resource("team", "channel"),
+            "/teams/team/channels/channel/messages"
+        );
+        assert_eq!(
+            channel_reply_resource("team", "channel", "message"),
+            "/teams/team/channels/channel/messages/message/replies"
+        );
+        assert_eq!(chat_message_resource("chat"), "/chats/chat/messages");
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -53,7 +53,7 @@ fn packs_have_consistent_manifests_and_artifacts() -> Result<()> {
             .with_context(|| format!("getting version from {}", yaml_path.display()))?;
         let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)
             .with_context(|| format!("parsing {}", manifest_path.display()))?;
-        let component_wasm_paths: HashMap<String, PathBuf> = manifest
+        let component_sources: Vec<(String, String)> = manifest
             .get("component_sources")
             .and_then(Value::as_array)
             .into_iter()
@@ -61,8 +61,19 @@ fn packs_have_consistent_manifests_and_artifacts() -> Result<()> {
             .filter_map(|component| {
                 let id = component.get("id").and_then(Value::as_str)?;
                 let wasm = component.get("wasm").and_then(Value::as_str)?;
-                Some((id.to_string(), pack_dir.join(wasm)))
+                Some((id.to_string(), wasm.to_string()))
             })
+            .collect();
+        assert_unique_component_ids(
+            &component_sources
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>(),
+            &format!("{} component_sources", pack_dir.display()),
+        );
+        let component_wasm_paths: HashMap<String, PathBuf> = component_sources
+            .iter()
+            .map(|(id, wasm)| (id.clone(), pack_dir.join(wasm)))
             .collect();
         let manifest_version = manifest
             .get("version")
@@ -77,6 +88,11 @@ fn packs_have_consistent_manifests_and_artifacts() -> Result<()> {
 
         // Components in manifest must have wasm artifacts staged in the pack.
         if let Some(comps) = manifest.get("components").and_then(Value::as_array) {
+            let component_ids = comps.iter().filter_map(Value::as_str).collect::<Vec<_>>();
+            assert_unique_component_ids(
+                &component_ids,
+                &format!("{} components", pack_dir.display()),
+            );
             for comp in comps {
                 let name = comp
                     .as_str()
@@ -198,4 +214,20 @@ fn packs_have_consistent_manifests_and_artifacts() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn assert_unique_component_ids(component_ids: &[&str], context: &str) {
+    let mut seen = HashSet::new();
+    let mut duplicates = Vec::new();
+    for component_id in component_ids {
+        if !seen.insert(*component_id) {
+            duplicates.push(*component_id);
+        }
+    }
+    duplicates.sort_unstable();
+    duplicates.dedup();
+    assert!(
+        duplicates.is_empty(),
+        "duplicate component ids in {context}: {duplicates:?}"
+    );
 }

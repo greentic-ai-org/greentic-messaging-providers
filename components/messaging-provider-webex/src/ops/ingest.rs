@@ -14,6 +14,8 @@ use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_oper
 use provider_common::redact;
 use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::{Value, json};
+// Webex webhook signatures are defined as HMAC-SHA1 by the provider API.
+// foxguard: ignore[rs/no-weak-hash]
 use sha1::Sha1;
 
 use super::ingest_helpers::{
@@ -26,7 +28,7 @@ use crate::config::{get_secret_string, load_config};
 use crate::{DEFAULT_API_BASE, DEFAULT_TOKEN_KEY, PROVIDER_TYPE, ProviderConfig};
 
 pub(crate) struct IngestOutcome {
-    pub(crate) envelope: ChannelMessageEnvelope,
+    pub(crate) envelope: Option<ChannelMessageEnvelope>,
     pub(crate) status: u16,
     pub(crate) error: Option<String>,
 }
@@ -71,7 +73,7 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         status: outcome.status,
         headers: Vec::new(),
         body_b64: STANDARD.encode(&normalized_bytes),
-        events: vec![outcome.envelope],
+        events: outcome.envelope.into_iter().collect(),
     };
     http_out_v1_bytes(&out)
 }
@@ -113,6 +115,8 @@ fn find_header_value(
 }
 
 fn hmac_sha1_hex(secret: &[u8], body: &[u8]) -> Option<String> {
+    // Webex signs webhook payloads with HMAC-SHA1; changing this breaks provider verification.
+    // foxguard: ignore[rs/no-weak-hash]
     let mut mac = Hmac::<Sha1>::new_from_slice(secret).ok()?;
     mac.update(body);
     Some(hex_lower(&mac.finalize().into_bytes()))
@@ -167,6 +171,38 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    if resource == "messages"
+        && event == "created"
+        && webhook_person_email
+            .as_deref()
+            .is_some_and(is_webex_bot_email)
+    {
+        let redacted_sender = webhook_person_email
+            .as_deref()
+            .map(redact::user_id)
+            .unwrap_or_default();
+        telemetry::emit(
+            Level::Info,
+            PROVIDER_TYPE,
+            "webex ignored bot-authored message webhook",
+            &[
+                Field {
+                    key: field::USER,
+                    value: &redacted_sender,
+                },
+                Field {
+                    key: field::MESSAGE_ID,
+                    value: message_id.as_deref().unwrap_or_default(),
+                },
+            ],
+        );
+        return IngestOutcome {
+            envelope: None,
+            status: 200,
+            error: None,
+        };
+    }
+
     // Handle Adaptive Card button clicks (Action.Submit).
     if resource == "attachmentActions" && event == "created" {
         let action_id = data.get("id").and_then(|v| v.as_str()).unwrap_or_default();
@@ -192,7 +228,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                 None,
             );
             return IngestOutcome {
-                envelope,
+                envelope: Some(envelope),
                 status: 400,
                 error: Some("attachmentActions missing action id".into()),
             };
@@ -299,7 +335,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
             Some(&action_id_str),
         );
         return IngestOutcome {
-            envelope,
+            envelope: Some(envelope),
             status: 200,
             error: None,
         };
@@ -369,7 +405,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                         Some(&message_id),
                     );
                     return IngestOutcome {
-                        envelope,
+                        envelope: Some(envelope),
                         status: 200,
                         error: None,
                     };
@@ -418,7 +454,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                         Some(&message_id),
                     );
                     return IngestOutcome {
-                        envelope,
+                        envelope: Some(envelope),
                         status: 502,
                         error: Some(err),
                     };
@@ -448,7 +484,7 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
                     Some(&message_id),
                 );
                 return IngestOutcome {
-                    envelope,
+                    envelope: Some(envelope),
                     status: 500,
                     error: Some(err),
                 };
@@ -487,10 +523,14 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
         message_id.as_ref(),
     );
     IngestOutcome {
-        envelope,
+        envelope: Some(envelope),
         status: 200,
         error: None,
     }
+}
+
+fn is_webex_bot_email(value: &str) -> bool {
+    value.to_ascii_lowercase().ends_with("@webex.bot")
 }
 
 #[cfg(test)]
@@ -499,9 +539,9 @@ mod signature_tests {
     use greentic_types::messaging::universal_dto::Header;
 
     #[test]
-    fn verifies_x_spark_signature_hmac_sha1() {
+    fn verifies_x_spark_signature_hmac_sha1() -> Result<(), String> {
         let body = br#"{"resource":"messages","event":"created"}"#;
-        let signature = hmac_sha1_hex(b"secret", body).expect("hmac");
+        let signature = hmac_sha1_hex(b"secret", body).ok_or("hmac")?;
         let headers = vec![Header {
             name: "X-Spark-Signature".to_string(),
             value: signature,
@@ -509,5 +549,43 @@ mod signature_tests {
 
         assert!(verify_webex_signature(&headers, body, "secret"));
         assert!(!verify_webex_signature(&headers, body, "wrong"));
+        Ok(())
+    }
+
+    #[test]
+    fn ignores_bot_authored_message_webhooks() {
+        let cfg = ProviderConfig {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            default_room_id: None,
+            default_to_person_email: None,
+            api_base_url: Some(DEFAULT_API_BASE.to_string()),
+            bot_token: None,
+            webhook_secret: None,
+            default_locale: None,
+        };
+        let outcome = handle_webhook_event(
+            &json!({
+                "resource": "messages",
+                "event": "created",
+                "data": {
+                    "id": "message-1",
+                    "roomId": "room-1",
+                    "personId": "bot-person",
+                    "personEmail": "greentic_ci@webex.bot"
+                }
+            }),
+            &cfg,
+        );
+
+        assert_eq!(outcome.status, 200);
+        assert!(outcome.error.is_none());
+        assert!(outcome.envelope.is_none());
+    }
+
+    #[test]
+    fn webex_bot_email_detection_is_case_insensitive() {
+        assert!(is_webex_bot_email("Greentic_CI@WEBEX.BOT"));
+        assert!(!is_webex_bot_email("maarten@greentic.ai"));
     }
 }

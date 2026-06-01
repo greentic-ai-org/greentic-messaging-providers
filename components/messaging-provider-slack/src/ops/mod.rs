@@ -26,7 +26,7 @@ pub(crate) use encode::encode_op;
 pub(crate) use ingest::ingest_http;
 pub(crate) use render::render_plan;
 pub(crate) use send::{handle_send, send_payload};
-pub(crate) use webhook::setup_webhook;
+pub(crate) use webhook::{setup_app_registration, setup_webhook};
 
 use greentic_types::{
     Actor, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,

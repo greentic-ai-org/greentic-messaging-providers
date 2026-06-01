@@ -70,7 +70,10 @@ def is_effectively_empty(schema: dict, base_dir: Path) -> bool:
 
 
 def main() -> int:
-    manifests = sorted(COMPONENTS_DIR.rglob("component.manifest.json"))
+    if len(sys.argv) > 1:
+        manifests = [ROOT / Path(path) for path in json.loads(sys.argv[1])]
+    else:
+        manifests = sorted(COMPONENTS_DIR.rglob("component.manifest.json"))
     if not manifests:
         print("No component.manifest.json files found.", file=sys.stderr)
         return 1

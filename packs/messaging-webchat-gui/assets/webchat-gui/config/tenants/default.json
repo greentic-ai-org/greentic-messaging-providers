@@ -1,42 +1,23 @@
 {
   "tenant_id": "default",
-  "skin": "default",
   "legacy_skin": "default",
+  "skin": "default",
   "branding": {
-    "company_name": "AI Assistant"
+    "company_name": {
+      "i18n": "product.greentic.short"
+    },
+    "tagline": {
+      "i18n": "product.greentic.long"
+    },
+    "logo": "/skins/default/assets/logo.svg"
   },
   "webchat": {
-    "directline": {},
+    "directline": {
+      "token_url": "/v1/messaging/webchat/default/token"
+    },
     "locale": "en-US"
   },
   "auth": {
-    "providers": [
-      {
-        "id": "guest",
-        "label": "Continue as Guest",
-        "type": "dummy",
-        "enabled": false
-      },
-      {
-        "id": "google",
-        "label": "Sign in with Google",
-        "type": "oidc",
-        "enabled": false,
-        "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
-        "clientId": "",
-        "scope": "openid profile email",
-        "responseType": "code"
-      },
-      {
-        "id": "microsoft",
-        "label": "Sign in with Microsoft",
-        "type": "oidc",
-        "enabled": false,
-        "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-        "clientId": "",
-        "scope": "openid profile email",
-        "responseType": "code"
-      }
-    ]
+    "providers": []
   }
 }

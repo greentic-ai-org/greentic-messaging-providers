@@ -17,6 +17,7 @@ use crate::PROVIDER_TYPE;
 use crate::bindings::greentic::http::http_client as client;
 
 /// Details extracted from `GET /messages/{id}`.
+#[derive(Debug)]
 pub(super) struct MessageDetails {
     pub(super) markdown: Option<String>,
     pub(super) text: Option<String>,
@@ -107,8 +108,11 @@ pub(super) fn fetch_action_details(
         telemetry::downstream_error(PROVIDER_TYPE, api_base, resp.status, &body_text);
         return Err(format_webex_error(resp.status, &body));
     }
-    let body = resp.body.unwrap_or_default();
-    let parsed: Value = serde_json::from_slice(&body).map_err(|err| {
+    parse_action_inputs(resp.body.as_deref().unwrap_or_default())
+}
+
+fn parse_action_inputs(body: &[u8]) -> Result<Value, String> {
+    let parsed: Value = serde_json::from_slice(body).map_err(|err| {
         let detail = redact::error_message(&err.to_string());
         telemetry::emit(
             Level::Error,
@@ -204,8 +208,11 @@ pub(super) fn fetch_message_details(
         telemetry::downstream_error(PROVIDER_TYPE, api_base, resp.status, &body_text);
         return Err(format_webex_error(resp.status, &body));
     }
-    let body = resp.body.unwrap_or_default();
-    let message_json: Value = serde_json::from_slice(&body).map_err(|err| {
+    parse_message_details_body(message_id, resp.body.as_deref().unwrap_or_default())
+}
+
+fn parse_message_details_body(message_id: &str, body: &[u8]) -> Result<MessageDetails, String> {
+    let message_json: Value = serde_json::from_slice(body).map_err(|err| {
         let detail = redact::error_message(&err.to_string());
         telemetry::emit(
             Level::Error,
@@ -445,6 +452,33 @@ mod tests {
     }
 
     #[test]
+    fn build_metadata_omits_optional_empty_fields() {
+        let metadata = build_webhook_metadata(
+            "attachmentActions",
+            "created",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&"".to_string()),
+            None,
+        );
+
+        assert_eq!(
+            metadata.get("webex.resource").map(String::as_str),
+            Some("attachmentActions")
+        );
+        assert_eq!(
+            metadata.get("webex.hasAttachments").map(String::as_str),
+            Some("false")
+        );
+        assert!(!metadata.contains_key("locale"));
+        assert!(!metadata.contains_key("webex.fetchStatus"));
+    }
+
+    #[test]
     fn webhook_envelope_uses_message_id_when_available() {
         let message_id = "abc".to_string();
         let envelope = build_webhook_envelope(
@@ -466,12 +500,31 @@ mod tests {
     }
 
     #[test]
+    fn webhook_envelope_falls_back_without_message_or_destination() {
+        let envelope = build_webhook_envelope(
+            "hello".to_string(),
+            "".to_string(),
+            pick_sender(&None, &Some("person-id".to_string())),
+            MessageMetadata::new(),
+            Vec::new(),
+            None,
+        );
+
+        assert_eq!(envelope.id, "webex-ingress-");
+        assert!(envelope.to.is_empty());
+        assert_eq!(
+            envelope.from.as_ref().map(|actor| actor.id.as_str()),
+            Some("person-id")
+        );
+    }
+
+    #[test]
     fn attachment_conversion_prefers_content_url_but_falls_back_to_stable_id() {
         let data = json!({
             "attachments": [
                 {"contentType": "image/png", "contentUrl": "https://cdn.example/a.png", "name": "a"},
-                {"contentType": "application/json", "content": {"url": "https://cdn.example/card.json"}},
-                {"contentType": "text/plain"}
+                {"contentType": "application/json", "content": {"url": "https://cdn.example/card.json"}, "displayName": "card", "sizeBytes": 42},
+                {"contentType": "text/plain", "size": 7}
             ]
         });
 
@@ -480,6 +533,79 @@ mod tests {
         assert_eq!(attachments.len(), 3);
         assert_eq!(attachments[0].url, "https://cdn.example/a.png");
         assert_eq!(attachments[1].url, "https://cdn.example/card.json");
+        assert_eq!(attachments[1].name.as_deref(), Some("card"));
+        assert_eq!(attachments[1].size_bytes, Some(42));
         assert_eq!(attachments[2].url, "webex:msg-1:attachment:2");
+        assert_eq!(attachments[2].size_bytes, Some(7));
+    }
+
+    #[test]
+    fn attachment_conversion_handles_missing_array() {
+        assert!(convert_webex_attachments("msg-1", &json!({})).is_empty());
+    }
+
+    #[test]
+    fn parse_action_inputs_returns_inputs_or_empty_object() {
+        let inputs = parse_action_inputs(br#"{"inputs":{"approved":true,"reason":"ok"}}"#)
+            .expect("valid action inputs");
+        assert_eq!(inputs["approved"], true);
+        assert_eq!(inputs["reason"], "ok");
+
+        let empty = parse_action_inputs(br#"{"id":"action-1"}"#).expect("missing inputs is empty");
+        assert_eq!(empty, json!({}));
+    }
+
+    #[test]
+    fn parse_action_inputs_reports_invalid_json() {
+        let err = parse_action_inputs(b"{not-json").expect_err("invalid json should fail");
+        assert!(err.contains("json parse error"));
+    }
+
+    #[test]
+    fn parse_message_details_unwraps_result_and_attachments() {
+        let details = parse_message_details_body(
+            "msg-1",
+            br#"{
+                "result": {
+                    "markdown": "**hello**",
+                    "text": "hello",
+                    "roomId": "room-1",
+                    "personEmail": "sender@example.com",
+                    "personId": "person-1",
+                    "attachments": [
+                        {"contentType":"image/png","contentUrl":"https://cdn.example/a.png"}
+                    ]
+                }
+            }"#,
+        )
+        .expect("valid message details");
+
+        assert_eq!(details.markdown.as_deref(), Some("**hello**"));
+        assert_eq!(details.text.as_deref(), Some("hello"));
+        assert_eq!(details.room_id.as_deref(), Some("room-1"));
+        assert_eq!(details.person_email.as_deref(), Some("sender@example.com"));
+        assert_eq!(details.person_id.as_deref(), Some("person-1"));
+        assert_eq!(details.attachments.len(), 1);
+    }
+
+    #[test]
+    fn parse_message_details_accepts_top_level_message() {
+        let details = parse_message_details_body(
+            "msg-2",
+            br#"{"text":"plain","roomId":"room-2","personId":"person-2"}"#,
+        )
+        .expect("valid top-level message");
+
+        assert_eq!(details.text.as_deref(), Some("plain"));
+        assert_eq!(details.room_id.as_deref(), Some("room-2"));
+        assert_eq!(details.person_id.as_deref(), Some("person-2"));
+        assert!(details.attachments.is_empty());
+    }
+
+    #[test]
+    fn parse_message_details_reports_invalid_json() {
+        let err = parse_message_details_body("msg-1", b"{not-json")
+            .expect_err("invalid message json should fail");
+        assert!(err.contains("invalid message JSON"));
     }
 }

@@ -768,6 +768,7 @@ mod teams {
         wasi_ctx: WasiCtx,
         secrets: HashMap<String, String>,
         responses: RefCell<Vec<bindings::greentic::http::http_client::Response>>,
+        requests: RefCell<Vec<bindings::greentic::http::http_client::Request>>,
         last_state_write: RefCell<Option<(String, Vec<u8>)>>,
     }
 
@@ -780,6 +781,7 @@ mod teams {
                 wasi_ctx: WasiCtxBuilder::new().inherit_stdio().build(),
                 secrets,
                 responses: RefCell::new(Vec::new()),
+                requests: RefCell::new(Vec::new()),
                 last_state_write: RefCell::new(None),
             }
         }
@@ -797,13 +799,14 @@ mod teams {
     impl bindings::greentic::http::http_client::Host for HostState {
         fn send(
             &mut self,
-            _req: bindings::greentic::http::http_client::Request,
+            req: bindings::greentic::http::http_client::Request,
             _options: Option<bindings::greentic::http::http_client::RequestOptions>,
             _ctx: Option<bindings::greentic::interfaces_types::types::TenantCtx>,
         ) -> Result<
             bindings::greentic::http::http_client::Response,
             bindings::greentic::http::http_client::HostError,
         > {
+            self.requests.borrow_mut().push(req);
             if let Some(resp) = self.responses.borrow_mut().pop() {
                 Ok(resp)
             } else {
@@ -910,7 +913,9 @@ mod teams {
         )
         .expect("link interfaces");
 
-        let host = HostState::with_secret("MS_GRAPH_CLIENT_SECRET", "secret");
+        let mut host = HostState::with_secret("MS_GRAPH_CLIENT_SECRET", "secret");
+        host.secrets
+            .insert("MS_GRAPH_REFRESH_TOKEN".into(), "refresh-token".into());
         host.responses
             .borrow_mut()
             .push(bindings::greentic::http::http_client::Response {
@@ -950,7 +955,8 @@ mod teams {
                 {
                     "resource": "/teams/abc/channels/def/messages",
                     "change_type": "created",
-                    "expiration_datetime": "2025-01-01T00:00:00Z"
+                    "expiration_datetime": "2025-01-01T00:00:00Z",
+                    "lifecycle_notification_url": "https://example.test/lifecycle"
                 }
             ]
         })
@@ -981,6 +987,25 @@ mod teams {
             .expect("state write");
         let state_written: Value = serde_json::from_slice(&state_bytes).context("state json")?;
         assert!(state_written.get("subscriptions").is_some());
+        let requests = store.data().requests.borrow();
+        let create_request = requests
+            .iter()
+            .find(|req| req.method == "POST" && req.url.ends_with("/subscriptions"))
+            .context("create subscription request")?;
+        let create_body: Value = serde_json::from_slice(
+            create_request
+                .body
+                .as_deref()
+                .context("create subscription body")?,
+        )?;
+        assert_eq!(
+            create_body.get("notificationUrl"),
+            Some(&Value::String("https://example.test/webhook".into()))
+        );
+        assert_eq!(
+            create_body.get("lifecycleNotificationUrl"),
+            Some(&Value::String("https://example.test/lifecycle".into()))
+        );
         Ok(())
     }
 }

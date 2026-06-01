@@ -56,7 +56,6 @@ Repository releases use `.github/workflows/publish-shared-crate.yml`; see
 ## Feature Flags
 
 - `schema`: enables `schemars::JsonSchema` derives for public DTOs.
-- `runner-smoke`: enables smoke tests that depend on `greentic-runner-desktop`.
 
 ## Migration Notes
 

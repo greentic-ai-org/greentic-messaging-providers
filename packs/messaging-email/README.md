@@ -1,6 +1,6 @@
 # Messaging Email Pack
 
-Email messaging provider — Microsoft Graph API with SMTP fallback.
+Legacy SMTP email messaging provider.
 
 ## Pack ID
 - `messaging-email`
@@ -12,10 +12,7 @@ Email messaging provider — Microsoft Graph API with SMTP fallback.
 - `messaging-provider-email` — core provider WASM (secrets-store + http-client)
 
 ## Secrets
-- `FROM_ADDRESS` — sender email address
-- `GRAPH_TENANT_ID` — Azure AD tenant ID
-- `MS_GRAPH_CLIENT_ID` — Azure AD app client ID
-- `MS_GRAPH_REFRESH_TOKEN` — OAuth refresh token (delegated permissions)
+- `EMAIL_PASSWORD` — SMTP password
 
 ## Flows
 - `setup_default` — configures provider via `messaging.configure` op
@@ -23,8 +20,8 @@ Email messaging provider — Microsoft Graph API with SMTP fallback.
 
 ## Setup
 Inputs:
-- Config required: from_address, graph_tenant_id, ms_graph_client_id
-- Secrets required: MS_GRAPH_REFRESH_TOKEN
+- Config required: host, port, username, from_address, tls_mode
+- Secrets required: EMAIL_PASSWORD
 
 ## Extensions
 - `greentic.ext.capabilities.v1` — capability offer `messaging-email-v1`
