@@ -113,9 +113,9 @@ def aggregate_requirements(pack_dir: Path, components_dir: Path) -> List[dict]:
             continue
         data = load_json(comp_manifest)
         component_reqs = data.get("secret_requirements") or []
-        reqs.extend(component_reqs)
+        reqs.extend(req for req in component_reqs if not req.get("generated"))
     # allow manual/static requirements already in the pack manifest
-    reqs.extend(manifest.get("secret_requirements") or [])
+    reqs.extend(req for req in (manifest.get("secret_requirements") or []) if not req.get("generated"))
     return dedupe_requirements(reqs)
 
 

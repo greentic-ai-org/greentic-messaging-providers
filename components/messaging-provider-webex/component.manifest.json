@@ -21,25 +21,6 @@
       "name": "WEBEX_BOT_TOKEN",
       "scope": "tenant",
       "description": "Webex bot access token used for Messages API calls."
-    },
-    {
-      "name": "webex_webhook_secret",
-      "aliases": [
-        "WEBEX_WEBHOOK_SECRET"
-      ],
-      "required": true,
-      "scope": "tenant",
-      "description": "Shared secret used to verify Webex webhook signatures.",
-      "generated": {
-        "policy": "random",
-        "length": 20,
-        "encoding": "raw_text",
-        "scope": {
-          "level": "tenant",
-          "team": "_"
-        },
-        "regenerate_if_present": false
-      }
     }
   ],
   "operations": [

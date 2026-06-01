@@ -14,7 +14,7 @@ Slack messaging provider — Bot API with Events API ingress.
 
 ## Secrets
 - `SLACK_BOT_TOKEN` — Slack bot token (xoxb-...)
-- `SLACK_SIGNING_SECRET` — Slack signing secret (optional, webhook verification)
+- `SLACK_SIGNING_SECRET` — generated tenant-wide Slack webhook verification secret
 - `SLACK_APP_ID` — Slack app ID for manifest webhook registration
 - `SLACK_CONFIGURATION_ACCESS_TOKEN` — short-lived Slack configuration access token
 - `SLACK_CONFIGURATION_REFRESH_TOKEN` — refresh token used to rotate expired configuration access tokens
@@ -28,7 +28,8 @@ Inputs:
 - Config required: public_base_url
 - Config optional: default_channel, team_id
 - Secrets required: SLACK_BOT_TOKEN
-- Secrets optional: SLACK_SIGNING_SECRET, SLACK_APP_ID, SLACK_CONFIGURATION_ACCESS_TOKEN, SLACK_CONFIGURATION_REFRESH_TOKEN
+- Secrets optional: SLACK_APP_ID, SLACK_CONFIGURATION_ACCESS_TOKEN, SLACK_CONFIGURATION_REFRESH_TOKEN
+- Generated runtime secrets: SLACK_SIGNING_SECRET
 
 Webhooks:
 - public_base_url + /webhooks/slack
