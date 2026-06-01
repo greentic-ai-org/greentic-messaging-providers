@@ -31,9 +31,9 @@
     {
       "name": "messaging-teams",
       "file": "dist/packs/messaging-teams.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.5.7",
-      "digest": "sha256:d1e2200608d4e676c498d6156245e373f0e43dbf7c5eae6d4d4a0a348579fb7d",
-      "built_at": "2026-05-31T06:43:17Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.5.8",
+      "digest": "sha256:611c71ff71e9686625fe575d88f50a1b3270faf595e163b94f3d7913076d7388",
+      "built_at": "2026-06-01T07:03:51Z"
     },
     {
       "name": "messaging-telegram",
@@ -59,9 +59,9 @@
     {
       "name": "messaging-webex",
       "file": "dist/packs/messaging-webex.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webex:0.5.5",
-      "digest": "sha256:3607108a7e1391b2a5889691585ff87c52ec4fdcb21ba808768fac12a1df0fe6",
-      "built_at": "2026-05-31T20:56:48Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webex:0.5.6",
+      "digest": "sha256:b32ee79bfe39252c32307f8dcab363b29a3cecedc368c53919822c936ee82de8",
+      "built_at": "2026-06-01T07:03:04Z"
     },
     {
       "name": "messaging-whatsapp",
