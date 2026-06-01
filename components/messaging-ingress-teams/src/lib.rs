@@ -12,7 +12,7 @@ use bindings::greentic::http::http_client as client;
 use bindings::greentic::secrets_store::secrets_store;
 use bindings::greentic::state::state_store;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use urlencoding::encode;
 
 const DEFAULT_GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
@@ -316,37 +316,83 @@ fn normalize_notification(notification: &Value) -> Value {
         content.to_string()
     };
     let destination = if let Some(chat_id) = ids.chat_id.as_ref() {
-        json!({"kind": "chat", "id": chat_id})
+        Some(chat_id.clone())
     } else if let (Some(team_id), Some(channel_id)) =
         (ids.team_id.as_ref(), ids.channel_id.as_ref())
     {
-        json!({"kind": "channel", "id": format!("{team_id}:{channel_id}")})
+        Some(format!("{team_id}:{channel_id}"))
     } else {
-        Value::Null
+        None
     };
+    let mut metadata = Map::new();
+    insert_string(&mut metadata, "graph_resource", resource);
+    insert_string(
+        &mut metadata,
+        "change_type",
+        notification
+            .get("changeType")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    insert_string(
+        &mut metadata,
+        "subscription_id",
+        notification
+            .get("subscriptionId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    insert_string(
+        &mut metadata,
+        "tenant_id",
+        notification
+            .get("tenantId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    insert_optional_string(&mut metadata, "team_id", ids.team_id.as_deref());
+    insert_optional_string(&mut metadata, "channel_id", ids.channel_id.as_deref());
+    insert_optional_string(&mut metadata, "chat_id", ids.chat_id.as_deref());
+    insert_string(
+        &mut metadata,
+        "webUrl",
+        resource_data
+            .get("webUrl")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    insert_string(
+        &mut metadata,
+        "replyToId",
+        resource_data
+            .get("replyToId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    insert_string(&mut metadata, "body_content", content);
+    insert_string(&mut metadata, "body_content_type", content_type);
 
-    json!({
-        "provider": "messaging.teams.graph",
-        "source": "teams",
-        "provider_message_id": if message_id.is_empty() { Value::Null } else { Value::String(format!("teams:{message_id}")) },
-        "message_id": message_id,
-        "text": text,
-        "from": graph_from(resource_data),
-        "to": destination,
-        "metadata": {
-            "graph_resource": resource,
-            "change_type": notification.get("changeType").and_then(Value::as_str).unwrap_or_default(),
-            "subscription_id": notification.get("subscriptionId").and_then(Value::as_str).unwrap_or_default(),
-            "tenant_id": notification.get("tenantId").and_then(Value::as_str).unwrap_or_default(),
-            "team_id": ids.team_id,
-            "channel_id": ids.channel_id,
-            "chat_id": ids.chat_id,
-            "webUrl": resource_data.get("webUrl").and_then(Value::as_str).unwrap_or_default(),
-            "replyToId": resource_data.get("replyToId").and_then(Value::as_str).unwrap_or_default(),
-            "body_content": content,
-            "body_content_type": content_type
-        }
-    })
+    let mut event = Map::new();
+    event.insert(
+        "provider".to_string(),
+        Value::String("messaging.teams.graph".to_string()),
+    );
+    event.insert("source".to_string(), Value::String("teams".to_string()));
+    if !message_id.is_empty() {
+        event.insert(
+            "provider_message_id".to_string(),
+            Value::String(format!("teams:{message_id}")),
+        );
+    }
+    event.insert(
+        "message_id".to_string(),
+        Value::String(message_id.to_string()),
+    );
+    event.insert("text".to_string(), Value::String(text));
+    insert_optional_string(&mut event, "from", graph_from_id(resource_data).as_deref());
+    insert_optional_string(&mut event, "to", destination.as_deref());
+    event.insert("metadata".to_string(), Value::Object(metadata));
+    Value::Object(event)
 }
 
 #[derive(Default)]
@@ -363,6 +409,22 @@ fn parse_graph_resource(resource: &str) -> ResourceIds {
     let mut i = 0;
     while i < parts.len() {
         match parts[i] {
+            segment if graph_segment_id(segment, "teams").is_some() => {
+                ids.team_id = graph_segment_id(segment, "teams");
+                i += 1;
+            }
+            segment if graph_segment_id(segment, "channels").is_some() => {
+                ids.channel_id = graph_segment_id(segment, "channels");
+                i += 1;
+            }
+            segment if graph_segment_id(segment, "chats").is_some() => {
+                ids.chat_id = graph_segment_id(segment, "chats");
+                i += 1;
+            }
+            segment if graph_segment_id(segment, "messages").is_some() => {
+                ids.message_id = graph_segment_id(segment, "messages");
+                i += 1;
+            }
             "teams" if i + 1 < parts.len() => {
                 ids.team_id = Some(parts[i + 1].to_string());
                 i += 2;
@@ -389,8 +451,42 @@ fn parse_graph_resource(resource: &str) -> ResourceIds {
     ids
 }
 
-fn graph_from(resource_data: &Value) -> Value {
-    resource_data.get("from").cloned().unwrap_or(Value::Null)
+fn graph_segment_id(segment: &str, name: &str) -> Option<String> {
+    let prefix = format!("{name}('");
+    segment
+        .strip_prefix(&prefix)
+        .and_then(|rest| rest.strip_suffix("')"))
+        .map(ToOwned::to_owned)
+        .filter(|value| !value.is_empty())
+}
+
+fn graph_from_id(resource_data: &Value) -> Option<String> {
+    let from = resource_data.get("from")?;
+    for path in [
+        &["user", "id"][..],
+        &["application", "id"],
+        &["device", "id"],
+        &["conversation", "id"],
+    ] {
+        let mut current = from;
+        for key in path {
+            current = current.get(*key)?;
+        }
+        if let Some(id) = current.as_str().map(str::trim).filter(|id| !id.is_empty()) {
+            return Some(id.to_string());
+        }
+    }
+    None
+}
+
+fn insert_string(map: &mut Map<String, Value>, key: &str, value: &str) {
+    map.insert(key.to_string(), Value::String(value.to_string()));
+}
+
+fn insert_optional_string(map: &mut Map<String, Value>, key: &str, value: Option<&str>) {
+    if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+        map.insert(key.to_string(), Value::String(value.to_string()));
+    }
 }
 
 fn strip_html(input: &str) -> String {
@@ -885,10 +981,38 @@ mod tests {
             parsed["events"][0]["provider_message_id"],
             "teams:message-1"
         );
-        assert_eq!(
-            parsed["events"][0]["to"],
-            json!({"kind": "channel", "id": "team-1:channel-1"})
-        );
+        assert_eq!(parsed["events"][0]["to"], "team-1:channel-1");
+        assert_eq!(parsed["events"][0]["from"], "user-1");
+        assert_eq!(parsed["events"][0]["metadata"]["team_id"], "team-1");
+        assert_eq!(parsed["events"][0]["metadata"]["channel_id"], "channel-1");
+    }
+
+    #[test]
+    fn webhook_omits_unknown_sender_and_parses_quoted_graph_resource_ids() {
+        let out = <Component as IngressGuest>::handle_webhook(
+            "{}".to_string(),
+            json!({
+                "value": [{
+                    "subscriptionId": "sub-1",
+                    "changeType": "created",
+                    "tenantId": "tenant-1",
+                    "resource": "teams('team-1')/channels('19:channel@thread.tacv2')/messages('1780340545252')",
+                    "resourceData": {
+                        "id": "1780340545252"
+                    }
+                }]
+            })
+            .to_string(),
+        )
+        .expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+        let event = parsed["events"][0].as_object().expect("event object");
+
+        assert!(!event.contains_key("from"));
+        assert_eq!(event["to"], "team-1:19:channel@thread.tacv2");
+        assert_eq!(event["metadata"]["team_id"], "team-1");
+        assert_eq!(event["metadata"]["channel_id"], "19:channel@thread.tacv2");
+        assert_eq!(event["provider_message_id"], "teams:1780340545252");
     }
 
     #[test]

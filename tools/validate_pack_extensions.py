@@ -15,7 +15,6 @@ from typing import Any, Dict, Tuple
 PROVIDER_EXTENSION_ID = "greentic.provider-extension.v1"
 
 GENERATED_SECRET_REQUIREMENTS = {
-    "messaging-slack": ("slack_signing_secret", "SLACK_SIGNING_SECRET"),
     "messaging-webex": ("webex_webhook_secret", "WEBEX_WEBHOOK_SECRET"),
     "messaging-webchat-gui": ("jwt_signing_key", "JWT_SIGNING_KEY"),
     "messaging-webchat": ("jwt_signing_key", "JWT_SIGNING_KEY"),

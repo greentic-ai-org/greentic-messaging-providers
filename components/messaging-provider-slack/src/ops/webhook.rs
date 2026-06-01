@@ -354,7 +354,6 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         "client_id": client_id,
         "slack_client_id": client_id,
         "client_secret": client_secret,
-        "signing_secret": signing_secret,
         "oauth_authorize_url": body.get("oauth_authorize_url").cloned().unwrap_or(Value::Null),
         "manifest": manifest,
         "slack_response": body,

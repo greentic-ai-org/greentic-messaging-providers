@@ -46,3 +46,8 @@ Generated secrets must not be exposed as setup questions, public config fields,
 or setup answers. Providers may emit them in `secrets_patch` during setup for new
 bundles, but startup hosts should also be able to seed missing values from this
 metadata alone for existing bundles.
+
+Slack is intentionally not part of this generated-secret contract:
+`SLACK_SIGNING_SECRET` is returned by Slack app registration and stored by the
+Slack provider as an external secret. Hosts must not generate a replacement
+signing secret.
