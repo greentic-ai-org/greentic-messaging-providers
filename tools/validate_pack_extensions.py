@@ -147,6 +147,73 @@ def validate_pack(path: Path) -> None:
                 f"{path} provider extension kind={kind!r}, expected {PROVIDER_EXTENSION_ID!r}"
             )
 
+    if path.stem == "messaging-teams":
+        validate_teams_subscription_desired_state(path, manifest)
+
+
+def validate_teams_subscription_desired_state(path: Path, manifest: Dict[str, Any]) -> None:
+    subscriptions = (
+        (manifest.get("extensions") or {})
+        .get("messaging.subscriptions.v1", {})
+        .get("inline")
+    )
+    if not isinstance(subscriptions, dict):
+        raise ValueError(f"{path} missing Teams messaging.subscriptions.v1 inline metadata")
+
+    desired_state = subscriptions.get("desired_state")
+    if not isinstance(desired_state, dict):
+        raise ValueError(f"{path} Teams subscriptions metadata missing desired_state")
+
+    if desired_state.get("output_key") != "desired_subscriptions":
+        raise ValueError(
+            f"{path} Teams desired_state output_key={desired_state.get('output_key')!r}, "
+            "expected 'desired_subscriptions'"
+        )
+
+    source_keys = desired_state.get("source_keys")
+    if not isinstance(source_keys, list):
+        raise ValueError(f"{path} Teams desired_state missing source_keys list")
+    for key in ("team_id", "channel_id"):
+        if key not in source_keys:
+            raise ValueError(f"{path} Teams desired_state source_keys missing {key}")
+
+    templates = desired_state.get("templates")
+    if not isinstance(templates, list):
+        raise ValueError(f"{path} Teams desired_state missing templates list")
+
+    channel_template = None
+    for template in templates:
+        if not isinstance(template, dict):
+            continue
+        if (
+            template.get("resource_template")
+            == "/teams/{team_id}/channels/{channel_id}/messages"
+        ):
+            channel_template = template
+            break
+    if channel_template is None:
+        raise ValueError(
+            f"{path} Teams desired_state templates missing channel message resource template"
+        )
+
+    when_all = channel_template.get("when_all")
+    if not isinstance(when_all, list) or "team_id" not in when_all or "channel_id" not in when_all:
+        raise ValueError(
+            f"{path} Teams channel subscription template must require team_id and channel_id"
+        )
+
+    component_config = subscriptions.get("component_config")
+    if not isinstance(component_config, dict):
+        raise ValueError(f"{path} Teams subscriptions metadata missing component_config")
+    include = component_config.get("include")
+    if not isinstance(include, list):
+        raise ValueError(f"{path} Teams component_config missing include list")
+    for key in ("team_id", "channel_id", "chat_id"):
+        if key in include:
+            raise ValueError(
+                f"{path} Teams component_config must not pass desired-state key {key}"
+            )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
