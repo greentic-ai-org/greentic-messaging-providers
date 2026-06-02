@@ -4,17 +4,33 @@
 
 use serde_json::Value;
 
-/// Extract the bot identity asserted by an inbound Bot Framework Activity.
+/// **Routing discriminator only — not an authentication check.**
+///
+/// `recipient.id` is read from the inbound Bot Framework Activity
+/// body, which is caller-controlled. This function is intended to
+/// answer "which `MessagingEndpoint` does this payload claim to be
+/// for?" — not "is this payload authentic?". The host MUST verify
+/// the Bot Framework JWT (signature, `aud`, expected bot identity)
+/// against the routed endpoint's configured credentials before
+/// admitting the request or emitting any events. Without that auth
+/// gate downstream, an attacker who knows a bot's `recipient.id`
+/// could choose the target endpoint by setting it in their payload.
+///
+/// The runner-host already validates the eid grammar at the routing
+/// boundary; the missing piece — JWT enforcement, not decode-only —
+/// is a separate hardening task on the Teams provider's existing
+/// ingest path.
 ///
 /// The discriminator for Teams is the activity's `recipient.id` field —
 /// every Bot Service registration has a unique MSA user id that lands in
 /// every inbound activity addressed to that bot. The input is accepted in
-/// either shape the runtime currently delivers:
+/// any shape the runtime currently delivers:
 ///
 /// - the raw Bot Framework Activity at the top level (when the runtime
 ///   has already unwrapped the HTTP envelope), or
 /// - an HttpInV1 / operator-format HTTP wrapper whose body is the
-///   activity (base64 in `body_b64` or already-decoded `body`).
+///   activity (base64 in `body_b64`, a JSON array of u8 numbers in
+///   `body`, or an already-decoded JSON object in `body`).
 pub(crate) fn extract_recipient_id(input_json: &[u8]) -> Option<String> {
     let value: Value = serde_json::from_slice(input_json).ok()?;
     recipient_id_from(&value).or_else(|| recipient_id_from_http_envelope(&value))
@@ -36,6 +52,13 @@ fn recipient_id_from_http_envelope(value: &Value) -> Option<String> {
 fn decoded_body(value: &Value) -> Option<Value> {
     if let Some(body) = value.get("body").and_then(Value::as_object) {
         return Some(Value::Object(body.clone()));
+    }
+    if let Some(arr) = value.get("body").and_then(Value::as_array) {
+        let bytes: Vec<u8> = arr
+            .iter()
+            .map(|v| u8::try_from(v.as_u64()?).ok())
+            .collect::<Option<Vec<u8>>>()?;
+        return serde_json::from_slice(&bytes).ok();
     }
     let b64 = value.get("body_b64").and_then(Value::as_str)?;
     let bytes = decode_b64(b64)?;
@@ -119,6 +142,24 @@ mod tests {
         assert_eq!(
             extract_recipient_id(&bytes).as_deref(),
             Some("28:bot-decoded")
+        );
+    }
+
+    #[test]
+    fn returns_recipient_id_from_http_wrapper_with_body_byte_array() {
+        let activity = json!({
+            "type": "message",
+            "recipient": { "id": "28:bot-via-bytes" }
+        });
+        let bytes = serde_json::to_vec(&activity).unwrap();
+        let wrapper = json!({
+            "headers": [],
+            "body": bytes.iter().map(|b| *b as u64).collect::<Vec<_>>()
+        });
+        let input = serde_json::to_vec(&wrapper).unwrap();
+        assert_eq!(
+            extract_recipient_id(&input).as_deref(),
+            Some("28:bot-via-bytes")
         );
     }
 
