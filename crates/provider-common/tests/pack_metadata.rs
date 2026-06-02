@@ -402,6 +402,24 @@ fn slack_signing_secret_is_registered_not_generated() -> Result<()> {
         }),
         "Slack signing secret must not be setup-prompted; setup_app_registration stores Slack's returned value"
     );
+    let secrets_out = manifest
+        .get("extensions")
+        .and_then(|value| value.get("greentic.provider-extension.v1"))
+        .and_then(|value| value.get("inline"))
+        .and_then(|value| value.get("providers"))
+        .and_then(Value::as_array)
+        .and_then(|providers| providers.first())
+        .and_then(|provider| provider.get("setup_contract"))
+        .and_then(|contract| contract.get("secrets_out"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("messaging-slack missing provider setup_contract.secrets_out"))?;
+    assert!(
+        secrets_out.iter().any(|value| {
+            value.get("answer_key").and_then(Value::as_str) == Some("slack_signing_secret")
+                && value.get("secret_key").and_then(Value::as_str) == Some("SLACK_SIGNING_SECRET")
+        }),
+        "Slack setup contract must persist Slack's returned signing secret as SLACK_SIGNING_SECRET"
+    );
 
     Ok(())
 }
