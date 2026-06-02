@@ -2115,7 +2115,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-slack"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "greentic-telemetry",
  "greentic-types",
@@ -2128,7 +2128,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-teams"
-version = "0.5.14"
+version = "0.5.15"
 dependencies = [
  "greentic-telemetry",
  "greentic-types",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-slack"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -2203,7 +2203,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-teams"
-version = "0.5.14"
+version = "0.5.15"
 dependencies = [
  "base64",
  "chrono",
@@ -3245,7 +3245,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slack"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -3330,7 +3330,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "teams"
-version = "0.5.14"
+version = "0.5.15"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",

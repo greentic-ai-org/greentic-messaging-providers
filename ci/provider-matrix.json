@@ -181,7 +181,7 @@
     },
     "slack": {
       "pack": "messaging-slack",
-      "version": "0.5.10",
+      "version": "0.5.11",
       "ghcr_target": "ghcr.io/greenticai/messaging-slack",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -219,7 +219,7 @@
     },
     "teams": {
       "pack": "messaging-teams",
-      "version": "0.5.14",
+      "version": "0.5.15",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {

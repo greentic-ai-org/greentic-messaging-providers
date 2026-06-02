@@ -24,16 +24,16 @@
     {
       "name": "messaging-slack",
       "file": "dist/packs/messaging-slack.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-slack:0.5.10",
-      "digest": "sha256:0c39d4bcdce88cf1445e8d6ac5a37935df20c118c3a2120bb504595ec1012987",
-      "built_at": "2026-06-02T16:33:11Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-slack:0.5.11",
+      "digest": "sha256:f8be62169f28948f69778b1cb385d479031a608840cc9561db95403096565e1f",
+      "built_at": "2026-06-02T17:01:29Z"
     },
     {
       "name": "messaging-teams",
       "file": "dist/packs/messaging-teams.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.5.14",
-      "digest": "sha256:e066a29a23aadf7e1a4b0092edc4d563d7542aeff799c81d3a9fe944f3c1fb98",
-      "built_at": "2026-06-02T16:27:22Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.5.15",
+      "digest": "sha256:bc73cf9b3afadef6c782feee393309f9a7609c4fccccd0318c6fefa11e095439",
+      "built_at": "2026-06-02T17:13:05Z"
     },
     {
       "name": "messaging-telegram",

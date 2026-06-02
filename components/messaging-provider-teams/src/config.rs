@@ -266,6 +266,18 @@ fn normalize_config_value(val: &Value) -> Value {
         return normalized;
     };
 
+    if let Some(enabled) = obj.get("enabled").and_then(Value::as_str) {
+        match enabled.trim().to_ascii_lowercase().as_str() {
+            "true" => {
+                obj.insert("enabled".to_string(), Value::Bool(true));
+            }
+            "false" => {
+                obj.insert("enabled".to_string(), Value::Bool(false));
+            }
+            _ => {}
+        }
+    }
+
     for (field, secret_key) in [
         ("tenant_id", DEFAULT_GRAPH_TENANT_ID_KEY),
         ("client_id", DEFAULT_GRAPH_CLIENT_ID_KEY),
@@ -523,6 +535,31 @@ mod tests {
         assert_eq!(top_level.team_name.as_deref(), Some("Team One"));
         assert_eq!(top_level.channel_id.as_deref(), Some("channel-1"));
         assert_eq!(top_level.channel_name.as_deref(), Some("General"));
+    }
+
+    #[test]
+    fn load_config_accepts_string_enabled_from_setup_answers() {
+        let nested = load_config(&json!({
+            "config": {
+                "enabled": "true",
+                "tenant_id": "tenant",
+                "client_id": "client",
+                "team_id": "team",
+                "channel_id": "channel"
+            }
+        }))
+        .expect("nested config");
+        assert!(nested.enabled);
+        assert_eq!(nested.team_id.as_deref(), Some("team"));
+        assert_eq!(nested.channel_id.as_deref(), Some("channel"));
+
+        let top_level = load_config(&json!({
+            "enabled": "false",
+            "tenant_id": "tenant",
+            "client_id": "client"
+        }))
+        .expect("top-level config");
+        assert!(!top_level.enabled);
     }
 
     #[test]
