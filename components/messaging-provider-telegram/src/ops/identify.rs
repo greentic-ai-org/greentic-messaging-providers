@@ -34,7 +34,9 @@ const SECRET_TOKEN_HEADER: &str = "x-telegram-bot-api-secret-token";
 ///
 /// # Input shape (M1 IID.4d wrapper)
 ///
-/// Accepts the wrapper shape:
+/// Accepts the wrapper shape. Header entries may be `{name, value}`
+/// objects or `[name, value]` tuple arrays (some HTTP-compat layers use
+/// the latter):
 ///
 /// ```json
 /// {
@@ -71,11 +73,10 @@ fn secret_token_from_headers(value: &Value) -> Option<String> {
     headers
         .iter()
         .filter_map(|header| {
-            let name = header.get("name").and_then(Value::as_str)?;
+            let (name, raw) = header_name_and_value(header)?;
             if !name.eq_ignore_ascii_case(SECRET_TOKEN_HEADER) {
                 return None;
             }
-            let raw = header.get("value").and_then(Value::as_str)?;
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 None
@@ -84,6 +85,29 @@ fn secret_token_from_headers(value: &Value) -> Option<String> {
             }
         })
         .next()
+}
+
+/// Accept both `{name, value}` object form (the canonical M1.4d wrapper
+/// shape from greentic-start) and `[name, value]` tuple form (an
+/// alternative wire shape some HTTP-compat layers in the repo use).
+/// Returns `(name, value)` borrowed from the entry, or `None` if the
+/// entry is neither shape.
+fn header_name_and_value(entry: &Value) -> Option<(&str, &str)> {
+    if let Some(obj) = entry.as_object() {
+        let name = obj.get("name")?.as_str()?;
+        let value = obj.get("value")?.as_str()?;
+        Some((name, value))
+    } else if let Some(arr) = entry.as_array() {
+        if arr.len() == 2 {
+            let name = arr[0].as_str()?;
+            let value = arr[1].as_str()?;
+            Some((name, value))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -151,6 +175,34 @@ mod tests {
             telegram_update(),
         );
         assert_eq!(extract_secret_token(&bytes).as_deref(), Some("first"));
+    }
+
+    #[test]
+    fn accepts_tuple_form_headers() {
+        // Some operator HTTP-compat layers in the repo serialize headers
+        // as `[name, value]` tuple arrays instead of `{name, value}`
+        // objects. The Telegram identify-instance must accept both.
+        let bytes = wrapper(
+            json!([
+                ["x-forwarded-for", "203.0.113.42"],
+                ["x-telegram-bot-api-secret-token", "tok-tuple-form"]
+            ]),
+            telegram_update(),
+        );
+        assert_eq!(
+            extract_secret_token(&bytes).as_deref(),
+            Some("tok-tuple-form")
+        );
+    }
+
+    #[test]
+    fn returns_none_for_malformed_tuple_header() {
+        // A 1-element tuple is neither shape — decline rather than panic.
+        let bytes = wrapper(
+            json!([["x-telegram-bot-api-secret-token"]]),
+            telegram_update(),
+        );
+        assert!(extract_secret_token(&bytes).is_none());
     }
 
     #[test]
