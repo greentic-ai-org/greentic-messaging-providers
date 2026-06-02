@@ -131,22 +131,21 @@ fn normalized_without_events(body_val: Value) -> Result<String, String> {
 }
 
 fn envelope_from_payload(payload: &Value) -> Option<Value> {
-    let text = payload
-        .get("text")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let channel = payload
-        .get("channel")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .map(str::to_string);
-    let sender = payload
-        .get("user")
-        .or_else(|| payload.get("user_id"))
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .map(str::to_string);
+    let (text, mut action_metadata) =
+        if payload.get("type").and_then(Value::as_str) == Some("block_actions") {
+            block_action_text_and_metadata(payload)
+        } else {
+            (
+                payload
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                Map::new(),
+            )
+        };
+    let channel = slack_channel_id(payload);
+    let sender = slack_user_id(payload);
     let channel_name = channel.clone().unwrap_or_else(|| "slack".to_string());
     let envelope_id = payload
         .get("event_ts")
@@ -170,6 +169,7 @@ fn envelope_from_payload(payload: &Value) -> Option<Value> {
     if let Some(event_ts) = payload.get("event_ts").and_then(Value::as_str) {
         metadata.insert("event_ts".to_string(), Value::String(event_ts.to_string()));
     }
+    metadata.append(&mut action_metadata);
 
     Some(json!({
         "id": envelope_id,
@@ -187,6 +187,87 @@ fn envelope_from_payload(payload: &Value) -> Option<Value> {
         "attachments": [],
         "metadata": metadata,
     }))
+}
+
+fn block_action_text_and_metadata(payload: &Value) -> (String, Map<String, Value>) {
+    let first_action = payload
+        .get("actions")
+        .and_then(Value::as_array)
+        .and_then(|actions| actions.first())
+        .cloned()
+        .unwrap_or(Value::Null);
+    let action_id = first_action
+        .get("action_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let action_value = first_action
+        .get("value")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let parsed_value = serde_json::from_str::<Value>(action_value).ok();
+    let text = if let Some(value) = parsed_value.as_ref() {
+        let route_to_card = value
+            .get("routeToCardId")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let card_id = value
+            .get("cardId")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if !route_to_card.is_empty() {
+            format!("[card:{route_to_card}]")
+        } else if !card_id.is_empty() {
+            format!("[action:{card_id}]")
+        } else {
+            format!("[action:{action_id}]")
+        }
+    } else {
+        format!("[action:{action_id}]")
+    };
+
+    let mut metadata = Map::new();
+    if let Some(obj) = parsed_value.as_ref().and_then(Value::as_object) {
+        for (key, value) in obj {
+            let value = match value {
+                Value::String(value) => Value::String(value.clone()),
+                other => Value::String(other.to_string()),
+            };
+            metadata.insert(key.clone(), value);
+        }
+    }
+    metadata.insert(
+        "slack.action_id".to_string(),
+        Value::String(action_id.to_string()),
+    );
+    metadata.insert(
+        "slack.action_value".to_string(),
+        Value::String(action_value.to_string()),
+    );
+    (text, metadata)
+}
+
+fn slack_channel_id(payload: &Value) -> Option<String> {
+    payload
+        .get("channel")
+        .and_then(|channel| {
+            channel
+                .as_str()
+                .or_else(|| channel.get("id").and_then(Value::as_str))
+        })
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn slack_user_id(payload: &Value) -> Option<String> {
+    payload
+        .get("user")
+        .or_else(|| payload.get("user_id"))
+        .and_then(|user| {
+            user.as_str()
+                .or_else(|| user.get("id").and_then(Value::as_str))
+        })
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
 }
 
 fn is_slack_retry(headers: &Map<String, Value>) -> bool {
@@ -325,6 +406,38 @@ mod tests {
         .expect("bot");
         let parsed: Value = serde_json::from_str(&bot).expect("json");
         assert_eq!(parsed["events"].as_array().expect("events").len(), 0);
+    }
+
+    #[test]
+    fn webhook_block_action_uses_channel_object_id_for_reply_route() {
+        let body = json!({
+            "type": "block_actions",
+            "channel": {"id": "C1", "name": "helpdesk"},
+            "user": {"id": "U1"},
+            "actions": [{
+                "action_id": "approve",
+                "value": serde_json::to_string(&json!({
+                    "routeToCardId": "next-card",
+                    "decision": "approve",
+                    "count": 2
+                })).expect("action value")
+            }]
+        });
+
+        let out = normalize_body(&Map::new(), &body.to_string()).expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+        let envelope: greentic_types::ChannelMessageEnvelope =
+            serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
+
+        assert_eq!(envelope.text.as_deref(), Some("[card:next-card]"));
+        assert_eq!(envelope.channel, "C1");
+        assert_eq!(envelope.session_id, "C1");
+        assert_eq!(envelope.to[0].id, "C1");
+        assert_eq!(envelope.from.expect("from").id, "U1");
+        assert_eq!(envelope.metadata["routeToCardId"], "next-card");
+        assert_eq!(envelope.metadata["decision"], "approve");
+        assert_eq!(envelope.metadata["count"], "2");
+        assert_eq!(envelope.metadata["slack.action_id"], "approve");
     }
 
     #[test]
