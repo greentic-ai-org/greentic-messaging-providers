@@ -158,6 +158,32 @@ mod tests {
     }
 
     #[test]
+    fn returns_recipient_id_from_m1_iid4d_wrapper_with_populated_headers() {
+        // M1 IID.4d (greentic-start#216): the host now sends a wrapper
+        // `{headers: [{name,value}], body: <parsed>}` instead of the raw
+        // request body, so providers whose discriminator lives in HTTP
+        // headers (Telegram) can read it. Teams's discriminator stays in
+        // the body (`recipient.id`); this test pins that the populated
+        // `headers` array does not perturb the body-based lookup.
+        let wrapper = json!({
+            "headers": [
+                { "name": "x-forwarded-for", "value": "203.0.113.42" },
+                { "name": "x-ms-routing-name", "value": "self" }
+            ],
+            "body": {
+                "type": "message",
+                "recipient": { "id": "28:bot-via-iid4d-wrapper" },
+                "from": { "id": "user-1" }
+            }
+        });
+        let bytes = serde_json::to_vec(&wrapper).unwrap();
+        assert_eq!(
+            extract_recipient_id(&bytes).as_deref(),
+            Some("28:bot-via-iid4d-wrapper")
+        );
+    }
+
+    #[test]
     fn returns_none_when_recipient_absent() {
         let payload = json!({
             "type": "message",
