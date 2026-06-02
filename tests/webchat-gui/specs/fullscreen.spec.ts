@@ -135,10 +135,44 @@ test.describe('full-screen WebChat', () => {
         color: computed.color,
       };
     });
-    expect(styles.backgroundColor).toBe('rgb(236, 253, 245)');
-    expect(styles.borderColor).toBe('rgba(5, 150, 105, 0.35)');
-    expect(styles.color).toBe('rgb(6, 78, 59)');
+    expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(styles.borderColor).toBe('rgb(5, 150, 105)');
+    expect(styles.color).toBe('rgb(5, 150, 105)');
   });
+
+  for (const skin of skins) {
+    test(`${skin} skin differentiates adaptive card action styles`, async ({ page }) => {
+      const webchat = new WebChatGuiPage(page);
+      await webchat.openFullscreen({ skin, nav: false, login: false });
+      await webchat.expectChatReady();
+
+      const defaultAction = page.getByTestId('adaptive-card-action');
+      const positiveAction = page.getByTestId('adaptive-card-action-positive');
+      const destructiveAction = page.getByTestId('adaptive-card-action-destructive');
+      await expect(defaultAction).toBeVisible();
+      await expect(positiveAction).toBeVisible();
+      await expect(destructiveAction).toBeVisible();
+
+      const styles = await Promise.all(
+        [defaultAction, positiveAction, destructiveAction].map((locator) => locator.evaluate((element) => {
+          const computed = window.getComputedStyle(element);
+          return {
+            backgroundColor: computed.backgroundColor,
+            borderColor: computed.borderTopColor,
+            color: computed.color,
+          };
+        }))
+      );
+      const [defaultStyles, positiveStyles, destructiveStyles] = styles;
+
+      expect(defaultStyles.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      expect(positiveStyles.backgroundColor).not.toBe(defaultStyles.backgroundColor);
+      expect(positiveStyles.color).toBe('rgb(255, 255, 255)');
+      expect(destructiveStyles.backgroundColor).toBe('rgb(220, 38, 38)');
+      expect(destructiveStyles.borderColor).toBe('rgb(252, 165, 165)');
+      expect(destructiveStyles.color).toBe('rgb(255, 255, 255)');
+    });
+  }
 
   test('default dark mode keeps adaptive card action borders green and visible', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
