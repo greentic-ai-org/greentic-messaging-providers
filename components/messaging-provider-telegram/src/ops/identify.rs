@@ -7,30 +7,13 @@ use serde_json::Value;
 
 const SECRET_TOKEN_HEADER: &str = "x-telegram-bot-api-secret-token";
 
-/// **Routing discriminator only — not an authentication check.**
-///
-/// Telegram's webhook update body carries the chat and sender but does
-/// not identify the receiving bot — by Telegram's design, the bot is
-/// implicit in the webhook URL the operator registered via
-/// `setWebhook`. The only payload surface that carries a per-bot
-/// discriminator is the `X-Telegram-Bot-Api-Secret-Token` HTTP header,
-/// which Telegram echoes on every inbound when the operator configured
-/// a `secret_token` at `setWebhook` time.
-///
-/// The convention the host expects: the operator declares
-/// `MessagingEndpoint.provider_id = <the same secret token>`. At
-/// inbound time, the host wraps the request as `{headers, body}` (M1
-/// IID.4d wrapper, see
-/// `greentic:provider-instance-identity@0.1.0/identify-instance`),
-/// this function reads the header value, and the host folds it against
-/// the env's `(provider_type, provider_id) → endpoint_id` table.
-///
-/// **Auth is downstream.** The secret token is a shared secret known to
-/// both operator and Telegram. Using it as a routing discriminator is
-/// safe ONLY because the verifying webhook receiver (downstream of this
-/// component) rejects any inbound whose header does not match the
-/// expected token. Without that downstream check, anyone who learns the
-/// token can address that endpoint.
+/// **Routing discriminator only — not an authentication check.** See the
+/// module doc for the host-routing context and the WIT contract at
+/// `greentic:provider-instance-identity@0.1.0/identify-instance` for
+/// the canonical semantics (including how `None` is folded against the
+/// admit table). Downstream auth — Telegram webhook verification
+/// rejecting any inbound whose header does not match the expected
+/// token — MUST run before any event is admitted.
 ///
 /// # Input shape (M1 IID.4d wrapper)
 ///
@@ -49,20 +32,12 @@ const SECRET_TOKEN_HEADER: &str = "x-telegram-bot-api-secret-token";
 ///
 /// Returns `None` when:
 ///
-/// - the input is not JSON
-/// - the wrapper has no `headers` array
-/// - no `x-telegram-bot-api-secret-token` header is present (legacy
-///   bare-body or single-instance setup without `secret_token`
-///   configured)
-/// - the header value is empty (matching `Some("")` against the admit
-///   table is a false-positive trap)
-///
-/// `None` falls back to single-instance behavior at the host: if the
-/// env declares only one Telegram endpoint, the request still admits
-/// via the operator's static `provider_id`; if ≥ 2 are declared, the
-/// resolver poisons to `Ambiguous` and the request is refused 422
-/// (the correct fail-closed outcome — without a discriminator we
-/// cannot route).
+/// - the input is not JSON,
+/// - the wrapper has no `headers` array (legacy bare body — Telegram's
+///   body alone does not identify the receiving bot),
+/// - no `x-telegram-bot-api-secret-token` header is present, or
+/// - the header value is empty / whitespace-only (matching `Some("")`
+///   against the admit table is a false-positive trap).
 pub(crate) fn extract_secret_token(input_json: &[u8]) -> Option<String> {
     let value: Value = serde_json::from_slice(input_json).ok()?;
     secret_token_from_headers(&value)
@@ -231,27 +206,22 @@ mod tests {
     }
 
     #[test]
-    fn returns_none_when_header_value_empty() {
-        let bytes = wrapper(
-            json!([
-                { "name": "x-telegram-bot-api-secret-token", "value": "" }
-            ]),
-            telegram_update(),
-        );
-        // Some("") would match an empty admit-table entry — never do
-        // that. Empty header → None → single-instance fallback.
-        assert!(extract_secret_token(&bytes).is_none());
-    }
-
-    #[test]
-    fn returns_none_when_header_value_only_whitespace() {
-        let bytes = wrapper(
-            json!([
-                { "name": "x-telegram-bot-api-secret-token", "value": "   " }
-            ]),
-            telegram_update(),
-        );
-        assert!(extract_secret_token(&bytes).is_none());
+    fn returns_none_when_header_value_empty_or_whitespace() {
+        // Empty + whitespace both `trim()` to "" — same is_empty() branch.
+        // Some("") would match an empty admit-table entry. Cover both as
+        // a single test asserting the post-trim invariant.
+        for value in ["", "   "] {
+            let bytes = wrapper(
+                json!([
+                    { "name": "x-telegram-bot-api-secret-token", "value": value }
+                ]),
+                telegram_update(),
+            );
+            assert!(
+                extract_secret_token(&bytes).is_none(),
+                "expected None for value={value:?}"
+            );
+        }
     }
 
     #[test]
