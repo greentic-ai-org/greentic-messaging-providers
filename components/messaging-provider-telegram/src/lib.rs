@@ -120,6 +120,14 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
     }
 }
 
+impl bindings::exports::greentic::provider_instance_identity::instance_identity_api::Guest
+    for Component
+{
+    fn identify_instance(input_json: Vec<u8>) -> Option<String> {
+        ops::extract_bot_id(&input_json)
+    }
+}
+
 bindings::export!(Component with_types_in bindings);
 
 // ============================================================================
