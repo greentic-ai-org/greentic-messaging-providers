@@ -372,22 +372,58 @@ fn normalize_notification(notification: &Value) -> Value {
     insert_string(&mut metadata, "body_content", content);
     insert_string(&mut metadata, "body_content_type", content_type);
 
+    let provider_message_id = if message_id.is_empty() {
+        None
+    } else {
+        Some(format!("teams:{message_id}"))
+    };
+    let session_id = destination
+        .as_ref()
+        .map(|(id, _)| id.clone())
+        .or_else(|| ids.chat_id.clone())
+        .or_else(|| ids.channel_id.clone())
+        .or_else(|| ids.team_id.clone())
+        .unwrap_or_else(|| "teams".to_string());
+    let envelope_id = provider_message_id
+        .clone()
+        .unwrap_or_else(|| format!("teams:{session_id}"));
+
     let mut event = Map::new();
+    event.insert("id".to_string(), Value::String(envelope_id));
     event.insert(
-        "provider".to_string(),
-        Value::String("messaging.teams.graph".to_string()),
+        "tenant".to_string(),
+        json!({
+            "env": "default",
+            "tenant": "default",
+            "tenant_id": "default",
+            "attempt": 0
+        }),
     );
-    event.insert("source".to_string(), Value::String("teams".to_string()));
+    event.insert("channel".to_string(), Value::String("teams".to_string()));
+    event.insert("session_id".to_string(), Value::String(session_id));
     if !message_id.is_empty() {
+        metadata.insert(
+            "provider_message_id".to_string(),
+            Value::String(format!("teams:{message_id}")),
+        );
+        metadata.insert(
+            "message_id".to_string(),
+            Value::String(message_id.to_string()),
+        );
         event.insert(
             "provider_message_id".to_string(),
             Value::String(format!("teams:{message_id}")),
         );
+        event.insert(
+            "message_id".to_string(),
+            Value::String(message_id.to_string()),
+        );
     }
-    event.insert(
-        "message_id".to_string(),
-        Value::String(message_id.to_string()),
+    metadata.insert(
+        "provider".to_string(),
+        Value::String("messaging.teams.graph".to_string()),
     );
+    metadata.insert("source".to_string(), Value::String("teams".to_string()));
     event.insert("text".to_string(), Value::String(text));
     insert_optional_actor(&mut event, "from", graph_from_id(resource_data).as_deref());
     insert_optional_destination(&mut event, "to", destination.as_ref());
@@ -1011,6 +1047,12 @@ mod tests {
 
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["events"][0]["text"], "hello");
+        let envelope: greentic_types::ChannelMessageEnvelope =
+            serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
+        assert_eq!(envelope.id, "teams:message-1");
+        assert_eq!(envelope.channel, "teams");
+        assert_eq!(envelope.session_id, "team-1:channel-1");
+        assert_eq!(envelope.text.as_deref(), Some("hello"));
         assert_eq!(
             parsed["events"][0]["provider_message_id"],
             "teams:message-1"
@@ -1050,6 +1092,10 @@ mod tests {
         assert_eq!(event["metadata"]["team_id"], "team-1");
         assert_eq!(event["metadata"]["channel_id"], "19:channel@thread.tacv2");
         assert_eq!(event["provider_message_id"], "teams:1780340545252");
+        let envelope: greentic_types::ChannelMessageEnvelope =
+            serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
+        assert_eq!(envelope.id, "teams:1780340545252");
+        assert_eq!(envelope.session_id, "team-1:19:channel@thread.tacv2");
     }
 
     #[test]
