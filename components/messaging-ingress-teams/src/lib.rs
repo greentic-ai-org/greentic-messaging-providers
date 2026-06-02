@@ -316,11 +316,11 @@ fn normalize_notification(notification: &Value) -> Value {
         content.to_string()
     };
     let destination = if let Some(chat_id) = ids.chat_id.as_ref() {
-        Some(chat_id.clone())
+        Some((chat_id.clone(), "chat"))
     } else if let (Some(team_id), Some(channel_id)) =
         (ids.team_id.as_ref(), ids.channel_id.as_ref())
     {
-        Some(format!("{team_id}:{channel_id}"))
+        Some((format!("{team_id}:{channel_id}"), "channel"))
     } else {
         None
     };
@@ -389,10 +389,44 @@ fn normalize_notification(notification: &Value) -> Value {
         Value::String(message_id.to_string()),
     );
     event.insert("text".to_string(), Value::String(text));
-    insert_optional_string(&mut event, "from", graph_from_id(resource_data).as_deref());
-    insert_optional_string(&mut event, "to", destination.as_deref());
+    insert_optional_actor(&mut event, "from", graph_from_id(resource_data).as_deref());
+    insert_optional_destination(&mut event, "to", destination.as_ref());
     event.insert("metadata".to_string(), Value::Object(metadata));
     Value::Object(event)
+}
+
+fn insert_optional_actor(map: &mut Map<String, Value>, key: &str, id: Option<&str>) {
+    let Some(id) = id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    map.insert(
+        key.to_string(),
+        json!({
+            "id": id,
+            "kind": "user"
+        }),
+    );
+}
+
+fn insert_optional_destination(
+    map: &mut Map<String, Value>,
+    key: &str,
+    destination: Option<&(String, &str)>,
+) {
+    let Some((id, kind)) = destination else {
+        return;
+    };
+    let id = id.trim();
+    if id.is_empty() {
+        return;
+    }
+    map.insert(
+        key.to_string(),
+        json!([{
+            "id": id,
+            "kind": kind
+        }]),
+    );
 }
 
 #[derive(Default)]
@@ -981,8 +1015,10 @@ mod tests {
             parsed["events"][0]["provider_message_id"],
             "teams:message-1"
         );
-        assert_eq!(parsed["events"][0]["to"], "team-1:channel-1");
-        assert_eq!(parsed["events"][0]["from"], "user-1");
+        assert_eq!(parsed["events"][0]["to"][0]["id"], "team-1:channel-1");
+        assert_eq!(parsed["events"][0]["to"][0]["kind"], "channel");
+        assert_eq!(parsed["events"][0]["from"]["id"], "user-1");
+        assert_eq!(parsed["events"][0]["from"]["kind"], "user");
         assert_eq!(parsed["events"][0]["metadata"]["team_id"], "team-1");
         assert_eq!(parsed["events"][0]["metadata"]["channel_id"], "channel-1");
     }
@@ -1009,7 +1045,8 @@ mod tests {
         let event = parsed["events"][0].as_object().expect("event object");
 
         assert!(!event.contains_key("from"));
-        assert_eq!(event["to"], "team-1:19:channel@thread.tacv2");
+        assert_eq!(event["to"][0]["id"], "team-1:19:channel@thread.tacv2");
+        assert_eq!(event["to"][0]["kind"], "channel");
         assert_eq!(event["metadata"]["team_id"], "team-1");
         assert_eq!(event["metadata"]["channel_id"], "19:channel@thread.tacv2");
         assert_eq!(event["provider_message_id"], "teams:1780340545252");

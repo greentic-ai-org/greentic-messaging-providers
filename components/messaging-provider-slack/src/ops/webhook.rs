@@ -1,8 +1,9 @@
 //! Slack app manifest webhook wiring (`setup_webhook`).
 //!
-//! Creates or updates Slack app manifests for setup. The registration op creates
-//! a new Slack app from a manifest and returns its OAuth credentials; the webhook
-//! op updates an existing app's callback URLs.
+//! Creates or updates Slack app manifests for setup. The registration op reuses
+//! a known app with the requested manifest name when available, otherwise it
+//! creates a new Slack app from a manifest. The webhook op updates an existing
+//! app's callback URLs.
 
 use provider_common::helpers::json_bytes;
 use serde_json::{Value, json};
@@ -181,11 +182,23 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
                                 "error": "manifest export auth error after token refresh"
                             }));
                         }
+                        ExportResult::NotFound => {
+                            return json_bytes(&json!({
+                                "ok": false,
+                                "error": "slack_app_id not found; rerun Slack setup to register an app"
+                            }));
+                        }
                         ExportResult::Err(e) => return e,
                     }
                 }
                 Err(e) => return e,
             }
+        }
+        ExportResult::NotFound => {
+            return json_bytes(&json!({
+                "ok": false,
+                "error": "slack_app_id not found; rerun Slack setup to register an app"
+            }));
         }
         ExportResult::Err(e) => return e,
     };
@@ -279,17 +292,17 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         );
     }
 
-    let manifest = registration_manifest(&parsed, public_base_url);
-    let mut body = create_manifest(&config_token, &manifest);
-    if slack_error(&body).is_some_and(is_auth_error) {
-        match try_refresh_token(&config_token, refresh_token.as_deref()) {
-            Ok(new_token) => {
-                config_token = new_token;
-                body = create_manifest(&config_token, &manifest);
-            }
-            Err(err) => return err,
-        }
-    }
+    let desired_manifest = registration_manifest(&parsed, public_base_url);
+    let registration = match register_or_reuse_app(
+        &parsed,
+        &desired_manifest,
+        &mut config_token,
+        refresh_token.as_deref(),
+    ) {
+        Ok(registration) => registration,
+        Err(err) => return err,
+    };
+    let body = registration.response;
     if body.get("ok").and_then(Value::as_bool) != Some(true) {
         let err = slack_error(&body).unwrap_or("unknown");
         return json_bytes(
@@ -297,15 +310,17 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         );
     }
 
-    let app_id = first_string(
-        &body,
-        &[
-            &["app_id"],
-            &["app", "id"],
-            &["app", "app_id"],
-            &["manifest", "app_id"],
-        ],
-    );
+    let app_id = registration.app_id.or_else(|| {
+        first_string(
+            &body,
+            &[
+                &["app_id"],
+                &["app", "id"],
+                &["app", "app_id"],
+                &["manifest", "app_id"],
+            ],
+        )
+    });
     let client_id = first_string(
         &body,
         &[
@@ -315,7 +330,9 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
             &["oauth_config", "client_id"],
             &["client_id"],
         ],
-    );
+    )
+    .or_else(|| first_string(&parsed, &[&["slack_client_id"], &["client_id"]]))
+    .or_else(|| secret_string(DEFAULT_CLIENT_ID_KEY));
     let client_secret = first_string(
         &body,
         &[
@@ -325,7 +342,9 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
             &["oauth_config", "client_secret"],
             &["client_secret"],
         ],
-    );
+    )
+    .or_else(|| first_string(&parsed, &[&["client_secret"], &["slack_client_secret"]]))
+    .or_else(|| secret_string(DEFAULT_CLIENT_SECRET_KEY));
     let signing_secret = first_string(
         &body,
         &[
@@ -334,7 +353,25 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
             &["app", "signing_secret"],
             &["signing_secret"],
         ],
-    );
+    )
+    .or_else(|| first_string(&parsed, &[&["signing_secret"], &["slack_signing_secret"]]))
+    .or_else(|| secret_string(DEFAULT_SIGNING_SECRET_KEY));
+    if registration.reused && client_id.is_none() {
+        return json_bytes(&json!({
+            "ok": false,
+            "error": "existing Slack app was reused but slack_client_id is not available; rerun with prior setup answers or create a new app",
+            "app_id": app_id,
+            "slack_response": body,
+        }));
+    }
+    if signing_secret.is_none() {
+        return json_bytes(&json!({
+            "ok": false,
+            "error": "Slack registration did not return slack_signing_secret; provide a prior Slack signing secret or create a new app registration",
+            "app_id": app_id,
+            "slack_response": body,
+        }));
+    }
     if let Some(app_id) = app_id.as_deref() {
         put_secret_string(DEFAULT_APP_ID_KEY, app_id);
     }
@@ -354,10 +391,102 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         "client_id": client_id,
         "slack_client_id": client_id,
         "client_secret": client_secret,
+        "slack_signing_secret": signing_secret,
         "oauth_authorize_url": body.get("oauth_authorize_url").cloned().unwrap_or(Value::Null),
-        "manifest": manifest,
+        "manifest": registration.manifest,
+        "registration_action": if registration.reused { "reused" } else { "created" },
+        "reused_existing_app": registration.reused,
         "slack_response": body,
     }))
+}
+
+struct RegistrationResult {
+    response: Value,
+    manifest: Value,
+    app_id: Option<String>,
+    reused: bool,
+}
+
+fn register_or_reuse_app(
+    parsed: &Value,
+    desired_manifest: &Value,
+    config_token: &mut String,
+    refresh_token: Option<&str>,
+) -> Result<RegistrationResult, Vec<u8>> {
+    if let Some(existing_app_id) = existing_app_id(parsed)
+        && let Some(export_body) =
+            export_manifest_with_refresh(&existing_app_id, config_token, refresh_token)?
+        && let Some(mut existing_manifest) = export_body.get("manifest").cloned()
+        && same_manifest_name(&existing_manifest, desired_manifest)
+    {
+        merge_registration_manifest(&mut existing_manifest, desired_manifest);
+        let update_body = update_manifest(config_token, &existing_app_id, &existing_manifest);
+        let update_body = if slack_error(&update_body).is_some_and(is_auth_error) {
+            *config_token = try_refresh_token(config_token, refresh_token)?;
+            update_manifest(config_token, &existing_app_id, &existing_manifest)
+        } else {
+            update_body
+        };
+        if update_body.get("ok").and_then(Value::as_bool) != Some(true) {
+            let err = slack_error(&update_body).unwrap_or("unknown");
+            return Err(json_bytes(&json!({
+                "ok": false,
+                "error": format!("manifest update error: {err}"),
+                "slack_response": update_body,
+            })));
+        }
+        return Ok(RegistrationResult {
+            response: update_body,
+            manifest: existing_manifest,
+            app_id: Some(existing_app_id),
+            reused: true,
+        });
+    }
+
+    let body = create_manifest_with_refresh(config_token, refresh_token, desired_manifest)?;
+    Ok(RegistrationResult {
+        response: body,
+        manifest: desired_manifest.clone(),
+        app_id: None,
+        reused: false,
+    })
+}
+
+fn create_manifest_with_refresh(
+    config_token: &mut String,
+    refresh_token: Option<&str>,
+    manifest: &Value,
+) -> Result<Value, Vec<u8>> {
+    let mut body = create_manifest(config_token, manifest);
+    if slack_error(&body).is_some_and(is_auth_error) {
+        *config_token = try_refresh_token(config_token, refresh_token)?;
+        body = create_manifest(config_token, manifest);
+    }
+    Ok(body)
+}
+
+fn export_manifest_with_refresh(
+    app_id: &str,
+    config_token: &mut String,
+    refresh_token: Option<&str>,
+) -> Result<Option<Value>, Vec<u8>> {
+    match export_manifest(app_id, config_token) {
+        ExportResult::Ok(body) => Ok(Some(body)),
+        ExportResult::AuthError => {
+            *config_token = try_refresh_token(config_token, refresh_token)?;
+            match export_manifest(app_id, config_token) {
+                ExportResult::Ok(body) => Ok(Some(body)),
+                ExportResult::AuthError => Err(json_bytes(&json!({
+                    "ok": false,
+                    "error": "manifest export auth error after token refresh"
+                }))),
+                ExportResult::Err(err) => Err(err),
+                ExportResult::NotFound => Ok(None),
+            }
+        }
+        ExportResult::Err(err) => Err(err),
+        ExportResult::NotFound => Ok(None),
+    }
 }
 
 /// Result of an `apps.manifest.export` call.
@@ -366,6 +495,8 @@ enum ExportResult {
     Ok(Value),
     /// Auth error (token expired or invalid) — caller should attempt refresh.
     AuthError,
+    /// Existing app id is invalid or no longer accessible; callers may create.
+    NotFound,
     /// Other error — already serialized as JSON bytes for immediate return.
     Err(Vec<u8>),
 }
@@ -405,6 +536,9 @@ fn export_manifest(app_id: &str, config_token: &str) -> ExportResult {
         .unwrap_or("unknown");
     if err == "invalid_auth" || err == "token_expired" || err == "token_revoked" {
         return ExportResult::AuthError;
+    }
+    if matches!(err, "invalid_app_id" | "app_not_found") {
+        return ExportResult::NotFound;
     }
     ExportResult::Err(json_bytes(
         &json!({"ok": false, "error": format!("manifest export error: {err}")}),
@@ -454,6 +588,11 @@ fn config_access_token_from_input(parsed: &Value) -> Option<String> {
         }
     }
     None
+}
+
+fn existing_app_id(parsed: &Value) -> Option<String> {
+    first_string(parsed, &[&["slack_app_id"], &["app_id"]])
+        .or_else(|| secret_string(DEFAULT_APP_ID_KEY))
 }
 
 fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
@@ -543,6 +682,34 @@ fn create_manifest(config_token: &str, manifest: &Value) -> Value {
     }
 }
 
+fn update_manifest(config_token: &str, app_id: &str, manifest: &Value) -> Value {
+    let resp = client::send(
+        &client::Request {
+            method: "POST".to_string(),
+            url: "https://slack.com/api/apps.manifest.update".to_string(),
+            headers: vec![
+                (
+                    "Authorization".to_string(),
+                    format!("Bearer {config_token}"),
+                ),
+                ("Content-Type".to_string(), "application/json".to_string()),
+            ],
+            body: Some(
+                serde_json::to_vec(&json!({"app_id": app_id, "manifest": manifest.to_string()}))
+                    .unwrap_or_default(),
+            ),
+        },
+        None,
+        None,
+    );
+    match resp {
+        Ok(resp) => serde_json::from_slice(&resp.body.unwrap_or_default()).unwrap_or(Value::Null),
+        Err(err) => {
+            json!({"ok": false, "error": format!("manifest update failed: {}", err.message)})
+        }
+    }
+}
+
 fn first_string(value: &Value, paths: &[&[&str]]) -> Option<String> {
     paths.iter().find_map(|path| {
         let mut current = value;
@@ -563,6 +730,22 @@ fn slack_error(value: &Value) -> Option<&str> {
 
 fn is_auth_error(err: &str) -> bool {
     matches!(err, "invalid_auth" | "token_expired" | "token_revoked")
+}
+
+fn manifest_name(manifest: &Value) -> Option<&str> {
+    manifest
+        .get("display_information")
+        .and_then(|value| value.get("name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn same_manifest_name(existing: &Value, desired: &Value) -> bool {
+    match (manifest_name(existing), manifest_name(desired)) {
+        (Some(existing), Some(desired)) => existing == desired,
+        _ => false,
+    }
 }
 
 #[cfg(not(test))]
@@ -629,6 +812,79 @@ fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
     if let Some(obj) = interactivity.as_object_mut() {
         obj.insert("request_url".to_string(), json!(webhook_url));
         obj.insert("is_enabled".to_string(), json!(true));
+    }
+}
+
+fn merge_registration_manifest(existing: &mut Value, desired: &Value) {
+    let Some(existing_obj) = existing.as_object_mut() else {
+        *existing = desired.clone();
+        return;
+    };
+    let Some(desired_obj) = desired.as_object() else {
+        return;
+    };
+
+    merge_object(existing_obj, desired_obj, "display_information");
+    merge_object(existing_obj, desired_obj, "features");
+    merge_object(existing_obj, desired_obj, "settings");
+    merge_oauth_config(existing_obj, desired_obj);
+}
+
+fn merge_object(
+    existing_obj: &mut serde_json::Map<String, Value>,
+    desired_obj: &serde_json::Map<String, Value>,
+    key: &str,
+) {
+    let Some(desired_value) = desired_obj.get(key) else {
+        return;
+    };
+    let existing_value = existing_obj
+        .entry(key.to_string())
+        .or_insert_with(|| json!({}));
+    merge_value(existing_value, desired_value);
+}
+
+fn merge_oauth_config(
+    existing_obj: &mut serde_json::Map<String, Value>,
+    desired_obj: &serde_json::Map<String, Value>,
+) {
+    let Some(desired_oauth) = desired_obj.get("oauth_config") else {
+        return;
+    };
+    let existing_oauth = existing_obj
+        .entry("oauth_config".to_string())
+        .or_insert_with(|| json!({}));
+    merge_value(existing_oauth, desired_oauth);
+}
+
+fn merge_value(existing: &mut Value, desired: &Value) {
+    match (existing, desired) {
+        (Value::Object(existing_obj), Value::Object(desired_obj)) => {
+            for (key, desired_value) in desired_obj {
+                let existing_value = existing_obj
+                    .entry(key.clone())
+                    .or_insert_with(|| empty_like(desired_value));
+                merge_value(existing_value, desired_value);
+            }
+        }
+        (Value::Array(existing_items), Value::Array(desired_items)) => {
+            for desired_item in desired_items {
+                if !existing_items.iter().any(|item| item == desired_item) {
+                    existing_items.push(desired_item.clone());
+                }
+            }
+        }
+        (existing_value, desired_value) => {
+            *existing_value = desired_value.clone();
+        }
+    }
+}
+
+fn empty_like(value: &Value) -> Value {
+    match value {
+        Value::Object(_) => json!({}),
+        Value::Array(_) => json!([]),
+        _ => Value::Null,
     }
 }
 
@@ -732,6 +988,93 @@ mod tests {
                 .expect("bot scopes")
                 .iter()
                 .any(|scope| scope.as_str() == Some("chat:write"))
+        );
+    }
+
+    #[test]
+    fn manifest_name_matching_requires_same_display_name() {
+        let existing = json!({"display_information": {"name": "Greentic Demo"}});
+        let same = json!({"display_information": {"name": "Greentic Demo"}});
+        let different = json!({"display_information": {"name": "Other App"}});
+
+        assert!(same_manifest_name(&existing, &same));
+        assert!(!same_manifest_name(&existing, &different));
+    }
+
+    #[test]
+    fn merge_registration_manifest_adds_missing_oauth_scopes_without_dropping_existing() {
+        let desired = registration_manifest(
+            &json!({
+                "provider_id": "messaging-slack",
+                "tenant": "demo",
+                "team": "support",
+                "slack_app_name": "Greentic Demo"
+            }),
+            "https://example.com/",
+        );
+        let mut existing = json!({
+            "display_information": {"name": "Greentic Demo"},
+            "oauth_config": {
+                "redirect_urls": ["https://old.example/oauth/callback/slack"],
+                "scopes": {"bot": ["files:read", "chat:write"]}
+            },
+            "settings": {
+                "event_subscriptions": {
+                    "request_url": "https://old.example/events",
+                    "bot_events": ["app_mention"]
+                }
+            }
+        });
+
+        merge_registration_manifest(&mut existing, &desired);
+
+        let bot_scopes = existing["oauth_config"]["scopes"]["bot"]
+            .as_array()
+            .expect("bot scopes");
+        for scope in [
+            "files:read",
+            "chat:write",
+            "channels:read",
+            "channels:history",
+            "channels:join",
+            "im:history",
+            "im:write",
+        ] {
+            assert!(
+                bot_scopes.iter().any(|value| value.as_str() == Some(scope)),
+                "missing scope {scope}"
+            );
+        }
+        let redirect_urls = existing["oauth_config"]["redirect_urls"]
+            .as_array()
+            .expect("redirect urls");
+        assert!(
+            redirect_urls
+                .iter()
+                .any(|value| value.as_str() == Some("https://old.example/oauth/callback/slack"))
+        );
+        assert!(
+            redirect_urls
+                .iter()
+                .any(|value| value.as_str() == Some("https://example.com/oauth/callback/slack"))
+        );
+        assert_eq!(
+            existing["settings"]["event_subscriptions"]["request_url"],
+            "https://example.com/v1/messaging/ingress/messaging-slack/demo/support"
+        );
+        assert!(
+            existing["settings"]["event_subscriptions"]["bot_events"]
+                .as_array()
+                .expect("bot events")
+                .iter()
+                .any(|value| value.as_str() == Some("message.im"))
+        );
+        assert!(
+            existing["settings"]["event_subscriptions"]["bot_events"]
+                .as_array()
+                .expect("bot events")
+                .iter()
+                .any(|value| value.as_str() == Some("app_mention"))
         );
     }
 

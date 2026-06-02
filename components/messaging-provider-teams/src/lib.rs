@@ -633,6 +633,55 @@ mod tests {
     }
 
     #[test]
+    fn apply_answers_reuses_existing_channel_matching_desired_name() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "setup_mode": "graph_channel",
+            "tenant_id": "tenant",
+            "client_id": "client",
+            "access_token": "token",
+            "team_id": "team-123",
+            "team_name": "Engineering",
+            "channel_id": "19:general@thread.tacv2",
+            "channel_name": "General",
+            "desired_channel_name": "Engineering Updates"
+        });
+
+        let out = crate::ops::with_http_send_mock(
+            |req| {
+                assert_eq!(req.method, "GET", "existing channel should be reused");
+                assert_eq!(
+                    req.url,
+                    "https://graph.microsoft.com/v1.0/teams/team-123/channels"
+                );
+                Ok(crate::bindings::greentic::http::http_client::Response {
+                    status: 200,
+                    headers: vec![],
+                    body: Some(
+                        br#"{"value":[{"id":"19:engineering-updates@thread.tacv2","displayName":"Engineering Updates"}]}"#.to_vec(),
+                    ),
+                })
+            },
+            || <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers)),
+        );
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        let config = out_json.get("config").expect("config object");
+        assert_eq!(
+            config.get("channel_id"),
+            Some(&Value::String(
+                "19:engineering-updates@thread.tacv2".to_string()
+            ))
+        );
+        assert_eq!(
+            config.get("channel_name"),
+            Some(&Value::String("Engineering Updates".to_string()))
+        );
+        assert_eq!(out_json.get("diagnostics"), Some(&json!([])));
+    }
+
+    #[test]
     fn apply_answers_accepts_channel_name_as_default_hint_without_channel_id_override() {
         use bindings::exports::greentic::component::qa::Guest as QaGuest;
         use bindings::exports::greentic::component::qa::Mode;
