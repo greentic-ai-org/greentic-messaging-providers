@@ -33,7 +33,18 @@ use serde_json::Value;
 ///   `body`, or an already-decoded JSON object in `body`).
 pub(crate) fn extract_recipient_id(input_json: &[u8]) -> Option<String> {
     let value: Value = serde_json::from_slice(input_json).ok()?;
-    recipient_id_from(&value).or_else(|| recipient_id_from_http_envelope(&value))
+    if let Some(id) = recipient_id_from(&value) {
+        return Some(id);
+    }
+    // HTTP wrapper: body may be an already-decoded JSON object (borrow
+    // directly — no clone), a JSON array of bytes, or absent with
+    // base64 in `body_b64`.
+    if let Some(body) = value.get("body").filter(|b| b.is_object()) {
+        return recipient_id_from(body);
+    }
+    let bytes = http_body_bytes(&value)?;
+    let parsed: Value = serde_json::from_slice(&bytes).ok()?;
+    recipient_id_from(&parsed)
 }
 
 fn recipient_id_from(value: &Value) -> Option<String> {
@@ -44,30 +55,13 @@ fn recipient_id_from(value: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn recipient_id_from_http_envelope(value: &Value) -> Option<String> {
-    let body_value = decoded_body(value)?;
-    recipient_id_from(&body_value)
-}
-
-fn decoded_body(value: &Value) -> Option<Value> {
-    if let Some(body) = value.get("body").and_then(Value::as_object) {
-        return Some(Value::Object(body.clone()));
-    }
-    if let Some(arr) = value.get("body").and_then(Value::as_array) {
-        let bytes: Vec<u8> = arr
-            .iter()
-            .map(|v| u8::try_from(v.as_u64()?).ok())
-            .collect::<Option<Vec<u8>>>()?;
-        return serde_json::from_slice(&bytes).ok();
+fn http_body_bytes(value: &Value) -> Option<Vec<u8>> {
+    if let Some(Value::Array(arr)) = value.get("body") {
+        return arr.iter().map(|v| u8::try_from(v.as_u64()?).ok()).collect();
     }
     let b64 = value.get("body_b64").and_then(Value::as_str)?;
-    let bytes = decode_b64(b64)?;
-    serde_json::from_slice(&bytes).ok()
-}
-
-fn decode_b64(input: &str) -> Option<Vec<u8>> {
     use base64::Engine;
-    base64::engine::general_purpose::STANDARD.decode(input).ok()
+    base64::engine::general_purpose::STANDARD.decode(b64).ok()
 }
 
 #[cfg(test)]
