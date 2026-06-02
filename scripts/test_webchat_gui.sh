@@ -144,7 +144,12 @@ if [ ! -f "${ASSET_DIR}/skins/${SKIN}/skin.json" ]; then
   exit 1
 fi
 
-python3 - "${ASSET_DIR}" "${SKIN}" "${DEMO_LINKS}" "${TEXT_INPUT}" "${LOGIN_REQUIRED}" "${NAV_LINKS_JSON}" "${NAV_LINK_ARGS[@]}" <<'PY'
+PY_ARGS=("${ASSET_DIR}" "${SKIN}" "${DEMO_LINKS}" "${TEXT_INPUT}" "${LOGIN_REQUIRED}" "${NAV_LINKS_JSON}")
+if [ "${#NAV_LINK_ARGS[@]}" -gt 0 ]; then
+  PY_ARGS+=("${NAV_LINK_ARGS[@]}")
+fi
+
+python3 - "${PY_ARGS[@]}" <<'PY'
 from __future__ import annotations
 
 import json
@@ -824,9 +829,25 @@ def sample_adaptive_card_activity() -> dict:
                     "actions": [
                         {
                             "type": "Action.Submit",
-                            "title": "Show next card",
+                            "title": "Default action",
                             "data": {
-                                "action": "show_followup_card",
+                                "action": "sample_default",
+                            },
+                        },
+                        {
+                            "type": "Action.Submit",
+                            "title": "Positive action",
+                            "style": "positive",
+                            "data": {
+                                "action": "sample_positive",
+                            },
+                        },
+                        {
+                            "type": "Action.Submit",
+                            "title": "Destructive action",
+                            "style": "destructive",
+                            "data": {
+                                "action": "sample_destructive",
                             },
                         }
                     ],

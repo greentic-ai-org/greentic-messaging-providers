@@ -52,9 +52,9 @@
     {
       "name": "messaging-webchat-gui",
       "file": "dist/packs/messaging-webchat-gui.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:0.5.6",
-      "digest": "sha256:36d88190f26fc69d0081f8c7a88667b24e26b72e08d6155545705f2d308e55fc",
-      "built_at": "2026-06-02T07:59:09Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-webchat-gui:0.5.7",
+      "digest": "sha256:d32f68d091f43aeab818cf58edc5b29a7d45538418a50c5147fad75919e6a295",
+      "built_at": "2026-06-02T11:56:49Z"
     },
     {
       "name": "messaging-webex",

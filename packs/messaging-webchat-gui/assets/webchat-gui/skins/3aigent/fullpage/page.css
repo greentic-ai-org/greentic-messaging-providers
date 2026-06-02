@@ -655,12 +655,24 @@ button[aria-label*="Upload" i] {
    dark panels. Force brand-tinted styling. */
 [data-theme="dark"] .ac-pushButton,
 :root:not([data-theme="light"]) .ac-pushButton {
-  background: var(--brand-muted) !important;
+  background: transparent !important;
   color: var(--brand-light) !important;
   border: 1px solid var(--brand-border) !important;
   border-radius: 8px !important;
   font-family: var(--font) !important;
   font-weight: 500 !important;
+}
+[data-theme="dark"] .ac-pushButton.style-positive,
+:root:not([data-theme="light"]) .ac-pushButton.style-positive {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  border-color: var(--brand-light) !important;
+}
+[data-theme="dark"] .ac-pushButton.style-destructive,
+:root:not([data-theme="light"]) .ac-pushButton.style-destructive {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #fca5a5 !important;
 }
 [data-theme="dark"] .ac-pushButton:hover,
 :root:not([data-theme="light"]) .ac-pushButton:hover {
@@ -668,18 +680,54 @@ button[aria-label*="Upload" i] {
   color: var(--text-primary) !important;
   border-color: var(--brand) !important;
 }
+[data-theme="dark"] .ac-pushButton.style-positive:hover,
+:root:not([data-theme="light"]) .ac-pushButton.style-positive:hover {
+  background: var(--brand-dark) !important;
+  color: #ffffff !important;
+  border-color: var(--brand-light) !important;
+}
+[data-theme="dark"] .ac-pushButton.style-destructive:hover,
+:root:not([data-theme="light"]) .ac-pushButton.style-destructive:hover {
+  background: #b91c1c !important;
+  color: #ffffff !important;
+  border-color: #fecaca !important;
+}
 [data-theme="light"] .ac-pushButton {
-  background: var(--brand-muted) !important;
+  background: transparent !important;
   color: var(--brand-dark) !important;
   border: 1px solid var(--brand-border) !important;
   border-radius: 8px !important;
   font-family: var(--font) !important;
   font-weight: 500 !important;
 }
+[data-theme="light"] .ac-pushButton.style-positive {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  border-color: var(--brand-light) !important;
+}
+[data-theme="light"] .ac-pushButton.style-destructive {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #fca5a5 !important;
+}
 [data-theme="light"] .ac-pushButton:hover {
   background: var(--brand-glow) !important;
   color: var(--brand-dark) !important;
   border-color: var(--brand) !important;
+}
+[data-theme="light"] .ac-pushButton.style-positive:hover {
+  background: var(--brand-dark) !important;
+  color: #ffffff !important;
+  border-color: var(--brand-light) !important;
+}
+[data-theme="light"] .ac-pushButton.style-destructive:hover {
+  background: #b91c1c !important;
+  color: #ffffff !important;
+  border-color: #fecaca !important;
+}
+.ac-pushButton.style-positive *,
+.ac-pushButton.style-destructive * {
+  color: #ffffff !important;
 }
 
 [data-theme="light"] .webchat__bubble__content .ac-adaptiveCard,

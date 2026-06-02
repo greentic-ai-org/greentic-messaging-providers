@@ -60,9 +60,21 @@
       type: 'button',
       class: 'ac-pushButton',
       'data-testid': 'adaptive-card-action',
-      text: 'Adaptive Cards docs',
+      text: 'Default action',
     });
-    actionSet.appendChild(actionButton);
+    var positiveActionButton = createElement('button', {
+      type: 'button',
+      class: 'ac-pushButton style-positive',
+      'data-testid': 'adaptive-card-action-positive',
+      text: 'Positive action',
+    });
+    var destructiveActionButton = createElement('button', {
+      type: 'button',
+      class: 'ac-pushButton style-destructive',
+      'data-testid': 'adaptive-card-action-destructive',
+      text: 'Destructive action',
+    });
+    actionSet.append(actionButton, positiveActionButton, destructiveActionButton);
     card.append(title, linkText, actionSet);
     content.appendChild(card);
     bubble.appendChild(content);
