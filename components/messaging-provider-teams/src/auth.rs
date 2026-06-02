@@ -54,6 +54,10 @@ pub(crate) fn acquire_graph_token(cfg: &ProviderConfig) -> Result<String, String
         return Ok(token);
     }
 
+    acquire_graph_token_from_refresh(cfg)
+}
+
+pub(crate) fn acquire_graph_token_from_refresh(cfg: &ProviderConfig) -> Result<String, String> {
     let refresh_token = cfg
         .refresh_token
         .clone()

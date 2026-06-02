@@ -7,7 +7,7 @@ use provider_common::helpers::{json_bytes, send_payload_error};
 use serde_json::{Value, json};
 
 use crate::PROVIDER_TYPE;
-use crate::auth::acquire_graph_token;
+use crate::auth::{acquire_graph_token, acquire_graph_token_from_refresh};
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::{
     ProviderConfig, default_channel_destination, default_chat_destination, load_config,
@@ -51,7 +51,8 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         Ok(env) => env,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
-    let (text, content_type) = match message_content(&parsed, &envelope) {
+    let card = adaptive_card(&parsed);
+    let (text, content_type) = match message_content(&parsed, &envelope, card.as_ref()) {
         Ok(value) => value,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
@@ -59,7 +60,14 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         Ok(dest) => dest,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
-    graph_send(&cfg, destination, &text, &content_type, "sent")
+    graph_send(
+        &cfg,
+        destination,
+        &text,
+        &content_type,
+        card.as_ref(),
+        "sent",
+    )
 }
 
 pub(crate) fn handle_reply(input_json: &[u8]) -> Vec<u8> {
@@ -98,7 +106,7 @@ pub(crate) fn handle_reply(input_json: &[u8]) -> Vec<u8> {
         },
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
-    graph_send(&cfg, destination, &text, &content_type, "replied")
+    graph_send(&cfg, destination, &text, &content_type, None, "replied")
 }
 
 pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
@@ -157,6 +165,7 @@ fn graph_send(
     destination: GraphDestination,
     text: &str,
     content_type: &str,
+    card: Option<&Value>,
     status: &str,
 ) -> Vec<u8> {
     let token = match acquire_graph_token(cfg) {
@@ -164,11 +173,19 @@ fn graph_send(
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
     let url = graph_url(cfg, &destination);
-    let body = graph_message_body(text, content_type);
-    let resp = match graph_post(&url, &token, &body) {
+    let body = graph_message_body(text, content_type, card);
+    let mut resp = match graph_post(&url, &token, &body) {
         Ok(resp) => resp,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
+    if resp.status == 401
+        && let Ok(refreshed_token) = acquire_graph_token_from_refresh(cfg)
+    {
+        resp = match graph_post(&url, &refreshed_token, &body) {
+            Ok(resp) => resp,
+            Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
+        };
+    }
 
     if resp.status < 200 || resp.status >= 300 {
         let err_body = resp
@@ -231,7 +248,24 @@ fn graph_url(cfg: &ProviderConfig, destination: &GraphDestination) -> String {
     }
 }
 
-fn graph_message_body(text: &str, content_type: &str) -> Value {
+fn graph_message_body(text: &str, content_type: &str, card: Option<&Value>) -> Value {
+    if let Some(card) = card {
+        let attachment_id = "greentic-adaptive-card-1";
+        return json!({
+            "subject": null,
+            "body": {
+                "contentType": "html",
+                "content": format!("<attachment id=\"{attachment_id}\"></attachment>")
+            },
+            "attachments": [{
+                "id": attachment_id,
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "contentUrl": null,
+                "content": serde_json::to_string(card).unwrap_or_else(|_| "{}".to_string())
+            }],
+            "summary": text
+        });
+    }
     json!({
         "body": {
             "contentType": if content_type.eq_ignore_ascii_case("html") { "html" } else { "text" },
@@ -275,6 +309,7 @@ fn parse_or_build_envelope(
 fn message_content(
     parsed: &Value,
     envelope: &ChannelMessageEnvelope,
+    card: Option<&Value>,
 ) -> Result<(String, String), String> {
     let content_type = content_type(parsed);
     let text = string_field(parsed, "html")
@@ -282,23 +317,26 @@ fn message_content(
         .or_else(|| string_field(parsed, "text"))
         .or_else(|| envelope.text.as_ref().map(|value| value.trim().to_string()))
         .filter(|value| !value.is_empty())
-        .or_else(|| adaptive_card_fallback(parsed));
+        .or_else(|| card.map(adaptive_card_fallback));
     text.map(|value| (value, content_type))
         .ok_or_else(|| "text or adaptive_card fallback required".to_string())
 }
 
-fn adaptive_card_fallback(parsed: &Value) -> Option<String> {
-    let card = parsed
+fn adaptive_card(parsed: &Value) -> Option<Value> {
+    parsed
         .get("_ac_json")
         .and_then(Value::as_str)
-        .and_then(|s| serde_json::from_str::<Value>(s).ok())?;
+        .and_then(|s| serde_json::from_str::<Value>(s).ok())
+}
+
+fn adaptive_card_fallback(card: &Value) -> String {
     let mut parts = Vec::new();
     collect_card_text(&card, &mut parts);
     let text = parts.join("\n");
     if text.trim().is_empty() {
-        Some("[Adaptive Card]".to_string())
+        "[Adaptive Card]".to_string()
     } else {
-        Some(text)
+        text
     }
 }
 
@@ -575,13 +613,40 @@ mod tests {
     #[test]
     fn graph_message_body_uses_graph_chat_message_shape() {
         assert_eq!(
-            graph_message_body("hello", "text"),
+            graph_message_body("hello", "text", None),
             json!({"body": {"contentType": "text", "content": "hello"}})
         );
         assert_eq!(
-            graph_message_body("<b>hello</b>", "html"),
+            graph_message_body("<b>hello</b>", "html", None),
             json!({"body": {"contentType": "html", "content": "<b>hello</b>"}})
         );
+    }
+
+    #[test]
+    fn graph_message_body_sends_adaptive_card_as_graph_attachment() {
+        let body = graph_message_body(
+            "fallback",
+            "text",
+            Some(&json!({
+                "type": "AdaptiveCard",
+                "version": "1.3",
+                "body": [{"type": "TextBlock", "text": "hello"}]
+            })),
+        );
+
+        assert_eq!(body["body"]["contentType"], "html");
+        assert_eq!(
+            body["body"]["content"],
+            "<attachment id=\"greentic-adaptive-card-1\"></attachment>"
+        );
+        assert_eq!(
+            body["attachments"][0]["contentType"],
+            "application/vnd.microsoft.card.adaptive"
+        );
+        let card: Value = serde_json::from_str(body["attachments"][0]["content"].as_str().unwrap())
+            .expect("card content json");
+        assert_eq!(card["type"], "AdaptiveCard");
+        assert_eq!(body["summary"], "fallback");
     }
 
     #[test]
