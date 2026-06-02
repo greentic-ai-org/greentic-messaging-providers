@@ -12,6 +12,7 @@ use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 mod bindings {
     wit_bindgen::generate!({
@@ -182,6 +183,8 @@ struct ApplyAnswersResult {
     remove: Option<RemovePlan>,
     diagnostics: Vec<String>,
     error: Option<String>,
+    #[serde(flatten)]
+    runtime_answers: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,6 +208,7 @@ fn apply_answers_impl(
                 remove: None,
                 diagnostics: Vec::new(),
                 error: Some(format!("invalid answers cbor: {err}")),
+                runtime_answers: BTreeMap::new(),
             });
         }
     };
@@ -225,6 +229,7 @@ fn apply_answers_impl(
             }),
             diagnostics: Vec::new(),
             error: None,
+            runtime_answers: BTreeMap::new(),
         });
     }
 
@@ -358,6 +363,7 @@ fn apply_answers_impl(
                     remove: None,
                     diagnostics: Vec::new(),
                     error: Some(error),
+                    runtime_answers: BTreeMap::new(),
                 });
             }
         }
@@ -372,11 +378,13 @@ fn apply_answers_impl(
             remove: None,
             diagnostics: Vec::new(),
             error: Some(error),
+            runtime_answers: BTreeMap::new(),
         });
     }
 
     canonical_cbor_bytes(&ApplyAnswersResult {
         ok: true,
+        runtime_answers: runtime_answers_from_config(&merged),
         config: Some(merged),
         remove: None,
         diagnostics: if channel_created {
@@ -386,6 +394,30 @@ fn apply_answers_impl(
         },
         error: None,
     })
+}
+
+fn runtime_answers_from_config(config: &ProviderConfigOut) -> BTreeMap<String, String> {
+    let mut answers = BTreeMap::new();
+    insert_non_empty(&mut answers, "tenant_id", Some(config.tenant_id.as_str()));
+    insert_non_empty(&mut answers, "client_id", Some(config.client_id.as_str()));
+    insert_non_empty(&mut answers, "team_id", config.team_id.as_deref());
+    insert_non_empty(&mut answers, "team_name", config.team_name.as_deref());
+    insert_non_empty(&mut answers, "channel_id", config.channel_id.as_deref());
+    insert_non_empty(&mut answers, "channel_name", config.channel_name.as_deref());
+    insert_non_empty(
+        &mut answers,
+        "desired_channel_name",
+        config.desired_channel_name.as_deref(),
+    );
+    insert_non_empty(&mut answers, "chat_id", config.chat_id.as_deref());
+    insert_non_empty(&mut answers, "user_id", config.user_id.as_deref());
+    answers
+}
+
+fn insert_non_empty(map: &mut BTreeMap<String, String>, key: &str, value: Option<&str>) {
+    if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+        map.insert(key.to_string(), value.to_string());
+    }
 }
 
 fn existing_config_from_answers(answers: &Value) -> Option<ProviderConfigOut> {
@@ -630,6 +662,34 @@ mod tests {
             out_json.get("diagnostics"),
             Some(&json!(["created Teams channel from desired_channel_name"]))
         );
+    }
+
+    #[test]
+    fn apply_answers_exposes_subscription_source_fields_at_top_level() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "setup_mode": "graph_channel",
+            "tenant_id": "tenant",
+            "client_id": "client",
+            "team_id": "team-123",
+            "team_name": "Engineering",
+            "channel_id": "19:general@thread.tacv2",
+            "channel_name": "General",
+            "chat_id": "chat-123"
+        });
+
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        assert_eq!(out_json["tenant_id"], "tenant");
+        assert_eq!(out_json["client_id"], "client");
+        assert_eq!(out_json["team_id"], "team-123");
+        assert_eq!(out_json["team_name"], "Engineering");
+        assert_eq!(out_json["channel_id"], "19:general@thread.tacv2");
+        assert_eq!(out_json["channel_name"], "General");
+        assert_eq!(out_json["chat_id"], "chat-123");
     }
 
     #[test]

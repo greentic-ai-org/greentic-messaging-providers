@@ -31,9 +31,9 @@
     {
       "name": "messaging-teams",
       "file": "dist/packs/messaging-teams.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.5.12",
-      "digest": "sha256:8d9c552b0d8e5d567750d714aebe98df7ff47003c7258d91a172f0252c58c8ca",
-      "built_at": "2026-06-02T08:24:33Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.5.13",
+      "digest": "sha256:790b3b298a884cebe3297f2112ffc98d379a0f212b19a3b899ba422aa187d590",
+      "built_at": "2026-06-02T12:22:32Z"
     },
     {
       "name": "messaging-telegram",
