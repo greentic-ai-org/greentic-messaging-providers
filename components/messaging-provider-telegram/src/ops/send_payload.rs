@@ -53,15 +53,48 @@ pub(crate) fn forward_send_payload(payload: &Value) -> Result<(), String> {
         .get("ok")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if ok {
-        Ok(())
-    } else {
+    if !ok {
         let message = result_value
             .get("error")
             .and_then(Value::as_str)
             .map(|s| s.to_string())
             .unwrap_or_else(|| "send_payload failed".to_string());
-        Err(message)
+        return Err(message);
+    }
+    check_media_results(&result_value)
+}
+
+// `handle_send` reports the final text/photo/group send as the top-level `ok`,
+// but attaches per-media outcomes in the `media` array whose failures are not
+// reflected there. Flow-based callers may want that partial-success shape, but
+// the new-model host egress treats `ok: true` as a successful delivery and
+// will not retry — silently losing media. Downgrade to a retriable failure
+// here so the host's reply-egress doesn't ack a partial send.
+pub(crate) fn check_media_results(result_value: &Value) -> Result<(), String> {
+    let Some(media) = result_value.get("media").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    let failures: Vec<String> = media
+        .iter()
+        .filter(|m| m.get("ok").and_then(Value::as_bool) == Some(false))
+        .map(|m| {
+            let detail = m
+                .get("error")
+                .or_else(|| m.get("detail"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown error");
+            detail.to_string()
+        })
+        .collect();
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "media send failed ({} of {}): [{}]",
+            failures.len(),
+            media.len(),
+            failures.join("; ")
+        ))
     }
 }
 
@@ -237,5 +270,37 @@ mod tests {
 
         assert_eq!(body["ok"], false);
         assert_eq!(body["error"], "text required");
+    }
+
+    #[test]
+    fn check_media_results_passes_when_no_media_array() {
+        let value = json!({ "ok": true });
+        assert!(check_media_results(&value).is_ok());
+    }
+
+    #[test]
+    fn check_media_results_passes_when_all_media_ok() {
+        let value = json!({
+            "ok": true,
+            "media": [
+                { "ok": true, "response": {} },
+                { "ok": true, "response": {} },
+            ],
+        });
+        assert!(check_media_results(&value).is_ok());
+    }
+
+    #[test]
+    fn check_media_results_downgrades_when_any_media_failed() {
+        let value = json!({
+            "ok": true,
+            "media": [
+                { "ok": true, "response": {} },
+                { "ok": false, "error": "sendPhoto returned status 400" },
+            ],
+        });
+        let err = check_media_results(&value).expect_err("must downgrade");
+        assert!(err.contains("media send failed"));
+        assert!(err.contains("sendPhoto returned status 400"));
     }
 }

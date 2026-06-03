@@ -108,7 +108,7 @@
     "provider": {
       "provider_type": "messaging.email.smtp",
       "capabilities": ["messaging"],
-      "ops": ["send", "reply", "render_plan", "encode", "send_payload", "qa-spec", "apply-answers", "i18n-keys"],
+      "ops": ["send", "reply", "qa-spec", "apply-answers", "i18n-keys"],
       "config_schema_ref": "schemas/messaging/email/public.config.schema.json",
       "runtime": {
         "component_ref": "messaging-provider-email",
