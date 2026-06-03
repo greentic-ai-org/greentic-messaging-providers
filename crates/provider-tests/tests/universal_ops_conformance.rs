@@ -9,7 +9,7 @@ use provider_tests::universal::{
     build_envelope, decode_challenge, http_input_from_fixture, load_http_fixture, provider_spec,
     send_payload_in,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 // Compile-time WIT contract validation — these bindings are not called at
 // runtime but verify that the WASM components match the expected world shape.
@@ -80,7 +80,17 @@ fn universal_ops_conformance() -> Result<()> {
         // --- ingest ---
         if spec.ingest_supported {
             let fixture = load_http_fixture(spec.fixture)?;
-            let http_in = http_input_from_fixture(fixture);
+            let mut http_in = http_input_from_fixture(fixture);
+            // Teams ingest fails-closed without a config (#228). Inject the same
+            // dev bypass the JWT validator unit tests use; the env-gate is set
+            // globally in TestHostState::with_secrets.
+            if spec.id == ProviderId::Teams {
+                http_in.config = Some(json!({
+                    "setup_mode": "bot_framework",
+                    "ms_bot_app_id": "test-bot-app-id",
+                    "skip_jwt_validation": true,
+                }));
+            }
             let ingest_bytes = serde_json::to_vec(&http_in)?;
             let ingest_out = harness.call("ingest_http", ingest_bytes)?;
             let ingest_value: Value = serde_json::from_slice(&ingest_out)?;
