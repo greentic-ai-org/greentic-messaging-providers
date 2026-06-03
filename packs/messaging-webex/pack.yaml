@@ -290,6 +290,9 @@ extensions:
         - send
         - reply
         - ingest_http
+        - render_plan
+        - encode
+        - send_payload
         - setup_webhook
         - qa-spec
         - apply-answers
