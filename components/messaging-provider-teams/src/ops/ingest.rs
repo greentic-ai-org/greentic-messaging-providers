@@ -338,10 +338,10 @@ mod tests {
     };
     use greentic_types::messaging::universal_dto::{Header, HttpInV1};
 
-    fn unsigned_token(claims: serde_json::Value) -> String {
-        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none"}"#);
+    fn fake_signed_token(claims: serde_json::Value) -> String {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"RS256","typ":"JWT"}"#);
         let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap());
-        format!("{header}.{payload}.")
+        format!("{header}.{payload}.placeholder-sig")
     }
 
     fn valid_token(app_id: &str) -> String {
@@ -349,7 +349,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        unsigned_token(json!({
+        fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": app_id,
             "exp": now + 3600,
@@ -475,7 +475,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": now - crate::auth::CLOCK_SKEW_SECS - 1,
@@ -491,7 +491,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": now - 60,
@@ -507,7 +507,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://evil.example.com",
             "aud": "bot-app-id",
             "exp": now + 3600,
@@ -526,10 +526,18 @@ mod tests {
         assert!(!body["events"].as_array().unwrap().is_empty());
     }
 
+    /// Env-var gate for skip_jwt_validation is unit-tested in config::tests
+    /// (skip_jwt_validation_without_env_var_rejected / _with_env_var_accepted).
+    /// Integration-level ingest test exercises the happy path only to avoid
+    /// env-var races under parallel test execution.
     #[test]
-    fn ingest_skip_validation_true_accepts_invalid() {
+    fn ingest_skip_validation_with_env_var_accepts_invalid() {
+        // SAFETY: test-only; tests that touch this env var must run serialized
+        // or accept the race. The config-level tests cover the rejection path.
+        unsafe { std::env::set_var("GREENTIC_TEAMS_INSECURE_DEV", "1") };
         let input = build_ingest_input(Some("Bearer not-a-jwt"), Some("bot-app-id"), Some(true));
         let (status, _) = parse_response(ingest_http(&input));
         assert_eq!(status, 200);
+        unsafe { std::env::remove_var("GREENTIC_TEAMS_INSECURE_DEV") };
     }
 }

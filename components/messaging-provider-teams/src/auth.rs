@@ -160,17 +160,29 @@ fn send_token_request(url: &str, form: &str) -> Result<String, String> {
     Ok(token.to_string())
 }
 
+/// JWT header (only the fields we inspect).
+#[derive(Debug, Deserialize)]
+struct BotHeader {
+    alg: Option<String>,
+}
+
 /// Validates a JWT token from Bot Framework webhooks.
 ///
-/// Phase 1 implementation: Decode-only validation (for dev/testing).
-/// - Decodes the JWT payload without cryptographic verification
+/// Phase 1: claim validation + alg:none rejection (no cryptographic verify).
+/// - Rejects `alg:none` and empty/missing algorithm
+/// - Rejects tokens with an empty signature segment
 /// - Validates audience matches Bot App ID
-/// - Validates expiration time
+/// - Requires and validates expiration time
 /// - Validates issuer is in the allowed list
 ///
-/// Note: Full validation would require fetching Microsoft's public keys from
-/// `https://login.botframework.com/v1/.well-known/keys` and verifying the signature.
+/// Phase 2 (follow-up): RSA signature verification against Bot Framework JWKS.
 pub(crate) fn validate_jwt(token: &str, app_id: &str) -> Result<BotClaims, String> {
+    let header = decode_jwt_header(token)?;
+    let alg = header.alg.as_deref().unwrap_or("").trim();
+    if alg.eq_ignore_ascii_case("none") || alg.is_empty() {
+        return Err("rejected: alg:none / unsigned JWT".to_string());
+    }
+
     let claims = decode_jwt_claims(token)?;
 
     // Validate audience
@@ -182,15 +194,14 @@ pub(crate) fn validate_jwt(token: &str, app_id: &str) -> Result<BotClaims, Strin
         ));
     }
 
-    // Validate expiration (with clock-skew tolerance)
-    if let Some(exp) = claims.exp {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        if exp + CLOCK_SKEW_SECS < now {
-            return Err("token expired".to_string());
-        }
+    // Validate expiration (mandatory, with clock-skew tolerance)
+    let exp = claims.exp.ok_or("missing exp claim")?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if exp + CLOCK_SKEW_SECS < now {
+        return Err("token expired".to_string());
     }
 
     // Validate issuer
@@ -202,6 +213,32 @@ pub(crate) fn validate_jwt(token: &str, app_id: &str) -> Result<BotClaims, Strin
     Ok(claims)
 }
 
+/// Decodes a base64url segment (with padding tolerance).
+fn url_safe_decode(segment: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    URL_SAFE_NO_PAD.decode(segment).or_else(|_| {
+        let padded = match segment.len() % 4 {
+            2 => format!("{}==", segment),
+            3 => format!("{}=", segment),
+            _ => segment.to_string(),
+        };
+        URL_SAFE_NO_PAD.decode(&padded)
+    })
+}
+
+/// Parses the JWT header and rejects structurally invalid tokens.
+fn decode_jwt_header(token: &str) -> Result<BotHeader, String> {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return Err("invalid JWT format: expected 3 parts".to_string());
+    }
+    if parts[2].is_empty() {
+        return Err("missing JWT signature".to_string());
+    }
+    let header_bytes =
+        url_safe_decode(parts[0]).map_err(|e| format!("failed to decode JWT header: {e}"))?;
+    serde_json::from_slice(&header_bytes).map_err(|e| format!("failed to parse JWT header: {e}"))
+}
+
 /// Decodes JWT payload without signature verification.
 ///
 /// JWT format: header.payload.signature (base64url encoded)
@@ -211,19 +248,8 @@ fn decode_jwt_claims(token: &str) -> Result<BotClaims, String> {
         return Err("invalid JWT format: expected 3 parts".to_string());
     }
 
-    let payload = parts[1];
-    let payload_bytes = URL_SAFE_NO_PAD
-        .decode(payload)
-        .or_else(|_| {
-            // Try with padding
-            let padded = match payload.len() % 4 {
-                2 => format!("{}==", payload),
-                3 => format!("{}=", payload),
-                _ => payload.to_string(),
-            };
-            URL_SAFE_NO_PAD.decode(&padded)
-        })
-        .map_err(|e| format!("failed to decode JWT payload: {e}"))?;
+    let payload_bytes =
+        url_safe_decode(parts[1]).map_err(|e| format!("failed to decode JWT payload: {e}"))?;
 
     let claims: BotClaims = serde_json::from_slice(&payload_bytes)
         .map_err(|e| format!("failed to parse JWT claims: {e}"))?;
@@ -277,15 +303,17 @@ mod tests {
         assert!(VALID_ISSUERS.iter().all(|iss| iss.starts_with("https://")));
     }
 
-    fn unsigned_token(claims: Value) -> Result<String, serde_json::Error> {
-        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none"}"#);
+    /// Builds a token with RS256 header and a placeholder signature.
+    /// Signature is not cryptographically valid but satisfies structural checks.
+    fn fake_signed_token(claims: Value) -> Result<String, serde_json::Error> {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"RS256","typ":"JWT"}"#);
         let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims)?);
-        Ok(format!("{header}.{payload}."))
+        Ok(format!("{header}.{payload}.placeholder-sig"))
     }
 
     #[test]
     fn validate_jwt_accepts_expected_botframework_claims() -> Result<(), String> {
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": 4_102_444_800_u64,
@@ -307,7 +335,7 @@ mod tests {
     #[test]
     fn validate_jwt_rejects_wrong_audience_expired_and_issuer() -> Result<(), String> {
         let valid_exp = 4_102_444_800_u64;
-        let wrong_audience = unsigned_token(json!({
+        let wrong_audience = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "other",
             "exp": valid_exp
@@ -319,7 +347,7 @@ mod tests {
                 .contains("invalid audience")
         );
 
-        let expired = unsigned_token(json!({
+        let expired = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": 1_u64
@@ -330,7 +358,7 @@ mod tests {
             "token expired"
         );
 
-        let bad_issuer = unsigned_token(json!({
+        let bad_issuer = fake_signed_token(json!({
             "iss": "https://evil.example",
             "aud": "bot-app-id",
             "exp": valid_exp
@@ -423,7 +451,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": now - CLOCK_SKEW_SECS - 1,
@@ -441,7 +469,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "bot-app-id",
             "exp": now - 60,
@@ -458,7 +486,7 @@ mod tests {
 
     #[test]
     fn validate_jwt_rejects_invalid_issuer() {
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://evil.example.com",
             "aud": "bot-app-id",
             "exp": 4_102_444_800_u64,
@@ -470,7 +498,7 @@ mod tests {
 
     #[test]
     fn validate_jwt_rejects_wrong_audience() {
-        let token = unsigned_token(json!({
+        let token = fake_signed_token(json!({
             "iss": "https://api.botframework.com",
             "aud": "wrong-app-id",
             "exp": 4_102_444_800_u64,
@@ -478,5 +506,48 @@ mod tests {
         .unwrap();
         let err = validate_jwt(&token, "bot-app-id").expect_err("wrong aud");
         assert!(err.contains("invalid audience"));
+    }
+
+    #[test]
+    fn validate_jwt_rejects_alg_none() {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&json!({
+                "iss": "https://api.botframework.com",
+                "aud": "bot-app-id",
+                "exp": 4_102_444_800_u64,
+            }))
+            .unwrap(),
+        );
+        let token = format!("{header}.{payload}.placeholder-sig");
+        let err = validate_jwt(&token, "bot-app-id").expect_err("alg:none");
+        assert!(err.contains("alg:none"));
+    }
+
+    #[test]
+    fn validate_jwt_rejects_empty_signature() {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"RS256","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&json!({
+                "iss": "https://api.botframework.com",
+                "aud": "bot-app-id",
+                "exp": 4_102_444_800_u64,
+            }))
+            .unwrap(),
+        );
+        let token = format!("{header}.{payload}.");
+        let err = validate_jwt(&token, "bot-app-id").expect_err("empty sig");
+        assert!(err.contains("missing JWT signature"));
+    }
+
+    #[test]
+    fn validate_jwt_rejects_missing_exp() {
+        let token = fake_signed_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "bot-app-id",
+        }))
+        .unwrap();
+        let err = validate_jwt(&token, "bot-app-id").expect_err("no exp");
+        assert!(err.contains("missing exp claim"));
     }
 }
