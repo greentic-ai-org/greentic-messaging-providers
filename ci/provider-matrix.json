@@ -219,7 +219,7 @@
     },
     "teams": {
       "pack": "messaging-teams",
-      "version": "0.5.8",
+      "version": "0.5.9",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
