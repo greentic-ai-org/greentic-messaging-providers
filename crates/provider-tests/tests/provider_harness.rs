@@ -185,6 +185,7 @@ fn test_message_from_plan(plan: &RenderPlan) -> ChannelMessageEnvelope {
 }
 
 struct ProviderHarness {
+    provider: ProviderId,
     _instance: Instance,
     store: Store<TestHostState>,
     invoke: TypedFunc<(String, Vec<u8>), (Vec<u8>,)>,
@@ -216,6 +217,7 @@ impl ProviderHarness {
             .expect("invoke func");
 
         Self {
+            provider,
             _instance: instance,
             store,
             invoke,
@@ -270,6 +272,14 @@ impl ProviderHarness {
             })
             .unwrap_or_default();
         let body_json = serde_json::to_vec(body).unwrap_or_default();
+        let config = match self.provider {
+            ProviderId::Teams => json!({
+                "setup_mode": "bot_framework",
+                "ms_bot_app_id": "test-bot-app-id",
+                "skip_jwt_validation": true
+            }),
+            _ => Value::Null,
+        };
         let out = self.call_json(
             "ingest_http",
             json!({
@@ -280,7 +290,7 @@ impl ProviderHarness {
                 "body_b64": STANDARD.encode(body_json),
                 "route_hint": null,
                 "binding_id": null,
-                "config": null
+                "config": config
             }),
         );
 
