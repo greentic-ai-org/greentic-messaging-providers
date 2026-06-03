@@ -132,7 +132,6 @@ mod tests {
     fn stub_decl(provider_type: &str, caps: &[&str]) -> ProviderDecl {
         ProviderDecl {
             provider_type: provider_type.to_string(),
-            provider_id: None,
             capabilities: caps.iter().map(|c| c.to_string()).collect(),
             ops: Vec::new(),
             config_schema_ref: "config.schema.json".into(),
