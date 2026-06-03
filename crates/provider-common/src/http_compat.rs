@@ -131,6 +131,30 @@ fn parse_headers(val: &Value) -> Vec<Header> {
     }
 }
 
+/// Extract a `(name, value)` header pair from a wrapper-shaped JSON entry.
+/// Accepts both the object form `{"name": "x-...", "value": "..."}` and
+/// the tuple form `["x-...", "..."]`. Returns `None` when either field
+/// is missing — stricter than `parse_headers` which defaults missing
+/// values to "" (correct for header-based identify-instance, where an
+/// empty value must reject).
+pub fn header_name_and_value(entry: &Value) -> Option<(&str, &str)> {
+    if let Some(obj) = entry.as_object() {
+        let name = obj.get("name")?.as_str()?;
+        let value = obj.get("value")?.as_str()?;
+        Some((name, value))
+    } else if let Some(arr) = entry.as_array() {
+        if arr.len() == 2 {
+            let name = arr[0].as_str()?;
+            let value = arr[1].as_str()?;
+            Some((name, value))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 /// Serialize `HttpOutV1` with `"v":1` for operator v0.4.x compatibility.
 ///
 /// Also transforms headers from `[{name, value}]` objects to `[[name, value]]` tuples
