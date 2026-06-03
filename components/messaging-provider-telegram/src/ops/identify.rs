@@ -49,16 +49,11 @@ fn secret_token_from_headers(value: &Value) -> Option<String> {
     headers
         .iter()
         .filter_map(|header| {
-            let (name, raw) = header_name_and_value(header)?;
+            let (name, value) = header_name_and_value(header)?;
             if !name.eq_ignore_ascii_case(SECRET_TOKEN_HEADER) {
                 return None;
             }
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_owned())
-            }
+            Some(value.to_owned())
         })
         .next()
 }

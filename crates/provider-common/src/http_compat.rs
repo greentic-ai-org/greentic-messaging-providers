@@ -131,28 +131,44 @@ fn parse_headers(val: &Value) -> Vec<Header> {
     }
 }
 
-/// Extract a `(name, value)` header pair from a wrapper-shaped JSON entry.
+/// Extract a `(name, value)` header pair from a wrapper-shaped JSON entry,
+/// trimmed and rejected if either field is missing or empty post-trim.
+///
+/// Returns `None` when:
+/// - either field is missing or not a string
+/// - the value is empty or whitespace-only after trim
+///
+/// The trim+empty-reject is INSIDE the helper, not the caller's responsibility:
+/// header-based identify-instance matching must never admit an empty
+/// discriminator (would match an empty admit-table entry — fail-open).
+///
 /// Accepts both the object form `{"name": "x-...", "value": "..."}` and
-/// the tuple form `["x-...", "..."]`. Returns `None` when either field
-/// is missing — stricter than `parse_headers` which defaults missing
-/// values to "" (correct for header-based identify-instance, where an
-/// empty value must reject).
+/// the tuple form `["x-...", "..."]`.
 pub fn header_name_and_value(entry: &Value) -> Option<(&str, &str)> {
-    if let Some(obj) = entry.as_object() {
+    let (name, value) = if let Some(obj) = entry.as_object() {
         let name = obj.get("name")?.as_str()?;
         let value = obj.get("value")?.as_str()?;
-        Some((name, value))
+        (name, value)
     } else if let Some(arr) = entry.as_array() {
-        if arr.len() == 2 {
-            let name = arr[0].as_str()?;
-            let value = arr[1].as_str()?;
-            Some((name, value))
-        } else {
-            None
+        if arr.len() != 2 {
+            return None;
         }
+        let name = arr[0].as_str()?;
+        let value = arr[1].as_str()?;
+        (name, value)
     } else {
-        None
+        return None;
+    };
+
+    let trimmed_value = value.trim();
+    if trimmed_value.is_empty() {
+        return None;
     }
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        return None;
+    }
+    Some((trimmed_name, trimmed_value))
 }
 
 /// Serialize `HttpOutV1` with `"v":1` for operator v0.4.x compatibility.
@@ -322,5 +338,91 @@ mod tests {
         let val: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(val["status"], 400);
         assert_eq!(val["v"], 1);
+    }
+
+    // ── header_name_and_value contract tests ──
+
+    #[test]
+    fn header_name_value_object_normal() {
+        let entry = json!({"name": "x-bot-token", "value": "tok123"});
+        assert_eq!(
+            header_name_and_value(&entry),
+            Some(("x-bot-token", "tok123"))
+        );
+    }
+
+    #[test]
+    fn header_name_value_object_missing_value() {
+        let entry = json!({"name": "x-bot-token"});
+        assert!(header_name_and_value(&entry).is_none());
+    }
+
+    #[test]
+    fn header_name_value_object_empty_value() {
+        let entry = json!({"name": "x-bot-token", "value": ""});
+        assert!(header_name_and_value(&entry).is_none());
+    }
+
+    #[test]
+    fn header_name_value_object_whitespace_value() {
+        let entry = json!({"name": "x-bot-token", "value": "   "});
+        assert!(header_name_and_value(&entry).is_none());
+    }
+
+    #[test]
+    fn header_name_value_object_trims_value() {
+        let entry = json!({"name": "x-bot-token", "value": "  tok  "});
+        assert_eq!(header_name_and_value(&entry), Some(("x-bot-token", "tok")));
+    }
+
+    #[test]
+    fn header_name_value_object_empty_name() {
+        let entry = json!({"name": "", "value": "tok"});
+        assert!(header_name_and_value(&entry).is_none());
+    }
+
+    #[test]
+    fn header_name_value_tuple_normal() {
+        let entry = json!(["x-bot-token", "tok456"]);
+        assert_eq!(
+            header_name_and_value(&entry),
+            Some(("x-bot-token", "tok456"))
+        );
+    }
+
+    #[test]
+    fn header_name_value_tuple_one_element() {
+        let entry = json!(["x-bot-token"]);
+        assert!(header_name_and_value(&entry).is_none());
+    }
+
+    #[test]
+    fn header_name_value_tuple_three_elements() {
+        let entry = json!(["x-bot-token", "v", "extra"]);
+        assert!(header_name_and_value(&entry).is_none());
+    }
+
+    #[test]
+    fn header_name_value_tuple_empty_value() {
+        let entry = json!(["x-bot-token", ""]);
+        assert!(header_name_and_value(&entry).is_none());
+    }
+
+    #[test]
+    fn header_name_value_tuple_trims_value() {
+        let entry = json!(["x-bot-token", "  tok  "]);
+        assert_eq!(header_name_and_value(&entry), Some(("x-bot-token", "tok")));
+    }
+
+    #[test]
+    fn header_name_value_non_object_non_array() {
+        assert!(header_name_and_value(&json!("just a string")).is_none());
+        assert!(header_name_and_value(&json!(42)).is_none());
+    }
+
+    #[test]
+    fn header_name_value_object_non_string_name() {
+        let entry = json!({"name": 42, "value": "tok"});
+        assert!(header_name_and_value(&entry).is_none());
     }
 }
