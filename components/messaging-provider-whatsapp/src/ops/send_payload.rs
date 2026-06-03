@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::SendPayloadInV1;
-use provider_common::helpers::{send_payload_error, send_payload_success};
+use provider_common::helpers::{check_media_results, send_payload_error, send_payload_success};
 use serde_json::Value;
 
 use crate::PROVIDER_TYPE;
@@ -47,42 +47,10 @@ fn forward_send_payload(payload: &Value) -> Result<(), String> {
             .unwrap_or_else(|| "send_payload failed".to_string());
         return Err(message);
     }
-    check_media_results(&result_value)
-}
-
-// `handle_send` reports the final text/interactive send as the top-level `ok`,
-// but attaches per-media outcomes in `media_results` whose failures are not
-// reflected there. Flow-based callers may want that partial-success shape, but
-// the new-model host egress treats `ok: true` as a successful delivery and
-// will not retry — silently losing media. Downgrade to a retriable failure
-// here so the host's reply-egress doesn't ack a partial send.
-fn check_media_results(result_value: &Value) -> Result<(), String> {
-    let Some(media) = result_value.get("media").and_then(Value::as_array) else {
-        return Ok(());
-    };
-    let failures: Vec<String> = media
-        .iter()
-        .filter(|m| m.get("ok").and_then(Value::as_bool) == Some(false))
-        .map(|m| {
-            let kind = m.get("type").and_then(Value::as_str).unwrap_or("media");
-            let detail = m
-                .get("error")
-                .or_else(|| m.get("detail"))
-                .and_then(Value::as_str)
-                .unwrap_or("unknown error");
-            format!("{kind}: {detail}")
-        })
-        .collect();
-    if failures.is_empty() {
-        Ok(())
-    } else {
-        Err(format!(
-            "media send failed ({} of {}): [{}]",
-            failures.len(),
-            media.len(),
-            failures.join("; ")
-        ))
-    }
+    // `handle_send` returns `ok: true` for the final text/interactive send
+    // even when separately-sent media failed. The new-model host egress
+    // wouldn't retry — downgrade to a retriable failure.
+    check_media_results(&result_value, "media")
 }
 
 #[cfg(test)]
@@ -153,37 +121,5 @@ mod tests {
         assert_eq!(body["ok"], false);
         assert_eq!(body["message"], "config required");
         assert_eq!(body["retryable"], false);
-    }
-
-    #[test]
-    fn check_media_results_passes_when_no_media_array() {
-        let value = serde_json::json!({ "ok": true });
-        assert!(check_media_results(&value).is_ok());
-    }
-
-    #[test]
-    fn check_media_results_passes_when_all_media_ok() {
-        let value = serde_json::json!({
-            "ok": true,
-            "media": [
-                { "type": "image", "ok": true },
-                { "type": "document", "ok": true },
-            ],
-        });
-        assert!(check_media_results(&value).is_ok());
-    }
-
-    #[test]
-    fn check_media_results_downgrades_when_any_media_failed() {
-        let value = serde_json::json!({
-            "ok": true,
-            "media": [
-                { "type": "image", "ok": true },
-                { "type": "video", "ok": false, "detail": "Err(\"transport\")" },
-            ],
-        });
-        let err = check_media_results(&value).expect_err("must downgrade");
-        assert!(err.contains("media send failed"));
-        assert!(err.contains("video: Err"));
     }
 }
