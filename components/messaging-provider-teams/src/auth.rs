@@ -17,6 +17,9 @@ use crate::{
     DEFAULT_GRAPH_REFRESH_TOKEN_KEY,
 };
 
+/// Standard Bot Framework JWT clock skew tolerance (seconds).
+pub(crate) const CLOCK_SKEW_SECS: u64 = 300;
+
 /// Valid issuers for Bot Framework JWT tokens.
 const VALID_ISSUERS: &[&str] = &[
     "https://api.botframework.com",
@@ -179,13 +182,13 @@ pub(crate) fn validate_jwt(token: &str, app_id: &str) -> Result<BotClaims, Strin
         ));
     }
 
-    // Validate expiration
+    // Validate expiration (with clock-skew tolerance)
     if let Some(exp) = claims.exp {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        if exp < now {
+        if exp + CLOCK_SKEW_SECS < now {
             return Err("token expired".to_string());
         }
     }
@@ -367,6 +370,7 @@ mod tests {
             bot_display_name: None,
             messaging_endpoint: None,
             default_service_url: None,
+            skip_jwt_validation: None,
         };
 
         assert_eq!(
@@ -401,6 +405,7 @@ mod tests {
             bot_display_name: None,
             messaging_endpoint: None,
             default_service_url: None,
+            skip_jwt_validation: None,
         };
 
         let form = graph_refresh_token_form(&cfg, "refresh token");
@@ -410,5 +415,68 @@ mod tests {
         assert!(form.contains("refresh_token=refresh%20token"));
         assert!(form.contains("scope=scope%20value"));
         assert!(!form.contains("client_secret"));
+    }
+
+    #[test]
+    fn validate_jwt_rejects_expired_beyond_skew() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "bot-app-id",
+            "exp": now - CLOCK_SKEW_SECS - 1,
+        }))
+        .unwrap();
+        assert_eq!(
+            validate_jwt(&token, "bot-app-id").expect_err("expired"),
+            "token expired"
+        );
+    }
+
+    #[test]
+    fn validate_jwt_accepts_expired_within_skew() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "bot-app-id",
+            "exp": now - 60,
+        }))
+        .unwrap();
+        validate_jwt(&token, "bot-app-id").expect("within skew should pass");
+    }
+
+    #[test]
+    fn validate_jwt_rejects_malformed_token() {
+        assert!(validate_jwt("not.a.jwt", "bot-app-id").is_err());
+        assert!(validate_jwt("only-one-part", "bot-app-id").is_err());
+    }
+
+    #[test]
+    fn validate_jwt_rejects_invalid_issuer() {
+        let token = unsigned_token(json!({
+            "iss": "https://evil.example.com",
+            "aud": "bot-app-id",
+            "exp": 4_102_444_800_u64,
+        }))
+        .unwrap();
+        let err = validate_jwt(&token, "bot-app-id").expect_err("bad issuer");
+        assert!(err.contains("invalid issuer"));
+    }
+
+    #[test]
+    fn validate_jwt_rejects_wrong_audience() {
+        let token = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "wrong-app-id",
+            "exp": 4_102_444_800_u64,
+        }))
+        .unwrap();
+        let err = validate_jwt(&token, "bot-app-id").expect_err("wrong aud");
+        assert!(err.contains("invalid audience"));
     }
 }

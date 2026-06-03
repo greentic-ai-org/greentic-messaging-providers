@@ -70,6 +70,11 @@ pub(crate) struct ProviderConfig {
     pub(crate) messaging_endpoint: Option<String>,
     #[serde(default)]
     pub(crate) default_service_url: Option<String>,
+
+    /// Dev-only escape hatch: when `true`, JWT validation errors are logged
+    /// but the request is allowed through. Default: `false` (strict).
+    #[serde(default)]
+    pub(crate) skip_jwt_validation: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +119,9 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) bot_display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) messaging_endpoint: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) skip_jwt_validation: Option<bool>,
 }
 
 fn default_enabled() -> bool {
@@ -156,6 +164,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         ms_bot_app_password: None,
         bot_display_name: None,
         messaging_endpoint: None,
+        skip_jwt_validation: None,
     }
 }
 
@@ -317,6 +326,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "bot_display_name",
         "messaging_endpoint",
         "default_service_url",
+        "skip_jwt_validation",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -393,6 +403,7 @@ fn load_config_from_secrets() -> Result<ProviderConfig, String> {
         bot_display_name: None,
         messaging_endpoint: None,
         default_service_url: None,
+        skip_jwt_validation: None,
     })
 }
 
@@ -477,6 +488,7 @@ mod tests {
             ms_bot_app_password: None,
             bot_display_name: None,
             messaging_endpoint: None,
+            skip_jwt_validation: None,
         }
     }
 
@@ -588,6 +600,7 @@ mod tests {
             bot_display_name: None,
             messaging_endpoint: None,
             default_service_url: Some("https://fallback.example.com".to_string()),
+            skip_jwt_validation: None,
         };
         let destination = default_channel_destination(&cfg).expect("channel destination");
         assert_eq!(destination.id, "team-1:channel-1");

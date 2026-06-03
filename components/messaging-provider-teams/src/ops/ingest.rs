@@ -34,29 +34,44 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         },
     };
 
-    // Extract and validate JWT from Authorization header (Phase 1: decode-only)
-    let auth_header = request
-        .headers
-        .iter()
-        .find(|h| h.name.eq_ignore_ascii_case("authorization"))
-        .map(|h| h.value.as_str());
-
-    // Load config to get Bot App ID for JWT validation
+    // Load config for JWT validation and skip_jwt_validation check
     let parsed_input: Value = serde_json::from_slice(input_json).unwrap_or(Value::Null);
-    let cfg = load_config(&parsed_input).ok();
+    let cfg = match load_config(&parsed_input) {
+        Ok(c) => c,
+        Err(_) => return http_out_error(500, "provider config error"),
+    };
 
-    if let (Some(auth), Some(config)) = (auth_header, &cfg)
-        && let Some(token) = extract_bearer_token(auth)
-        && let Some(app_id) = config.ms_bot_app_id.as_deref()
-    {
-        // Validate JWT (Phase 1: decode-only, no signature verification)
+    if cfg.skip_jwt_validation == Some(true) {
+        telemetry::emit(
+            Level::Warn,
+            PROVIDER_TYPE,
+            "skip_jwt_validation=true, JWT checks bypassed (dev only)",
+            &[],
+        );
+    } else {
+        let app_id = match cfg.ms_bot_app_id.as_deref() {
+            Some(id) if !id.is_empty() => id,
+            _ => return http_out_error(401, "ms_bot_app_id not configured"),
+        };
+        let auth_header = request
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("authorization"))
+            .map(|h| h.value.as_str());
+        let auth = match auth_header {
+            Some(h) => h,
+            None => return http_out_error(401, "missing Authorization header"),
+        };
+        let token = match extract_bearer_token(auth) {
+            Some(t) => t,
+            None => return http_out_error(401, "invalid Authorization scheme"),
+        };
         if let Err(err) = validate_jwt(&token, app_id) {
-            // Log warning but don't fail - allow dev/testing without full validation
             let detail = redact::error_message(&err);
             telemetry::emit(
                 Level::Warn,
                 PROVIDER_TYPE,
-                "JWT validation warning",
+                "JWT validation rejected",
                 &[
                     Field {
                         key: field::EVENT_KIND,
@@ -68,6 +83,7 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
                     },
                 ],
             );
+            return http_out_error(401, "JWT validation failed");
         }
     }
 
@@ -312,4 +328,208 @@ pub(crate) fn extract_sender(value: &Value) -> Option<String> {
         .and_then(|f| f.get("id"))
         .and_then(Value::as_str)
         .map(|s| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::{
+        Engine, engine::general_purpose::STANDARD, engine::general_purpose::URL_SAFE_NO_PAD,
+    };
+    use greentic_types::messaging::universal_dto::{Header, HttpInV1};
+
+    fn unsigned_token(claims: serde_json::Value) -> String {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap());
+        format!("{header}.{payload}.")
+    }
+
+    fn valid_token(app_id: &str) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": app_id,
+            "exp": now + 3600,
+        }))
+    }
+
+    fn bot_activity_body() -> String {
+        STANDARD.encode(
+            serde_json::to_vec(&json!({
+                "type": "message",
+                "text": "hello",
+                "from": { "id": "user-1" },
+                "conversation": { "id": "conv-1" },
+                "id": "act-1",
+                "serviceUrl": "https://smba.trafficmanager.net/amer/"
+            }))
+            .unwrap(),
+        )
+    }
+
+    fn build_ingest_input(
+        auth_header: Option<&str>,
+        app_id: Option<&str>,
+        skip_jwt: Option<bool>,
+    ) -> Vec<u8> {
+        build_ingest_input_with_mode(auth_header, app_id, skip_jwt, true)
+    }
+
+    fn build_ingest_input_with_mode(
+        auth_header: Option<&str>,
+        app_id: Option<&str>,
+        skip_jwt: Option<bool>,
+        bot_framework_mode: bool,
+    ) -> Vec<u8> {
+        let body_b64 = bot_activity_body();
+        let mut headers = vec![];
+        if let Some(auth) = auth_header {
+            headers.push(Header {
+                name: "Authorization".to_string(),
+                value: auth.to_string(),
+            });
+        }
+
+        let http_in = HttpInV1 {
+            method: "POST".to_string(),
+            path: "/api/messages".to_string(),
+            query: None,
+            headers,
+            body_b64,
+            route_hint: None,
+            binding_id: None,
+            config: None,
+        };
+        let mut val = serde_json::to_value(&http_in).unwrap();
+        let obj = val.as_object_mut().unwrap();
+
+        // Build a nested config object so load_config picks it up via input.get("config").
+        let mut cfg = serde_json::Map::new();
+        if bot_framework_mode {
+            cfg.insert("setup_mode".into(), json!("bot_framework"));
+        } else {
+            cfg.insert("tenant_id".into(), json!("tenant"));
+            cfg.insert("client_id".into(), json!("client"));
+        }
+        if let Some(id) = app_id {
+            cfg.insert("ms_bot_app_id".into(), json!(id));
+        }
+        if let Some(skip) = skip_jwt {
+            cfg.insert("skip_jwt_validation".into(), json!(skip));
+        }
+        obj.insert("config".into(), Value::Object(cfg));
+        serde_json::to_vec(&val).unwrap()
+    }
+
+    fn parse_response(bytes: Vec<u8>) -> (u16, Value) {
+        let out: Value = serde_json::from_slice(&bytes).unwrap();
+        let status = out["status"].as_u64().unwrap() as u16;
+        (status, out)
+    }
+
+    #[test]
+    fn ingest_missing_auth_header_rejects_401() {
+        let input = build_ingest_input(None, Some("bot-app-id"), None);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn ingest_non_bearer_scheme_rejects_401() {
+        let input = build_ingest_input(Some("Basic abc123"), Some("bot-app-id"), None);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn ingest_missing_app_id_rejects_401() {
+        let token = valid_token("bot-app-id");
+        // Use graph mode so config loads successfully but ms_bot_app_id is absent.
+        let input =
+            build_ingest_input_with_mode(Some(&format!("Bearer {token}")), None, None, false);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn ingest_malformed_jwt_rejects_401() {
+        let input = build_ingest_input(Some("Bearer not-a-jwt"), Some("bot-app-id"), None);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn ingest_wrong_audience_rejects_401() {
+        let token = valid_token("wrong-app-id");
+        let input = build_ingest_input(Some(&format!("Bearer {token}")), Some("bot-app-id"), None);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn ingest_expired_token_rejects_401() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "bot-app-id",
+            "exp": now - crate::auth::CLOCK_SKEW_SECS - 1,
+        }));
+        let input = build_ingest_input(Some(&format!("Bearer {token}")), Some("bot-app-id"), None);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn ingest_expired_within_skew_accepted() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = unsigned_token(json!({
+            "iss": "https://api.botframework.com",
+            "aud": "bot-app-id",
+            "exp": now - 60,
+        }));
+        let input = build_ingest_input(Some(&format!("Bearer {token}")), Some("bot-app-id"), None);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 200);
+    }
+
+    #[test]
+    fn ingest_invalid_issuer_rejects_401() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = unsigned_token(json!({
+            "iss": "https://evil.example.com",
+            "aud": "bot-app-id",
+            "exp": now + 3600,
+        }));
+        let input = build_ingest_input(Some(&format!("Bearer {token}")), Some("bot-app-id"), None);
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn ingest_valid_token_accepts_200() {
+        let token = valid_token("bot-app-id");
+        let input = build_ingest_input(Some(&format!("Bearer {token}")), Some("bot-app-id"), None);
+        let (status, body) = parse_response(ingest_http(&input));
+        assert_eq!(status, 200);
+        assert!(!body["events"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn ingest_skip_validation_true_accepts_invalid() {
+        let input = build_ingest_input(Some("Bearer not-a-jwt"), Some("bot-app-id"), Some(true));
+        let (status, _) = parse_response(ingest_http(&input));
+        assert_eq!(status, 200);
+    }
 }
