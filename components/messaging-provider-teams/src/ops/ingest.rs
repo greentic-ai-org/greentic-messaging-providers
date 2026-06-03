@@ -333,16 +333,9 @@ pub(crate) fn extract_sender(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::{
-        Engine, engine::general_purpose::STANDARD, engine::general_purpose::URL_SAFE_NO_PAD,
-    };
+    use crate::auth::fake_signed_token;
+    use base64::{Engine, engine::general_purpose::STANDARD};
     use greentic_types::messaging::universal_dto::{Header, HttpInV1};
-
-    fn fake_signed_token(claims: serde_json::Value) -> String {
-        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"RS256","typ":"JWT"}"#);
-        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap());
-        format!("{header}.{payload}.placeholder-sig")
-    }
 
     fn valid_token(app_id: &str) -> String {
         let now = std::time::SystemTime::now()
