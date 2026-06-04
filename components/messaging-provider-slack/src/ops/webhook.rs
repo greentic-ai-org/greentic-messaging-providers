@@ -137,6 +137,7 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
     // `public_base_url` + the ingress path segments.
     let webhook_url = match parsed
         .get("webhook_url")
+        .or_else(|| parsed.get("config").and_then(|c| c.get("webhook_url")))
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
