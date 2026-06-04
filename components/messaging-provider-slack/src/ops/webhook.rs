@@ -133,36 +133,54 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         }
     };
 
-    let public_base_url = parsed
-        .get("public_base_url")
+    // Revision-serve passes a fully-formed `webhook_url`; legacy fills it from
+    // `public_base_url` + the ingress path segments.
+    let webhook_url = match parsed
+        .get("webhook_url")
         .and_then(Value::as_str)
-        .unwrap_or("");
-    if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
-        return json_bytes(
-            &json!({"ok": false, "error": "public_base_url must be an https:// URL"}),
-        );
-    }
-
-    let provider_id = parsed
-        .get("provider_id")
-        .and_then(Value::as_str)
-        .unwrap_or("messaging-slack");
-    let tenant = parsed
-        .get("tenant")
-        .and_then(Value::as_str)
-        .unwrap_or("default");
-    let team = parsed
-        .get("team")
-        .and_then(Value::as_str)
-        .unwrap_or("default");
-
-    let webhook_url = format!(
-        "{}/v1/messaging/ingress/{}/{}/{}",
-        public_base_url.trim_end_matches('/'),
-        provider_id,
-        tenant,
-        team,
-    );
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(url) => {
+            if !url.starts_with("https://") {
+                return json_bytes(
+                    &json!({"ok": false, "error": "webhook_url must be an https:// URL"}),
+                );
+            }
+            url.to_string()
+        }
+        None => {
+            let public_base_url = parsed
+                .get("public_base_url")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
+                return json_bytes(&json!({
+                    "ok": false,
+                    "error": "public_base_url or webhook_url required (https://)"
+                }));
+            }
+            let provider_id = parsed
+                .get("provider_id")
+                .and_then(Value::as_str)
+                .unwrap_or("messaging-slack");
+            let tenant = parsed
+                .get("tenant")
+                .and_then(Value::as_str)
+                .unwrap_or("default");
+            let team = parsed
+                .get("team")
+                .and_then(Value::as_str)
+                .unwrap_or("default");
+            format!(
+                "{}/v1/messaging/ingress/{}/{}/{}",
+                public_base_url.trim_end_matches('/'),
+                provider_id,
+                tenant,
+                team,
+            )
+        }
+    };
 
     // Step 1: Export current manifest (with token refresh on auth failure)
     let mut config_token = config_token_input;
