@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 mod bindings {
     wit_bindgen::generate!({
-        path: "../messaging-provider-webchat/wit/messaging-provider-webchat",
+        path: "wit/messaging-provider-webchat-gui",
         world: "component-v0-v6-v0",
         generate_all
     });
@@ -139,6 +139,54 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
             return result;
         }
         dispatch_json_invoke(&op, &input_json)
+    }
+}
+
+impl bindings::exports::provider::common::ingress::Guest for Component {
+    /// Inbound WebChat DirectLine ingress. The runtime (`greentic-start`)
+    /// dispatches HTTP requests for `auth/config`, `/v3/directline/*` and the
+    /// `/token` shorthand through `provider:common/ingress@0.0.2#handle-webhook`.
+    ///
+    /// It packs `method`/`path`/`query` into the headers object and passes the
+    /// raw request body separately. We rebuild the operator-format `HttpInV1`
+    /// the shared `ingest_http` router already understands, then hand its
+    /// `HttpOutV1` JSON straight back — the runtime's `parse_http_response`
+    /// reads `status`/`headers`/`body_b64` from it verbatim.
+    fn handle_webhook(headers_json: String, body_json: String) -> Result<String, String> {
+        let headers: serde_json::Map<String, Value> = serde_json::from_str(&headers_json)
+            .map_err(|err| format!("invalid ingress headers json: {err}"))?;
+
+        let header_str = |key: &str| {
+            headers
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let method = match header_str("method") {
+            m if m.is_empty() => "POST".to_string(),
+            m => m,
+        };
+        let path = header_str("path");
+        let query = header_str("query");
+        let header_pairs: Vec<Value> = headers
+            .iter()
+            .filter(|(key, _)| !matches!(key.as_str(), "method" | "path" | "query"))
+            .map(|(key, value)| json!([key, value.as_str().unwrap_or_default()]))
+            .collect();
+
+        let operator_input = json!({
+            "method": method,
+            "path": path,
+            "query": query,
+            "headers": header_pairs,
+            "body_b64": general_purpose::STANDARD.encode(body_json.as_bytes()),
+        });
+        let input_bytes = serde_json::to_vec(&operator_input)
+            .map_err(|err| format!("encode ingress request: {err}"))?;
+
+        let output = ingest_http(&input_bytes);
+        String::from_utf8(output).map_err(|err| format!("ingress response not utf-8: {err}"))
     }
 }
 
