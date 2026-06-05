@@ -142,6 +142,22 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
     }
 }
 
+impl bindings::exports::greentic::provider_instance_identity::instance_identity_api::Guest
+    for Component
+{
+    fn identify_instance(input_json: Vec<u8>) -> Option<String> {
+        ops::extract_recipient_id(&input_json)
+    }
+}
+
+impl bindings::exports::greentic::provider_instance_identity::instance_identity_describe_api::Guest
+    for Component
+{
+    fn describe_identify_instance() -> Option<Vec<u8>> {
+        Some(ops::IDENTIFY_HINT_JSON.to_vec())
+    }
+}
+
 bindings::export!(Component with_types_in bindings);
 
 fn build_gui_describe_payload() -> DescribePayload {

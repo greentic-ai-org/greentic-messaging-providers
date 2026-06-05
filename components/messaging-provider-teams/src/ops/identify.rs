@@ -4,6 +4,14 @@
 
 use serde_json::Value;
 
+/// JSON-encoded `IdentifyInstanceHint` returned from
+/// `describe-identify-instance` — declares that the discriminator lives
+/// at body path `/recipient/id`, so the host can scope per-provider
+/// header allowlists (Teams needs no inbound headers for
+/// identification).
+pub(crate) const IDENTIFY_HINT_JSON: &[u8] =
+    br#"{"version":1,"sources":[{"body_path":{"json_pointer":"/recipient/id"}}]}"#;
+
 /// **Routing discriminator only — not an authentication check.**
 ///
 /// `recipient.id` is read from the inbound Bot Framework Activity
@@ -207,5 +215,16 @@ mod tests {
         });
         let bytes = serde_json::to_vec(&wrapper).unwrap();
         assert!(extract_recipient_id(&bytes).is_none());
+    }
+
+    #[test]
+    fn identify_hint_json_parses_with_version_one_and_non_empty_sources() {
+        let value: Value = serde_json::from_slice(IDENTIFY_HINT_JSON).expect("parse hint");
+        assert_eq!(value.get("version").and_then(Value::as_u64), Some(1));
+        let sources = value
+            .get("sources")
+            .and_then(Value::as_array)
+            .expect("sources array");
+        assert!(!sources.is_empty(), "hint sources must be non-empty");
     }
 }

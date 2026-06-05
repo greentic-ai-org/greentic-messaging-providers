@@ -3,6 +3,8 @@ package greentic:component@0.6.1;
 use greentic:http/http-client@1.1.0 as http-client;
 use greentic:secrets-store/secrets-store@1.1.0;
 use greentic:provider-schema-core/schema-core-api@1.0.0;
+use greentic:provider-instance-identity/instance-identity-api@0.1.0;
+use greentic:provider-instance-identity/instance-identity-describe-api@0.1.0;
 
 world component-v0-v6-v0 {
     import http-client;
@@ -12,4 +14,6 @@ world component-v0-v6-v0 {
     export qa;
     export component-i18n;
     export schema-core-api;
+    export instance-identity-api;
+    export instance-identity-describe-api;
 }

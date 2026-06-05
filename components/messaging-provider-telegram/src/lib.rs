@@ -128,6 +128,14 @@ impl bindings::exports::greentic::provider_instance_identity::instance_identity_
     }
 }
 
+impl bindings::exports::greentic::provider_instance_identity::instance_identity_describe_api::Guest
+    for Component
+{
+    fn describe_identify_instance() -> Option<Vec<u8>> {
+        Some(ops::IDENTIFY_HINT_JSON.to_vec())
+    }
+}
+
 bindings::export!(Component with_types_in bindings);
 
 // ============================================================================

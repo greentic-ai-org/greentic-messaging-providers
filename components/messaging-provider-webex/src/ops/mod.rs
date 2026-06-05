@@ -14,6 +14,7 @@
 //! `send` and `ingest` paths.
 
 mod encode;
+mod identify;
 mod ingest;
 mod ingest_helpers;
 mod render;
@@ -22,6 +23,7 @@ mod send_payload;
 mod webhook;
 
 pub(crate) use encode::encode_op;
+pub(crate) use identify::{IDENTIFY_HINT_JSON, extract_app_id};
 pub(crate) use ingest::ingest_http;
 pub(crate) use render::render_plan;
 pub(crate) use send::{handle_reply, handle_send};

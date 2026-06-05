@@ -8,6 +8,14 @@ use serde_json::Value;
 
 const SECRET_TOKEN_HEADER: &str = "x-telegram-bot-api-secret-token";
 
+/// JSON-encoded `IdentifyInstanceHint` returned from
+/// `describe-identify-instance` — declares that the discriminator lives
+/// in the `x-telegram-bot-api-secret-token` HTTP header, so the host can
+/// scope per-provider header allowlists and route only that header to
+/// Telegram (and never to body-discriminated siblings like Slack).
+pub(crate) const IDENTIFY_HINT_JSON: &[u8] =
+    br#"{"version":1,"sources":[{"header":{"name":"x-telegram-bot-api-secret-token"}}]}"#;
+
 /// **Routing discriminator only — not an authentication check.** See the
 /// module doc for the host-routing context and the WIT contract at
 /// `greentic:provider-instance-identity@0.1.0/identify-instance` for
@@ -231,5 +239,16 @@ mod tests {
     #[test]
     fn returns_none_for_unparseable_input() {
         assert!(extract_secret_token(b"not json").is_none());
+    }
+
+    #[test]
+    fn identify_hint_json_parses_with_version_one_and_non_empty_sources() {
+        let value: Value = serde_json::from_slice(IDENTIFY_HINT_JSON).expect("parse hint");
+        assert_eq!(value.get("version").and_then(Value::as_u64), Some(1));
+        let sources = value
+            .get("sources")
+            .and_then(Value::as_array)
+            .expect("sources array");
+        assert!(!sources.is_empty(), "hint sources must be non-empty");
     }
 }
