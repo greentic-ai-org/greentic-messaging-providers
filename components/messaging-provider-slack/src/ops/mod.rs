@@ -16,6 +16,7 @@
 
 mod blockkit;
 mod encode;
+mod identify;
 mod ingest;
 mod modal;
 mod render;
@@ -23,6 +24,7 @@ mod send;
 mod webhook;
 
 pub(crate) use encode::encode_op;
+pub(crate) use identify::{IDENTIFY_HINT_JSON, extract_api_app_id};
 pub(crate) use ingest::ingest_http;
 pub(crate) use render::render_plan;
 pub(crate) use send::{handle_send, send_payload};

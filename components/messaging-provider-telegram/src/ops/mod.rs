@@ -27,7 +27,7 @@ pub(crate) mod send_payload;
 pub(crate) mod webhook;
 
 pub(crate) use encode::encode_op;
-pub(crate) use identify::extract_secret_token;
+pub(crate) use identify::{IDENTIFY_HINT_JSON, extract_secret_token};
 pub(crate) use ingest::ingest_http;
 pub(crate) use render::render_plan;
 pub(crate) use send::handle_send;

@@ -21,7 +21,7 @@ mod render;
 mod send;
 
 pub(crate) use encode::encode_op;
-pub(crate) use identify::extract_recipient_id;
+pub(crate) use identify::{IDENTIFY_HINT_JSON, extract_recipient_id};
 pub(crate) use ingest::ingest_http;
 #[cfg(test)]
 pub(crate) use provision::with_http_send_mock;
