@@ -196,5 +196,5 @@ extensions:
         - application/json
         supports_webhook_validation: false
       component_ref: messaging-provider-webchat-gui
-      export: ingest-http
-      world: greentic:provider/schema-core@1.0.0
+      export: handle-webhook
+      world: provider:common/ingress@0.0.2
