@@ -2202,7 +2202,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "messaging-provider-teams"
+name = "messaging-provider-teams-graph"
 version = "0.5.16"
 dependencies = [
  "base64",

@@ -31,7 +31,7 @@ Expected: **329 passed, 0 failed, 2 ignored** (the 2 ignored are pre-existing `p
 | `messaging-provider-dummy` | 7 | QA ops + send |
 | `messaging-provider-telegram` | 11 | QA ops + send + ingress |
 | `messaging-provider-slack` | 8 | QA ops + send |
-| `messaging-provider-teams` | 10 | QA ops + send + config |
+| `messaging-provider-teams-graph` | 10 | QA ops + send + config |
 | `messaging-provider-webex` | 12 | QA ops + send + ingress |
 | `messaging-provider-webchat` | 16 | QA ops + send + integration |
 | `messaging-provider-whatsapp` | 11 | QA ops + send + ingress |
@@ -126,7 +126,7 @@ Output lands in `target/components/`:
 target/components/messaging-provider-dummy/component.wasm
 target/components/messaging-provider-email/component.wasm
 target/components/messaging-provider-slack/component.wasm
-target/components/messaging-provider-teams/component.wasm
+target/components/messaging-provider-teams-graph/component.wasm
 target/components/messaging-provider-telegram/component.wasm
 target/components/messaging-provider-webchat/component.wasm
 target/components/messaging-provider-webex/component.wasm
@@ -212,13 +212,13 @@ greentic-secrets apply "$SECRETS_FILE" \
 # NOTE: Do NOT seed MS_GRAPH_CLIENT_SECRET for public client apps.
 # Azure public clients must not include a client_secret with the refresh_token flow.
 greentic-secrets apply "$SECRETS_FILE" \
-  "secrets://dev/demo/_/messaging-teams/MS_GRAPH_TENANT_ID" \
+  "secrets://dev/demo/_/messaging-teams-graph/MS_GRAPH_TENANT_ID" \
   "<your-tenant-id>"
 greentic-secrets apply "$SECRETS_FILE" \
-  "secrets://dev/demo/_/messaging-teams/MS_GRAPH_CLIENT_ID" \
+  "secrets://dev/demo/_/messaging-teams-graph/MS_GRAPH_CLIENT_ID" \
   "<your-client-id>"
 greentic-secrets apply "$SECRETS_FILE" \
-  "secrets://dev/demo/_/messaging-teams/MS_GRAPH_REFRESH_TOKEN" \
+  "secrets://dev/demo/_/messaging-teams-graph/MS_GRAPH_REFRESH_TOKEN" \
   "<your-refresh-token>"
 ```
 
@@ -344,7 +344,7 @@ For a full WebChat demo, you need:
 ```bash
 GREENTIC_ENV=dev gtc op demo send \
   --bundle /root/works/personal/greentic/demo-bundle \
-  --provider messaging-teams \
+  --provider messaging-teams-graph \
   --to "c3392cbc-2cb0-48e8-9247-504d8defea40:19:wQzzrth6t3YA-aEdLzt8Pse3kW3Us-nJl9XzN-5NcEE1@thread.tacv2" \
   --text "Hello from Greentic operator" \
   --tenant demo --env dev
@@ -380,7 +380,7 @@ EOF
 ```bash
 GREENTIC_ENV=dev gtc op demo ingress \
   --bundle /root/works/personal/greentic/demo-bundle \
-  --provider messaging-teams \
+  --provider messaging-teams-graph \
   --tenant demo \
   --body /tmp/teams-webhook.json
 ```
@@ -396,7 +396,7 @@ GREENTIC_ENV=dev gtc op demo start \
   --cloudflared off --nats off --skip-setup --skip-secrets-init --domains messaging
 
 # POST the webhook payload
-curl -X POST http://localhost:8080/messaging/ingress/messaging-teams/demo/default \
+curl -X POST http://localhost:8080/messaging/ingress/messaging-teams-graph/demo/default \
   -H "Content-Type: application/json" \
   -d @/tmp/teams-webhook.json
 ```

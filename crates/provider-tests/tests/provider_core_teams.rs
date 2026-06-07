@@ -16,7 +16,7 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 mod bindings {
     wasmtime::component::bindgen!({
-        path: "../../components/messaging-provider-teams/wit/messaging-provider-teams",
+        path: "../../components/messaging-provider-teams-graph/wit/messaging-provider-teams-graph",
         world: "component-v0-v6-v0",
     });
 }
@@ -32,11 +32,11 @@ fn workspace_root() -> PathBuf {
 fn candidate_artifacts() -> Vec<PathBuf> {
     let root = workspace_root();
     vec![
-        root.join("target/components/messaging-provider-teams.wasm"),
-        root.join("target/wasm32-wasip2/release/messaging_provider_teams.wasm"),
-        root.join("target/wasm32-wasip2/wasm32-wasip2/release/messaging_provider_teams.wasm"),
-        root.join("components/messaging-provider-teams/target/wasm32-wasip2/release/messaging_provider_teams.wasm"),
-        root.join("packs/messaging-teams/components/messaging-provider-teams.wasm"),
+        root.join("target/components/messaging-provider-teams-graph.wasm"),
+        root.join("target/wasm32-wasip2/release/messaging_provider_teams_graph.wasm"),
+        root.join("target/wasm32-wasip2/wasm32-wasip2/release/messaging_provider_teams_graph.wasm"),
+        root.join("components/messaging-provider-teams-graph/target/wasm32-wasip2/release/messaging_provider_teams_graph.wasm"),
+        root.join("packs/messaging-teams-graph/components/messaging-provider-teams-graph.wasm"),
     ]
 }
 
@@ -55,11 +55,11 @@ fn ensure_component_artifact() -> Result<PathBuf> {
             "--target",
             "wasm32-wasip2",
             "--package",
-            "messaging-provider-teams",
+            "messaging-provider-teams-graph",
         ])
         .current_dir(workspace_root())
         .status()
-        .context("running cargo component build for messaging-provider-teams")?;
+        .context("running cargo component build for messaging-provider-teams-graph")?;
     if !status.success() {
         return Err(anyhow::anyhow!(
             "cargo component build failed with status {status}"
@@ -68,7 +68,8 @@ fn ensure_component_artifact() -> Result<PathBuf> {
 
     for path in candidate_artifacts() {
         if path.exists() {
-            let target = workspace_root().join("target/components/messaging-provider-teams.wasm");
+            let target =
+                workspace_root().join("target/components/messaging-provider-teams-graph.wasm");
             if !target.exists() {
                 if let Some(dir) = target.parent() {
                     let _ = fs::create_dir_all(dir);
@@ -173,7 +174,7 @@ fn builds_teams_component() -> Result<()> {
 
 #[test]
 fn pack_has_extension_and_schema() -> Result<()> {
-    let pack_dir = workspace_root().join("packs/messaging-teams");
+    let pack_dir = workspace_root().join("packs/messaging-teams-graph");
     let manifest_path = pack_dir.join("pack.manifest.json");
     let manifest: Value =
         serde_json::from_slice(&fs::read(&manifest_path).context("reading pack.manifest.json")?)
@@ -292,7 +293,7 @@ fn invoke_send_smoke_test() -> Result<()> {
         .call(&mut describe_store, ())
         .map_err(|err| anyhow::anyhow!("call describe: {err}"))?;
     let described: DescribePayload = decode_cbor(&described).map_err(anyhow::Error::msg)?;
-    assert_eq!(described.provider, "messaging-provider-teams");
+    assert_eq!(described.provider, "messaging-provider-teams-graph");
     assert!(described.operations.iter().any(|op| op.name == "run"));
     assert!(described.operations.iter().any(|op| op.name == "send"));
 

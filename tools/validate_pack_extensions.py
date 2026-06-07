@@ -153,7 +153,7 @@ def validate_pack(path: Path) -> None:
                 f"{path} provider extension kind={kind!r}, expected {PROVIDER_EXTENSION_ID!r}"
             )
 
-    if path.stem == "messaging-teams":
+    if path.stem == "messaging-teams-graph":
         validate_teams_subscription_desired_state(path, manifest)
 
     if path.stem in GENERATED_SECRET_REQUIREMENTS:

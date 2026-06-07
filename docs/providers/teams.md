@@ -73,14 +73,14 @@ create channels in the selected Team.
 
 - `components/teams/`
 - `components/messaging-ingress-teams/`
-- `components/messaging-provider-teams/`
-- `packs/messaging-teams/`
+- `components/messaging-provider-teams-graph/`
+- `packs/messaging-teams-graph/`
 - `e2e/providers/teams/`
 
 ## Focused Checks
 
 ```bash
-cargo test -p messaging-provider-teams
+cargo test -p messaging-provider-teams-graph
 cargo test -p messaging-ingress-teams
 scripts/build_providers.sh teams
 ```

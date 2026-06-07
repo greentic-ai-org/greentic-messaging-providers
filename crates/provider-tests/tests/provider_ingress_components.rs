@@ -40,7 +40,7 @@ fn ensure_component_artifact(package: &str, artifact_name: &str) -> Result<PathB
             "packs/messaging-slack/components/{artifact_name}.wasm"
         )),
         root.join(format!(
-            "packs/messaging-teams/components/{artifact_name}.wasm"
+            "packs/messaging-teams-graph/components/{artifact_name}.wasm"
         )),
         root.join(format!(
             "packs/messaging-telegram/components/{artifact_name}.wasm"
@@ -878,6 +878,94 @@ mod teams {
     }
 
     impl bindings::greentic::interfaces_types::types::Host for HostState {}
+
+    #[test]
+    fn handles_bot_framework_adaptive_card_submit() -> Result<()> {
+        let path = ensure_component_artifact("messaging-ingress-teams", "messaging-ingress-teams")?;
+        let engine = new_engine();
+        let component = Component::from_file(&engine, &path)
+            .map_err(|err| anyhow::anyhow!("loading component: {err}"))?;
+        let mut linker = Linker::new(&engine);
+        add_wasi_to_linker(&mut linker);
+        bindings::greentic::http::http_client::add_to_linker::<HostState, HasSelf<HostState>>(
+            &mut linker,
+            |state| state,
+        )
+        .expect("link http");
+        bindings::greentic::secrets_store::secrets_store::add_to_linker::<
+            HostState,
+            HasSelf<HostState>,
+        >(&mut linker, |state| state)
+        .expect("link secrets");
+        bindings::greentic::state::state_store::add_to_linker::<HostState, HasSelf<HostState>>(
+            &mut linker,
+            |state| state,
+        )
+        .expect("link state");
+        bindings::greentic::telemetry::logger_api::add_to_linker::<HostState, HasSelf<HostState>>(
+            &mut linker,
+            |state| state,
+        )
+        .expect("link logger");
+        bindings::greentic::interfaces_types::types::add_to_linker::<HostState, HasSelf<HostState>>(
+            &mut linker,
+            |state| state,
+        )
+        .expect("link interfaces");
+
+        let mut store = Store::new(&engine, HostState::default());
+        let instance = linker
+            .instantiate(&mut store, &component)
+            .map_err(|err| anyhow::anyhow!("instantiate: {err}"))?;
+        let ingress_index: ComponentExportIndex = instance
+            .get_export_index(&mut store, None, "provider:common/ingress@0.0.2")
+            .context("get ingress export index")?;
+        let handle_index = instance
+            .get_export_index(&mut store, Some(&ingress_index), "handle-webhook")
+            .context("get handle-webhook export index")?;
+        let handle: TypedFunc<(String, String), (Result<String, String>,)> = instance
+            .get_typed_func(&mut store, handle_index)
+            .map_err(|err| anyhow::anyhow!("get handle-webhook func: {err}"))?;
+
+        let headers = json!({"Authorization": "Bearer test-token"});
+        let body = json!({
+            "type": "invoke",
+            "id": "activity-1",
+            "serviceUrl": "https://smba.trafficmanager.net/emea/",
+            "channelId": "msteams",
+            "conversation": {"id": "conv-1", "conversationType": "personal"},
+            "from": {"id": "user-1", "name": "Ada"},
+            "recipient": {"id": "28:bot-id", "name": "Greentic"},
+            "channelData": {"tenant": {"id": "tenant-1"}},
+            "value": {
+                "action": {
+                    "type": "Action.Execute",
+                    "verb": "show_next",
+                    "data": {"text": "hello from Teams"}
+                }
+            }
+        });
+        let (res,) = handle
+            .call(&mut store, (headers.to_string(), body.to_string()))
+            .map_err(|err| anyhow::anyhow!("call handle_webhook: {err}"))?;
+        let payload: serde_json::Value =
+            serde_json::from_str(&res.map_err(|err| anyhow::anyhow!(err))?)?;
+
+        assert_eq!(payload["ok"], true);
+        assert_eq!(payload["kind"], "bot_framework_activity");
+        assert_eq!(payload["conversation"]["id"], "conv-1");
+        assert_eq!(payload["events"][0]["metadata"]["action_id"], "show_next");
+        assert_eq!(
+            payload["events"][0]["metadata"]["submitted_text"],
+            "hello from Teams"
+        );
+        assert_eq!(
+            payload["reply_activity"]["attachments"][0]["content"]["body"][1]["facts"][0]["value"],
+            "show_next"
+        );
+        assert_eq!(payload["invoke_response"]["status"], 200);
+        Ok(())
+    }
 
     #[test]
     fn syncs_subscriptions() -> Result<()> {

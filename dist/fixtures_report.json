@@ -14,7 +14,7 @@
   "messaging-slack": {
     "errors": []
   },
-  "messaging-teams": {
+  "messaging-teams-graph": {
     "errors": []
   },
   "messaging-telegram": {

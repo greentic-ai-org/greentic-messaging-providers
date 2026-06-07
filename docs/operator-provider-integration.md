@@ -574,7 +574,7 @@ secrets://{env}/{tenant}/{team}/{category}/{key}
 Examples:
   secrets://dev/default/_/messaging-telegram/telegram_bot_token
   secrets://dev/default/_/messaging-slack/slack_bot_token
-  secrets://dev/demo/_/messaging-teams/MS_GRAPH_REFRESH_TOKEN
+  secrets://dev/demo/_/messaging-teams-graph/MS_GRAPH_REFRESH_TOKEN
   secrets://dev/demo/_/messaging-email/ms_graph_refresh_token
 ```
 

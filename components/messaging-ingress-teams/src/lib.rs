@@ -6,6 +6,9 @@ mod bindings {
     });
 }
 
+#[path = "../../../messaging-teams/src/bot_framework.rs"]
+mod bot_framework;
+
 use bindings::exports::provider::common::ingress::Guest as IngressGuest;
 use bindings::exports::provider::common::subscriptions::Guest as SubscriptionsGuest;
 use bindings::greentic::http::http_client as client;
@@ -63,6 +66,11 @@ impl IngressGuest for Component {
         }
         let parsed: Value = serde_json::from_str(&body_json)
             .map_err(|_| "validation error: invalid body".to_string())?;
+        if bot_framework::is_bot_framework_activity(&parsed) {
+            let normalized = bot_framework::handle_bot_framework_activity(&headers_json, &parsed)?;
+            return serde_json::to_string(&normalized)
+                .map_err(|_| "other error: serialization failed".to_string());
+        }
         let expected_client_state = expected_client_state_from_headers(&headers_json);
         let events = normalize_graph_notifications(&parsed, expected_client_state.as_deref())?;
         let normalized = json!({

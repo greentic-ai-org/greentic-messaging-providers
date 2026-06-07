@@ -18,7 +18,7 @@ fn instantiates_telegram() -> Result<()> {
 
 #[test]
 fn instantiates_teams() -> Result<()> {
-    instantiate_component("messaging-provider-teams")
+    instantiate_component("messaging-provider-teams-graph")
 }
 
 #[test]
