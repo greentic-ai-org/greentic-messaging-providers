@@ -26,7 +26,7 @@ impl Guest for Component {
             verify_signature(&headers, &body_json, &signing_secret)?;
         }
 
-        normalize_body(&body_json)
+        normalize_body(&headers, &body_json)
     }
 }
 
@@ -64,14 +64,240 @@ fn verify_signature(headers: &Map<String, Value>, body: &str, secret: &str) -> R
     }
 }
 
-fn normalize_body(body_json: &str) -> Result<String, String> {
-    let body_val: Value = serde_json::from_str(body_json)
-        .map_err(|_| "validation error: invalid body json".to_string())?;
+fn normalize_body(headers: &Map<String, Value>, body_json: &str) -> Result<String, String> {
+    let body_val = parse_slack_body(body_json)?;
+    if body_val.get("type").and_then(Value::as_str) == Some("url_verification") {
+        let challenge = body_val
+            .get("challenge")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let normalized = json!({
+            "status": 200,
+            "headers": {"content-type": "text/plain"},
+            "body": challenge,
+            "events": [],
+            "ok": true,
+            "event": body_val,
+        });
+        return serde_json::to_string(&normalized)
+            .map_err(|_| "other error: serialization failed".to_string());
+    }
+
+    if is_slack_retry(headers) {
+        return normalized_without_events(body_val);
+    }
+
+    let payload = body_val
+        .get("event")
+        .or_else(|| body_val.get("body"))
+        .cloned()
+        .unwrap_or_else(|| body_val.clone());
+
+    if is_bot_message(&payload) {
+        return normalized_without_events(body_val);
+    }
+
+    let mut events = Vec::new();
+    if let Some(envelope) = envelope_from_payload(&payload) {
+        events.push(envelope);
+    }
+
     let normalized = json!({
         "ok": true,
         "event": body_val,
+        "events": events,
     });
     serde_json::to_string(&normalized).map_err(|_| "other error: serialization failed".to_string())
+}
+
+fn parse_slack_body(body_json: &str) -> Result<Value, String> {
+    if let Ok(value) = serde_json::from_str(body_json) {
+        return Ok(value);
+    }
+    if let Some(payload) = body_json.strip_prefix("payload=") {
+        return serde_json::from_str(&url_decode(payload))
+            .map_err(|_| "validation error: invalid body json".to_string());
+    }
+    Err("validation error: invalid body json".to_string())
+}
+
+fn normalized_without_events(body_val: Value) -> Result<String, String> {
+    let normalized = json!({
+        "ok": true,
+        "event": body_val,
+        "events": [],
+    });
+    serde_json::to_string(&normalized).map_err(|_| "other error: serialization failed".to_string())
+}
+
+fn envelope_from_payload(payload: &Value) -> Option<Value> {
+    let (text, mut action_metadata) =
+        if payload.get("type").and_then(Value::as_str) == Some("block_actions") {
+            block_action_text_and_metadata(payload)
+        } else {
+            (
+                payload
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                Map::new(),
+            )
+        };
+    let channel = slack_channel_id(payload);
+    let sender = slack_user_id(payload);
+    let channel_name = channel.clone().unwrap_or_else(|| "slack".to_string());
+    let envelope_id = payload
+        .get("event_ts")
+        .or_else(|| payload.get("ts"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| format!("slack:{value}"))
+        .unwrap_or_else(|| format!("slack-{channel_name}"));
+
+    let mut metadata = Map::new();
+    metadata.insert("universal".to_string(), Value::String("true".to_string()));
+    if let Some(channel_id) = channel.as_ref() {
+        metadata.insert("channel".to_string(), Value::String(channel_id.clone()));
+    }
+    if let Some(sender_id) = sender.as_ref() {
+        metadata.insert("from".to_string(), Value::String(sender_id.clone()));
+    }
+    if let Some(ts) = payload.get("ts").and_then(Value::as_str) {
+        metadata.insert("ts".to_string(), Value::String(ts.to_string()));
+    }
+    if let Some(event_ts) = payload.get("event_ts").and_then(Value::as_str) {
+        metadata.insert("event_ts".to_string(), Value::String(event_ts.to_string()));
+    }
+    metadata.append(&mut action_metadata);
+
+    Some(json!({
+        "id": envelope_id,
+        "tenant": {
+            "env": "default",
+            "tenant": "default",
+            "tenant_id": "default",
+            "attempt": 0
+        },
+        "channel": channel_name,
+        "session_id": channel.clone().unwrap_or_else(|| "slack".to_string()),
+        "from": sender.map(|id| json!({"id": id, "kind": "user"})),
+        "to": channel.map(|id| vec![json!({"id": id})]).unwrap_or_default(),
+        "text": text,
+        "attachments": [],
+        "metadata": metadata,
+    }))
+}
+
+fn block_action_text_and_metadata(payload: &Value) -> (String, Map<String, Value>) {
+    let first_action = payload
+        .get("actions")
+        .and_then(Value::as_array)
+        .and_then(|actions| actions.first())
+        .cloned()
+        .unwrap_or(Value::Null);
+    let action_id = first_action
+        .get("action_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let action_value = first_action
+        .get("value")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let parsed_value = serde_json::from_str::<Value>(action_value).ok();
+    let text = if let Some(value) = parsed_value.as_ref() {
+        let route_to_card = value
+            .get("routeToCardId")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let card_id = value
+            .get("cardId")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if !route_to_card.is_empty() {
+            format!("[card:{route_to_card}]")
+        } else if !card_id.is_empty() {
+            format!("[action:{card_id}]")
+        } else {
+            format!("[action:{action_id}]")
+        }
+    } else {
+        format!("[action:{action_id}]")
+    };
+
+    let mut metadata = Map::new();
+    if let Some(obj) = parsed_value.as_ref().and_then(Value::as_object) {
+        for (key, value) in obj {
+            let value = match value {
+                Value::String(value) => Value::String(value.clone()),
+                other => Value::String(other.to_string()),
+            };
+            metadata.insert(key.clone(), value);
+        }
+    }
+    metadata.insert(
+        "slack.action_id".to_string(),
+        Value::String(action_id.to_string()),
+    );
+    metadata.insert(
+        "slack.action_value".to_string(),
+        Value::String(action_value.to_string()),
+    );
+    (text, metadata)
+}
+
+fn slack_channel_id(payload: &Value) -> Option<String> {
+    payload
+        .get("channel")
+        .and_then(|channel| {
+            channel
+                .as_str()
+                .or_else(|| channel.get("id").and_then(Value::as_str))
+        })
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn slack_user_id(payload: &Value) -> Option<String> {
+    payload
+        .get("user")
+        .or_else(|| payload.get("user_id"))
+        .and_then(|user| {
+            user.as_str()
+                .or_else(|| user.get("id").and_then(Value::as_str))
+        })
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn is_slack_retry(headers: &Map<String, Value>) -> bool {
+    header_value(headers, "x-slack-retry-num").is_some()
+}
+
+fn is_bot_message(payload: &Value) -> bool {
+    payload.get("bot_id").is_some_and(|value| !value.is_null())
+        || payload.get("subtype").and_then(Value::as_str) == Some("bot_message")
+}
+
+fn url_decode(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut chars = input.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                result.push(byte as char);
+            } else {
+                result.push('%');
+                result.push_str(&hex);
+            }
+        } else if ch == '+' {
+            result.push(' ');
+        } else {
+            result.push(ch);
+        }
+    }
+    result
 }
 
 fn header_value(headers: &Map<String, Value>, key: &str) -> Option<String> {
@@ -142,12 +368,89 @@ mod tests {
 
     #[test]
     fn webhook_normalizes_valid_json_without_signing_secret() {
-        let body = r#"{"type":"event_callback","event":{"text":"hi"}}"#;
+        let body = r#"{"type":"event_callback","event":{"text":"hi","channel":"C1","user":"U1","event_ts":"1780414157.651"}}"#;
+        let headers = Map::new();
 
-        let out = normalize_body(body).expect("normalized");
+        let out = normalize_body(&headers, body).expect("normalized");
         let parsed: Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["event"]["event"]["text"], "hi");
+        assert_eq!(parsed["events"].as_array().expect("events").len(), 1);
+        let envelope: greentic_types::ChannelMessageEnvelope =
+            serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
+        assert_eq!(envelope.id, "slack:1780414157.651");
+        assert_eq!(envelope.channel, "C1");
+        assert_eq!(envelope.session_id, "C1");
+        assert_eq!(envelope.text.as_deref(), Some("hi"));
+        assert_eq!(envelope.from.expect("from").id, "U1");
+        assert_eq!(envelope.to[0].id, "C1");
+    }
+
+    #[test]
+    fn webhook_drops_retries_and_bot_messages_without_events() {
+        let mut headers = Map::new();
+        headers.insert("X-Slack-Retry-Num".to_string(), Value::String("1".into()));
+        let retry = normalize_body(
+            &headers,
+            r#"{"type":"event_callback","event":{"text":"hi","channel":"C1","user":"U1"}}"#,
+        )
+        .expect("retry");
+        let parsed: Value = serde_json::from_str(&retry).expect("json");
+        assert_eq!(parsed["events"].as_array().expect("events").len(), 0);
+
+        let bot = normalize_body(
+            &Map::new(),
+            r#"{"type":"event_callback","event":{"text":"hi","channel":"C1","bot_id":"B1"}}"#,
+        )
+        .expect("bot");
+        let parsed: Value = serde_json::from_str(&bot).expect("json");
+        assert_eq!(parsed["events"].as_array().expect("events").len(), 0);
+    }
+
+    #[test]
+    fn webhook_block_action_uses_channel_object_id_for_reply_route() {
+        let body = json!({
+            "type": "block_actions",
+            "channel": {"id": "C1", "name": "helpdesk"},
+            "user": {"id": "U1"},
+            "actions": [{
+                "action_id": "approve",
+                "value": serde_json::to_string(&json!({
+                    "routeToCardId": "next-card",
+                    "decision": "approve",
+                    "count": 2
+                })).expect("action value")
+            }]
+        });
+
+        let out = normalize_body(&Map::new(), &body.to_string()).expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+        let envelope: greentic_types::ChannelMessageEnvelope =
+            serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
+
+        assert_eq!(envelope.text.as_deref(), Some("[card:next-card]"));
+        assert_eq!(envelope.channel, "C1");
+        assert_eq!(envelope.session_id, "C1");
+        assert_eq!(envelope.to[0].id, "C1");
+        assert_eq!(envelope.from.expect("from").id, "U1");
+        assert_eq!(envelope.metadata["routeToCardId"], "next-card");
+        assert_eq!(envelope.metadata["decision"], "approve");
+        assert_eq!(envelope.metadata["count"], "2");
+        assert_eq!(envelope.metadata["slack.action_id"], "approve");
+    }
+
+    #[test]
+    fn webhook_returns_url_verification_challenge() {
+        let out = normalize_body(
+            &Map::new(),
+            r#"{"type":"url_verification","challenge":"abc123"}"#,
+        )
+        .expect("challenge");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["status"], 200);
+        assert_eq!(parsed["body"], "abc123");
+        assert_eq!(parsed["events"].as_array().expect("events").len(), 0);
     }
 }

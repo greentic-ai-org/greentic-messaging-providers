@@ -23,8 +23,9 @@ setup_actions:
     registration:
       component_ref: messaging-provider-slack
       op: setup_app_registration
-      client_id_output: client_id
+      client_id_output: slack_client_id
       client_secret_output: client_secret
+      signing_secret_output: slack_signing_secret
       app_id_output: slack_app_id
       app_name_field: slack_app_name
       config_access_token_field: slack_configuration_access_token

@@ -24,6 +24,17 @@ setup_modes:
           channel_id: channel_id
           channel_name: channel_name
         graph:
+          lookup:
+            method: GET
+            resource_template: /teams/{team_id}/channels
+            collection_path: value
+            match:
+              field: displayName
+              source_key: desired_channel_name
+              case_insensitive: true
+            output_keys:
+              id: channel_id
+              displayName: channel_name
           method: POST
           resource_template: /teams/{team_id}/channels
           body_template:

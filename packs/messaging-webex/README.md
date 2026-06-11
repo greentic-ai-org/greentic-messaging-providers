@@ -24,6 +24,8 @@ Inputs:
 - Config optional: public_base_url, default_room_id, default_to_person_email, api_base_url
 - Secrets required at runtime: WEBEX_BOT_TOKEN, WEBEX_WEBHOOK_SECRET
 - Setup asks only for WEBEX_BOT_TOKEN. The provider generates WEBEX_WEBHOOK_SECRET.
+- The pack declares WEBEX_WEBHOOK_SECRET as a generated tenant-wide runtime
+  secret so hosts can seed it generically for existing bundles.
 - default_room_id/default_to_person_email are legacy proactive-send fallbacks. Direct bot conversations do not need them; replies should use the room/person metadata captured from the inbound Webex webhook.
 
 Webhooks:

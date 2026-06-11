@@ -14,6 +14,12 @@ from typing import Any, Dict, Tuple
 
 PROVIDER_EXTENSION_ID = "greentic.provider-extension.v1"
 
+GENERATED_SECRET_REQUIREMENTS = {
+    "messaging-webex": ("webex_webhook_secret", "WEBEX_WEBHOOK_SECRET"),
+    "messaging-webchat-gui": ("jwt_signing_key", "JWT_SIGNING_KEY"),
+    "messaging-webchat": ("jwt_signing_key", "JWT_SIGNING_KEY"),
+}
+
 
 class CBORDecoder:
     """
@@ -145,6 +151,140 @@ def validate_pack(path: Path) -> None:
         if kind != PROVIDER_EXTENSION_ID:
             raise ValueError(
                 f"{path} provider extension kind={kind!r}, expected {PROVIDER_EXTENSION_ID!r}"
+            )
+
+    if path.stem == "messaging-teams":
+        validate_teams_subscription_desired_state(path, manifest)
+
+    if path.stem in GENERATED_SECRET_REQUIREMENTS:
+        secret_name, alias = GENERATED_SECRET_REQUIREMENTS[path.stem]
+        validate_generated_secret_requirement(path, manifest, secret_name, alias)
+
+
+def validate_generated_secret_requirement(
+    path: Path, manifest: Dict[str, Any], secret_name: str, alias: str
+) -> None:
+    generated_extension = (
+        (manifest.get("extensions") or {})
+        .get("greentic.generated-secrets.v1", {})
+        .get("inline", {})
+        .get("secrets")
+    )
+    if isinstance(generated_extension, list):
+        for candidate in generated_extension:
+            if isinstance(candidate, dict) and candidate.get("key") == secret_name:
+                validate_generated_secret_policy(path, candidate, secret_name, alias)
+                return
+
+    requirements = manifest.get("secret_requirements")
+    if not isinstance(requirements, list):
+        raise ValueError(f"{path} manifest missing secret_requirements list")
+    requirement = None
+    for candidate in requirements:
+        if isinstance(candidate, dict) and candidate.get("name") == secret_name:
+            requirement = candidate
+            break
+    if requirement is None:
+        raise ValueError(f"{path} missing generated secret requirement {secret_name}")
+
+    validate_generated_secret_policy(path, requirement, secret_name, alias)
+
+
+def validate_generated_secret_policy(
+    path: Path, requirement: Dict[str, Any], secret_name: str, alias: str
+) -> None:
+    aliases = requirement.get("aliases")
+    if not isinstance(aliases, list) or alias not in aliases:
+        raise ValueError(f"{path} {secret_name} missing alias {alias}")
+    if requirement.get("required") is not True:
+        raise ValueError(f"{path} {secret_name} must be required")
+    scope_value = requirement.get("scope")
+    if isinstance(scope_value, dict):
+        if scope_value.get("level") != "tenant" or scope_value.get("team") != "_":
+            raise ValueError(f"{path} {secret_name} must use tenant-wide team=_ scope")
+    elif scope_value != "tenant":
+        raise ValueError(f"{path} {secret_name} must use tenant requirement scope")
+
+    generated = requirement.get("generated")
+    if not isinstance(generated, dict):
+        generated = requirement
+    expected = {
+        "policy": "random",
+        "length": 20,
+        "encoding": "raw_text",
+        "regenerate_if_present": False,
+    }
+    for key, value in expected.items():
+        if generated.get(key) != value:
+            raise ValueError(
+                f"{path} {secret_name} generated.{key}={generated.get(key)!r}, expected {value!r}"
+            )
+    scope = generated.get("scope")
+    if not isinstance(scope, dict) or scope.get("level") != "tenant" or scope.get("team") != "_":
+        raise ValueError(f"{path} {secret_name} generated scope must be tenant-wide team=_")
+
+
+def validate_teams_subscription_desired_state(path: Path, manifest: Dict[str, Any]) -> None:
+    subscriptions = (
+        (manifest.get("extensions") or {})
+        .get("messaging.subscriptions.v1", {})
+        .get("inline")
+    )
+    if not isinstance(subscriptions, dict):
+        raise ValueError(f"{path} missing Teams messaging.subscriptions.v1 inline metadata")
+
+    desired_state = subscriptions.get("desired_state")
+    if not isinstance(desired_state, dict):
+        raise ValueError(f"{path} Teams subscriptions metadata missing desired_state")
+
+    if desired_state.get("output_key") != "desired_subscriptions":
+        raise ValueError(
+            f"{path} Teams desired_state output_key={desired_state.get('output_key')!r}, "
+            "expected 'desired_subscriptions'"
+        )
+
+    source_keys = desired_state.get("source_keys")
+    if not isinstance(source_keys, list):
+        raise ValueError(f"{path} Teams desired_state missing source_keys list")
+    for key in ("team_id", "channel_id"):
+        if key not in source_keys:
+            raise ValueError(f"{path} Teams desired_state source_keys missing {key}")
+
+    templates = desired_state.get("templates")
+    if not isinstance(templates, list):
+        raise ValueError(f"{path} Teams desired_state missing templates list")
+
+    channel_template = None
+    for template in templates:
+        if not isinstance(template, dict):
+            continue
+        if (
+            template.get("resource_template")
+            == "/teams/{team_id}/channels/{channel_id}/messages"
+        ):
+            channel_template = template
+            break
+    if channel_template is None:
+        raise ValueError(
+            f"{path} Teams desired_state templates missing channel message resource template"
+        )
+
+    when_all = channel_template.get("when_all")
+    if not isinstance(when_all, list) or "team_id" not in when_all or "channel_id" not in when_all:
+        raise ValueError(
+            f"{path} Teams channel subscription template must require team_id and channel_id"
+        )
+
+    component_config = subscriptions.get("component_config")
+    if not isinstance(component_config, dict):
+        raise ValueError(f"{path} Teams subscriptions metadata missing component_config")
+    include = component_config.get("include")
+    if not isinstance(include, list):
+        raise ValueError(f"{path} Teams component_config missing include list")
+    for key in ("team_id", "channel_id", "chat_id"):
+        if key in include:
+            raise ValueError(
+                f"{path} Teams component_config must not pass desired-state key {key}"
             )
 
 

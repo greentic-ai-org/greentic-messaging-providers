@@ -1,7 +1,7 @@
 [package]
 name = "messaging-provider-webchat-gui"
 edition.workspace = true
-version = "0.5.4"
+version = "0.5.8"
 license.workspace = true
 publish = false
 
@@ -27,11 +27,14 @@ webchat-directline-core.workspace = true
 package = "greentic:messaging-provider-webchat-gui-core"
 
 [package.metadata.component.target]
-path = "../messaging-provider-webchat/wit/messaging-provider-webchat"
+path = "wit/messaging-provider-webchat-gui"
 world = "component-v0-v6-v0"
 
 [package.metadata.component.target.dependencies]
-"greentic:state" = { path = "../messaging-provider-webchat/wit/messaging-provider-webchat/deps/state" }
-"greentic:interfaces-types" = { path = "../messaging-provider-webchat/wit/messaging-provider-webchat/deps/interfaces-types" }
-"greentic:secrets-store" = { path = "../messaging-provider-webchat/wit/messaging-provider-webchat/deps/secrets-store" }
-"greentic:provider-schema-core" = { path = "../messaging-provider-webchat/wit/messaging-provider-webchat/deps/provider-schema-core" }
+"greentic:http" = { path = "wit/messaging-provider-webchat-gui/deps/http" }
+"greentic:state" = { path = "wit/messaging-provider-webchat-gui/deps/state" }
+"greentic:interfaces-types" = { path = "wit/messaging-provider-webchat-gui/deps/interfaces-types" }
+"greentic:secrets-store" = { path = "wit/messaging-provider-webchat-gui/deps/secrets-store" }
+"greentic:provider-schema-core" = { path = "wit/messaging-provider-webchat-gui/deps/provider-schema-core" }
+"greentic:provider-instance-identity" = { path = "wit/messaging-provider-webchat-gui/deps/provider-instance-identity" }
+"provider:common" = { path = "wit/messaging-provider-webchat-gui/deps/provider-common" }

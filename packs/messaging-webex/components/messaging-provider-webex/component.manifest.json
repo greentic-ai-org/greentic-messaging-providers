@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-webex",
-  "version": "0.5.9",
+  "version": "0.5.11",
   "supports": [
     "messaging"
   ],

@@ -148,7 +148,22 @@ fn ensure_channel_with_token(
     }
 
     let body = channel_create_body(desired_name);
-    let created = graph_post_json(&list_url, token, &body)?;
+    let created = match graph_post_json(&list_url, token, &body) {
+        Ok(created) => created,
+        Err(err) if err.starts_with("Teams channel already exists") => {
+            let channels = graph_get_json(&list_url, token)?;
+            if let Some((channel_id, channel_name)) = find_channel_by_name(&channels, desired_name)
+            {
+                return Ok(EnsureChannelResult {
+                    created: false,
+                    channel_id,
+                    channel_name,
+                });
+            }
+            return Err(err);
+        }
+        Err(err) => return Err(err),
+    };
     let channel_id = created
         .get("id")
         .and_then(Value::as_str)
@@ -382,6 +397,48 @@ mod tests {
         assert_eq!(
             find_channel_by_name(&channels, "hr onboarding"),
             Some(("hr".to_string(), "HR Onboarding".to_string()))
+        );
+    }
+
+    #[test]
+    fn create_conflict_reuses_channel_found_after_retry() {
+        let requests = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let requests_for_mock = requests.clone();
+        with_http_send_mock(
+            move |req| {
+                let mut requests = requests_for_mock.borrow_mut();
+                requests.push(req.method.clone());
+                match requests.len() {
+                    1 if req.method == "GET" => Ok(client::Response {
+                        status: 200,
+                        headers: vec![],
+                        body: Some(br#"{"value":[]}"#.to_vec()),
+                    }),
+                    2 if req.method == "POST" => Ok(client::Response {
+                        status: 409,
+                        headers: vec![],
+                        body: Some(
+                            br#"{"error":{"message":"Channel with this displayName already exists"}}"#
+                                .to_vec(),
+                        ),
+                    }),
+                    3 if req.method == "GET" => Ok(client::Response {
+                        status: 200,
+                        headers: vec![],
+                        body: Some(
+                            br#"{"value":[{"id":"hr","displayName":"HR Onboarding"}]}"#.to_vec(),
+                        ),
+                    }),
+                    _ => panic!("unexpected request sequence: {requests:?}"),
+                }
+            },
+            || {
+                let result = ensure_channel_with_token(&cfg(), "token", "team", "HR Onboarding")
+                    .expect("reuse channel after conflict");
+                assert!(!result.created);
+                assert_eq!(result.channel_id, "hr");
+                assert_eq!(result.channel_name, "HR Onboarding");
+            },
         );
     }
 

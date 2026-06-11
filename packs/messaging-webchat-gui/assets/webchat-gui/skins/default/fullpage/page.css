@@ -284,7 +284,9 @@ button[data-action="logout"]:hover,
   border-bottom: none !important;
 }
 
-/* Action buttons — Greentic brand-tinted outline variant */
+/* Action buttons — default is a brand outline, positive is filled brand,
+   destructive is always red. Adaptive Cards JS adds style-positive /
+   style-destructive for Action.Submit style values. */
 .ac-actionSet button,
 .ac-pushButton {
   font-family: var(--font) !important;
@@ -299,6 +301,24 @@ button[data-action="logout"]:hover,
   cursor: pointer !important;
   transition: background 0.15s, border-color 0.15s !important;
 }
+.ac-actionSet button:not(.style-positive):not(.style-destructive),
+.ac-pushButton:not(.style-positive):not(.style-destructive) {
+  background-color: transparent !important;
+  color: var(--brand) !important;
+  border-color: var(--brand) !important;
+}
+.ac-actionSet button.style-positive,
+.ac-pushButton.style-positive {
+  background-color: var(--brand) !important;
+  color: #ffffff !important;
+  border-color: rgba(16, 185, 129, 0.55) !important;
+}
+.ac-actionSet button.style-destructive,
+.ac-pushButton.style-destructive {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #fca5a5 !important;
+}
 
 .ac-actionSet button div,
 .ac-actionSet button span,
@@ -308,12 +328,38 @@ button[data-action="logout"]:hover,
 .ac-pushButton p {
   color: inherit !important;
 }
+.ac-actionSet button.style-positive div,
+.ac-actionSet button.style-positive span,
+.ac-actionSet button.style-positive p,
+.ac-actionSet button.style-destructive div,
+.ac-actionSet button.style-destructive span,
+.ac-actionSet button.style-destructive p,
+.ac-pushButton.style-positive div,
+.ac-pushButton.style-positive span,
+.ac-pushButton.style-positive p,
+.ac-pushButton.style-destructive div,
+.ac-pushButton.style-destructive span,
+.ac-pushButton.style-destructive p {
+  color: #ffffff !important;
+}
 
 .ac-actionSet button:hover,
 .ac-pushButton:hover {
   background-color: rgba(5, 150, 105, 0.14) !important;
   border-color: var(--brand) !important;
   color: var(--brand-dark) !important;
+}
+.ac-actionSet button.style-positive:hover,
+.ac-pushButton.style-positive:hover {
+  background-color: #047857 !important;
+  border-color: #6ee7b7 !important;
+  color: #ffffff !important;
+}
+.ac-actionSet button.style-destructive:hover,
+.ac-pushButton.style-destructive:hover {
+  background-color: #b91c1c !important;
+  border-color: #fecaca !important;
+  color: #ffffff !important;
 }
 
 .ac-actionSet button[disabled],
@@ -564,7 +610,7 @@ button[data-action="logout"]:hover,
     color: #9ca3af !important;
     border-bottom-color: #374151 !important;
   }
-  :root:not([data-theme="light"]) .ac-pushButton {
+  :root:not([data-theme="light"]) .ac-pushButton:not(.style-positive):not(.style-destructive) {
     background-color: rgba(5, 150, 105, 0.18) !important;
     border-color: #34d399 !important;
     color: #d1fae5 !important;
@@ -574,7 +620,7 @@ button[data-action="logout"]:hover,
   :root:not([data-theme="light"]) .ac-pushButton p {
     color: #d1fae5 !important;
   }
-  :root:not([data-theme="light"]) .ac-pushButton:hover {
+  :root:not([data-theme="light"]) .ac-pushButton:not(.style-positive):not(.style-destructive):hover {
     background-color: rgba(5, 150, 105, 0.28) !important;
     border-color: #6ee7b7 !important;
   }
@@ -587,7 +633,7 @@ button[data-action="logout"]:hover,
   color: #9ca3af !important;
   border-bottom-color: #374151 !important;
 }
-[data-theme="dark"] .ac-pushButton {
+[data-theme="dark"] .ac-pushButton:not(.style-positive):not(.style-destructive) {
   background-color: rgba(5, 150, 105, 0.18) !important;
   border-color: #34d399 !important;
   color: #d1fae5 !important;
@@ -597,7 +643,7 @@ button[data-action="logout"]:hover,
 [data-theme="dark"] .ac-pushButton p {
   color: #d1fae5 !important;
 }
-[data-theme="dark"] .ac-pushButton:hover {
+[data-theme="dark"] .ac-pushButton:not(.style-positive):not(.style-destructive):hover {
   background-color: rgba(5, 150, 105, 0.28) !important;
   border-color: #6ee7b7 !important;
 }
@@ -718,17 +764,17 @@ button[data-action="logout"]:hover,
   :root:not([data-theme="light"]) .webchat__bubble__content .ac-separator {
     border-color: #374151 !important;
   }
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-actionSet button,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-pushButton,
-  :root:not([data-theme="light"]) .webchat__bubble__content [role="group"] button {
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-actionSet button:not(.style-positive):not(.style-destructive),
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-pushButton:not(.style-positive):not(.style-destructive),
+  :root:not([data-theme="light"]) .webchat__bubble__content [role="group"] button:not(.style-positive):not(.style-destructive) {
     background-color: rgba(5, 150, 105, 0.18) !important;
     border: 1px solid #34d399 !important;
     border-radius: 6px !important;
     color: #d1fae5 !important;
   }
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-actionSet button:hover,
-  :root:not([data-theme="light"]) .webchat__bubble__content .ac-pushButton:hover,
-  :root:not([data-theme="light"]) .webchat__bubble__content [role="group"] button:hover {
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-actionSet button:not(.style-positive):not(.style-destructive):hover,
+  :root:not([data-theme="light"]) .webchat__bubble__content .ac-pushButton:not(.style-positive):not(.style-destructive):hover,
+  :root:not([data-theme="light"]) .webchat__bubble__content [role="group"] button:not(.style-positive):not(.style-destructive):hover {
     background-color: rgba(5, 150, 105, 0.28) !important;
     border-color: #6ee7b7 !important;
   }
@@ -782,17 +828,17 @@ button[data-action="logout"]:hover,
 [data-theme="dark"] .webchat__bubble__content .ac-separator {
   border-color: #374151 !important;
 }
-[data-theme="dark"] .webchat__bubble__content .ac-actionSet button,
-[data-theme="dark"] .webchat__bubble__content .ac-pushButton,
-[data-theme="dark"] .webchat__bubble__content [role="group"] button {
+[data-theme="dark"] .webchat__bubble__content .ac-actionSet button:not(.style-positive):not(.style-destructive),
+[data-theme="dark"] .webchat__bubble__content .ac-pushButton:not(.style-positive):not(.style-destructive),
+[data-theme="dark"] .webchat__bubble__content [role="group"] button:not(.style-positive):not(.style-destructive) {
   background-color: rgba(5, 150, 105, 0.18) !important;
   border: 1px solid #34d399 !important;
   border-radius: 6px !important;
   color: #d1fae5 !important;
 }
-[data-theme="dark"] .webchat__bubble__content .ac-actionSet button:hover,
-[data-theme="dark"] .webchat__bubble__content .ac-pushButton:hover,
-[data-theme="dark"] .webchat__bubble__content [role="group"] button:hover {
+[data-theme="dark"] .webchat__bubble__content .ac-actionSet button:not(.style-positive):not(.style-destructive):hover,
+[data-theme="dark"] .webchat__bubble__content .ac-pushButton:not(.style-positive):not(.style-destructive):hover,
+[data-theme="dark"] .webchat__bubble__content [role="group"] button:not(.style-positive):not(.style-destructive):hover {
   background-color: rgba(5, 150, 105, 0.28) !important;
   border-color: #6ee7b7 !important;
 }

@@ -631,6 +631,20 @@
               "teams_channel": {
                 "component_ref": "messaging-provider-teams",
                 "graph": {
+                  "lookup": {
+                    "collection_path": "value",
+                    "match": {
+                      "case_insensitive": true,
+                      "field": "displayName",
+                      "source_key": "desired_channel_name"
+                    },
+                    "method": "GET",
+                    "output_keys": {
+                      "displayName": "channel_name",
+                      "id": "channel_id"
+                    },
+                    "resource_template": "/teams/{team_id}/channels"
+                  },
                   "body_template": {
                     "displayName": "{desired_channel_name}",
                     "membershipType": "standard"

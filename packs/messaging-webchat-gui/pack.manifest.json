@@ -1,13 +1,13 @@
 {
   "name": "messaging-webchat-gui",
-  "version": "0.5.4",
+  "version": "0.5.7",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Hosted WebChat messaging pack with Direct Line backend and packaged GUI.",
   "component_sources": [
     {
       "id": "ai.greentic.component-provision",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -29,7 +29,7 @@
     },
     {
       "id": "ai.greentic.component-qa",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -51,7 +51,7 @@
     },
     {
       "id": "ai.greentic.component-templates",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -73,7 +73,7 @@
     },
     {
       "id": "messaging-provider-webchat-gui",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -95,7 +95,7 @@
     },
     {
       "id": "messaging_provider_webchat_gui",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -150,9 +150,33 @@
     }
   ],
   "extensions": {
+    "greentic.generated-secrets.v1": {
+      "kind": "greentic.generated-secrets.v1",
+      "version": "0.5.7",
+      "inline": {
+        "secrets": [
+          {
+            "key": "jwt_signing_key",
+            "aliases": [
+              "JWT_SIGNING_KEY"
+            ],
+            "required": true,
+            "policy": "random",
+            "length": 20,
+            "encoding": "raw_text",
+            "scope": {
+              "level": "tenant",
+              "team": "_"
+            },
+            "regenerate_if_present": false,
+            "description": "Secret key used for Direct Line JWT token signing and verification."
+          }
+        ]
+      }
+    },
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "inline": {
         "offers": [
           {
@@ -167,7 +191,7 @@
             "setup": {
               "qa_ref": "components/messaging-provider-webchat-gui"
             },
-            "version": "0.5.4"
+            "version": "0.5.7"
           }
         ],
         "schema_version": 1
@@ -175,7 +199,7 @@
     },
     "greentic.http-routes.v1": {
       "kind": "greentic.http-routes.v1",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "inline": {
         "routes": [
           {
@@ -210,7 +234,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "inline": {
         "validators": [
           {
@@ -223,7 +247,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "inline": {
         "providers": [
           {
@@ -251,7 +275,7 @@
     },
     "greentic.static-routes.v1": {
       "kind": "greentic.static-routes.v1",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "inline": {
         "routes": [
           {
@@ -271,7 +295,7 @@
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.5.4",
+      "version": "0.5.7",
       "inline": {
         "capabilities": {
           "content_types": [
@@ -280,8 +304,8 @@
           "supports_webhook_validation": false
         },
         "component_ref": "messaging-provider-webchat-gui",
-        "export": "ingest-http",
-        "world": "greentic:provider/schema-core@1.0.0"
+        "export": "handle-webhook",
+        "world": "provider:common/ingress@0.0.2"
       }
     }
   },

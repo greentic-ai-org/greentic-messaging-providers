@@ -32,6 +32,9 @@ def load_json(path: Path) -> dict:
         raise SystemExit(1)
 
 
+PRESERVED_REQUIREMENT_FIELDS = ("aliases", "generated")
+
+
 def dedupe_requirements(requirements: Iterable[dict]) -> List[dict]:
     merged: Dict[Tuple[str, str], dict] = {}
     for req in requirements:
@@ -58,6 +61,12 @@ def dedupe_requirements(requirements: Iterable[dict]) -> List[dict]:
             merged[key]["example"] = example
         if required is not None:
             merged[key]["required"] = bool(required)
+        for field in PRESERVED_REQUIREMENT_FIELDS:
+            value = req.get(field)
+            if value is None and existing:
+                value = existing.get(field)
+            if value is not None:
+                merged[key][field] = value
     return list(merged.values())
 
 
@@ -104,9 +113,9 @@ def aggregate_requirements(pack_dir: Path, components_dir: Path) -> List[dict]:
             continue
         data = load_json(comp_manifest)
         component_reqs = data.get("secret_requirements") or []
-        reqs.extend(component_reqs)
+        reqs.extend(req for req in component_reqs if not req.get("generated"))
     # allow manual/static requirements already in the pack manifest
-    reqs.extend(manifest.get("secret_requirements") or [])
+    reqs.extend(req for req in (manifest.get("secret_requirements") or []) if not req.get("generated"))
     return dedupe_requirements(reqs)
 
 
