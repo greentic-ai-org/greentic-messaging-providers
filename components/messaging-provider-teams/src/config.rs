@@ -70,6 +70,13 @@ pub(crate) struct ProviderConfig {
     pub(crate) messaging_endpoint: Option<String>,
     #[serde(default)]
     pub(crate) default_service_url: Option<String>,
+
+    /// Dev-only escape hatch: when `true` AND `GREENTIC_TEAMS_INSECURE_DEV=1`
+    /// is set in the runtime environment, JWT validation is bypassed.
+    /// Config flag alone is not sufficient — the runtime must also export the
+    /// env var. Default: `None` (strict).
+    #[serde(default)]
+    pub(crate) skip_jwt_validation: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +121,9 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) bot_display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) messaging_endpoint: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) skip_jwt_validation: Option<bool>,
 }
 
 fn default_enabled() -> bool {
@@ -156,6 +166,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         ms_bot_app_password: None,
         bot_display_name: None,
         messaging_endpoint: None,
+        skip_jwt_validation: None,
     }
 }
 
@@ -229,6 +240,17 @@ pub(crate) fn validate_provider_config(mut cfg: ProviderConfig) -> Result<Provid
     if cfg.token_scope.is_empty() {
         return Err("invalid config: token_scope cannot be empty".to_string());
     }
+
+    if cfg.skip_jwt_validation == Some(true) {
+        let dev_mode = std::env::var("GREENTIC_TEAMS_INSECURE_DEV").unwrap_or_default();
+        if dev_mode != "1" {
+            return Err(
+                "skip_jwt_validation requires GREENTIC_TEAMS_INSECURE_DEV=1 in the runtime environment"
+                    .to_string(),
+            );
+        }
+    }
+
     Ok(cfg)
 }
 
@@ -329,6 +351,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "bot_display_name",
         "messaging_endpoint",
         "default_service_url",
+        "skip_jwt_validation",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -405,6 +428,7 @@ fn load_config_from_secrets() -> Result<ProviderConfig, String> {
         bot_display_name: None,
         messaging_endpoint: None,
         default_service_url: None,
+        skip_jwt_validation: None,
     })
 }
 
@@ -489,6 +513,7 @@ mod tests {
             ms_bot_app_password: None,
             bot_display_name: None,
             messaging_endpoint: None,
+            skip_jwt_validation: None,
         }
     }
 
@@ -625,6 +650,7 @@ mod tests {
             bot_display_name: None,
             messaging_endpoint: None,
             default_service_url: Some("https://fallback.example.com".to_string()),
+            skip_jwt_validation: None,
         };
         let destination = default_channel_destination(&cfg).expect("channel destination");
         assert_eq!(destination.id, "team-1:channel-1");
@@ -642,5 +668,45 @@ mod tests {
         );
         assert_eq!(get_conversation_id(&activity).as_deref(), Some("conv-1"));
         assert_eq!(get_activity_id(&activity).as_deref(), Some("activity-1"));
+    }
+
+    /// Combined into a single test to avoid env-var races under parallel execution.
+    #[test]
+    fn skip_jwt_validation_env_gate() {
+        let make_cfg = || ProviderConfig {
+            enabled: true,
+            public_base_url: None,
+            setup_mode: Some("bot_framework".to_string()),
+            tenant_id: String::new(),
+            client_id: String::new(),
+            refresh_token: None,
+            client_secret: None,
+            access_token: None,
+            graph_base_url: DEFAULT_GRAPH_BASE_URL.to_string(),
+            auth_base_url: DEFAULT_AUTH_BASE_URL.to_string(),
+            token_scope: DEFAULT_GRAPH_TOKEN_SCOPE.to_string(),
+            team_id: None,
+            team_name: None,
+            channel_id: None,
+            channel_name: None,
+            desired_channel_name: None,
+            chat_id: None,
+            user_id: None,
+            ms_bot_app_id: Some("bot-app-id".to_string()),
+            ms_bot_app_password: None,
+            bot_display_name: None,
+            messaging_endpoint: None,
+            default_service_url: None,
+            skip_jwt_validation: Some(true),
+        };
+
+        // SAFETY: test-only; single test ensures sequential execution.
+        unsafe { std::env::remove_var("GREENTIC_TEAMS_INSECURE_DEV") };
+        let err = validate_provider_config(make_cfg()).expect_err("should reject without env var");
+        assert!(err.contains("GREENTIC_TEAMS_INSECURE_DEV"));
+
+        unsafe { std::env::set_var("GREENTIC_TEAMS_INSECURE_DEV", "1") };
+        validate_provider_config(make_cfg()).expect("should accept with env var");
+        unsafe { std::env::remove_var("GREENTIC_TEAMS_INSECURE_DEV") };
     }
 }

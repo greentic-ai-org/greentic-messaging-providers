@@ -157,6 +157,25 @@ fn ingest_callback_query(body_val: &Value, callback: &Value) -> Vec<u8> {
     envelope
         .metadata
         .insert("callback_data".into(), data_str.to_string());
+    // Flatten the AC Action.Submit data fields into metadata (mirrors
+    // slack/teams/webex ingest) so the flow can route on e.g.
+    // `response.action`. Telegram's 64-byte callback_data round-trips the
+    // submit data as a JSON string, so the action would otherwise stay buried
+    // inside `callback_data` and never reach the flow's routing context.
+    //
+    // `or_insert`, not `insert`: callback_data is client-supplied, so a crafted
+    // value must never overwrite the trusted metadata already derived from the
+    // authenticated Telegram callback fields (chat_id, from, routeToCardId,
+    // ...). New keys like `action` still flow; existing trusted keys win.
+    if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(data_str) {
+        for (k, v) in obj {
+            let s = match v {
+                Value::String(s) => s,
+                other => other.to_string(),
+            };
+            envelope.metadata.entry(k).or_insert(s);
+        }
+    }
 
     let normalized = json!({
         "ok": true,
@@ -353,6 +372,42 @@ mod tests {
             Some("button-1")
         );
         assert_eq!(event.metadata.get("locale").map(String::as_str), Some("nl"));
+    }
+
+    #[test]
+    fn callback_query_flattens_submit_action_without_overwriting_trusted_metadata() {
+        // AC Action.Submit data under 64 bytes round-trips as full JSON (not
+        // compacted to r/c). Flatten its fields into metadata so the flow can
+        // route on `response.action`. Client-supplied keys that collide with
+        // trusted metadata (chat_id, from) derived from the authenticated
+        // Telegram fields must NOT be overwritten.
+        let out = ingest_body(json!({
+            "callback_query": {
+                "id": "cb-1",
+                "from": {"id": 42},
+                "message": {"chat": {"id": 99}},
+                "data": "{\"action\":\"about_card\",\"chat_id\":\"99999\",\"from\":\"attacker\"}"
+            }
+        }));
+
+        assert_eq!(out.status, 200);
+        let event = &out.events[0];
+        // New (non-colliding) submit field flows through for routing.
+        assert_eq!(
+            event.metadata.get("action").map(String::as_str),
+            Some("about_card")
+        );
+        // Trusted identity/session keys keep their authenticated values.
+        assert_eq!(
+            event.metadata.get("chat_id").map(String::as_str),
+            Some("99")
+        );
+        assert_eq!(event.metadata.get("from").map(String::as_str), Some("42"));
+        // Raw callback_data is still preserved alongside the flattened fields.
+        assert_eq!(
+            event.metadata.get("callback_data").map(String::as_str),
+            Some("{\"action\":\"about_card\",\"chat_id\":\"99999\",\"from\":\"attacker\"}")
+        );
     }
 
     #[test]
