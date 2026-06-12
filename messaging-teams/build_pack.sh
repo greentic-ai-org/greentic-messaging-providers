@@ -195,6 +195,26 @@ extensions:
         content_types:
         - application/json
         supports_webhook_validation: true
+  greentic.http-routes.v1:
+    kind: greentic.http-routes.v1
+    version: "1"
+    inline:
+      schema_version: 1
+      routes:
+      - id: messaging-teams-setup-state
+        pattern: /v1/messaging/setup/messaging-teams/{{tenant}}
+        methods:
+        - GET
+        - POST
+        provider_op: ingest_http
+        domain: messaging
+      - id: messaging-teams-setup-actions
+        pattern: /v1/messaging/setup/messaging-teams/{{tenant}}/{{action*}}
+        methods:
+        - GET
+        - POST
+        provider_op: ingest_http
+        domain: messaging
 """
 if "\nextensions:\n" not in text and not text.rstrip().endswith("extensions:"):
     text = text.rstrip() + "\n" + extensions

@@ -9,6 +9,9 @@ mod bindings {
 #[path = "../../../messaging-teams/src/bot_framework.rs"]
 mod bot_framework;
 
+mod setup;
+mod teams_pkg;
+
 use bindings::exports::provider::common::ingress::Guest as IngressGuest;
 use bindings::exports::provider::common::subscriptions::Guest as SubscriptionsGuest;
 use bindings::greentic::http::http_client as client;
@@ -61,6 +64,12 @@ struct Component;
 
 impl IngressGuest for Component {
     fn handle_webhook(headers_json: String, body_json: String) -> Result<String, String> {
+        if let Some((method, path)) = request_method_path(&headers_json)
+            && path.contains("/setup/messaging-teams/")
+            && let Some(result) = setup::handle(&method, &path, &body_json)
+        {
+            return result;
+        }
         if let Some(token) = validation_token_from_headers(&headers_json) {
             return Ok(token);
         }
@@ -68,6 +77,12 @@ impl IngressGuest for Component {
             .map_err(|_| "validation error: invalid body".to_string())?;
         if bot_framework::is_bot_framework_activity(&parsed) {
             let normalized = bot_framework::handle_bot_framework_activity(&headers_json, &parsed)?;
+            // Record the activity so the setup wizard's first_bot_framework_post resolves.
+            if let Some((_, path)) = request_method_path(&headers_json)
+                && let Some(tenant) = ingress_tenant_from_path(&path)
+            {
+                setup::record_activity(&tenant, &parsed);
+            }
             return serde_json::to_string(&normalized)
                 .map_err(|_| "other error: serialization failed".to_string());
         }
@@ -228,6 +243,24 @@ fn existing_subscriptions_to_json(existing: &[ExistingSubscription]) -> Value {
         })
         .collect();
     Value::Array(list)
+}
+
+fn request_method_path(headers_json: &str) -> Option<(String, String)> {
+    let headers: Value = serde_json::from_str(headers_json).ok()?;
+    let method = headers.get("method").and_then(Value::as_str)?.to_string();
+    let path = headers.get("path").and_then(Value::as_str)?.to_string();
+    Some((method, path))
+}
+
+/// Extract the tenant from `/v1/messaging/ingress/messaging-teams/{tenant}/{team}`.
+fn ingress_tenant_from_path(path: &str) -> Option<String> {
+    let rest = path.split("/ingress/messaging-teams/").nth(1)?;
+    let tenant = rest.trim_start_matches('/').split('/').next()?;
+    if tenant.is_empty() {
+        None
+    } else {
+        Some(tenant.to_string())
+    }
 }
 
 fn validation_token_from_headers(headers_json: &str) -> Option<String> {

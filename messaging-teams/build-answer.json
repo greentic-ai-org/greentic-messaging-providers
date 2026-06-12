@@ -84,6 +84,7 @@
     "assets/setup/greentic-teams-setup.d.ts",
     "assets/setup/README.md",
     "assets/setup/examples/basic.html",
+    "assets/setup/trial.html",
     "assets/setup/conformance.json",
     "assets/setup/backend-contract.json",
     "assets/teams-app/manifest.template.json",
