@@ -70,7 +70,7 @@ cargo clippy --workspace --all-targets
 
 ### WIT Component Model
 
-All providers export the `component-v0-v6-v0` world (`greentic:component@0.6.1`):
+All providers export worlds from `greentic:component@0.6.0` (`component`, `component-configurable`, `component-qa-support`, `component-i18n-support`):
 - **imports:** `http-client`, `secrets-store`
 - **exports:** `descriptor`, `runtime` (CBOR), `qa`, `component-i18n`, `schema-core-api` (JSON compat)
 
@@ -123,7 +123,7 @@ Each `components/messaging-provider-*` follows this pattern:
 ## Version Management
 
 The workspace version in root `Cargo.toml` must stay in sync with:
-- All `component.manifest.json` files (57 files across `components/` and `packs/`)
+- All `component.manifest.json` files (55 files across `components/` and `packs/`)
 - All `pack.yaml` files (12 files in `packs/`)
 - All `pack.manifest.json` files (12 files in `packs/`)
 
@@ -177,6 +177,11 @@ Before adding new core types or interfaces, check if they exist in shared Greent
 - **Keep comments minimal.** Default to no comment. Add one only when the WHY is non-obvious (a hidden constraint, a subtle invariant, a workaround). Never explain WHAT the code does — well-named identifiers cover that.
 - **One short line max** for a comment when needed. No multi-paragraph block comments or multi-line docstrings on internal items. Trim before committing.
 - Don't reference the current task, fix, or callers ("used by X", "added for Y") — those belong in the PR description and rot as the codebase evolves.
+
+## Gotchas
+
+- `ci/steps/07_sync_packs.sh` (delegates to `tools/sync_packs.sh`) syncs versions from `Cargo.toml` into pack manifests and can DOWNBUMP pack versions. For surgical pack-only changes, edit `pack.yaml` + `manifest.json` by hand instead of running sync_packs.
+- Egress ops (`render_plan`, `encode`, `send_payload`) must be declared in each provider's `pack.yaml` + component manifest op allow-list, or egress fails at runtime with `op 'render_plan' is not declared` (fixed across 6 providers in PR #232).
 
 ## Git Conventions
 
