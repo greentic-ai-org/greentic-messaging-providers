@@ -1,5 +1,5 @@
 pack:
-  id: messaging-teams
+  id: messaging-teams-graph
   name: Messaging Teams
   version: "0.1.0"
   publisher: Greentic
@@ -15,10 +15,10 @@ provider:
       - tier-d
 components:
   adapter:
-    component_ref: local:../packs/messaging-teams/components/messaging-provider-teams.wasm
+    component_ref: local:../packs/messaging-teams-graph/components/messaging-provider-teams-graph.wasm
     world: greentic:provider-schema-core/schema-core@1.0.0
     export: schema-core-api
-    manifest: ../components/messaging-provider-teams/component.manifest.json
+    manifest: ../components/messaging-provider-teams-graph/component.manifest.json
 flows:
   generate:
     - setup_default

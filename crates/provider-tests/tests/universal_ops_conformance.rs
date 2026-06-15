@@ -36,7 +36,7 @@ provider_bindings!(
 );
 provider_bindings!(
     teams_bindings,
-    "../../components/messaging-provider-teams/wit/messaging-provider-teams",
+    "../../components/messaging-provider-teams-graph/wit/messaging-provider-teams-graph",
     "component-v0-v6-v0"
 );
 provider_bindings!(

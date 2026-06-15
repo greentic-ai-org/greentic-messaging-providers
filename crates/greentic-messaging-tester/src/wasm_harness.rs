@@ -450,7 +450,7 @@ fn describe_manifest_from_schema(
 fn provider_type_from_descriptor(provider: &str) -> String {
     match provider {
         "messaging-provider-slack" | "slack" => "messaging.slack.api".to_string(),
-        "messaging-provider-teams" | "teams" => "messaging.teams.bot".to_string(),
+        "messaging-provider-teams-graph" | "teams" => "messaging.teams.graph".to_string(),
         "messaging-provider-telegram" | "telegram" => "messaging.telegram.bot".to_string(),
         "messaging-provider-webchat" | "webchat" => "messaging.webchat".to_string(),
         "messaging-provider-webchat-gui" | "webchat-gui" => "messaging.webchat-gui".to_string(),
@@ -720,7 +720,7 @@ impl http_client::HttpClientHostV1_1 for TesterHostState {
         _ctx: Option<http_client::TenantCtxV1_1>,
     ) -> Result<http_client::ResponseV1_1, http_client::HttpClientErrorV1_1> {
         let response = match self.http_mode {
-            HttpMode::Mock => http_mock::mock_response(self.mock_responses.as_ref()),
+            HttpMode::Mock => http_mock::mock_response(self.mock_responses.as_ref(), &req.url),
             HttpMode::Real => http_mock::send_real_request(&req)?,
         };
         let call = HttpCall {

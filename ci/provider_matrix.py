@@ -33,6 +33,11 @@ def load_matrix() -> dict:
 
 def normalize_provider(raw: str, matrix: dict) -> str:
     value = raw.strip().lower()
+    if value in matrix["providers"]:
+        return value
+    for name, provider in matrix["providers"].items():
+        if value == provider.get("pack", "").lower():
+            return name
     if value.startswith("messaging-"):
         value = value[len("messaging-") :]
     if value in matrix["providers"]:

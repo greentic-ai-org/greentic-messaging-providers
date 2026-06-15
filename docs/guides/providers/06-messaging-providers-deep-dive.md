@@ -12,7 +12,7 @@ greentic-messaging-providers/
 │   │   └── src/directline/         # Direct Line v3 protocol
 │   ├── messaging-provider-slack/
 │   ├── messaging-ingress-slack/
-│   ├── messaging-provider-teams/
+│   ├── messaging-provider-teams-graph/
 │   ├── messaging-ingress-teams/
 │   ├── messaging-provider-whatsapp/
 │   ├── messaging-ingress-whatsapp/
@@ -32,7 +32,7 @@ greentic-messaging-providers/
 │   ├── messaging-webex/
 │   ├── messaging-webchat/
 │   ├── messaging-slack/
-│   ├── messaging-teams/
+│   ├── messaging-teams-graph/
 │   ├── messaging-whatsapp/
 │   ├── messaging-email/
 │   └── messaging-dummy/

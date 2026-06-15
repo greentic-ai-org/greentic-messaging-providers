@@ -48,7 +48,7 @@ const PROVIDERS: &[ProviderSpec] = &[
     },
     ProviderSpec {
         id: "teams",
-        component: "messaging-provider-teams",
+        component: "messaging-provider-teams-graph",
     },
     ProviderSpec {
         id: "telegram",

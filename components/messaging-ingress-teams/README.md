@@ -6,20 +6,17 @@ Ingress and subscription lifecycle component for Microsoft Teams.
 - `messaging-ingress-teams`
 
 ## Provider types
-- `messaging.teams.bot`
-- Graph subscription inputs are also supported for channel message resources
-  when `team_id` and `channel_id` are present.
+- `messaging.teams.graph`
 
 ## Setup Contract
 
-Teams setup is Graph-first for outbound channel messaging. That path persists
+Teams Graph setup persists
 `team_id`, `team_name`, `channel_id`, and `channel_name`; ingress and egress
 must use the IDs for Graph resource paths. Display names are labels only.
 
-Bot Framework ingress remains supported separately through `ms_bot_app_id`,
-`ms_bot_app_password`, `bot_display_name`, and `messaging_endpoint`. Those
-fields describe the Azure Bot and Teams app manifest endpoint; they do not
-replace Graph `team_id`/`channel_id` values for Graph channel subscriptions.
+This component handles Microsoft Graph change notifications, subscription
+lifecycle, and Bot Framework-compatible Teams message/invoke activities for the
+answer-generated `messaging-teams` pack.
 
 ## Subscription Desired State
 

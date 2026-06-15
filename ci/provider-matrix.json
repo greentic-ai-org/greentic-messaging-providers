@@ -16,7 +16,7 @@
     "messaging-ingress-whatsapp",
     "messaging-provider-dummy",
     "messaging-provider-telegram",
-    "messaging-provider-teams",
+    "messaging-provider-teams-graph",
     "messaging-provider-email",
     "messaging-provider-slack",
     "messaging-provider-webex",
@@ -30,6 +30,7 @@
     "messaging-microsoft-email",
     "messaging-slack",
     "messaging-teams",
+    "messaging-teams-graph",
     "messaging-telegram",
     "messaging-webchat",
     "messaging-webchat-gui",
@@ -218,9 +219,9 @@
       ]
     },
     "teams": {
-      "pack": "messaging-teams",
-      "version": "0.5.15",
-      "ghcr_target": "ghcr.io/greenticai/messaging-teams",
+      "pack": "messaging-teams-graph",
+      "version": "0.5.16",
+      "ghcr_target": "ghcr.io/greenticai/messaging-teams-graph",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "microsoft-teams",
@@ -240,20 +241,53 @@
       "components": [
         "teams",
         "messaging-ingress-teams",
-        "messaging-provider-teams"
+        "messaging-provider-teams-graph"
       ],
       "manifests": [
         "components/teams/Cargo.toml",
         "components/messaging-ingress-teams/Cargo.toml",
-        "components/messaging-provider-teams/Cargo.toml"
+        "components/messaging-provider-teams-graph/Cargo.toml"
       ],
       "paths": [
         "components/teams/",
         "components/messaging-ingress-teams/",
-        "components/messaging-provider-teams/",
-        "packs/messaging-teams/",
+        "components/messaging-provider-teams-graph/",
+        "packs/messaging-teams-graph/",
         "ci/secrets/teams.secrets-pack.yaml",
         "crates/provider-tests/tests/provider_core_teams.rs"
+      ]
+    },
+    "messaging-teams": {
+      "pack": "messaging-teams",
+      "version": "0.5.16",
+      "ghcr_target": "ghcr.io/greenticai/messaging-teams",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
+      "e2e": {
+        "external_service": "microsoft-teams-bot-framework",
+        "required_secrets": [],
+        "optional_secrets": [
+          "GREENTIC_TEAMS_BOT_APP_ID",
+          "GREENTIC_TEAMS_BOT_APP_PASSWORD",
+          "GREENTIC_TEAMS_BOT_TENANT"
+        ],
+        "fixture_path": "e2e/providers/teams",
+        "test_command": "scripts/test_teams_bot.sh",
+        "operation": "Bot Framework Teams activity ingress and Adaptive Card invoke handling",
+        "readback": "local provider ingress contract validation"
+      },
+      "components": [
+        "messaging-ingress-teams"
+      ],
+      "manifests": [
+        "components/messaging-ingress-teams/Cargo.toml"
+      ],
+      "paths": [
+        "messaging-teams/",
+        "components/messaging-ingress-teams/",
+        "tools/build_components/messaging-ingress-teams.sh",
+        "scripts/test_teams_bot.sh",
+        "crates/provider-tests/tests/provider_ingress_components.rs",
+        "crates/provider-common/tests/pack_metadata.rs"
       ]
     },
     "telegram": {

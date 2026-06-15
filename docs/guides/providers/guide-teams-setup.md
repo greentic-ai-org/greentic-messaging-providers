@@ -105,7 +105,7 @@ Ingress uses Microsoft Graph change notifications. The webhook endpoint must be 
 ## Checks
 
 ```bash
-cargo test -p messaging-provider-teams
+cargo test -p messaging-provider-teams-graph
 cargo test -p messaging-ingress-teams
 scripts/build_providers.sh teams
 ```

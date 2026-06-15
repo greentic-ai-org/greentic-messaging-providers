@@ -6,6 +6,12 @@ mod bindings {
     });
 }
 
+#[path = "../../../messaging-teams/src/bot_framework.rs"]
+mod bot_framework;
+
+mod setup;
+mod teams_pkg;
+
 use bindings::exports::provider::common::ingress::Guest as IngressGuest;
 use bindings::exports::provider::common::subscriptions::Guest as SubscriptionsGuest;
 use bindings::greentic::http::http_client as client;
@@ -18,6 +24,8 @@ use urlencoding::encode;
 const DEFAULT_GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
 const DEFAULT_AUTH_BASE: &str = "https://login.microsoftonline.com";
 const DEFAULT_TOKEN_SCOPE: &str = "https://graph.microsoft.com/.default";
+#[cfg(not(test))]
+const DEFAULT_CLIENT_ID_KEY: &str = "MS_GRAPH_CLIENT_ID";
 const DEFAULT_REFRESH_TOKEN_KEY: &str = "MS_GRAPH_REFRESH_TOKEN";
 const STATE_KEY: &str = "messaging.teams.subscriptions";
 
@@ -56,11 +64,28 @@ struct Component;
 
 impl IngressGuest for Component {
     fn handle_webhook(headers_json: String, body_json: String) -> Result<String, String> {
+        if let Some((method, path)) = request_method_path(&headers_json)
+            && path.contains("/setup/messaging-teams/")
+            && let Some(result) = setup::handle(&method, &path, &body_json)
+        {
+            return result;
+        }
         if let Some(token) = validation_token_from_headers(&headers_json) {
             return Ok(token);
         }
         let parsed: Value = serde_json::from_str(&body_json)
             .map_err(|_| "validation error: invalid body".to_string())?;
+        if bot_framework::is_bot_framework_activity(&parsed) {
+            let normalized = bot_framework::handle_bot_framework_activity(&headers_json, &parsed)?;
+            // Record the activity so the setup wizard's first_bot_framework_post resolves.
+            if let Some((_, path)) = request_method_path(&headers_json)
+                && let Some(tenant) = ingress_tenant_from_path(&path)
+            {
+                setup::record_activity(&tenant, &parsed);
+            }
+            return serde_json::to_string(&normalized)
+                .map_err(|_| "other error: serialization failed".to_string());
+        }
         let expected_client_state = expected_client_state_from_headers(&headers_json);
         let events = normalize_graph_notifications(&parsed, expected_client_state.as_deref())?;
         let normalized = json!({
@@ -220,6 +245,24 @@ fn existing_subscriptions_to_json(existing: &[ExistingSubscription]) -> Value {
     Value::Array(list)
 }
 
+fn request_method_path(headers_json: &str) -> Option<(String, String)> {
+    let headers: Value = serde_json::from_str(headers_json).ok()?;
+    let method = headers.get("method").and_then(Value::as_str)?.to_string();
+    let path = headers.get("path").and_then(Value::as_str)?.to_string();
+    Some((method, path))
+}
+
+/// Extract the tenant from `/v1/messaging/ingress/messaging-teams/{tenant}/{team}`.
+fn ingress_tenant_from_path(path: &str) -> Option<String> {
+    let rest = path.split("/ingress/messaging-teams/").nth(1)?;
+    let tenant = rest.trim_start_matches('/').split('/').next()?;
+    if tenant.is_empty() {
+        None
+    } else {
+        Some(tenant.to_string())
+    }
+}
+
 fn validation_token_from_headers(headers_json: &str) -> Option<String> {
     let headers: Value = serde_json::from_str(headers_json).ok()?;
     for key in ["validationToken", "validation_token"] {
@@ -284,17 +327,33 @@ fn normalize_graph_notifications(
                 return Err("validation error: Graph clientState mismatch".to_string());
             }
         }
-        events.push(normalize_notification(notification));
+        if let Some(event) = normalize_notification(notification) {
+            events.push(event);
+        }
     }
     Ok(Value::Array(events))
 }
 
-fn normalize_notification(notification: &Value) -> Value {
+fn normalize_notification(notification: &Value) -> Option<Value> {
     let resource = notification
         .get("resource")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let resource_data = notification.get("resourceData").unwrap_or(&Value::Null);
+    let resolved_resource_data;
+    let notification_tenant_id = notification.get("tenantId").and_then(Value::as_str);
+    let resource_data = match notification.get("resourceData") {
+        Some(data) if message_has_body(data) => data,
+        Some(data) => {
+            resolved_resource_data = resolve_graph_message(resource, notification_tenant_id)
+                .unwrap_or_else(|| data.clone());
+            &resolved_resource_data
+        }
+        None => {
+            resolved_resource_data =
+                resolve_graph_message(resource, notification_tenant_id).unwrap_or(Value::Null);
+            &resolved_resource_data
+        }
+    };
     let ids = parse_graph_resource(resource);
     let message_id = resource_data
         .get("id")
@@ -315,6 +374,9 @@ fn normalize_notification(notification: &Value) -> Value {
     } else {
         content.to_string()
     };
+    if should_skip_message(resource_data, &text) {
+        return None;
+    }
     let destination = if let Some(chat_id) = ids.chat_id.as_ref() {
         Some((chat_id.clone(), "chat"))
     } else if let (Some(team_id), Some(channel_id)) =
@@ -428,7 +490,76 @@ fn normalize_notification(notification: &Value) -> Value {
     insert_optional_actor(&mut event, "from", graph_from_id(resource_data).as_deref());
     insert_optional_destination(&mut event, "to", destination.as_ref());
     event.insert("metadata".to_string(), Value::Object(metadata));
-    Value::Object(event)
+    Some(Value::Object(event))
+}
+
+fn message_has_body(resource_data: &Value) -> bool {
+    resource_data
+        .get("body")
+        .and_then(|body| body.get("content"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .is_some_and(|content| !content.is_empty())
+}
+
+fn should_skip_message(resource_data: &Value, text: &str) -> bool {
+    if has_card_attachment(resource_data) {
+        return true;
+    }
+    text.trim().is_empty()
+}
+
+fn has_card_attachment(resource_data: &Value) -> bool {
+    resource_data
+        .get("attachments")
+        .and_then(Value::as_array)
+        .is_some_and(|attachments| {
+            attachments.iter().any(|attachment| {
+                attachment
+                    .get("contentType")
+                    .and_then(Value::as_str)
+                    .is_some_and(|content_type| content_type.contains("card."))
+            })
+        })
+}
+
+#[cfg(test)]
+fn resolve_graph_message(_resource: &str, _tenant_id: Option<&str>) -> Option<Value> {
+    None
+}
+
+#[cfg(not(test))]
+fn resolve_graph_message(resource: &str, tenant_id: Option<&str>) -> Option<Value> {
+    let resource = resource.trim().trim_start_matches('/');
+    if resource.is_empty() {
+        return None;
+    }
+    let client_id = get_secret_any_case(DEFAULT_CLIENT_ID_KEY).ok()?;
+    let cfg = ProviderConfig {
+        tenant_id: tenant_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| get_secret_any_case("MS_GRAPH_TENANT_ID").ok())?,
+        client_id,
+        graph_base_url: None,
+        auth_base_url: None,
+        token_scope: None,
+    };
+    let token = acquire_token(&cfg).ok()?;
+    let url = format!("{}/{}", DEFAULT_GRAPH_BASE, resource);
+    let request = client::Request {
+        method: "GET".into(),
+        url,
+        headers: vec![("Authorization".into(), format!("Bearer {}", token))],
+        body: None,
+    };
+    let resp = client::send(&request, None, None).ok()?;
+    if resp.status < 200 || resp.status >= 300 {
+        return None;
+    }
+    let body = resp.body.unwrap_or_default();
+    serde_json::from_slice(&body).ok()
 }
 
 fn insert_optional_actor(map: &mut Map<String, Value>, key: &str, id: Option<&str>) {
@@ -866,6 +997,11 @@ fn get_secret(key: &str) -> Result<String, String> {
     }
 }
 
+#[cfg(not(test))]
+fn get_secret_any_case(uppercase: &str) -> Result<String, String> {
+    get_secret(uppercase).or_else(|_| get_secret(&uppercase.to_ascii_lowercase()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1076,7 +1212,11 @@ mod tests {
                     "tenantId": "tenant-1",
                     "resource": "teams('team-1')/channels('19:channel@thread.tacv2')/messages('1780340545252')",
                     "resourceData": {
-                        "id": "1780340545252"
+                        "id": "1780340545252",
+                        "body": {
+                            "contentType": "text",
+                            "content": "hello"
+                        }
                     }
                 }]
             })
@@ -1096,6 +1236,61 @@ mod tests {
             serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
         assert_eq!(envelope.id, "teams:1780340545252");
         assert_eq!(envelope.session_id, "team-1:19:channel@thread.tacv2");
+    }
+
+    #[test]
+    fn webhook_skips_unresolved_empty_notifications() {
+        let out = <Component as IngressGuest>::handle_webhook(
+            "{}".to_string(),
+            json!({
+                "value": [{
+                    "subscriptionId": "sub-1",
+                    "changeType": "created",
+                    "tenantId": "tenant-1",
+                    "resource": "teams('team-1')/channels('channel-1')/messages('message-1')",
+                    "resourceData": {
+                        "id": "message-1"
+                    }
+                }]
+            })
+            .to_string(),
+        )
+        .expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["events"].as_array().expect("events").len(), 0);
+    }
+
+    #[test]
+    fn webhook_skips_card_attachment_notifications_to_prevent_echo_loop() {
+        let out = <Component as IngressGuest>::handle_webhook(
+            "{}".to_string(),
+            json!({
+                "value": [{
+                    "subscriptionId": "sub-1",
+                    "changeType": "created",
+                    "tenantId": "tenant-1",
+                    "resource": "/teams/team-1/channels/channel-1/messages/message-1",
+                    "resourceData": {
+                        "id": "message-1",
+                        "body": {
+                            "contentType": "html",
+                            "content": "<attachment id=\"greentic-adaptive-card-1\"></attachment>"
+                        },
+                        "attachments": [{
+                            "id": "greentic-adaptive-card-1",
+                            "contentType": "application/vnd.microsoft.card.adaptive",
+                            "content": "{}"
+                        }]
+                    }
+                }]
+            })
+            .to_string(),
+        )
+        .expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(parsed["events"].as_array().expect("events").len(), 0);
     }
 
     #[test]

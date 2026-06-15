@@ -8,7 +8,7 @@ DIST_DIR="${ROOT_DIR}/dist/wasms"
 PACKAGES=(
   "messaging-provider-dummy"
   "messaging-provider-telegram"
-  "messaging-provider-teams"
+  "messaging-provider-teams-graph"
   "messaging-provider-email"
   "messaging-provider-slack"
   "messaging-provider-webex"

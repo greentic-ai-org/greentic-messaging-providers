@@ -204,7 +204,7 @@ fn teams_setup_persists_discovery_labels_and_modes() -> Result<()> {
     let root = workspace_root();
     let setup_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("assets")
         .join("setup.yaml");
     let value: Value = serde_yaml_bw::from_str(&fs::read_to_string(&setup_path)?)?;
@@ -216,8 +216,8 @@ fn teams_setup_persists_discovery_labels_and_modes() -> Result<()> {
         .get("graph_channel")
         .ok_or_else(|| anyhow!("Teams setup must describe Graph channel mode"))?;
     assert!(
-        setup_modes.get("bot_framework").is_some(),
-        "Teams setup must describe Bot Framework mode"
+        setup_modes.get("bot_framework").is_none(),
+        "Teams Graph setup must not advertise Bot Framework mode"
     );
     let provisioning = graph_channel
         .get("provisioning")
@@ -359,16 +359,16 @@ fn teams_subscription_manifest_declares_generic_desired_state_metadata() -> Resu
     let root = workspace_root();
     let manifest_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("pack.manifest.json");
     let desired_fixture_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("fixtures")
         .join("subscriptions.desired-state-metadata.expected.json");
     let component_config_fixture_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("fixtures")
         .join("subscriptions.component-config.expected.json");
     let manifest: JsonValue = serde_json::from_str(&fs::read_to_string(&manifest_path)?)?;
@@ -532,7 +532,7 @@ fn teams_pack_manifest_declares_channel_provisioning_contract() -> Result<()> {
     let root = workspace_root();
     let manifest_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("pack.manifest.json");
     let manifest: JsonValue = serde_json::from_str(&fs::read_to_string(&manifest_path)?)?;
     let extensions = manifest

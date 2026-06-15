@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "{teams_app_id}",
+  "developer": {
+    "name": "Greentic",
+    "websiteUrl": "https://greentic.ai",
+    "privacyUrl": "https://greentic.ai/privacy",
+    "termsOfUseUrl": "https://greentic.ai/terms"
+  },
+  "name": {
+    "short": "Greentic Teams Bot",
+    "full": "Greentic Teams Bot"
+  },
+  "description": {
+    "short": "Greentic Microsoft Teams bot",
+    "full": "Greentic Microsoft Teams bot for setup validation and Bot Framework messaging."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#0F766E",
+  "bots": [
+    {
+      "botId": "{bot_app_id}",
+      "scopes": [
+        "personal",
+        "team"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ]
+}

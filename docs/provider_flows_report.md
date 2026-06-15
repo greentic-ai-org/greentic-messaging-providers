@@ -22,7 +22,7 @@ Both flows are single-node flows that invoke the provider component's `messaging
 | WebChat | messaging-webchat | messaging.webchat | 1 | Inline |
 | Telegram | messaging-telegram | messaging.telegram.bot | 2 | Separate |
 | Slack | messaging-slack | messaging.slack.api | 2 | Separate |
-| Teams | messaging-teams | messaging.teams.bot | 2 | Separate |
+| Teams Graph | messaging-teams-graph | messaging.teams.graph | 2 | Separate |
 | Webex | messaging-webex | messaging.webex.bot | 1 | No |
 | WhatsApp | messaging-whatsapp | messaging.whatsapp.cloud | 2 | Separate |
 
