@@ -152,6 +152,52 @@ generate_pack_manifest() {
     --secrets-out "${secrets_out}"
 }
 
+ensure_pack_manifest_seed() {
+  local pack_dir="$1"
+  local manifest_path="${pack_dir}/pack.manifest.json"
+  local pack_yaml_path="${pack_dir}/pack.yaml"
+  if [ -f "${manifest_path}" ]; then
+    return 0
+  fi
+  if [ ! -f "${pack_yaml_path}" ]; then
+    echo "Missing pack.yaml in ${pack_dir}; cannot seed pack.manifest.json" >&2
+    exit 1
+  fi
+  python3 - "${pack_yaml_path}" "${manifest_path}" <<'PY'
+import json
+from pathlib import Path
+import sys
+import yaml
+
+pack_yaml_path = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+pack_yaml = yaml.safe_load(pack_yaml_path.read_text()) or {}
+components = []
+component_sources = []
+for component in pack_yaml.get("components") or []:
+    if not isinstance(component, dict):
+        continue
+    comp_id = component.get("id")
+    if not comp_id:
+        continue
+    components.append(comp_id)
+    component_sources.append(dict(component))
+
+manifest = {
+    "name": pack_yaml.get("pack_id", manifest_path.parent.name.removesuffix(".pack")),
+    "publisher": pack_yaml.get("publisher", "Greentic"),
+    "kind": pack_yaml.get("kind", "application"),
+    "version": str(pack_yaml.get("version", "0.0.0")),
+    "components": components,
+    "component_sources": component_sources,
+    "extensions": pack_yaml.get("extensions", {}),
+    "flows": pack_yaml.get("flows", []),
+    "secret_requirements": [],
+}
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+PY
+}
+
 run_pack_doctor_json_tolerant() {
   local pack_path=""
   local prev=""
@@ -448,6 +494,21 @@ read_components() {
   jq -c '(.component_sources // .components // [])[] | if type=="string" then {id: ., wasm: ("components/" + . + ".wasm"), manifest: "", oci: {}} else {id: .id, wasm: (.wasm // ("components/" + .id + ".wasm")), manifest: (.manifest // ""), oci: (.oci // {})} end' "${manifest}"
 }
 
+extra_pack_dirs=()
+if pack_selected "messaging-teams"; then
+  teams_build_script="${ROOT_DIR}/messaging-teams/build_pack.sh"
+  teams_generated_dir="${ROOT_DIR}/target/generated/messaging-teams.pack"
+  if [ -x "${teams_build_script}" ]; then
+    echo "Preparing standalone pack messaging-teams"
+    "${teams_build_script}"
+    if [ ! -d "${teams_generated_dir}" ]; then
+      echo "Standalone pack build did not create ${teams_generated_dir}" >&2
+      exit 1
+    fi
+    extra_pack_dirs+=("${teams_generated_dir}")
+  fi
+fi
+
 target_component_wasm_name() {
   local comp_id="$1"
   local wasm_path="$2"
@@ -460,9 +521,10 @@ target_component_wasm_name() {
   fi
 }
 
-for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
+for dir in "${ROOT_DIR}/${PACKS_DIR}/"* "${extra_pack_dirs[@]}"; do
   [ -d "${dir}" ] || continue
   pack_name="$(basename "${dir}")"
+  pack_name="${pack_name%.pack}"
   if [ "${pack_name}" = "messaging-provider-bundle" ]; then
     echo "Skipping deprecated pack ${pack_name}"
     continue
@@ -477,6 +539,7 @@ for dir in "${ROOT_DIR}/${PACKS_DIR}/"*; do
 
   update_pack_yaml_version "${dir}"
   python3 "${ROOT_DIR}/tools/normalize_pack_components.py" "${dir}/pack.yaml"
+  ensure_pack_manifest_seed "${dir}"
   generate_pack_manifest "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset "${dir}" "${secrets_out}"
   ensure_secret_requirements_asset_entry "${dir}"
