@@ -3,7 +3,7 @@
 `ci/provider-matrix.json` is the single checked-in source of truth for:
 
 - provider name to pack mapping
-- provider-owned version and GHCR target metadata
+- provider-owned version and component GHCR target metadata
 - provider name to buildable component targets
 - provider name to Rust manifests used for targeted `fmt` and `clippy`
 - provider-scoped paths that can stay on the fast path
@@ -22,7 +22,7 @@ Every provider entry declares:
 
 - `pack`: stable `.gtpack` pack name.
 - `version`: provider release version.
-- `ghcr_target`: provider-specific GHCR package target.
+- `ghcr_target`: provider-specific component GHCR target.
 - `shared_crate_dependency`: shared provider crate version that the provider is expected to consume.
 - `components`: buildable component package names for the provider.
 - `manifests`: component manifests used for targeted Rust checks.
@@ -60,7 +60,13 @@ for one-provider builds and supports both `workflow_call` and
   can be flaky or rate-limited.
 
 Validation-only runs upload `gtpack-<pack>` as an artifact. Publish runs push
-only the selected provider's components and pack to GHCR.
+only the selected provider's components and pack to GHCR. Component WASM images
+use the provider matrix `ghcr_target`; `.gtpack` packages are published under
+`ghcr.io/<owner>/packs/messaging/<pack>`.
+
+The `teams` provider input resolves to the current Bot Framework-backed
+`messaging-teams` pack. Use `messaging-teams-graph` when you intentionally need
+the legacy Graph-backed Teams provider.
 
 For a local one-command fast path, use:
 

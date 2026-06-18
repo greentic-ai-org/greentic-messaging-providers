@@ -69,6 +69,9 @@ on:
       pack:
         description: Provider pack name
         value: ${{ jobs.resolve-provider.outputs.pack }}
+      pack_ghcr_target:
+        description: Provider pack GHCR target
+        value: ${{ jobs.resolve-provider.outputs.pack_ghcr_target }}
 
 concurrency:
   group: provider-build-publish-${{ github.ref }}-${{ inputs.provider }}
@@ -91,6 +94,7 @@ jobs:
       pack: ${{ steps.resolve.outputs.pack }}
       version: ${{ steps.resolve.outputs.version }}
       ghcr_target: ${{ steps.resolve.outputs.ghcr_target }}
+      pack_ghcr_target: ${{ steps.resolve.outputs.pack_ghcr_target }}
       components: ${{ steps.resolve.outputs.components }}
       components_csv: ${{ steps.resolve.outputs.components_csv }}
       manifests: ${{ steps.resolve.outputs.manifests }}
@@ -115,11 +119,17 @@ jobs:
           if override:
             result["version"] = override
 
+          namespace = os.environ.get("OCI_NAMESPACE", "")
+          owner = namespace.split("/", 1)[0] if namespace else "greenticai"
+          registry = os.environ.get("OCI_REGISTRY", "ghcr.io")
+          pack_ghcr_target = f"{registry}/{owner}/packs/messaging/{result['pack']}"
+
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
             handle.write(f"provider={result['provider']}\n")
             handle.write(f"pack={result['pack']}\n")
             handle.write(f"version={result['version']}\n")
             handle.write(f"ghcr_target={result['ghcr_target']}\n")
+            handle.write(f"pack_ghcr_target={pack_ghcr_target}\n")
             handle.write(f"components={json.dumps(result['components'])}\n")
             handle.write(f"components_csv={','.join(result['components'])}\n")
             handle.write(f"manifests={json.dumps(result['manifests'])}\n")
@@ -129,7 +139,8 @@ jobs:
             handle.write(f"- provider: `{result['provider']}`\n")
             handle.write(f"- version: `{result['version']}`\n")
             handle.write(f"- pack: `{result['pack']}`\n")
-            handle.write(f"- GHCR target: `{result['ghcr_target']}`\n")
+            handle.write(f"- component GHCR target: `{result['ghcr_target']}`\n")
+            handle.write(f"- pack GHCR target: `{pack_ghcr_target}`\n")
             handle.write(f"- components: {', '.join(result['components'])}\n")
             handle.write(f"- shared crate version: `{os.environ.get('SHARED_CRATE_VERSION', '') or 'metadata default'}`\n")
           PY
@@ -296,6 +307,7 @@ jobs:
             echo "- version: \`${{ needs.resolve-provider.outputs.version }}\`"
             echo "- components: ${{ needs.resolve-provider.outputs.components_csv }}"
             echo "- pack: \`${{ needs.resolve-provider.outputs.pack }}\`"
+            echo "- pack GHCR target: \`${{ needs.resolve-provider.outputs.pack_ghcr_target }}\`"
             echo "- publish: \`${{ inputs.publish }}\`"
             echo "- publish_latest: \`${{ inputs.publish_latest }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
