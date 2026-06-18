@@ -442,7 +442,7 @@ def write_provider_values():
 def subscription_body(data):
     cfg = state()["config"]
     public = public_url().rstrip("/")
-    ingress_url = f"{public}/v1/messaging/ingress/messaging-teams/default/default"
+    ingress_url = f"{public}/v1/messaging/ingress/messaging-teams-graph/default/default"
     resource = data.get("resource")
     if not resource:
         if data.get("chat_id") or cfg.get("chat_id"):
@@ -480,6 +480,51 @@ def validate_subscription_body(body):
     return {"ok": not warnings, "warnings": warnings, "body": body}
 
 
+def next_card_payload(submitted_text):
+    card_id = "greentic-card-next"
+    shown_text = submitted_text or "(empty)"
+    card = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "Greentic Teams Test - Next Card",
+                "weight": "Bolder",
+                "size": "Large",
+                "wrap": True,
+            },
+            {
+                "type": "TextBlock",
+                "text": "Submitted text:",
+                "weight": "Bolder",
+                "wrap": True,
+            },
+            {
+                "type": "TextBlock",
+                "text": shown_text,
+                "wrap": True,
+            },
+        ],
+    }
+    return {
+        "subject": None,
+        "summary": f"Greentic Teams next card: {shown_text}",
+        "body": {
+            "contentType": "html",
+            "content": f'<attachment id="{card_id}"></attachment>',
+        },
+        "attachments": [
+            {
+                "id": card_id,
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": json.dumps(card),
+            }
+        ],
+    }
+
+
 def adaptive_card_payload(text):
     card_id = "greentic-card-1"
     card_text = text or "Hello from Greentic Teams tester"
@@ -507,8 +552,32 @@ def adaptive_card_payload(text):
                     {"title": "Card", "value": "Adaptive Card 1.4"},
                 ],
             },
+            {
+                "type": "Input.Text",
+                "id": "greentic_tester_text",
+                "label": "Text for next card",
+                "placeholder": "Type something and press Show next",
+                "isMultiline": False,
+            },
         ],
         "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "Show next",
+                "data": {
+                    "action_id": "greentic_show_next",
+                    "routeToCardId": "greentic_next_card",
+                    "msteams": {
+                        "type": "messageBack",
+                        "displayText": "Show next",
+                        "text": "greentic_show_next",
+                        "value": {
+                            "action_id": "greentic_show_next",
+                            "routeToCardId": "greentic_next_card",
+                        },
+                    },
+                },
+            },
             {
                 "type": "Action.OpenUrl",
                 "title": "Open Greentic",
@@ -531,6 +600,38 @@ def adaptive_card_payload(text):
             }
         ],
     }
+
+
+def graph_send_target_path(data):
+    if data.get("kind") == "chat":
+        return f"/chats/{data.get('chat_id')}/messages"
+    return f"/teams/{data.get('team_id')}/channels/{data.get('channel_id')}/messages"
+
+
+def extract_submit_text_from_message(message):
+    body = message.get("body") or {}
+    body_text = strip_html(body.get("content") or "")
+    if "greentic_show_next" not in body_text and "Show next" not in body_text:
+        return None
+    for key in ("greentic_tester_text", "tester_text", "text"):
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return body_text.replace("greentic_show_next", "").replace("Show next", "").strip()
+
+
+def maybe_send_next_card(data, enriched):
+    for item in enriched:
+        message = item.get("raw_message") or {}
+        submitted_text = extract_submit_text_from_message(message)
+        if submitted_text is None:
+            continue
+        path = graph_send_target_path(data)
+        result = graph_request("POST", path, token(), next_card_payload(submitted_text))
+        event = {"submitted_text": submitted_text, "send_path": path, "result": result}
+        append_event("teams_show_next_sent", event)
+        return event
+    return None
 
 
 def strip_html(value):
@@ -605,6 +706,7 @@ def enrich_notification_payload(payload):
         if path:
             try:
                 message = graph_request("GET", path, token())
+                item["raw_message"] = message
                 item["message"] = summarize_chat_message(notification, message)
             except Exception as exc:
                 item["fetch_error"] = str(exc)
@@ -625,25 +727,26 @@ button{margin:4px 6px 4px 0;padding:8px 12px} pre{white-space:pre-wrap;backgroun
 <section><h2>Connection</h2><p>Public URL: <code id="public"></code></p><p>Ingress: <code id="ingress"></code></p></section>
 <section><h2>Connect Microsoft Teams</h2><button onclick="deviceStart()">Start device login</button><button onclick="deviceComplete()">Poll and finish login</button><button onclick="refreshToken()">Refresh token</button><details><summary>Advanced OAuth settings</summary><div class="row"><label>Tenant authority<input id="tenant_id"></label><label>Client ID<input id="client_id"></label></div><label>Scopes<input id="scopes"></label></details><pre id="oauth"></pre></section>
 <section><h2>Discovery</h2><button onclick="api('/api/discover/setup',collect(),'discover')">Discover setup data</button><button onclick="api('/api/discover/me',{})">Get me</button><button onclick="api('/api/discover/teams',{})">List joined teams</button><label>Team ID<input id="team_id"></label><button onclick="api('/api/discover/channels',{team_id:val('team_id')})">List channels</button><label>Channel ID<input id="channel_id"></label><label>Chat ID<input id="chat_id"></label><pre id="discover"></pre></section>
-<section><h2>Send</h2><label>Kind<select id="kind"><option>channel</option><option>chat</option></select></label><label>Card text<textarea id="text">Hello from Greentic Teams tester</textarea></label><button onclick="directGraph()">Send adaptive card</button><pre id="send"></pre></section>
+<section><h2>Send</h2><p class="muted">The adaptive card includes a text input and a Show next submit button. If Teams exposes the submit through Graph notifications, this tester sends a second card with the submitted text.</p><label>Kind<select id="kind"><option>channel</option><option>chat</option></select></label><label>Card text<textarea id="text">Hello from Greentic Teams tester</textarea></label><label>Manual next-card text<input id="next_text" placeholder="Used only by the manual fallback button"></label><button onclick="directGraph()">Send adaptive card</button><button onclick="sendNextManual()">Send next card manually</button><pre id="send"></pre></section>
 <section><h2>Subscriptions</h2><label>Client state<input id="client_state" value="greentic-teams-test"></label><label>Expiration<input id="expiration"></label><label>Lifecycle notification URL<input id="lifecycle_notification_url"></label><button onclick="subPreview()">Preview subscription body</button><button onclick="subCreate()">Create subscription</button><button onclick="simulateValidation()">Simulate validationToken</button><pre id="subs"></pre></section>
 <section><h2>Incoming Events</h2><pre id="events"></pre></section>
 <script>
-const ids=["tenant_id","client_id","team_id","channel_id","chat_id","scopes","kind","text","client_state","expiration","lifecycle_notification_url"];
+const ids=["tenant_id","client_id","team_id","channel_id","chat_id","scopes","kind","text","next_text","client_state","expiration","lifecycle_notification_url"];
 function val(id){const el=document.getElementById(id);return el?el.value:""}
 function set(id,v){document.getElementById(id).textContent=typeof v==="string"?v:JSON.stringify(v,null,2)}
 function targetFor(path,target){return target||(path.includes("discover")?"discover":path.includes("subscription")?"subs":path.includes("send")?"send":"oauth")}
 async function api(path,body,target){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const j=await r.json();set(targetFor(path,target),j);return j}
 function mergeScopes(v,required){const seen=new Set();const out=[];((v||'')+' '+(required||'')).split(/\\s+/).filter(Boolean).forEach(s=>{const k=s.toLowerCase();if(!seen.has(k)){seen.add(k);out.push(s)}});return out.join(' ')}
-async function load(){const r=await fetch('/api/state');const s=await r.json();const ingress=(s.public_url||'')+'/v1/messaging/ingress/messaging-teams/default/default';document.getElementById('public').textContent=s.public_url||'';document.getElementById('ingress').textContent=ingress;const c=s.values.config||{};const sec=s.values.secrets||{};ids.forEach(id=>{if(document.getElementById(id)&&c[id])document.getElementById(id).value=c[id]});if(document.getElementById('tenant_id'))document.getElementById('tenant_id').value=c.device_login_tenant||c.auth_tenant_alias||'organizations';const scopeEl=document.getElementById('scopes');scopeEl.value=mergeScopes(scopeEl.value||c.oauth_scopes||localStorage.scopes||s.default_scopes,s.default_scopes);localStorage.scopes=scopeEl.value;if(!document.getElementById('expiration').value)document.getElementById('expiration').value=s.default_subscription_expiration;if(!document.getElementById('lifecycle_notification_url').value)document.getElementById('lifecycle_notification_url').value=ingress;set('events',s.events)}
-function collect(){return {tenant_id:val('tenant_id'),client_id:val('client_id'),scopes:val('scopes'),team_id:val('team_id'),channel_id:val('channel_id'),chat_id:val('chat_id'),kind:val('kind'),text:val('text'),client_state:val('client_state'),expiration:val('expiration'),lifecycle_notification_url:val('lifecycle_notification_url')}}
+async function load(){const r=await fetch('/api/state');const s=await r.json();const ingress=(s.public_url||'')+'/v1/messaging/ingress/messaging-teams-graph/default/default';document.getElementById('public').textContent=s.public_url||'';document.getElementById('ingress').textContent=ingress;const c=s.values.config||{};const sec=s.values.secrets||{};ids.forEach(id=>{if(document.getElementById(id)&&c[id])document.getElementById(id).value=c[id]});if(document.getElementById('tenant_id'))document.getElementById('tenant_id').value=c.device_login_tenant||c.auth_tenant_alias||'organizations';const scopeEl=document.getElementById('scopes');scopeEl.value=mergeScopes(scopeEl.value||c.oauth_scopes||localStorage.scopes||s.default_scopes,s.default_scopes);localStorage.scopes=scopeEl.value;if(!document.getElementById('expiration').value)document.getElementById('expiration').value=s.default_subscription_expiration;if(!document.getElementById('lifecycle_notification_url').value)document.getElementById('lifecycle_notification_url').value=ingress;set('events',s.events)}
+function collect(){return {tenant_id:val('tenant_id'),client_id:val('client_id'),scopes:val('scopes'),team_id:val('team_id'),channel_id:val('channel_id'),chat_id:val('chat_id'),kind:val('kind'),text:val('text'),next_text:val('next_text'),client_state:val('client_state'),expiration:val('expiration'),lifecycle_notification_url:val('lifecycle_notification_url')}}
 async function deviceStart(){localStorage.scopes=val('scopes');const j=await api('/api/device/start',collect(),'oauth');const url=j.verification_uri||j.verification_url||j.login_url||'https://microsoft.com/devicelogin';if(url) window.open(url,'_blank','noopener')}
 async function deviceComplete(){await api('/api/device/complete',collect(),'oauth')}
 async function refreshToken(){await api('/api/token/refresh',collect(),'oauth')}
 async function directGraph(){await api('/api/send/direct',collect(),'send')}
+async function sendNextManual(){await api('/api/send/next',collect(),'send')}
 async function subPreview(){await api('/api/subscriptions/preview',collect(),'subs')}
 async function subCreate(){await api('/api/subscriptions/create',collect(),'subs')}
-async function simulateValidation(){const r=await fetch('/v1/messaging/ingress/messaging-teams/default/default?validationToken=hello-graph',{method:'POST'});set('subs',await r.text())}
+async function simulateValidation(){const r=await fetch('/v1/messaging/ingress/messaging-teams-graph/default/default?validationToken=hello-graph',{method:'POST'});set('subs',await r.text())}
 setInterval(load,2000);load();
 </script></body></html>"""
 
@@ -690,7 +793,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/state":
             self.send_json({"public_url": public_url(), "values": sanitized(state()), "events": recent_events(), "default_scopes": os.environ.get("GREENTIC_TEAMS_SCOPES", DEFAULT_SCOPES), "default_subscription_expiration": default_subscription_expiration()})
             return
-        if parsed.path == "/v1/messaging/ingress/messaging-teams/default/default":
+        if parsed.path == "/v1/messaging/ingress/messaging-teams-graph/default/default":
             if self.send_validation_token(parsed):
                 return
         self.send_json({"error": "not found"}, 404)
@@ -698,7 +801,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         try:
-            if parsed.path == "/v1/messaging/ingress/messaging-teams/default/default" and self.send_validation_token(parsed):
+            if parsed.path == "/v1/messaging/ingress/messaging-teams-graph/default/default" and self.send_validation_token(parsed):
                 return
             data = self.read_json()
             if parsed.path == "/api/save":
@@ -718,11 +821,11 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/discover/channels":
                 self.send_json(graph_request("GET", f"/teams/{data.get('team_id')}/channels", token())); return
             if parsed.path == "/api/send/direct":
-                if data.get("kind") == "chat":
-                    path = f"/chats/{data.get('chat_id')}/messages"
-                else:
-                    path = f"/teams/{data.get('team_id')}/channels/{data.get('channel_id')}/messages"
+                path = graph_send_target_path(data)
                 self.send_json(graph_request("POST", path, token(), adaptive_card_payload(data.get("text")))); return
+            if parsed.path == "/api/send/next":
+                path = graph_send_target_path(data)
+                self.send_json(graph_request("POST", path, token(), next_card_payload(data.get("next_text") or data.get("text")))); return
             if parsed.path == "/api/subscriptions/preview":
                 body = subscription_body(data)
                 self.send_json(validate_subscription_body(body)); return
@@ -740,12 +843,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(graph_request("PATCH", f"/subscriptions/{data.get('subscription_id')}", token(), {"expirationDateTime": data.get("expiration")})); return
             if parsed.path == "/api/subscriptions/delete":
                 self.send_json(graph_request("DELETE", f"/subscriptions/{data.get('subscription_id')}", token())); return
-            if parsed.path == "/v1/messaging/ingress/messaging-teams/default/default":
+            if parsed.path == "/v1/messaging/ingress/messaging-teams-graph/default/default":
                 append_event("graph_notification", data)
                 enriched = enrich_notification_payload(data)
                 if enriched:
                     append_event("graph_notification_enriched", enriched)
-                self.send_json({"ok": True, "enriched": enriched}); return
+                next_card = maybe_send_next_card(state()["config"], enriched)
+                self.send_json({"ok": True, "enriched": enriched, "next_card": next_card}); return
             self.send_json({"error": "not found"}, 404)
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, 500)
@@ -782,7 +886,7 @@ fi
 
 echo "Teams tester UI: ${LOCAL_URL}"
 echo "Teams public URL: $(cat "${WORK_DIR}/public-url.txt")"
-echo "Teams ingress URL: $(cat "${WORK_DIR}/public-url.txt")/v1/messaging/ingress/messaging-teams/default/default"
+echo "Teams ingress URL: $(cat "${WORK_DIR}/public-url.txt")/v1/messaging/ingress/messaging-teams-graph/default/default"
 
 if [[ "${NO_OPEN}" -eq 0 ]]; then
   if command -v xdg-open >/dev/null 2>&1; then

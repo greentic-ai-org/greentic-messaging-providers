@@ -123,6 +123,7 @@ mod tests {
             to: Map::new(),
             http: None,
             state: Map::new(),
+            responses: Vec::new(),
         };
         values.config.insert(
             "api_base".to_string(),

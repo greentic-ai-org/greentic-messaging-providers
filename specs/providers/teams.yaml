@@ -1,5 +1,5 @@
 pack:
-  id: messaging-teams
+  id: messaging-teams-graph
   name: Messaging Teams
   version: 0.1.0
   publisher: Greentic
@@ -18,13 +18,13 @@ provider:
     - tier-d
 components:
   adapter:
-    id: messaging-provider-teams
-    component_ref: local:../../packs/messaging-teams/components/messaging-provider-teams.wasm
+    id: messaging-provider-teams-graph
+    component_ref: local:../../packs/messaging-teams-graph/components/messaging-provider-teams-graph.wasm
     world: greentic:provider/schema-core@1.0.0
     export: schema-core-api
   ingress:
     id: messaging-ingress-teams
-    component_ref: local:../../packs/messaging-teams/components/messaging-ingress-teams.wasm
+    component_ref: local:../../packs/messaging-teams-graph/components/messaging-ingress-teams.wasm
     world: greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1
     export: handle-webhook
 flows:
@@ -34,7 +34,7 @@ flows:
   - verify_webhooks
   - sync_subscriptions
 source:
-  pack_dir: ../../packs/messaging-teams
+  pack_dir: ../../packs/messaging-teams-graph
   extensions:
     include:
     - greentic.provider-extension.v1

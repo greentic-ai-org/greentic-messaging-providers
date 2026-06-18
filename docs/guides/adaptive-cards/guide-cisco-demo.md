@@ -11,7 +11,7 @@ Run the Cisco RFQ Compliance demo with interactive Adaptive Cards across three p
                                     │
                     ┌───────────────┼───────────────┐
                     ▼               ▼               ▼
-             messaging-webchat  messaging-teams  messaging-webex
+             messaging-webchat  messaging-teams-graph  messaging-webex
               (Direct Line)     (Graph API)      (Webex API)
                     │               │               │
                     ▼               ▼               ▼
@@ -65,7 +65,7 @@ No server needed. Send individual cards to any platform.
 ```bash
 GREENTIC_ENV=dev gtc op demo send \
   --bundle demo-bundle \
-  --provider messaging-teams \
+  --provider messaging-teams-graph \
   --tenant demo --env dev \
   --to "c3392cbc-2cb0-48e8-9247-504d8defea40:19:wQzzrth6t3YA-aEdLzt8Pse3kW3Us-nJl9XzN-5NcEE1@thread.tacv2" \
   --text "RFQ Compliance Demo" \
@@ -92,7 +92,7 @@ cd /root/works/personal/greentic
 # Teams — all 14 cards
 for card in RFQ-CARD-{01_intake,02_processing,03_tasks_dashboard,04_task_detail,05B_rag_answer,05_rag_edit,06_pack_ready,07_send_review,08_review_dashboard,09_apply_change,10B_send_approval,10_final_approval,11_compliance_summary,STATUS}; do
   GREENTIC_ENV=dev gtc op demo send \
-    --bundle demo-bundle --provider messaging-teams \
+    --bundle demo-bundle --provider messaging-teams-graph \
     --tenant demo --env dev \
     --to "c3392cbc-2cb0-48e8-9247-504d8defea40:19:wQzzrth6t3YA-aEdLzt8Pse3kW3Us-nJl9XzN-5NcEE1@thread.tacv2" \
     --text "$card" \
@@ -114,7 +114,7 @@ done
 
 | Provider | `--provider` | `--tenant` | `--to` format |
 |----------|-------------|-----------|---------------|
-| Teams | `messaging-teams` | `demo` | `team_id:channel_id` |
+| Teams | `messaging-teams-graph` | `demo` | `team_id:channel_id` |
 | Webex | `messaging-webex` | `default` | Room ID (`Y2lz...`) |
 | WebChat | `messaging-webchat` | `default` | (via Direct Line, not `demo send`) |
 
@@ -173,7 +173,7 @@ Open `http://localhost:5173/dev` — the WebChat widget connects to `localhost:8
 1. Go to [Azure Portal](https://portal.azure.com) → Bot Services → your bot
 2. Under **Settings → Configuration**, set the Messaging endpoint:
    ```
-   https://<TUNNEL_URL>/v1/messaging/ingress/messaging-teams/demo/default
+   https://<TUNNEL_URL>/v1/messaging/ingress/messaging-teams-graph/demo/default
    ```
 3. Save
 
@@ -187,7 +187,7 @@ The endpoint format is:
 **Simulated (no Azure Bot needed):**
 
 ```bash
-curl -X POST http://localhost:8080/v1/messaging/ingress/messaging-teams/demo/default \
+curl -X POST http://localhost:8080/v1/messaging/ingress/messaging-teams-graph/demo/default \
   -H "Content-Type: application/json" \
   -d '{
     "type": "message",
@@ -371,9 +371,9 @@ The flow engine reads `routeToCardId` and renders the next card.
 
 | Secret | URI |
 |--------|-----|
-| Tenant ID | `secrets://dev/demo/_/messaging-teams/MS_GRAPH_TENANT_ID` |
-| Client ID | `secrets://dev/demo/_/messaging-teams/MS_GRAPH_CLIENT_ID` |
-| Refresh Token | `secrets://dev/demo/_/messaging-teams/MS_GRAPH_REFRESH_TOKEN` |
+| Tenant ID | `secrets://dev/demo/_/messaging-teams-graph/MS_GRAPH_TENANT_ID` |
+| Client ID | `secrets://dev/demo/_/messaging-teams-graph/MS_GRAPH_CLIENT_ID` |
+| Refresh Token | `secrets://dev/demo/_/messaging-teams-graph/MS_GRAPH_REFRESH_TOKEN` |
 
 ### Webex (tenant: `default`)
 
@@ -392,7 +392,7 @@ WebChat uses state-store (no external secrets needed). Direct Line tokens are ge
 
 | Platform | Ingress URL |
 |----------|-------------|
-| Teams | `{TUNNEL}/v1/messaging/ingress/messaging-teams/demo/default` |
+| Teams | `{TUNNEL}/v1/messaging/ingress/messaging-teams-graph/demo/default` |
 | Webex (messages) | `{TUNNEL}/v1/messaging/ingress/messaging-webex/default/default` |
 | Webex (card actions) | Same URL, resource=`attachmentActions` |
 | WebChat | Direct Line at `{HOST}/v3/directline/*` (no webhook needed) |

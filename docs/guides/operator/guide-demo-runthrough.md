@@ -151,7 +151,7 @@ Expected:
 messaging-dummy.gtpack
 messaging-email.gtpack
 messaging-slack.gtpack
-messaging-teams.gtpack
+messaging-teams-graph.gtpack
 messaging-telegram.gtpack
 messaging-webchat.gtpack
 messaging-webex.gtpack
@@ -260,7 +260,7 @@ GREENTIC_ENV=dev gtc op demo send \
 ```bash
 GREENTIC_ENV=dev gtc op demo send \
   --bundle demo-bundle \
-  --provider messaging-teams \
+  --provider messaging-teams-graph \
   --to "c3392cbc-2cb0-48e8-9247-504d8defea40:19:wQzzrth6t3YA-aEdLzt8Pse3kW3Us-nJl9XzN-5NcEE1@thread.tacv2" \
   --text "Hello from Greentic demo"
 ```
@@ -391,7 +391,7 @@ GREENTIC_ENV=dev gtc op demo list-packs --bundle demo-bundle
 |------|------|------------|
 | `messaging-telegram.gtpack` | Messaging | Telegram bot |
 | `messaging-slack.gtpack` | Messaging | Slack bot |
-| `messaging-teams.gtpack` | Messaging | Teams bot |
+| `messaging-teams-graph.gtpack` | Messaging | Teams bot |
 | `messaging-webchat.gtpack` | Messaging | WebChat (Direct Line) |
 | `messaging-webex.gtpack` | Messaging | Webex bot |
 | `messaging-email.gtpack` | Messaging | Email (Graph API) |

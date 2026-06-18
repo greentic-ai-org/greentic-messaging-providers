@@ -1,0 +1,26 @@
+{
+  "id": "messaging-ingress-teams",
+  "version": "0.5.17",
+  "supports": [
+    "messaging"
+  ],
+  "world": "root:component/root",
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
+  "capabilities": {
+    "wasi": {},
+    "host": {
+      "state": {
+        "read": true,
+        "write": true
+      }
+    }
+  },
+  "operations": [],
+  "resources": {},
+  "dev_flows": {}
+}

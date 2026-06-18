@@ -618,6 +618,889 @@ fn webchat_gui_pack_declares_provider_routes_and_static_assets() -> Result<()> {
 }
 
 #[test]
+fn webchat_gui_packaged_component_exports_ingress_world() -> Result<()> {
+    let root = workspace_root();
+    let gtpack_path = root
+        .join("dist")
+        .join("packs")
+        .join("messaging-webchat-gui.gtpack");
+    let component = read_from_gtpack(
+        &gtpack_path,
+        "components/messaging-provider-webchat-gui.wasm",
+    )?;
+    let tmp = tempdir()?;
+    let wasm_path = tmp.path().join("messaging-provider-webchat-gui.wasm");
+    fs::write(&wasm_path, component)?;
+
+    let output = Command::new("wasm-tools")
+        .arg("component")
+        .arg("wit")
+        .arg(&wasm_path)
+        .output()?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "wasm-tools component wit failed for {}: {}",
+            wasm_path.display(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let wit = String::from_utf8(output.stdout)?;
+    assert!(
+        wit.contains("export provider:common/ingress@0.0.2;"),
+        "packaged messaging-provider-webchat-gui.wasm must export provider:common/ingress@0.0.2 for webchat HTTP routes"
+    );
+    assert!(
+        wit.contains("handle-webhook: func("),
+        "packaged messaging-provider-webchat-gui.wasm ingress world must expose handle-webhook"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn messaging_teams_source_is_answer_owned_with_setup_assets() -> Result<()> {
+    let root = workspace_root();
+    let source_dir = root.join("messaging-teams");
+    let answer_path = source_dir.join("build-answer.json");
+    let answer: Value = serde_json::from_slice(&fs::read(&answer_path)?)?;
+    let pack_version = answer
+        .get("pack_version")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("messaging-teams build-answer missing pack_version"))?;
+
+    assert_eq!(
+        answer.get("schema_id").and_then(Value::as_str),
+        Some("greentic-pack.wizard.answers")
+    );
+    assert_eq!(
+        answer
+            .get("build_answer")
+            .and_then(|meta| meta.get("schema_id"))
+            .and_then(Value::as_str),
+        Some("greentic-messaging-teams.build-answer")
+    );
+    assert!(
+        answer.get("pack_create").is_some(),
+        "messaging-teams must declare pack_create answers"
+    );
+    assert!(
+        answer.get("pack").is_some(),
+        "messaging-teams must declare pack update answers"
+    );
+    assert_eq!(
+        answer
+            .get("source_layout")
+            .and_then(|layout| layout.get("assets"))
+            .and_then(Value::as_str),
+        Some("assets")
+    );
+    assert_eq!(
+        answer
+            .get("source_layout")
+            .and_then(|layout| layout.get("src"))
+            .and_then(Value::as_str),
+        Some("src")
+    );
+
+    let generated_pack_dir = root.join("packs").join("messaging-teams");
+    assert!(
+        !generated_pack_dir.exists(),
+        "packs/messaging-teams is generated output; source must live under messaging-teams/"
+    );
+
+    let assets = answer
+        .get("assets")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("messaging-teams build-answer missing assets"))?;
+    for expected in [
+        "assets/setup/greentic-teams-setup.js",
+        "assets/setup/greentic-teams-setup.d.ts",
+        "assets/setup/README.md",
+        "assets/setup/examples/basic.html",
+        "assets/setup/conformance.json",
+        "assets/setup/backend-contract.json",
+        "assets/teams-app/manifest.template.json",
+    ] {
+        assert!(
+            assets.iter().any(|asset| asset.as_str() == Some(expected)),
+            "messaging-teams build-answer missing asset {expected}"
+        );
+        assert!(
+            source_dir.join(expected).exists(),
+            "messaging-teams asset missing on disk: {expected}"
+        );
+    }
+
+    let setup_api = answer
+        .get("setup_api")
+        .ok_or_else(|| anyhow!("messaging-teams build-answer missing setup_api"))?;
+    let web_component = setup_api
+        .get("web_component")
+        .ok_or_else(|| anyhow!("messaging-teams build-answer missing setup_api.web_component"))?;
+    assert_eq!(
+        web_component.get("schema_id").and_then(Value::as_str),
+        Some("greentic.setup.web-component.v1")
+    );
+    assert_eq!(
+        web_component.get("tag_name").and_then(Value::as_str),
+        Some("greentic-teams-setup-v4")
+    );
+    assert_eq!(
+        web_component.get("module_asset").and_then(Value::as_str),
+        Some("assets/setup/greentic-teams-setup.js")
+    );
+    let expected_module_url = format!(
+        "/v1/web/messaging-teams/setup/{{tenant}}/greentic-teams-setup.js?v={pack_version}-setup4"
+    );
+    assert_eq!(
+        web_component.get("module_url").and_then(Value::as_str),
+        Some(expected_module_url.as_str())
+    );
+    assert_eq!(
+        web_component.get("asset_base_path").and_then(Value::as_str),
+        Some("/v1/web/messaging-teams/setup/{tenant}")
+    );
+    assert_eq!(
+        web_component
+            .get("completion")
+            .and_then(|value| value.get("event"))
+            .and_then(Value::as_str),
+        Some("greentic-provider-setup-complete")
+    );
+    assert_eq!(
+        web_component
+            .get("completion")
+            .and_then(|value| value.get("state_path"))
+            .and_then(Value::as_str),
+        Some("setup_status.ok")
+    );
+    assert_eq!(
+        web_component
+            .get("attributes")
+            .and_then(|value| value.get("state-path"))
+            .and_then(Value::as_str),
+        Some("/v1/messaging/setup/messaging-teams/{tenant}")
+    );
+    let backend_contract = setup_api.get("backend_contract").ok_or_else(|| {
+        anyhow!("messaging-teams build-answer missing setup_api.backend_contract")
+    })?;
+    assert_eq!(
+        backend_contract.get("schema_id").and_then(Value::as_str),
+        Some("greentic.setup.backend-contract.v1")
+    );
+    assert_eq!(
+        backend_contract.get("asset").and_then(Value::as_str),
+        Some("assets/setup/backend-contract.json")
+    );
+
+    let setup_api = setup_api
+        .get("routes")
+        .ok_or_else(|| anyhow!("messaging-teams build-answer missing setup_api.routes"))?;
+    assert_eq!(
+        setup_api.get("state").and_then(Value::as_str),
+        Some("/v1/messaging/setup/messaging-teams/{tenant}")
+    );
+    assert_eq!(
+        setup_api.get("oauth_complete").and_then(Value::as_str),
+        Some("/v1/messaging/setup/messaging-teams/{tenant}/oauth/{kind}/complete")
+    );
+
+    let component = fs::read_to_string(source_dir.join("assets/setup/greentic-teams-setup.js"))?;
+    let teams_manifest =
+        fs::read_to_string(source_dir.join("assets/teams-app/manifest.template.json"))?;
+    assert!(
+        teams_manifest.contains("\"short\": \"Greentic Teams Bot\"")
+            && teams_manifest.contains("\"botId\": \"{bot_app_id}\"")
+            && teams_manifest.contains("\"id\": \"{teams_app_id}\"")
+            && !teams_manifest.contains("{app_name}")
+            && !teams_manifest.contains("{public_domain}"),
+        "Teams app manifest must only use setup-supported placeholders"
+    );
+    assert!(
+        component.contains("state-path") && component.contains("oauth-complete-path"),
+        "setup component must expose endpoint path attributes"
+    );
+    assert!(
+        component.contains("provider-id")
+            && component.contains("greentic-provider-setup-")
+            && component.contains("_emitCompleteIfDone"),
+        "setup component must expose generic provider setup web-component events"
+    );
+    assert!(
+        component.contains("\"greentic-teams-setup-v4\""),
+        "setup component must register a versioned custom element tag so browser sessions cannot reuse an old class"
+    );
+    assert!(
+        component.contains("class extends GreenticTeamsSetup"),
+        "setup component must use a fresh constructor for the versioned custom element tag"
+    );
+    assert!(
+        !component.contains("data-role=\"requiredFields\""),
+        "setup component must not inject provider-specific Microsoft credential fields into the main action"
+    );
+    assert!(
+        component.contains("_draftConfig") && component.contains("result && result.ok === false"),
+        "setup component must preserve edited advanced config and stop polling on validation failures"
+    );
+    assert!(
+        component.contains("open-device-login")
+            && component.contains("_deviceLoginPollMs")
+            && component.contains("_actionDeadline")
+            && component.contains("authorizationPending"),
+        "setup component must keep device login controls visible and respect Microsoft device-flow polling"
+    );
+    assert!(
+        component.contains("let waitAction = action")
+            && component.contains("waitAction = {")
+            && component.contains("kind: \"device-login\""),
+        "setup component must switch a continue action into device-login waiting once Microsoft returns a device code"
+    );
+    assert!(
+        component.contains("_activeDeviceLogin")
+            && component.contains("_oauthComplete")
+            && component.contains("values.oauth"),
+        "setup component must ignore stale device-login codes once server-side OAuth state is complete"
+    );
+    assert!(
+        component.contains("verifyTeamsInstall")
+            && component.contains("addToTeamsOpened")
+            && component.contains("verifyBotMessage")
+            && component.contains("openBotChatOpened")
+            && component.contains("_waitingForFirstBotMessage")
+            && component.contains("_writeManualActions"),
+        "setup component must verify Teams installation and the first bot message after opening manual Teams browser actions"
+    );
+    assert!(
+        component.contains("_clientConfig")
+            && component.contains("\"oauth_device_code\"")
+            && component.contains("\"graph_access_token\"")
+            && component.contains("\"azure_management_access_token\""),
+        "setup component must strip server-owned OAuth/token state, including legacy management tokens, before posting browser config"
+    );
+    assert!(
+        component.contains("\"azure_management_user_code\"")
+            && component.contains("oauthKind === \"management\" ? \"azure_management_user_code\" : \"oauth_user_code\""),
+        "setup component must keep Graph and Azure management device-login user codes separate"
+    );
+    assert!(
+        component.contains("\"public_base_url\"")
+            && !component.contains("  \"bot_framework_registration_url\",\n"),
+        "setup component advanced config must expose public URL but not ask admins for setup-host registration internals"
+    );
+    assert!(
+        component.contains("_preflightAction")
+            && component.contains("_localError(preflight)")
+            && component.contains("bot_framework_endpoint_registration")
+            && component.contains("missingPublicBaseUrl")
+            && !component.contains("bot_framework_registration_url"),
+        "setup component must require public runtime URL without exposing setup-host registration internals"
+    );
+    assert!(
+        component.contains("result && result.setup_status")
+            && component.contains("this._applyState(result)")
+            && component.contains("nextResult && nextResult.setup_status")
+            && component.contains("this._applyState(nextResult)")
+            && component.contains("this._advanced(before, after, waitAction)")
+            && component.contains("const nextResult = await this._request(\"POST\", this._endpoint(\"next\"), this._collectConfig())"),
+        "setup component must apply immediate OAuth completion and /next state responses before polling for advancement"
+    );
+    assert!(
+        component.contains("request-start")
+            && component.contains("request-success")
+            && component.contains("request-error")
+            && component.contains("skip-next")
+            && component.contains("pendingStepId"),
+        "setup component must emit request and skip diagnostics for setup backend calls"
+    );
+    assert!(
+        component.contains("_isStaleState(nextState)")
+            && component.contains("next.done < current.done")
+            && component.contains("after.done === before.done && action.kind === \"device-login\""),
+        "setup component must not let stale setup-state refreshes move the wizard backward or treat unchanged done counts as normal progress"
+    );
+    assert!(
+        component.contains("this._runState.error && this._runState.error.message"),
+        "setup component must render backend action error messages instead of hiding them behind a generic timeout"
+    );
+    assert!(
+        component.contains("_staleManagedAction(action)")
+            && component.contains("this._oauthComplete(action.oauthKind || this._oauthKind())"),
+        "setup component retry must not replay stale Microsoft device-login actions after OAuth has completed and must support non-Graph OAuth steps"
+    );
+    assert!(
+        component.contains("step === \"bot_framework_endpoint_registration\"")
+            && component.contains("step === \"teams_app_publish\"")
+            && component.contains("step === \"teams_app_user_install\""),
+        "setup component outcome messages must recognize generic backend-contract step ids"
+    );
+
+    let backend_contract: Value = serde_json::from_slice(&fs::read(
+        source_dir.join("assets/setup/backend-contract.json"),
+    )?)?;
+    assert_eq!(
+        backend_contract.get("schema_id").and_then(Value::as_str),
+        Some("greentic.setup.backend-contract.v1")
+    );
+    let server_owned = backend_contract
+        .get("server_owned_config_keys")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("setup backend contract missing server_owned_config_keys"))?;
+    for expected in [
+        "oauth_kind",
+        "oauth_device_code",
+        "oauth_user_code",
+        "azure_management_device_code",
+        "azure_management_user_code",
+        "graph_access_token",
+        "azure_management_access_token",
+    ] {
+        assert!(
+            server_owned
+                .iter()
+                .any(|item| item.as_str() == Some(expected)),
+            "setup backend contract missing server-owned key {expected}"
+        );
+    }
+    let order = backend_contract
+        .get("required_order")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("setup backend contract missing required_order"))?;
+    let expected_order = [
+        "graph_admin_consent",
+        "bot_app_identity",
+        "microsoft_bot_channel_registration_consent",
+        "bot_framework_endpoint_registration",
+        "teams_app_publish",
+        "teams_app_user_install",
+        "first_bot_framework_post",
+    ];
+    let actual_order: Vec<_> = order.iter().filter_map(Value::as_str).collect();
+    assert_eq!(
+        actual_order, expected_order,
+        "setup backend contract required_order must exactly match the runtime/UI setup steps"
+    );
+    let position = |name: &str| {
+        order
+            .iter()
+            .position(|item| item.as_str() == Some(name))
+            .ok_or_else(|| anyhow!("setup backend contract missing required order step {name}"))
+    };
+    assert!(
+        position("bot_app_identity")? < position("microsoft_bot_channel_registration_consent")?
+            && position("microsoft_bot_channel_registration_consent")?
+                < position("bot_framework_endpoint_registration")?,
+        "setup backend contract must authorize Microsoft bot channel registration before Bot Framework endpoint registration"
+    );
+    assert!(
+        position("bot_framework_endpoint_registration")? < position("teams_app_publish")?,
+        "setup backend contract must require Bot Framework endpoint registration before Teams app publishing"
+    );
+    assert_eq!(
+        backend_contract
+            .get("actions_schema_id")
+            .and_then(Value::as_str),
+        Some("greentic.setup.actions.v1"),
+        "setup backend contract must declare the generic setup action schema"
+    );
+    let actions = backend_contract
+        .get("actions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("setup backend contract missing executable actions"))?;
+    let mut actions_by_id = BTreeMap::new();
+    for action in actions {
+        let id = action
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("setup action missing id"))?;
+        let executor = action
+            .get("executor")
+            .and_then(Value::as_object)
+            .ok_or_else(|| anyhow!("setup action {id} missing executor"))?;
+        let kind = executor
+            .get("kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("setup action {id} missing executor kind"))?;
+        assert!(
+            !kind.trim().is_empty(),
+            "setup action {id} executor kind must not be empty"
+        );
+        actions_by_id.insert(id, action);
+    }
+    for step in order.iter().filter_map(Value::as_str) {
+        assert!(
+            actions_by_id.contains_key(step),
+            "setup backend contract required step {step} must declare an executable action"
+        );
+    }
+    assert_eq!(
+        actions_by_id
+            .get("graph_admin_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("kind"))
+            .and_then(Value::as_str),
+        Some("oauth_device_code"),
+        "Graph setup must declare generic device-code OAuth execution"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("graph_admin_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("client_id_default"))
+            .and_then(Value::as_str),
+        Some("14d82eec-204b-4c2f-b7e8-296a70dab67e"),
+        "Graph setup must provide a public device-flow client default so one-button setup does not require manual graph_setup_client_id entry"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("graph_admin_consent")
+            .and_then(|action| action.get("completion"))
+            .and_then(|completion| completion.get("state_path"))
+            .and_then(Value::as_str),
+        Some("oauth.graph.ok"),
+        "Graph setup completion path must be relative to the backend values object used by greentic-setup"
+    );
+    let graph_scopes = actions_by_id
+        .get("graph_admin_consent")
+        .and_then(|action| action.get("executor"))
+        .and_then(|executor| executor.get("scopes"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("Graph setup action missing scopes"))?;
+    assert!(
+        graph_scopes.iter().any(|scope| scope.as_str()
+            == Some("https://graph.microsoft.com/TeamsAppInstallation.ReadWriteForUser")),
+        "Graph setup must request the delegated Teams user app install scope"
+    );
+    assert!(
+        !graph_scopes.iter().any(|scope| {
+            scope.as_str()
+                == Some("https://graph.microsoft.com/TeamsAppInstallation.ReadWriteForUser.All")
+        }),
+        "Graph device-code setup must not request application-only TeamsAppInstallation.ReadWriteForUser.All"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("microsoft_bot_channel_registration_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("kind"))
+            .and_then(Value::as_str),
+        Some("oauth_device_code"),
+        "Microsoft bot channel registration must use generic device-code OAuth execution"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("microsoft_bot_channel_registration_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("oauth_kind"))
+            .and_then(Value::as_str),
+        Some("management"),
+        "Microsoft bot channel registration must use management OAuth state"
+    );
+    let management_scopes = actions_by_id
+        .get("microsoft_bot_channel_registration_consent")
+        .and_then(|action| action.get("executor"))
+        .and_then(|executor| executor.get("scopes"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("Microsoft bot channel registration action missing scopes"))?;
+    assert_eq!(
+        actions_by_id
+            .get("graph_admin_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("device_code_store_key"))
+            .and_then(Value::as_str),
+        Some("oauth_device_code"),
+        "Graph device OAuth must keep the legacy device-code key"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("graph_admin_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("user_code_store_key"))
+            .and_then(Value::as_str),
+        Some("oauth_user_code"),
+        "Graph device OAuth must keep the legacy user-code key used by the setup UI"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("microsoft_bot_channel_registration_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("device_code_store_key"))
+            .and_then(Value::as_str),
+        Some("azure_management_device_code"),
+        "Azure management device OAuth must not overwrite the Graph device code"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("microsoft_bot_channel_registration_consent")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("user_code_store_key"))
+            .and_then(Value::as_str),
+        Some("azure_management_user_code"),
+        "Azure management device OAuth must not overwrite the Graph device user code"
+    );
+    assert!(
+        management_scopes
+            .iter()
+            .any(|scope| scope.as_str() == Some("https://management.azure.com/user_impersonation")),
+        "Microsoft bot channel registration must request Azure management delegated scope"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("bot_framework_endpoint_registration")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("kind"))
+            .and_then(Value::as_str),
+        Some("provider_http"),
+        "Bot endpoint setup must declare generic provider-owned HTTP execution"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("bot_framework_endpoint_registration")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("path_template"))
+            .and_then(Value::as_str),
+        Some("/v1/setup/messaging-teams/{tenant}/{team}/bot-framework-registration"),
+        "Bot endpoint setup must declare the provider-owned registration path template"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("bot_framework_endpoint_registration")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("body"))
+            .and_then(|body| body.get("messaging_endpoint"))
+            .and_then(Value::as_str),
+        Some("{public_base_url}/v1/messaging/ingress/messaging-teams/{tenant}/{team}"),
+        "Bot endpoint setup must send the runtime messaging endpoint in the provider HTTP body"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("bot_framework_endpoint_registration")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("body"))
+            .and_then(|body| body.get("public_base_url"))
+            .and_then(Value::as_str),
+        Some("{public_base_url}"),
+        "Bot endpoint setup must pass public_base_url to the provider-owned setup op"
+    );
+    let bot_registration_body = actions_by_id
+        .get("bot_framework_endpoint_registration")
+        .and_then(|action| action.get("executor"))
+        .and_then(|executor| executor.get("body"))
+        .ok_or_else(|| anyhow!("Bot endpoint setup missing provider HTTP body"))?;
+    for expected in [
+        "azure_management_access_token",
+        "azure_auth_tenant",
+        "azure_subscription_id",
+        "azure_resource_group",
+        "azure_resource_group_location",
+        "azure_location",
+        "azure_bot_name",
+    ] {
+        assert!(
+            bot_registration_body.get(expected).is_some(),
+            "Bot endpoint setup must pass Microsoft channel registration field {expected}"
+        );
+    }
+    let build_pack = fs::read_to_string(source_dir.join("build_pack.sh"))?;
+    assert!(
+        build_pack.contains("id: messaging-teams-bot-framework-registration")
+            && build_pack.contains(
+                "pattern: /v1/setup/messaging-teams/{{tenant}}/{{team}}/bot-framework-registration"
+            )
+            && build_pack.contains("setup_component_ref: messaging-ingress-teams")
+            && build_pack.contains("setup_op: bot-framework-registration"),
+        "generated pack must declare the provider_http setup route with setup_component_ref/setup_op"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("bot_framework_endpoint_registration")
+            .and_then(|action| action.get("completion"))
+            .and_then(|completion| completion.get("state_path"))
+            .and_then(Value::as_str),
+        Some("last_reconcile.ok"),
+        "Bot endpoint completion path must be relative to backend values, not prefixed with values."
+    );
+    assert_eq!(
+        actions_by_id
+            .get("teams_app_publish")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("kind"))
+            .and_then(Value::as_str),
+        Some("provider_http"),
+        "Teams app publishing must use provider-owned HTTP execution so the pack can reuse existing catalog versions"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("teams_app_publish")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("path_template"))
+            .and_then(Value::as_str),
+        Some("/v1/setup/messaging-teams/{tenant}/{team}/teams-app-publish"),
+        "Teams app publishing must declare the provider-owned publish path template"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("teams_app_user_install")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("kind"))
+            .and_then(Value::as_str),
+        Some("provider_http"),
+        "Teams app install must use provider-owned HTTP execution so it can resolve reused catalog apps"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("teams_app_user_install")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("path_template"))
+            .and_then(Value::as_str),
+        Some("/v1/setup/messaging-teams/{tenant}/{team}/teams-app-install"),
+        "Teams app install must declare the provider-owned install path template"
+    );
+    assert!(
+        build_pack.contains("id: messaging-teams-app-publish")
+            && build_pack.contains(
+                "pattern: /v1/setup/messaging-teams/{{tenant}}/{{team}}/teams-app-publish"
+            )
+            && build_pack.contains("setup_op: teams-app-publish")
+            && build_pack.contains("id: messaging-teams-app-install")
+            && build_pack.contains(
+                "pattern: /v1/setup/messaging-teams/{{tenant}}/{{team}}/teams-app-install"
+            )
+            && build_pack.contains("setup_op: teams-app-install"),
+        "generated pack must declare provider_http setup routes for Teams app publish/install"
+    );
+    assert_eq!(
+        actions_by_id
+            .get("first_bot_framework_post")
+            .and_then(|action| action.get("executor"))
+            .and_then(|executor| executor.get("kind"))
+            .and_then(Value::as_str),
+        Some("runtime_observation"),
+        "final setup step must be driven by a runtime observation, not manual Teams install alone"
+    );
+
+    let setup_routes_entry = answer
+        .get("pack_overlay")
+        .and_then(|value| value.get("files"))
+        .and_then(Value::as_array)
+        .and_then(|files| {
+            files.iter().find(|file| {
+                file.get("path").and_then(Value::as_str) == Some("assets/setup.routes.json")
+            })
+        })
+        .ok_or_else(|| anyhow!("missing assets/setup.routes.json overlay"))?;
+    let setup_routes: Value = serde_json::from_str(
+        setup_routes_entry
+            .get("content")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("setup.routes.json overlay missing content"))?,
+    )?;
+    assert_eq!(
+        setup_routes.get("schema_id").and_then(Value::as_str),
+        Some("greentic.setup.web-component.v1")
+    );
+    assert_eq!(
+        setup_routes.get("tag_name").and_then(Value::as_str),
+        Some("greentic-teams-setup-v4")
+    );
+    assert_eq!(
+        setup_routes.get("module_url").and_then(Value::as_str),
+        Some(expected_module_url.as_str())
+    );
+    assert_eq!(
+        setup_routes
+            .get("events")
+            .and_then(|value| value.get("complete"))
+            .and_then(Value::as_str),
+        Some("greentic-provider-setup-complete")
+    );
+
+    let manifest: Value = serde_json::from_slice(&fs::read(
+        source_dir.join("assets/teams-app/manifest.template.json"),
+    )?)?;
+    assert!(
+        manifest.get("packageName").is_none(),
+        "Teams manifest template must not include unsupported packageName"
+    );
+    assert!(
+        manifest
+            .get("bots")
+            .and_then(Value::as_array)
+            .is_some_and(|bots| !bots.is_empty()),
+        "Teams manifest template must declare a bot"
+    );
+    let manifest_text =
+        fs::read_to_string(source_dir.join("assets/teams-app/manifest.template.json"))?;
+    assert!(
+        manifest_text.contains("{bot_app_id}")
+            && manifest_text.contains("{teams_app_id}")
+            && manifest_text.contains("{teams_app_version}")
+            && !manifest_text.contains("{{ bot_app_id }}")
+            && !manifest_text.contains("{{ teams_app_id }}"),
+        "Teams manifest template must use greentic-setup placeholder syntax"
+    );
+    for icon in ["assets/teams-app/color.png", "assets/teams-app/outline.png"] {
+        assert!(
+            source_dir.join(icon).is_file(),
+            "Teams manifest references {icon}, so the source pack must include it"
+        );
+        assert!(
+            answer
+                .get("assets")
+                .and_then(Value::as_array)
+                .is_some_and(|assets| assets.iter().any(|asset| asset.as_str() == Some(icon))),
+            "Teams build-answer assets must package {icon}"
+        );
+    }
+
+    let build_pack = fs::read_to_string(source_dir.join("build_pack.sh"))?;
+    assert!(
+        build_pack.contains("greentic.ext.capabilities.v1")
+            && build_pack.contains("greentic.cap.messaging.provider.v1")
+            && build_pack.contains("messaging-teams-v1"),
+        "messaging-teams pack build must advertise canonical provider capabilities"
+    );
+    assert!(
+        build_pack.contains("Do not also declare them under `assets:`"),
+        "messaging-teams build must avoid duplicating static-route assets as assets/assets/*"
+    );
+    assert!(
+        build_pack.contains("greentic.setup.backend-contract.v1"),
+        "messaging-teams build must advertise the provider setup backend contract"
+    );
+    assert!(
+        !build_pack.contains("greentic.provider-extension.v1"),
+        "messaging-teams must not fake a schema-core provider extension for its ingress-only runtime"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn messaging_teams_setup_conformance_covers_required_states() -> Result<()> {
+    let root = workspace_root();
+    let conformance_path = root
+        .join("messaging-teams")
+        .join("assets/setup/conformance.json");
+    let conformance: Value = serde_json::from_slice(&fs::read(&conformance_path)?)?;
+
+    assert_eq!(
+        conformance.get("provider_id").and_then(Value::as_str),
+        Some("messaging-teams")
+    );
+    let states = conformance
+        .get("setup_states")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing setup_states"))?;
+    for expected in [
+        "fresh_setup",
+        "graph_device_login_start",
+        "graph_device_login_pending",
+        "graph_device_login_expired",
+        "graph_device_login_refresh_code",
+        "microsoft_bot_channel_registration_consent",
+        "bot_framework_registration_before_publish",
+        "teams_app_publish",
+        "teams_app_install",
+        "open_bot_chat",
+        "first_activity_received",
+        "send_test_card",
+        "adaptive_card_action_received",
+    ] {
+        assert!(
+            states.iter().any(|state| state.as_str() == Some(expected)),
+            "missing setup conformance state {expected}"
+        );
+    }
+
+    let runtime_cases = conformance
+        .get("runtime_cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing runtime_cases"))?;
+    for expected in [
+        "bot_framework_activity_ingestion",
+        "bot_framework_authentication_failure",
+        "bot_framework_message_normalization",
+        "adaptive_card_submit_normalization",
+        "adaptive_card_follow_up_response",
+        "conversation_context_available",
+    ] {
+        assert!(
+            runtime_cases
+                .iter()
+                .any(|case| case.as_str() == Some(expected)),
+            "missing runtime conformance case {expected}"
+        );
+    }
+
+    let tester = conformance
+        .get("tester_contract")
+        .ok_or_else(|| anyhow!("missing tester_contract"))?;
+    let setup_component = conformance
+        .get("setup_component_contract")
+        .ok_or_else(|| anyhow!("missing setup_component_contract"))?;
+    let setup_backend = conformance
+        .get("setup_backend_contract")
+        .ok_or_else(|| anyhow!("missing setup_backend_contract"))?;
+    assert_eq!(
+        setup_backend
+            .get("actions_schema_id")
+            .and_then(Value::as_str),
+        Some("greentic.setup.actions.v1")
+    );
+    let required_action_kinds = setup_backend
+        .get("required_action_kinds")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing setup_backend_contract.required_action_kinds"))?;
+    for expected in [
+        "oauth_device_code",
+        "microsoft_graph_application",
+        "provider_http",
+        "runtime_observation",
+    ] {
+        assert!(
+            required_action_kinds
+                .iter()
+                .any(|kind| kind.as_str() == Some(expected)),
+            "missing setup backend action kind {expected}"
+        );
+    }
+    assert_eq!(
+        setup_component.get("schema_id").and_then(Value::as_str),
+        Some("greentic.setup.web-component.v1")
+    );
+    assert_eq!(
+        setup_component
+            .get("completion_state_path")
+            .and_then(Value::as_str),
+        Some("setup_status.ok")
+    );
+    let generic_events = setup_component
+        .get("generic_events")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing setup_component_contract.generic_events"))?;
+    assert!(
+        generic_events
+            .iter()
+            .any(|event| event.as_str() == Some("greentic-provider-setup-complete")),
+        "setup component conformance must declare generic completion event"
+    );
+    assert_eq!(
+        tester
+            .get("node_botbuilder_sidecar_default")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        tester
+            .get("azure_bot_service_required")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+
+    Ok(())
+}
+
+#[test]
 fn webchat_gui_pack_contains_runtime_bootstrap_and_bundled_assets() -> Result<()> {
     let root = workspace_root();
     let asset_root = root

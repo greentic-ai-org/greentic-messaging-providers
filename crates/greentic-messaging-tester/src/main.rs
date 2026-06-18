@@ -428,7 +428,7 @@ fn handle_send(
         &secrets,
         http_mode,
         history.clone(),
-        None,
+        values.response_queue(),
     ) {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -1489,6 +1489,7 @@ mod tests {
             to: serde_json::Map::new(),
             http: None,
             state: serde_json::Map::new(),
+            responses: Vec::new(),
         };
 
         assert_eq!(
@@ -1514,6 +1515,7 @@ mod tests {
             to: serde_json::Map::new(),
             http: None,
             state: serde_json::Map::new(),
+            responses: Vec::new(),
         };
 
         let input = build_provider_webhook_input(&values, "https://new.example.com".to_string());

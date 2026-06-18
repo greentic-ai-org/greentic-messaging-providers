@@ -1,0 +1,546 @@
+pack_id: messaging-teams-graph
+version: 0.5.17
+kind: application
+publisher: Greentic
+display_name: Microsoft Teams
+components:
+- id: ai.greentic.component-templates
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/ai.greentic.component-templates.wasm
+- id: diagnostics___channel_check
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics___channel_check.wasm
+- id: diagnostics___subscription_check
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics___subscription_check.wasm
+- id: diagnostics___summary
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics___summary.wasm
+- id: diagnostics___token_check
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics___token_check.wasm
+- id: diagnostics__channel_check
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics__channel_check.wasm
+- id: diagnostics__subscription_check
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics__subscription_check.wasm
+- id: diagnostics__summary
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics__summary.wasm
+- id: diagnostics__token_check
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/diagnostics__token_check.wasm
+- id: ingress_default___ingress_default__summary
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/ingress_default___ingress_default__summary.wasm
+- id: messaging-ingress-teams
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/messaging-ingress-teams.wasm
+- id: messaging-provider-teams-graph
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/messaging-provider-teams-graph.wasm
+- id: sync_subscriptions___summary
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/sync_subscriptions___summary.wasm
+- id: sync_subscriptions___sync_subscriptions__summary
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/sync_subscriptions___sync_subscriptions__summary.wasm
+- id: templates
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/templates.wasm
+- id: verify_webhooks___summary
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/verify_webhooks___summary.wasm
+- id: verify_webhooks___verify
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/verify_webhooks___verify.wasm
+- id: verify_webhooks__verify
+  version: 0.5.17
+  world: root:component/root
+  supports:
+  - messaging
+  profiles:
+    default: default
+    supported:
+    - default
+  capabilities:
+    wasi:
+      random: false
+      clocks: false
+    host: {}
+  wasm: components/verify_webhooks__verify.wasm
+dependencies: []
+flows: []
+assets:
+- path: secret-requirements.json
+- path: schemas/messaging/teams/public.config.schema.json
+- path: fixtures/egress.request.json
+- path: fixtures/egress.expected.summary.json
+- path: fixtures/ingress.request.json
+- path: fixtures/ingress.expected.message.json
+- path: fixtures/subscriptions.desired.json
+- path: fixtures/subscriptions.expected.ops.json
+extensions:
+  greentic.ext.capabilities.v1:
+    kind: greentic.ext.capabilities.v1
+    version: 0.5.17
+    inline:
+      offers:
+      - cap_id: greentic.cap.messaging.provider.v1
+        offer_id: messaging-teams-graph-v1
+        priority: 100
+        provider:
+          component_ref: messaging-provider-teams-graph
+          op: messaging.configure
+        requires_setup: true
+        setup:
+          qa_ref: components/messaging-provider-teams-graph
+        version: 0.5.17
+      schema_version: 1
+  greentic.messaging.validators.v1:
+    kind: greentic.messaging.validators.v1
+    version: 0.5.17
+    inline:
+      validators:
+      - component_ref: oci://ghcr.io/greenticai/validators/messaging:0.4.19
+        id: greentic.validators.messaging
+        world: greentic:pack-validate/pack-validator@0.1.0
+  greentic.provider-extension.v1:
+    kind: greentic.provider-extension.v1
+    version: 0.5.17
+    inline:
+      providers:
+      - provider_type: messaging.teams.graph
+        capabilities:
+        - messaging
+        ops:
+        - send
+        - reply
+        - qa-spec
+        - apply-answers
+        - i18n-keys
+        config_schema_ref: schemas/messaging/teams/public.config.schema.json
+        runtime:
+          component_ref: messaging-provider-teams-graph
+          export: schema-core-api
+          world: greentic:provider/schema-core@1.0.0
+  messaging.oauth.v1:
+    kind: messaging.oauth.v1
+    version: 0.5.17
+    inline:
+      auth_type: oauth2_device_code
+      device_code_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode
+      provider_id: teams
+      scopes:
+      - offline_access
+      - openid
+      - profile
+      - User.Read
+      - Team.ReadBasic.All
+      - Channel.ReadBasic.All
+      - Channel.Create
+      - ChannelMessage.Send
+      - ChannelMessage.Read.All
+      - Chat.Read
+      secret_keys:
+      - MS_GRAPH_TENANT_ID
+      - MS_GRAPH_CLIENT_ID
+      - MS_GRAPH_REFRESH_TOKEN
+      - MS_GRAPH_ACCESS_TOKEN
+      tenant_alias: organizations
+      token_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/token
+      verification_uri: https://microsoft.com/devicelogin
+  messaging.oauth_device_code.v1:
+    kind: messaging.oauth_device_code.v1
+    version: 0.5.17
+    inline:
+      checklist:
+      - 'App registration must be multi-tenant: signInAudience = AzureADMultipleOrgs'
+      - Public client/device code flow must be enabled
+      - Tenant may require admin consent
+      - Teams message subscriptions require delegated read scopes such as ChannelMessage.Read.All
+      - Creating a missing Teams channel requires delegated Channel.Create and a signed-in
+        user allowed to create channels in the selected Team
+      - Device/token endpoints must use organizations, not the developer tenant ID
+      client_id_config_key: client_id
+      client_id_secret_key: MS_GRAPH_CLIENT_ID
+      config_out:
+        channel_id: channel_id
+        channel_name: channel_name
+        chat_id: chat_id
+        client_id: client_id
+        desired_channel_name: desired_channel_name
+        team_id: team_id
+        team_name: team_name
+        tenant_id: tenant_id
+        user_id: user_id
+      device_code_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode
+      label: Connect Microsoft Teams
+      post_login_discovery:
+      - id: me
+        method: GET
+        save:
+          id: user_id
+          tenant_id: tenant_id
+        url: https://graph.microsoft.com/v1.0/me
+      - id: joined_teams
+        method: GET
+        select:
+          from: value
+          label: displayName
+          save_as: team_id
+          save_label_as: team_name
+          value: id
+        url: https://graph.microsoft.com/v1.0/me/joinedTeams
+      - id: channels
+        method: GET
+        requires:
+        - team_id
+        select:
+          from: value
+          label: displayName
+          save_as: channel_id
+          save_label_as: channel_name
+          value: id
+        url_template: https://graph.microsoft.com/v1.0/teams/{team_id}/channels
+      provider: microsoft
+      provider_id: teams
+      scopes:
+      - offline_access
+      - openid
+      - profile
+      - User.Read
+      - Team.ReadBasic.All
+      - Channel.ReadBasic.All
+      - Channel.Create
+      - ChannelMessage.Send
+      - ChannelMessage.Read.All
+      - Chat.Read
+      secrets_out:
+        access_token: MS_GRAPH_ACCESS_TOKEN
+        client_id: MS_GRAPH_CLIENT_ID
+        refresh_token: MS_GRAPH_REFRESH_TOKEN
+      setup_modes:
+        graph_channel:
+          config_keys:
+          - tenant_id
+          - client_id
+          - team_id
+          - team_name
+          - channel_id
+          - channel_name
+          - desired_channel_name
+          description: Default mode. Uses Microsoft Graph delegated tokens plus team_id/channel_id
+            for outbound channel messages.
+          provisioning:
+            teams_channel:
+              component_ref: messaging-provider-teams-graph
+              graph:
+                body_template:
+                  displayName: '{desired_channel_name}'
+                  membershipType: standard
+                lookup:
+                  collection_path: value
+                  match:
+                    case_insensitive: true
+                    field: displayName
+                    source_key: desired_channel_name
+                  method: GET
+                  output_keys:
+                    displayName: channel_name
+                    id: channel_id
+                  resource_template: /teams/{team_id}/channels
+                method: POST
+                required_scopes:
+                  delegated:
+                  - Channel.Create
+                resource_template: /teams/{team_id}/channels
+              mode: create_if_missing
+              op: apply-answers
+              output_keys:
+                channel_id: channel_id
+                channel_name: channel_name
+              source_keys:
+                desired_channel_name: desired_channel_name
+                team_id: team_id
+      tenant_alias: organizations
+      token_url: https://login.microsoftonline.com/organizations/oauth2/v2.0/token
+      verification_uri: https://microsoft.com/devicelogin
+  messaging.provider_ingress.v1:
+    kind: messaging.provider_ingress.v1
+    version: 0.5.17
+    inline:
+      capabilities:
+        content_types:
+        - application/json
+        supports_webhook_validation: true
+      component_ref: messaging-ingress-teams
+      export: handle-webhook
+      world: greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1
+  messaging.subscriptions.v1:
+    kind: messaging.subscriptions.v1
+    version: 0.5.17
+    inline:
+      component_config:
+        include:
+        - tenant_id
+        - client_id
+        - graph_base_url
+        - auth_base_url
+        - token_scope
+        source: setup_answers
+      component_ref: messaging-ingress-teams
+      desired_state:
+        defaults:
+          change_type: created
+        expiration_policy:
+          description: Microsoft Graph subscriptions require an expirationDateTime
+            on create and renewal.
+          host_supplied: true
+          max_minutes: 4320
+          required: true
+          state_key: expiration_datetime
+        lifecycle_notification_url:
+          description: Microsoft Graph Teams chatMessage subscriptions require lifecycleNotificationUrl
+            when expirationDateTime is more than 1 hour in the future.
+          required_when_expiration_over_minutes: 60
+          state_key: lifecycle_notification_url
+          template: '{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}'
+        notification_url:
+          state_key: notification_url
+          template: '{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}'
+        output_key: desired_subscriptions
+        source: setup_answers
+        source_keys:
+        - team_id
+        - channel_id
+        - chat_id
+        templates:
+        - change_type: created
+          expiration_datetime: '{expiration_datetime}'
+          id: teams_channel_messages
+          lifecycle_notification_url: '{lifecycle_notification_url}'
+          notification_url: '{notification_url}'
+          resource_template: /teams/{team_id}/channels/{channel_id}/messages
+          when_all:
+          - team_id
+          - channel_id
+        - change_type: created
+          expiration_datetime: '{expiration_datetime}'
+          id: teams_chat_messages
+          lifecycle_notification_url: '{lifecycle_notification_url}'
+          notification_url: '{notification_url}'
+          resource_template: /chats/{chat_id}/messages
+          when_all:
+          - chat_id
+      export: sync-subscriptions
+      pattern: sync
+      renewal_window_hours: 24
+      resources:
+      - message
+      world: greentic:messaging-ingress-teams/messaging-ingress-teams@0.0.1

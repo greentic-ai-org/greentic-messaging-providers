@@ -664,7 +664,7 @@ PY
 
   local_out_dir="${ROOT_DIR}/.tmp/packs"
   mkdir -p "${local_out_dir}"
-  tmp_pack_out="${local_out_dir}/${pack_name}.gtpack"
+  tmp_pack_out="${local_out_dir}/${pack_name}.$$.$RANDOM.gtpack"
   rm -f "${tmp_pack_out}"
   declare -a packc_flags=()
   if [ -n "${PACKC_BUILD_FLAGS:-}" ]; then

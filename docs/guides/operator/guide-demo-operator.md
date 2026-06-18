@@ -22,7 +22,7 @@ demo-bundle/
 │   └── messaging/              # Provider gtpacks (8 providers)
 │       ├── messaging-telegram.gtpack
 │       ├── messaging-slack.gtpack
-│       ├── messaging-teams.gtpack
+│       ├── messaging-teams-graph.gtpack
 │       ├── messaging-webex.gtpack
 │       ├── messaging-webchat.gtpack
 │       ├── messaging-email.gtpack
@@ -122,7 +122,7 @@ GREENTIC_ENV=dev ./tools/seed-secret/target/release/seed-secret \
 |----------|------------|------|
 | Telegram | `secrets://dev/default/_/messaging-telegram/` | `telegram_bot_token`, `bot_token` |
 | Slack | `secrets://dev/default/_/messaging-slack/` | `slack_bot_token` |
-| Teams | `secrets://dev/demo/_/messaging-teams/` | `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_REFRESH_TOKEN` |
+| Teams | `secrets://dev/demo/_/messaging-teams-graph/` | `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_REFRESH_TOKEN` |
 | Webex | `secrets://dev/default/_/messaging-webex/` | `webex_bot_token`, `bot_token` |
 | Email | `secrets://dev/default/_/messaging-email/` | `from_address`, `graph_tenant_id`, `ms_graph_client_id`, `ms_graph_refresh_token` |
 | WhatsApp | `secrets://dev/default/_/messaging-whatsapp/` | `whatsapp_token`, `phone_number_id` |
@@ -206,13 +206,13 @@ Teams uses Microsoft Graph API for sending and Bot Framework for receiving.
 2. API permissions: `ChannelMessage.Send` (Delegated), `Channel.ReadBasic.All`
 3. Get OAuth refresh token via authorization_code flow
 4. Seed secrets: `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_REFRESH_TOKEN`
-5. Register an Azure Bot pointing to: `{NGROK_URL}/v1/messaging/ingress/messaging-teams/default/default`
+5. Register an Azure Bot pointing to: `{NGROK_URL}/v1/messaging/ingress/messaging-teams-graph/default/default`
 6. Install the bot in your Teams channel
 
 Test egress:
 ```bash
 GREENTIC_ENV=dev gtc op demo send \
-  --bundle . --provider messaging-teams \
+  --bundle . --provider messaging-teams-graph \
   --to "TEAM_ID:CHANNEL_ID" --text "Hello Teams!"
 ```
 
@@ -346,6 +346,6 @@ rm -rf "$tmpdir"
 | Webhook not receiving | Check ngrok is running, URL matches, provider webhook is set |
 | WASM stale after rebuild | Clean `target/wasm32-wasip2/` and rebuild |
 | DEK cache bug (wrong decryption) | Batch-seed all secrets per category in one session |
-| `subscription_id: null` (Teams) | Check `ensure_provider` accepts `messaging-teams` |
+| `subscription_id: null` (Teams) | Check `ensure_provider` accepts `messaging-teams-graph` |
 
 See `docs/guide-troubleshooting.md` for detailed troubleshooting.

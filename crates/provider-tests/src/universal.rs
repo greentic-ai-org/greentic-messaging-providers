@@ -50,7 +50,7 @@ impl ProviderId {
         match self {
             ProviderId::Slack => "messaging-provider-slack",
             ProviderId::Telegram => "messaging-provider-telegram",
-            ProviderId::Teams => "messaging-provider-teams",
+            ProviderId::Teams => "messaging-provider-teams-graph",
             ProviderId::Webchat => "messaging-provider-webchat",
             ProviderId::Webex => "messaging-provider-webex",
             ProviderId::Whatsapp => "messaging-provider-whatsapp",
@@ -91,9 +91,9 @@ pub const PROVIDERS: &[ProviderSpec] = &[
     },
     ProviderSpec {
         id: ProviderId::Teams,
-        provider_type: "messaging.teams.bot",
+        provider_type: "messaging.teams.graph",
         fixture: "teams.json",
-        ingest_supported: true,
+        ingest_supported: false,
         challenge_fixture: None,
         challenge_response: None,
         skip_universal_ops: false,
