@@ -12,17 +12,28 @@ fn json_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn manifest(bot_app_id: &str, teams_app_id: &str, app_name: &str) -> String {
+fn manifest(
+    bot_app_id: &str,
+    teams_app_id: &str,
+    teams_app_version: &str,
+    app_name: &str,
+) -> String {
     let name = if app_name.trim().is_empty() {
         "Greentic Teams Bot"
     } else {
         app_name.trim()
+    };
+    let version = if teams_app_version.trim().is_empty() {
+        "1.0.0"
+    } else {
+        teams_app_version.trim()
     };
     let escaped = json_escape(name);
     // The source template keeps the fixed name (asserted by pack_metadata tests);
     // the runtime package substitutes the operator-supplied name.
     MANIFEST_TEMPLATE
         .replace("{teams_app_id}", teams_app_id)
+        .replace("{teams_app_version}", version)
         .replace("{bot_app_id}", bot_app_id)
         .replace(
             "\"short\": \"Greentic Teams Bot\"",
@@ -35,8 +46,13 @@ fn manifest(bot_app_id: &str, teams_app_id: &str, app_name: &str) -> String {
 }
 
 /// Build a Teams app package zip containing manifest.json + the two icons.
-pub fn build_package(bot_app_id: &str, teams_app_id: &str, app_name: &str) -> Vec<u8> {
-    let manifest = manifest(bot_app_id, teams_app_id, app_name);
+pub fn build_package(
+    bot_app_id: &str,
+    teams_app_id: &str,
+    teams_app_version: &str,
+    app_name: &str,
+) -> Vec<u8> {
+    let manifest = manifest(bot_app_id, teams_app_id, teams_app_version, app_name);
     build_zip(&[
         ("manifest.json", manifest.as_bytes()),
         ("color.png", COLOR_PNG),
@@ -115,4 +131,80 @@ fn build_zip(files: &[(&str, &[u8])]) -> Vec<u8> {
     out.extend_from_slice(&cd_offset.to_le_bytes());
     out.extend_from_slice(&0u16.to_le_bytes()); // comment len
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn le_u32(bytes: &[u8]) -> u32 {
+        u32::from_le_bytes(bytes.try_into().unwrap())
+    }
+
+    #[test]
+    fn json_escape_handles_json_string_specials() {
+        assert_eq!(json_escape(r#"Ops \ "Bot""#), r#"Ops \\ \"Bot\""#);
+    }
+
+    #[test]
+    fn manifest_substitutes_ids_version_and_name() {
+        let manifest = manifest(
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002",
+            "2.3.4",
+            r#"Ops "Bot""#,
+        );
+
+        assert!(manifest.contains("00000000-0000-0000-0000-000000000001"));
+        assert!(manifest.contains("00000000-0000-0000-0000-000000000002"));
+        assert!(manifest.contains(r#""version": "2.3.4""#));
+        assert!(manifest.contains(r#""short": "Ops \"Bot\"""#));
+        assert!(!manifest.contains("{bot_app_id}"));
+        assert!(!manifest.contains("{teams_app_id}"));
+        assert!(!manifest.contains("{teams_app_version}"));
+    }
+
+    #[test]
+    fn manifest_uses_defaults_for_empty_inputs() {
+        let manifest = manifest("bot-id", "teams-id", " ", " ");
+
+        assert!(manifest.contains(r#""short": "Greentic Teams Bot""#));
+        assert!(manifest.contains(r#""version": "1.0.0""#));
+    }
+
+    #[test]
+    fn crc32_matches_standard_vector() {
+        assert_eq!(crc32(b"123456789"), 0xcbf4_3926);
+    }
+
+    #[test]
+    fn build_zip_writes_stored_entries_and_directory() {
+        let zip = build_zip(&[("a.txt", b"alpha"), ("b.txt", b"beta")]);
+
+        assert_eq!(le_u32(&zip[0..4]), 0x0403_4b50);
+        let text = String::from_utf8_lossy(&zip);
+        assert!(text.contains("a.txt"));
+        assert!(text.contains("b.txt"));
+        assert!(zip.windows(4).any(|w| w == 0x0201_4b50u32.to_le_bytes()));
+        assert!(zip.windows(4).any(|w| w == 0x0605_4b50u32.to_le_bytes()));
+    }
+
+    #[test]
+    fn build_package_contains_manifest_and_icon_entries() {
+        let package = build_package(
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002",
+            "2.3.4",
+            "Ops Bot",
+        );
+
+        assert_eq!(le_u32(&package[0..4]), 0x0403_4b50);
+        let text = String::from_utf8_lossy(&package);
+        assert!(text.contains("manifest.json"));
+        assert!(text.contains("color.png"));
+        assert!(text.contains("outline.png"));
+        assert!(text.contains("00000000-0000-0000-0000-000000000001"));
+        assert!(text.contains("00000000-0000-0000-0000-000000000002"));
+        assert!(text.contains("2.3.4"));
+    }
 }

@@ -4,9 +4,11 @@
 //!
 //! Each step runs a real executor: device-code OAuth (`graph_admin_consent`),
 //! operator-supplied or Graph-created bot identity (`bot_app_identity`), Bot
-//! Framework endpoint registration, Teams app publish (in-component zip → Graph
-//! app catalog) and per-user install, and a runtime observation of the first
-//! inbound activity (`first_bot_framework_post`).
+//! Framework endpoint registration consent
+//! (`microsoft_bot_channel_registration_consent`), Bot Framework endpoint
+//! registration, Teams app publish (in-component zip → Graph app catalog) and
+//! per-user install, and a runtime observation of the first inbound activity
+//! (`first_bot_framework_post`).
 
 use crate::bindings::greentic::http::http_client as client;
 use crate::bindings::greentic::state::state_store;
@@ -16,10 +18,13 @@ use urlencoding::encode;
 /// Microsoft Graph Command Line Tools public client (device-code capable).
 const GRAPH_CLIENT_ID_DEFAULT: &str = "14d82eec-204b-4c2f-b7e8-296a70dab67e";
 const GRAPH_SCOPES: &str = "https://graph.microsoft.com/Application.ReadWrite.All https://graph.microsoft.com/AppCatalog.ReadWrite.All https://graph.microsoft.com/TeamsAppInstallation.ReadWriteForUser https://graph.microsoft.com/User.Read offline_access";
+const AZURE_MANAGEMENT_SCOPES: &str =
+    "https://management.azure.com/user_impersonation offline_access";
 
-const STEP_IDS: [&str; 6] = [
+const STEP_IDS: [&str; 7] = [
     "graph_admin_consent",
     "bot_app_identity",
+    "microsoft_bot_channel_registration_consent",
     "bot_framework_endpoint_registration",
     "teams_app_publish",
     "teams_app_user_install",
@@ -30,6 +35,9 @@ fn step_label(id: &str) -> &'static str {
     match id {
         "graph_admin_consent" => "Authorize Microsoft Graph setup access",
         "bot_app_identity" => "Create or reuse the Bot Framework app identity",
+        "microsoft_bot_channel_registration_consent" => {
+            "Authorize Microsoft Teams bot channel registration"
+        }
         "bot_framework_endpoint_registration" => "Register the Bot Framework endpoint",
         "teams_app_publish" => "Publish the Teams app",
         "teams_app_user_install" => "Install the Teams app for the current user",
@@ -62,8 +70,7 @@ fn default_state() -> Value {
         "values": {
             "config": {
                 "bot_display_name": "Greentic Bot",
-                "public_base_url": "https://runtime.example.test",
-                "bot_framework_registration_url": "https://runtime.example.test/v1/setup/bot-framework/registration"
+                "public_base_url": "https://runtime.example.test"
             },
             "last_setup_result": Value::Null
         }
@@ -103,10 +110,10 @@ fn is_done(state: &Value, id: &str) -> bool {
 }
 
 fn mark_done(state: &mut Value, id: &str) {
-    if !is_done(state, id) {
-        if let Some(arr) = state.get_mut("done").and_then(Value::as_array_mut) {
-            arr.push(Value::String(id.to_string()));
-        }
+    if !is_done(state, id)
+        && let Some(arr) = state.get_mut("done").and_then(Value::as_array_mut)
+    {
+        arr.push(Value::String(id.to_string()));
     }
 }
 
@@ -157,15 +164,17 @@ fn advance(state: &mut Value) -> &'static str {
         0 => graph_poll(state),
         // bot_app_identity: create/reuse the Entra app + mint its secret.
         1 => bot_app_step(state),
+        // microsoft_bot_channel_registration_consent: device-code login for Azure management.
+        2 => management_poll(state),
         // bot_framework_endpoint_registration: POST to the registration service if configured.
-        2 => bot_framework_registration_step(state),
+        3 => bot_framework_registration_step(state),
         // teams_app_publish: build + upload the real Teams app package to the catalog.
-        3 => teams_publish_step(state),
+        4 => teams_publish_step(state),
         // teams_app_user_install: install the published app for the signed-in user.
-        4 => teams_install_step(state),
+        5 => teams_install_step(state),
         // first_bot_framework_post: do NOT self-complete — it resolves when a real
         // inbound activity is observed (see record_activity + the GET handler).
-        5 => "send a message to the bot in Teams to finish setup",
+        6 => "send a message to the bot in Teams to finish setup",
         _ => "setup complete",
     }
 }
@@ -252,6 +261,15 @@ fn graph_authority(state: &Value) -> String {
 
 fn graph_client_id(state: &Value) -> String {
     let id = cfg_str(state, "graph_setup_client_id");
+    if id.trim().is_empty() {
+        GRAPH_CLIENT_ID_DEFAULT.to_string()
+    } else {
+        id
+    }
+}
+
+fn management_client_id(state: &Value) -> String {
+    let id = cfg_str(state, "azure_setup_client_id");
     if id.trim().is_empty() {
         GRAPH_CLIENT_ID_DEFAULT.to_string()
     } else {
@@ -388,6 +406,21 @@ fn graph_poll(state: &mut Value) -> &'static str {
         Ok(resp) => {
             if let Some(token) = resp.get("access_token").and_then(Value::as_str) {
                 values_mut(state).insert("graph_access_token".into(), json!(token));
+                let mut oauth = state
+                    .get("values")
+                    .and_then(|v| v.get("oauth"))
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                if let Some(map) = oauth.as_object_mut() {
+                    map.insert(
+                        "graph".to_string(),
+                        json!({
+                            "ok": true,
+                            "token_store_key": "graph_access_token",
+                        }),
+                    );
+                }
+                values_mut(state).insert("oauth".into(), oauth);
                 values_mut(state).insert("oauth_device".into(), Value::Null);
                 {
                     let config = config_mut(state);
@@ -426,6 +459,196 @@ fn graph_poll(state: &mut Value) -> &'static str {
             }
         }
         Err(_) => "authorize in the opened browser, then wait for setup to continue",
+    }
+}
+
+// ── microsoft_bot_channel_registration_consent: Azure management OAuth ──────
+
+fn set_management_pending(state: &mut Value, dc: &Value) {
+    let user_code = dc
+        .get("user_code")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let verification_uri = dc
+        .get("verification_uri")
+        .or_else(|| dc.get("verification_url"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let expires_in = dc.get("expires_in").and_then(Value::as_i64).unwrap_or(900);
+    let interval = dc.get("interval").and_then(Value::as_i64).unwrap_or(5);
+    let message = dc
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let response = json!({
+        "user_code": user_code,
+        "verification_uri": verification_uri,
+        "expires_in": expires_in,
+        "interval": interval,
+        "message": message,
+    });
+    {
+        let config = config_mut(state);
+        config.insert("oauth_kind".into(), json!("management"));
+        config.insert("azure_management_user_code".into(), json!(user_code));
+        config.insert("oauth_verification_uri".into(), json!(verification_uri));
+    }
+    values_mut(state).insert(
+        "last_oauth".into(),
+        json!({ "kind": "management", "response": response }),
+    );
+    values_mut(state).insert(
+        "azure_management_device".into(),
+        json!({ "device_code": dc.get("device_code").cloned().unwrap_or(Value::Null), "interval": interval, "expires_in": expires_in }),
+    );
+    set_result(
+        state,
+        "microsoft_bot_channel_registration_consent",
+        false,
+        json!({
+            "ok": false,
+            "pending_device_login": true,
+            "login": { "user_code": user_code, "userCode": user_code, "url": verification_uri, "expiresIn": expires_in, "interval": interval },
+            "body": response,
+        }),
+        "authorize Microsoft bot channel registration, then wait for setup to continue",
+    );
+}
+
+fn management_start(state: &mut Value) -> &'static str {
+    let url = format!("{}/oauth2/v2.0/devicecode", graph_authority(state));
+    let form = format!(
+        "client_id={}&scope={}",
+        encode(&management_client_id(state)),
+        encode(AZURE_MANAGEMENT_SCOPES)
+    );
+    match http_post_form(&url, &form) {
+        Ok(dc) if dc.get("device_code").is_some() => {
+            set_management_pending(state, &dc);
+            "authorize Microsoft bot channel registration, then wait for setup to continue"
+        }
+        Ok(err) => {
+            let msg = err
+                .get("error_description")
+                .or_else(|| err.get("error"))
+                .and_then(Value::as_str)
+                .unwrap_or("Azure management device-code request failed")
+                .to_string();
+            set_result(
+                state,
+                "microsoft_bot_channel_registration_consent",
+                false,
+                json!({ "ok": false, "error": msg }),
+                "Azure management device-code request failed",
+            );
+            "Azure management device-code request failed"
+        }
+        Err(_) => "Azure management device-code request failed",
+    }
+}
+
+fn management_poll(state: &mut Value) -> &'static str {
+    let existing_token = state
+        .get("values")
+        .and_then(|v| v.get("azure_management_access_token"))
+        .and_then(Value::as_str)
+        .filter(|token| !token.trim().is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            let token = cfg_str(state, "azure_management_access_token");
+            if token.trim().is_empty() {
+                None
+            } else {
+                Some(token)
+            }
+        });
+    if existing_token.is_some() {
+        mark_done(state, "microsoft_bot_channel_registration_consent");
+        set_result(
+            state,
+            "microsoft_bot_channel_registration_consent",
+            true,
+            json!({ "ok": true, "action": "supplied" }),
+            "click Continue to continue setup",
+        );
+        return "click Continue to continue setup";
+    }
+
+    let device_code = state
+        .get("values")
+        .and_then(|v| v.get("azure_management_device"))
+        .and_then(|d| d.get("device_code"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let Some(device_code) = device_code else {
+        return management_start(state);
+    };
+    let url = format!("{}/oauth2/v2.0/token", graph_authority(state));
+    let form = format!(
+        "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id={}&device_code={}",
+        encode(&management_client_id(state)),
+        encode(&device_code)
+    );
+    match http_post_form(&url, &form) {
+        Ok(resp) => {
+            if let Some(token) = resp.get("access_token").and_then(Value::as_str) {
+                values_mut(state).insert("azure_management_access_token".into(), json!(token));
+                let mut oauth = state
+                    .get("values")
+                    .and_then(|v| v.get("oauth"))
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                if let Some(map) = oauth.as_object_mut() {
+                    map.insert(
+                        "management".to_string(),
+                        json!({
+                            "ok": true,
+                            "token_store_key": "azure_management_access_token",
+                        }),
+                    );
+                }
+                values_mut(state).insert("oauth".into(), oauth);
+                values_mut(state).insert("azure_management_device".into(), Value::Null);
+                {
+                    let config = config_mut(state);
+                    config.remove("azure_management_user_code");
+                    config.remove("oauth_verification_uri");
+                    config.insert("oauth_kind".into(), json!("graph"));
+                }
+                mark_done(state, "microsoft_bot_channel_registration_consent");
+                set_result(
+                    state,
+                    "microsoft_bot_channel_registration_consent",
+                    true,
+                    json!({ "ok": true }),
+                    "click Continue to continue setup",
+                );
+                "click Continue to continue setup"
+            } else {
+                let error = resp.get("error").and_then(Value::as_str).unwrap_or("");
+                if error == "authorization_pending" || error == "slow_down" {
+                    "authorize Microsoft bot channel registration, then wait for setup to continue"
+                } else {
+                    values_mut(state).insert("azure_management_device".into(), Value::Null);
+                    let msg = resp
+                        .get("error_description")
+                        .and_then(Value::as_str)
+                        .unwrap_or("Azure management device authorization failed");
+                    set_result(
+                        state,
+                        "microsoft_bot_channel_registration_consent",
+                        false,
+                        json!({ "ok": false, "error": msg }),
+                        "Azure management authorization failed; click Continue to retry",
+                    );
+                    "Azure management authorization failed; click Continue to retry"
+                }
+            }
+        }
+        Err(_) => "authorize Microsoft bot channel registration, then wait for setup to continue",
     }
 }
 
@@ -542,7 +765,7 @@ fn bot_app_step(state: &mut Value) -> &'static str {
         Some((Some(oid), Some(aid))) => (oid, aid, "keep"),
         _ => {
             let create_body =
-                json!({ "displayName": display_name, "signInAudience": "AzureADMultipleOrgs" });
+                json!({ "displayName": display_name, "signInAudience": "AzureADMyOrg" });
             match graph_request(
                 &token,
                 "POST",
@@ -687,7 +910,9 @@ fn teams_publish_step(state: &mut Value) -> &'static str {
     }
     // Use the bot app id as the stable Teams manifest id (a valid GUID).
     let app_name = cfg_str(state, "bot_display_name");
-    let package = crate::teams_pkg::build_package(&bot_app_id, &bot_app_id, &app_name);
+    let teams_app_version = cfg_str(state, "teams_app_version");
+    let package =
+        crate::teams_pkg::build_package(&bot_app_id, &bot_app_id, &teams_app_version, &app_name);
     let url = format!("{GRAPH_BASE}/appCatalogs/teamsApps");
     match graph_request_bytes(&token, "POST", &url, "application/zip", package) {
         Ok((s, body)) if s < 300 => {
@@ -759,10 +984,9 @@ fn graph_user_id(state: &mut Value, token: &str) -> Option<String> {
         .get("values")
         .and_then(|v| v.get("user_id"))
         .and_then(Value::as_str)
+        && !uid.is_empty()
     {
-        if !uid.is_empty() {
-            return Some(uid.to_string());
-        }
+        return Some(uid.to_string());
     }
     match graph_request(token, "GET", &format!("{GRAPH_BASE}/me"), None) {
         Ok((s, body)) if s < 300 => {
@@ -833,28 +1057,7 @@ fn teams_install_step(state: &mut Value) -> &'static str {
     }
 }
 
-fn http_post_json(url: &str, body: &Value) -> Result<(u16, Value), String> {
-    let bytes = serde_json::to_vec(body).map_err(|e| e.to_string())?;
-    let request = client::Request {
-        method: "POST".into(),
-        url: url.to_string(),
-        headers: vec![("Content-Type".into(), "application/json".into())],
-        body: Some(bytes),
-    };
-    let resp = client::send(&request, None, None)
-        .map_err(|e| format!("transport error: {}", e.message))?;
-    let status = resp.status as u16;
-    let b = resp.body.unwrap_or_default();
-    let json = if b.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&b).unwrap_or(Value::Null)
-    };
-    Ok((status, json))
-}
-
-/// Register the messaging endpoint with the Bot Framework service if a registration
-/// URL is configured; otherwise treat it as registered manually in Azure Bot Service.
+/// Register the messaging endpoint with the provider-owned setup operation.
 fn bot_framework_registration_step(state: &mut Value) -> &'static str {
     let public_base = cfg_str(state, "public_base_url");
     let team = {
@@ -877,14 +1080,26 @@ fn bot_framework_registration_step(state: &mut Value) -> &'static str {
         tenant,
         team
     );
-    let reg_url = cfg_str(state, "bot_framework_registration_url");
-    // Empty or the placeholder default → manual mode: don't POST anywhere, just report
-    // the endpoint the operator should set as their Azure Bot messaging endpoint.
-    let is_manual = reg_url.trim().is_empty()
-        || reg_url.contains("example.test")
-        || reg_url.contains("example.com");
-    if is_manual {
-        let result = json!({ "ok": true, "action": "manual", "target_messaging_endpoint": messaging_endpoint, "note": "Set this URL as your Azure Bot Service messaging endpoint. (No registration service configured.)" });
+    let body = json!({
+        "provider_id": "messaging-teams",
+        "bot_app_id": cfg_str(state, "bot_app_id"),
+        "bot_app_password": cfg_str(state, "bot_app_password"),
+        "messaging_endpoint": messaging_endpoint,
+        "public_base_url": public_base,
+        "bot_display_name": cfg_str(state, "bot_display_name"),
+        "azure_management_access_token": cfg_str(state, "azure_management_access_token"),
+        "azure_auth_tenant": cfg_str(state, "azure_auth_tenant"),
+        "azure_subscription_id": cfg_str(state, "azure_subscription_id"),
+        "azure_resource_group": cfg_str(state, "azure_resource_group"),
+        "azure_resource_group_location": cfg_str(state, "azure_resource_group_location"),
+        "azure_location": cfg_str(state, "azure_location"),
+        "azure_bot_name": cfg_str(state, "azure_bot_name"),
+        "channel": "msteams",
+        "tenant": tenant,
+        "team": team,
+    });
+    let result = crate::handle_bot_framework_registration_body(&body);
+    if result.get("ok").and_then(Value::as_bool) == Some(true) {
         mark_done(state, "bot_framework_endpoint_registration");
         set_result(
             state,
@@ -893,39 +1108,16 @@ fn bot_framework_registration_step(state: &mut Value) -> &'static str {
             result,
             "click Continue to continue setup",
         );
-        return "click Continue to continue setup";
-    }
-    let body = json!({
-        "provider_id": "messaging-teams",
-        "bot_app_id": cfg_str(state, "bot_app_id"),
-        "bot_app_password": cfg_str(state, "bot_app_password"),
-        "messaging_endpoint": messaging_endpoint,
-        "channel": "msteams",
-        "tenant": tenant,
-        "team": team,
-    });
-    match http_post_json(&reg_url, &body) {
-        Ok((s, _)) if s < 300 => {
-            let result = json!({ "ok": true, "action": "update", "target_messaging_endpoint": messaging_endpoint });
-            mark_done(state, "bot_framework_endpoint_registration");
-            set_result(
-                state,
-                "bot_framework_endpoint_registration",
-                true,
-                result,
-                "click Continue to continue setup",
-            );
-            "click Continue to continue setup"
-        }
-        Ok((status, body)) => step_fail(
+        "click Continue to continue setup"
+    } else {
+        step_fail(
             state,
             "bot_framework_endpoint_registration",
-            &format!(
-                "Bot Framework registration failed (HTTP {status}): {}",
-                graph_error_message(&body, "unknown error")
-            ),
-        ),
-        Err(e) => step_fail(state, "bot_framework_endpoint_registration", &e),
+            result
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("Bot Framework registration failed"),
+        )
     }
 }
 
@@ -1013,8 +1205,15 @@ pub fn handle(method: &str, path: &str, body_json: &str) -> Option<Result<String
         }
         // OAuth device-code: /start (re)issues a device code, /complete polls for the token.
         ("POST", a) if a.starts_with("oauth/") => {
+            let is_management = a.starts_with("oauth/management/");
             let next = if a.ends_with("/start") {
-                graph_start(&mut state)
+                if is_management {
+                    management_start(&mut state)
+                } else {
+                    graph_start(&mut state)
+                }
+            } else if is_management {
+                management_poll(&mut state)
             } else {
                 graph_poll(&mut state)
             };
@@ -1036,4 +1235,457 @@ pub fn handle(method: &str, path: &str, body_json: &str) -> Option<Result<String
     };
 
     Some(respond(200, snapshot))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn config_state(config: Value) -> Value {
+        let mut state = default_state();
+        values_mut(&mut state).insert("config".into(), config);
+        state
+    }
+
+    #[test]
+    fn parse_path_extracts_tenant_and_action() {
+        assert_eq!(
+            parse_path("/v1/messaging/setup/messaging-teams/demo/next"),
+            Some(("demo".to_string(), "next".to_string()))
+        );
+        assert_eq!(
+            parse_path("/v1/messaging/setup/messaging-teams/demo/oauth/graph/start/"),
+            Some(("demo".to_string(), "oauth/graph/start".to_string()))
+        );
+        assert_eq!(parse_path("/v1/messaging/setup/messaging-teams/"), None);
+        assert_eq!(parse_path("/v1/messaging/other/demo"), None);
+    }
+
+    #[test]
+    fn setup_state_tracks_done_steps_idempotently() {
+        let mut state = default_state();
+
+        mark_done(&mut state, "graph_admin_consent");
+        mark_done(&mut state, "graph_admin_consent");
+
+        assert!(is_done(&state, "graph_admin_consent"));
+        assert_eq!(done_count(&state), 1);
+        assert_eq!(done_ids(&state), vec!["graph_admin_consent"]);
+    }
+
+    #[test]
+    fn public_state_surfaces_step_status_and_teams_links() {
+        let mut state = default_state();
+        mark_done(&mut state, "graph_admin_consent");
+        mark_done(&mut state, "teams_app_publish");
+        values_mut(&mut state).insert(
+            "last_teams_app_publish".into(),
+            json!({ "add_to_teams_url": "https://teams.microsoft.com/l/app/catalog-id" }),
+        );
+        values_mut(&mut state).insert(
+            "last_teams_app_install".into(),
+            json!({ "open_bot_chat_url": "https://teams.microsoft.com/l/chat/0/0" }),
+        );
+
+        let view = public_state(&state, "demo", Some("next action"));
+
+        assert_eq!(view["setup_status"]["items"].as_array().unwrap().len(), 7);
+        assert_eq!(
+            view["setup_status"]["selected"]["tenant"].as_str(),
+            Some("demo")
+        );
+        assert_eq!(view["setup_status"]["next"].as_str(), Some("next action"));
+        assert_eq!(view["teams_app"]["ok"].as_bool(), Some(true));
+        assert_eq!(
+            view["teams_app"]["add_to_teams_url"].as_str(),
+            Some("https://teams.microsoft.com/l/app/catalog-id")
+        );
+        assert_eq!(
+            view["teams_app"]["open_bot_chat_url"].as_str(),
+            Some("https://teams.microsoft.com/l/chat/0/0")
+        );
+    }
+
+    #[test]
+    fn public_state_reports_complete_only_when_all_steps_done() {
+        let mut state = default_state();
+        for step in STEP_IDS {
+            mark_done(&mut state, step);
+        }
+
+        let view = public_state(&state, "demo", None);
+
+        assert_eq!(view["setup_status"]["ok"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn merge_config_preserves_existing_values_for_empty_inputs() {
+        let mut state = config_state(json!({
+            "public_base_url": "https://runtime.example.test",
+            "bot_display_name": "Greentic Bot"
+        }));
+
+        merge_config(
+            &mut state,
+            &json!({
+                "public_base_url": "",
+                "bot_display_name": "Ops Bot",
+                "team": "support"
+            }),
+        );
+
+        assert_eq!(
+            cfg_str(&state, "public_base_url"),
+            "https://runtime.example.test"
+        );
+        assert_eq!(cfg_str(&state, "bot_display_name"), "Ops Bot");
+        assert_eq!(cfg_str(&state, "team"), "support");
+    }
+
+    #[test]
+    fn oauth_pending_state_keeps_graph_and_management_codes_separate() {
+        let mut state = default_state();
+
+        set_graph_pending(
+            &mut state,
+            &json!({
+                "device_code": "graph-device",
+                "user_code": "GRAPH-CODE",
+                "verification_uri": "https://microsoft.com/devicelogin",
+                "expires_in": 600,
+                "interval": 4
+            }),
+        );
+        assert_eq!(cfg_str(&state, "oauth_kind"), "graph");
+        assert_eq!(cfg_str(&state, "oauth_user_code"), "GRAPH-CODE");
+        assert_eq!(
+            state["values"]["oauth_device"]["device_code"].as_str(),
+            Some("graph-device")
+        );
+
+        set_management_pending(
+            &mut state,
+            &json!({
+                "device_code": "management-device",
+                "user_code": "MGMT-CODE",
+                "verification_url": "https://microsoft.com/devicelogin",
+                "expires_in": 900,
+                "interval": 5
+            }),
+        );
+
+        assert_eq!(cfg_str(&state, "oauth_kind"), "management");
+        assert_eq!(cfg_str(&state, "oauth_user_code"), "GRAPH-CODE");
+        assert_eq!(cfg_str(&state, "azure_management_user_code"), "MGMT-CODE");
+        assert_eq!(
+            state["values"]["azure_management_device"]["device_code"].as_str(),
+            Some("management-device")
+        );
+        assert_eq!(
+            state["values"]["last_setup_result"]["step"].as_str(),
+            Some("microsoft_bot_channel_registration_consent")
+        );
+    }
+
+    #[test]
+    fn management_poll_accepts_supplied_token_without_network() {
+        let mut state = config_state(json!({
+            "azure_management_access_token": "management-token"
+        }));
+
+        let next = management_poll(&mut state);
+
+        assert_eq!(next, "click Continue to continue setup");
+        assert!(is_done(
+            &state,
+            "microsoft_bot_channel_registration_consent"
+        ));
+        assert_eq!(
+            state["values"]["last_setup_result"]["result"]["action"].as_str(),
+            Some("supplied")
+        );
+    }
+
+    #[test]
+    fn bot_app_step_accepts_supplied_credentials_without_graph() {
+        let mut state = config_state(json!({
+            "bot_app_id": "00000000-0000-0000-0000-000000000001",
+            "bot_app_password": "secret"
+        }));
+
+        let next = bot_app_step(&mut state);
+
+        assert_eq!(next, "click Continue to continue setup");
+        assert!(is_done(&state, "bot_app_identity"));
+        assert_eq!(
+            state["values"]["last_setup_result"]["result"]["action"].as_str(),
+            Some("supplied")
+        );
+    }
+
+    #[test]
+    fn bot_framework_registration_step_validates_required_config() {
+        let mut missing = default_state();
+        let next = bot_framework_registration_step(&mut missing);
+        assert_eq!(next, "step failed; click Continue to retry");
+        assert!(
+            state_error(&missing)
+                .unwrap()
+                .starts_with("missing bot_app_id")
+        );
+
+        let mut state = config_state(json!({
+            "public_base_url": "https://runtime.example.test",
+            "team": "support",
+            "bot_app_id": "00000000-0000-0000-0000-000000000001",
+            "bot_app_password": "secret",
+            "bot_display_name": "Greentic Bot",
+            "azure_management_access_token": "management-token",
+            "azure_bot_name": "Greentic Teams Bot"
+        }));
+        values_mut(&mut state).insert("tenant".into(), json!("demo"));
+
+        let next = bot_framework_registration_step(&mut state);
+
+        assert_eq!(next, "click Continue to continue setup");
+        assert!(is_done(&state, "bot_framework_endpoint_registration"));
+        assert_eq!(
+            state["values"]["last_setup_result"]["result"]["target_messaging_endpoint"].as_str(),
+            Some("https://runtime.example.test/v1/messaging/ingress/messaging-teams/demo/support")
+        );
+    }
+
+    #[test]
+    fn publish_and_install_helpers_record_links_and_errors() {
+        let mut state = config_state(json!({
+            "bot_app_id": "00000000-0000-0000-0000-000000000001"
+        }));
+
+        let next = finalize_publish(&mut state, "catalog-id", "exists");
+        assert_eq!(next, "open Add to Teams, install the app, then continue");
+        assert!(is_done(&state, "teams_app_publish"));
+        assert_eq!(cfg_str(&state, "teams_app_id"), "catalog-id");
+        assert_eq!(
+            state["values"]["last_teams_app_publish"]["action"].as_str(),
+            Some("exists")
+        );
+
+        let mut no_token = default_state();
+        let next = teams_install_step(&mut no_token);
+        assert_eq!(next, "step failed; click Continue to retry");
+        assert_eq!(
+            state_error(&no_token).as_deref(),
+            Some("Microsoft Graph authorization is required (complete step 1)")
+        );
+
+        let mut missing_app = default_state();
+        values_mut(&mut missing_app).insert("graph_access_token".into(), json!("graph-token"));
+        let next = teams_install_step(&mut missing_app);
+        assert_eq!(next, "step failed; click Continue to retry");
+        assert_eq!(
+            state_error(&missing_app).as_deref(),
+            Some("teams_app_id missing — publish the app first")
+        );
+    }
+
+    #[test]
+    fn graph_user_id_reuses_cached_value() {
+        let mut state = default_state();
+        values_mut(&mut state).insert("user_id".into(), json!("user-123"));
+
+        assert_eq!(
+            graph_user_id(&mut state, "unused-token"),
+            Some("user-123".to_string())
+        );
+    }
+
+    #[test]
+    fn authority_and_client_id_helpers_use_defaults_and_overrides() {
+        let default = default_state();
+        assert_eq!(
+            graph_authority(&default),
+            "https://login.microsoftonline.com/organizations"
+        );
+        assert_eq!(graph_client_id(&default), GRAPH_CLIENT_ID_DEFAULT);
+        assert_eq!(management_client_id(&default), GRAPH_CLIENT_ID_DEFAULT);
+        assert_eq!(step_label("unknown"), "");
+        assert_eq!(state_key("demo"), "messaging.teams.setup.demo");
+
+        let configured = config_state(json!({
+            "azure_auth_tenant": "contoso.onmicrosoft.com",
+            "graph_setup_client_id": "graph-client",
+            "azure_setup_client_id": "management-client"
+        }));
+        assert_eq!(
+            graph_authority(&configured),
+            "https://login.microsoftonline.com/contoso.onmicrosoft.com"
+        );
+        assert_eq!(graph_client_id(&configured), "graph-client");
+        assert_eq!(management_client_id(&configured), "management-client");
+    }
+
+    #[test]
+    fn advance_routes_each_non_oauth_stage() {
+        let mut bot_app = config_state(json!({
+            "bot_app_id": "00000000-0000-0000-0000-000000000001",
+            "bot_app_password": "secret"
+        }));
+        mark_done(&mut bot_app, "graph_admin_consent");
+        assert_eq!(advance(&mut bot_app), "click Continue to continue setup");
+        assert!(is_done(&bot_app, "bot_app_identity"));
+
+        let mut management = config_state(json!({
+            "azure_management_access_token": "management-token"
+        }));
+        mark_done(&mut management, "graph_admin_consent");
+        mark_done(&mut management, "bot_app_identity");
+        assert_eq!(advance(&mut management), "click Continue to continue setup");
+        assert!(is_done(
+            &management,
+            "microsoft_bot_channel_registration_consent"
+        ));
+
+        let mut registration = config_state(json!({
+            "public_base_url": "https://runtime.example.test",
+            "team": "default",
+            "bot_app_id": "00000000-0000-0000-0000-000000000001",
+            "bot_app_password": "secret",
+            "bot_display_name": "Greentic Bot",
+            "azure_management_access_token": "management-token"
+        }));
+        values_mut(&mut registration).insert("tenant".into(), json!("demo"));
+        for step in [
+            "graph_admin_consent",
+            "bot_app_identity",
+            "microsoft_bot_channel_registration_consent",
+        ] {
+            mark_done(&mut registration, step);
+        }
+        assert_eq!(
+            advance(&mut registration),
+            "click Continue to continue setup"
+        );
+        assert!(is_done(
+            &registration,
+            "bot_framework_endpoint_registration"
+        ));
+
+        let mut publish = default_state();
+        for step in [
+            "graph_admin_consent",
+            "bot_app_identity",
+            "microsoft_bot_channel_registration_consent",
+            "bot_framework_endpoint_registration",
+        ] {
+            mark_done(&mut publish, step);
+        }
+        assert_eq!(
+            advance(&mut publish),
+            "step failed; click Continue to retry"
+        );
+        assert_eq!(
+            state_error(&publish).as_deref(),
+            Some("Microsoft Graph authorization is required (complete step 1)")
+        );
+
+        let mut install = default_state();
+        for step in [
+            "graph_admin_consent",
+            "bot_app_identity",
+            "microsoft_bot_channel_registration_consent",
+            "bot_framework_endpoint_registration",
+            "teams_app_publish",
+        ] {
+            mark_done(&mut install, step);
+        }
+        assert_eq!(
+            advance(&mut install),
+            "step failed; click Continue to retry"
+        );
+        assert_eq!(
+            state_error(&install).as_deref(),
+            Some("Microsoft Graph authorization is required (complete step 1)")
+        );
+
+        mark_done(&mut install, "teams_app_user_install");
+        assert_eq!(
+            advance(&mut install),
+            "send a message to the bot in Teams to finish setup"
+        );
+        mark_done(&mut install, "first_bot_framework_post");
+        assert_eq!(advance(&mut install), "setup complete");
+    }
+
+    #[test]
+    fn bot_app_step_requires_graph_when_credentials_are_incomplete() {
+        let mut state = config_state(json!({
+            "bot_app_id": "00000000-0000-0000-0000-000000000001"
+        }));
+
+        let next = bot_app_step(&mut state);
+
+        assert_eq!(next, "bot app setup failed; click Continue to retry");
+        assert_eq!(
+            state_error(&state).as_deref(),
+            Some("Microsoft Graph authorization is required first")
+        );
+    }
+
+    #[test]
+    fn publish_step_validates_before_graph_upload() {
+        let mut no_token = config_state(json!({
+            "bot_app_id": "00000000-0000-0000-0000-000000000001"
+        }));
+        assert_eq!(
+            teams_publish_step(&mut no_token),
+            "step failed; click Continue to retry"
+        );
+        assert_eq!(
+            state_error(&no_token).as_deref(),
+            Some("Microsoft Graph authorization is required (complete step 1)")
+        );
+
+        let mut no_bot_app = default_state();
+        values_mut(&mut no_bot_app).insert("graph_access_token".into(), json!("graph-token"));
+        assert_eq!(
+            teams_publish_step(&mut no_bot_app),
+            "step failed; click Continue to retry"
+        );
+        assert_eq!(
+            state_error(&no_bot_app).as_deref(),
+            Some("bot_app_id is required before publishing")
+        );
+    }
+
+    #[test]
+    fn graph_error_message_uses_nested_message_or_fallback() {
+        assert_eq!(
+            graph_error_message(
+                &json!({ "error": { "message": "Graph said no" } }),
+                "fallback"
+            ),
+            "Graph said no"
+        );
+        assert_eq!(graph_error_message(&json!({}), "fallback"), "fallback");
+    }
+
+    #[test]
+    fn respond_wraps_status_headers_and_body() {
+        let body = respond(202, json!({ "ok": true })).unwrap();
+        let parsed: Value = serde_json::from_str(&body).unwrap();
+
+        assert_eq!(parsed["response"]["status"].as_u64(), Some(202));
+        assert_eq!(
+            parsed["response"]["headers"]["content-type"].as_str(),
+            Some("application/json")
+        );
+        assert_eq!(parsed["response"]["body_json"]["ok"].as_bool(), Some(true));
+    }
+
+    fn state_error(state: &Value) -> Option<String> {
+        state["values"]["last_setup_result"]["result"]["error"]
+            .as_str()
+            .map(str::to_string)
+    }
 }

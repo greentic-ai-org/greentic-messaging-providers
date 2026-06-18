@@ -6,6 +6,7 @@ use greentic:http/http-client@1.1.0 as http-client;
 use greentic:secrets-store/secrets-store@1.0.0;
 use greentic:state/state-store@1.0.0;
 use greentic:telemetry/logger-api@1.0.0;
+use greentic:provider-schema-core/schema-core-api@1.0.0;
 use provider:common/ingress@0.0.2;
 use provider:common/subscriptions@0.0.2;
 
@@ -17,4 +18,5 @@ world messaging-ingress-teams {
 
     export ingress;
     export subscriptions;
+    export schema-core-api;
 }

@@ -12,6 +12,8 @@ mod bot_framework;
 mod setup;
 mod teams_pkg;
 
+#[cfg(not(test))]
+use base64::{Engine as _, engine::general_purpose};
 use bindings::exports::provider::common::ingress::Guest as IngressGuest;
 use bindings::exports::provider::common::subscriptions::Guest as SubscriptionsGuest;
 use bindings::greentic::http::http_client as client;
@@ -24,6 +26,12 @@ use urlencoding::encode;
 const DEFAULT_GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
 const DEFAULT_AUTH_BASE: &str = "https://login.microsoftonline.com";
 const DEFAULT_TOKEN_SCOPE: &str = "https://graph.microsoft.com/.default";
+#[cfg(not(test))]
+const AZURE_MANAGEMENT_BASE: &str = "https://management.azure.com";
+#[cfg(not(test))]
+const AZURE_BOT_API_VERSION: &str = "2022-09-15";
+#[cfg(not(test))]
+const AZURE_RESOURCE_GROUP_API_VERSION: &str = "2021-04-01";
 #[cfg(not(test))]
 const DEFAULT_CLIENT_ID_KEY: &str = "MS_GRAPH_CLIENT_ID";
 const DEFAULT_REFRESH_TOKEN_KEY: &str = "MS_GRAPH_REFRESH_TOKEN";
@@ -155,12 +163,995 @@ impl SubscriptionsGuest for Component {
     }
 }
 
-bindings::exports::provider::common::ingress::__export_provider_common_ingress_0_0_2_cabi!(
-    Component with_types_in bindings::exports::provider::common::ingress
-);
-bindings::exports::provider::common::subscriptions::__export_provider_common_subscriptions_0_0_2_cabi!(
-    Component with_types_in bindings::exports::provider::common::subscriptions
-);
+impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest for Component {
+    fn describe() -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "provider_type": "messaging.teams",
+            "capabilities": ["setup", "ingress", "subscriptions"],
+            "ops": [
+                "bot-framework-registration",
+                "teams-app-publish",
+                "teams-app-install"
+            ]
+        }))
+        .unwrap_or_default()
+    }
+
+    fn validate_config(_config_json: Vec<u8>) -> Vec<u8> {
+        json_bytes(&json!({"ok": true}))
+    }
+
+    fn healthcheck() -> Vec<u8> {
+        json_bytes(&json!({"status": "healthy"}))
+    }
+
+    fn invoke(op: String, input_json: Vec<u8>) -> Vec<u8> {
+        let output = match op.as_str() {
+            "bot-framework-registration" => handle_bot_framework_registration_request(&input_json),
+            "teams-app-publish" => handle_teams_app_publish_request(&input_json),
+            "teams-app-install" => handle_teams_app_install_request(&input_json),
+            other => json!({
+                "ok": false,
+                "blocked": true,
+                "error": format!("unsupported setup op: {other}")
+            }),
+        };
+        json_bytes(&output)
+    }
+}
+
+bindings::export!(Component with_types_in bindings);
+
+fn json_bytes(value: &Value) -> Vec<u8> {
+    serde_json::to_vec(value).unwrap_or_default()
+}
+
+fn handle_bot_framework_registration_request(input_json: &[u8]) -> Value {
+    let request = match serde_json::from_slice::<Value>(input_json) {
+        Ok(value) => value,
+        Err(_) => {
+            return setup_blocked("invalid setup registration request JSON");
+        }
+    };
+    let body = match request.get("body_json").and_then(Value::as_str) {
+        Some(raw) => match serde_json::from_str::<Value>(raw) {
+            Ok(value) => value,
+            Err(_) => return setup_blocked("invalid setup registration body JSON"),
+        },
+        None => request,
+    };
+    handle_bot_framework_registration_body(&body)
+}
+
+fn setup_request_body(
+    input_json: &[u8],
+    invalid_request: &str,
+    invalid_body: &str,
+) -> Result<Value, Value> {
+    let request =
+        serde_json::from_slice::<Value>(input_json).map_err(|_| setup_blocked(invalid_request))?;
+    match request.get("body_json").and_then(Value::as_str) {
+        Some(raw) => serde_json::from_str::<Value>(raw).map_err(|_| setup_blocked(invalid_body)),
+        None => Ok(request),
+    }
+}
+
+fn handle_teams_app_publish_request(input_json: &[u8]) -> Value {
+    let body = match setup_request_body(
+        input_json,
+        "invalid Teams app publish request JSON",
+        "invalid Teams app publish body JSON",
+    ) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    handle_teams_app_publish_body(&body)
+}
+
+fn handle_teams_app_publish_body(body: &Value) -> Value {
+    if body.get("provider_id").and_then(Value::as_str) != Some("messaging-teams") {
+        return setup_blocked("provider_id must be messaging-teams");
+    }
+    let token = match required_body_str(body, "graph_access_token") {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let bot_app_id = match required_body_str(body, "bot_app_id") {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let display_name = body_str(body, "bot_display_name");
+    let version = body_str(body, "teams_app_version");
+    match publish_or_reuse_teams_app(token, bot_app_id, version, display_name) {
+        Ok(value) => value,
+        Err(error) => setup_blocked(&error),
+    }
+}
+
+#[cfg(not(test))]
+fn publish_or_reuse_teams_app(
+    token: &str,
+    bot_app_id: &str,
+    version: &str,
+    display_name: &str,
+) -> Result<Value, String> {
+    let package = teams_pkg::build_package(bot_app_id, bot_app_id, version, display_name);
+    let url = format!("{DEFAULT_GRAPH_BASE}/appCatalogs/teamsApps");
+    let (action, catalog_app_id) = match graph_setup_zip_request(token, "POST", &url, package) {
+        Ok((status, body)) if status < 300 => {
+            let catalog_app_id = body
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or(bot_app_id)
+                .to_string();
+            ("publish", catalog_app_id)
+        }
+        Ok((409, _)) => (
+            "exists",
+            lookup_existing_teams_catalog_app(token, bot_app_id)?,
+        ),
+        Ok((status, body)) => {
+            return Err(format!(
+                "Teams app catalog publish failed (HTTP {status}): {}",
+                graph_setup_error_message(&body, "unknown error")
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    Ok(teams_app_publish_result(
+        action,
+        &catalog_app_id,
+        bot_app_id,
+        version,
+    ))
+}
+
+#[cfg(test)]
+fn publish_or_reuse_teams_app(
+    _token: &str,
+    bot_app_id: &str,
+    version: &str,
+    _display_name: &str,
+) -> Result<Value, String> {
+    Ok(teams_app_publish_result(
+        "publish",
+        "catalog-app",
+        bot_app_id,
+        version,
+    ))
+}
+
+fn teams_app_publish_result(
+    action: &str,
+    catalog_app_id: &str,
+    bot_app_id: &str,
+    version: &str,
+) -> Value {
+    json!({
+        "ok": true,
+        "action": action,
+        "teams_app_id": catalog_app_id,
+        "catalog_app_id": catalog_app_id,
+        "external_id": bot_app_id,
+        "manifest_version": if version.trim().is_empty() { "1.0.0" } else { version.trim() },
+        "add_to_teams_url": format!("https://teams.microsoft.com/l/app/{catalog_app_id}?source=app-details-dialog"),
+    })
+}
+
+fn handle_teams_app_install_request(input_json: &[u8]) -> Value {
+    let body = match setup_request_body(
+        input_json,
+        "invalid Teams app install request JSON",
+        "invalid Teams app install body JSON",
+    ) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    handle_teams_app_install_body(&body)
+}
+
+fn handle_teams_app_install_body(body: &Value) -> Value {
+    if body.get("provider_id").and_then(Value::as_str) != Some("messaging-teams") {
+        return setup_blocked("provider_id must be messaging-teams");
+    }
+    let token = match required_body_str(body, "graph_access_token") {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let bot_app_id = match required_body_str(body, "bot_app_id") {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    match install_or_reuse_teams_app(token, bot_app_id) {
+        Ok(value) => value,
+        Err(error) => setup_blocked(&error),
+    }
+}
+
+#[cfg(not(test))]
+fn install_or_reuse_teams_app(token: &str, bot_app_id: &str) -> Result<Value, String> {
+    let catalog_app_id = lookup_existing_teams_catalog_app(token, bot_app_id)?;
+    let user_id =
+        match graph_setup_json_request(token, "GET", &format!("{DEFAULT_GRAPH_BASE}/me"), None) {
+            Ok((status, body)) if status < 300 => body
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .ok_or_else(|| "Microsoft Graph /me response missing user id".to_string())?,
+            Ok((status, body)) => {
+                return Err(format!(
+                    "Microsoft Graph /me failed (HTTP {status}): {}",
+                    graph_setup_error_message(&body, "unknown error")
+                ));
+            }
+            Err(error) => return Err(error),
+        };
+    let url = format!(
+        "{DEFAULT_GRAPH_BASE}/users/{}/teamwork/installedApps",
+        encode(&user_id)
+    );
+    let body = json!({
+        "teamsApp@odata.bind": format!("{DEFAULT_GRAPH_BASE}/appCatalogs/teamsApps/{catalog_app_id}")
+    });
+    let action = match graph_setup_json_request(token, "POST", &url, Some(body)) {
+        Ok((status, _)) if status < 300 => "install",
+        Ok((409, _)) => "exists",
+        Ok((status, body)) => {
+            return Err(format!(
+                "Teams app user install failed (HTTP {status}): {}",
+                graph_setup_error_message(&body, "unknown error")
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    Ok(teams_app_install_result(
+        action,
+        &catalog_app_id,
+        bot_app_id,
+        &user_id,
+    ))
+}
+
+#[cfg(test)]
+fn install_or_reuse_teams_app(_token: &str, bot_app_id: &str) -> Result<Value, String> {
+    Ok(teams_app_install_result(
+        "install",
+        "catalog-app",
+        bot_app_id,
+        "user-id",
+    ))
+}
+
+fn teams_app_install_result(
+    action: &str,
+    catalog_app_id: &str,
+    bot_app_id: &str,
+    user_id: &str,
+) -> Value {
+    json!({
+        "ok": true,
+        "action": action,
+        "teams_app_id": catalog_app_id,
+        "catalog_app_id": catalog_app_id,
+        "installed_for": user_id,
+        "add_to_teams_url": format!("https://teams.microsoft.com/l/app/{catalog_app_id}?source=app-details-dialog"),
+        "open_bot_chat_url": format!("https://teams.microsoft.com/l/chat/0/0?users=28:{bot_app_id}&message=hello"),
+    })
+}
+
+pub(crate) fn handle_bot_framework_registration_body(body: &Value) -> Value {
+    for key in [
+        "tenant",
+        "team",
+        "bot_app_id",
+        "bot_app_password",
+        "messaging_endpoint",
+        "public_base_url",
+        "bot_display_name",
+        "azure_management_access_token",
+    ] {
+        if body
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return setup_blocked(&format!("missing {key}"));
+        }
+    }
+    if body.get("provider_id").and_then(Value::as_str) != Some("messaging-teams") {
+        return setup_blocked("provider_id must be messaging-teams");
+    }
+    if body.get("channel").and_then(Value::as_str) != Some("msteams") {
+        return setup_blocked("channel must be msteams");
+    }
+    let messaging_endpoint = body
+        .get("messaging_endpoint")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let public_base_url = body
+        .get("public_base_url")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !messaging_endpoint.starts_with("https://") {
+        return setup_blocked("messaging_endpoint must be an HTTPS URL Teams can reach");
+    }
+    if !messaging_endpoint.starts_with(public_base_url.trim_end_matches('/')) {
+        return setup_blocked("messaging_endpoint must be under public_base_url");
+    }
+    let tenant = body
+        .get("tenant")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let team = body.get("team").and_then(Value::as_str).unwrap_or_default();
+    let bot_app_id = body
+        .get("bot_app_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let channel_registration =
+        match register_microsoft_bot_channel(body, messaging_endpoint, bot_app_id) {
+            Ok(value) => value,
+            Err(error) => return setup_blocked(&error),
+        };
+    let registration = bot_framework_registration_record(body, messaging_endpoint);
+    if let Err(error) = persist_bot_framework_registration(tenant, team, bot_app_id, &registration)
+    {
+        return setup_blocked(&error);
+    }
+
+    json!({
+        "ok": true,
+        "action": "register",
+        "provider_id": "messaging-teams",
+        "channel": "msteams",
+        "registration": registration,
+        "microsoft_bot_channel_registration": channel_registration,
+        "tenant": body.get("tenant").cloned().unwrap_or(Value::Null),
+        "team": body.get("team").cloned().unwrap_or(Value::Null),
+        "target_messaging_endpoint": messaging_endpoint,
+    })
+}
+
+fn bot_framework_registration_record(body: &Value, messaging_endpoint: &str) -> Value {
+    json!({
+        "kind": "greentic_bot_framework",
+        "status": "registered",
+        "provider_id": "messaging-teams",
+        "channel": "msteams",
+        "tenant": body.get("tenant").cloned().unwrap_or(Value::Null),
+        "team": body.get("team").cloned().unwrap_or(Value::Null),
+        "bot_app_id": body.get("bot_app_id").cloned().unwrap_or(Value::Null),
+        "bot_app_password_ref": "setup_config.bot_app_password",
+        "messaging_endpoint": messaging_endpoint,
+        "public_base_url": body.get("public_base_url").cloned().unwrap_or(Value::Null),
+    })
+}
+
+fn body_str<'a>(body: &'a Value, key: &str) -> &'a str {
+    body.get(key).and_then(Value::as_str).unwrap_or_default()
+}
+
+fn required_body_str<'a>(body: &'a Value, key: &str) -> Result<&'a str, Value> {
+    body.get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| setup_blocked(&format!("missing {key}")))
+}
+
+#[cfg(not(test))]
+fn graph_setup_error_message(body: &Value, fallback: &str) -> String {
+    body.get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+#[cfg(not(test))]
+fn graph_setup_json_request(
+    token: &str,
+    method: &str,
+    url: &str,
+    body: Option<Value>,
+) -> Result<(u16, Value), String> {
+    let mut headers = vec![("Authorization".into(), format!("Bearer {token}"))];
+    let body = if let Some(body) = body {
+        headers.push(("Content-Type".into(), "application/json".into()));
+        Some(
+            serde_json::to_vec(&body)
+                .map_err(|_| "failed to serialize Microsoft Graph setup request".to_string())?,
+        )
+    } else {
+        None
+    };
+    let request = client::Request {
+        method: method.to_string(),
+        url: url.to_string(),
+        headers,
+        body,
+    };
+    let response = client::send(&request, None, None)
+        .map_err(|err| format!("Microsoft Graph setup request failed: {}", err.message))?;
+    let status = response.status as u16;
+    let body = response
+        .body
+        .as_deref()
+        .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok())
+        .unwrap_or(Value::Null);
+    Ok((status, body))
+}
+
+#[cfg(not(test))]
+fn graph_setup_zip_request(
+    token: &str,
+    method: &str,
+    url: &str,
+    body: Vec<u8>,
+) -> Result<(u16, Value), String> {
+    let request = client::Request {
+        method: method.to_string(),
+        url: url.to_string(),
+        headers: vec![
+            ("Authorization".into(), format!("Bearer {token}")),
+            ("Content-Type".into(), "application/zip".into()),
+        ],
+        body: Some(body),
+    };
+    let response = client::send(&request, None, None)
+        .map_err(|err| format!("Microsoft Graph setup request failed: {}", err.message))?;
+    let status = response.status as u16;
+    let body = response
+        .body
+        .as_deref()
+        .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok())
+        .unwrap_or(Value::Null);
+    Ok((status, body))
+}
+
+#[cfg(not(test))]
+fn lookup_existing_teams_catalog_app(token: &str, external_id: &str) -> Result<String, String> {
+    let url = format!(
+        "{DEFAULT_GRAPH_BASE}/appCatalogs/teamsApps?$filter=externalId eq '{}'",
+        encode(external_id)
+    );
+    match graph_setup_json_request(token, "GET", &url, None) {
+        Ok((status, body)) if status < 300 => body
+            .get("value")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|app| app.get("id"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                "existing Teams app catalog id could not be resolved by externalId".to_string()
+            }),
+        Ok((status, body)) => Err(format!(
+            "Teams app catalog lookup failed (HTTP {status}): {}",
+            graph_setup_error_message(&body, "unknown error")
+        )),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(not(test))]
+fn azure_arm_request(
+    token: &str,
+    method: &str,
+    url: &str,
+    body: Option<Value>,
+) -> Result<(u16, Value), String> {
+    let mut headers = vec![("Authorization".into(), format!("Bearer {token}"))];
+    let body =
+        if let Some(body) = body {
+            headers.push(("Content-Type".into(), "application/json".into()));
+            Some(serde_json::to_vec(&body).map_err(|_| {
+                "failed to serialize Microsoft bot registration request".to_string()
+            })?)
+        } else {
+            None
+        };
+    let request = client::Request {
+        method: method.to_string(),
+        url: url.to_string(),
+        headers,
+        body,
+    };
+    let response = client::send(&request, None, None).map_err(|err| {
+        format!(
+            "Microsoft bot channel registration request failed: {}",
+            err.message
+        )
+    })?;
+    let status = response.status as u16;
+    let body = response
+        .body
+        .as_deref()
+        .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok())
+        .unwrap_or(Value::Null);
+    Ok((status, body))
+}
+
+#[cfg(not(test))]
+fn azure_error_message(body: &Value, fallback: &str) -> String {
+    body.get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn azure_safe_name(raw: &str) -> String {
+    let mut out = String::new();
+    for ch in raw.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '-' {
+            out.push(ch.to_ascii_lowercase());
+        }
+    }
+    let out = out.trim_matches('-').to_string();
+    if out.is_empty() {
+        "greentic-teams-bot".to_string()
+    } else {
+        out.chars().take(42).collect()
+    }
+}
+
+#[cfg(not(test))]
+fn first_non_empty<'a>(values: &[&'a str]) -> &'a str {
+    values
+        .iter()
+        .copied()
+        .find(|value| !value.trim().is_empty())
+        .unwrap_or_default()
+}
+
+#[cfg(not(test))]
+fn looks_like_guid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36 {
+        return false;
+    }
+    for (idx, byte) in bytes.iter().enumerate() {
+        if matches!(idx, 8 | 13 | 18 | 23) {
+            if *byte != b'-' {
+                return false;
+            }
+        } else if !byte.is_ascii_hexdigit() {
+            return false;
+        }
+    }
+    true
+}
+
+#[cfg(not(test))]
+fn jwt_claim_str(token: &str, claim: &str) -> Option<String> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .or_else(|_| general_purpose::URL_SAFE.decode(payload))
+        .ok()?;
+    let value: Value = serde_json::from_slice(&bytes).ok()?;
+    value
+        .get(claim)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+#[cfg(not(test))]
+fn azure_tenant_id_for_single_tenant_bot(body: &Value, token: &str) -> Result<String, String> {
+    let configured = body_str(body, "azure_auth_tenant").trim();
+    if looks_like_guid(configured) {
+        return Ok(configured.to_string());
+    }
+    if let Some(tid) = jwt_claim_str(token, "tid")
+        && looks_like_guid(&tid)
+    {
+        return Ok(tid);
+    }
+    Err(
+        "Microsoft bot channel registration requires a tenant id for SingleTenant bots. Set Azure auth tenant to your Microsoft Entra tenant GUID and retry."
+            .to_string(),
+    )
+}
+
+#[cfg(not(test))]
+fn register_microsoft_bot_channel(
+    body: &Value,
+    messaging_endpoint: &str,
+    bot_app_id: &str,
+) -> Result<Value, String> {
+    let token = body_str(body, "azure_management_access_token");
+    let mut actions = Vec::new();
+    let subscription_id = if body_str(body, "azure_subscription_id").trim().is_empty() {
+        let url = format!("{AZURE_MANAGEMENT_BASE}/subscriptions?api-version=2022-12-01");
+        match azure_arm_request(token, "GET", &url, None) {
+            Ok((status, body)) if status < 300 => {
+                let items = body
+                    .get("value")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                let chosen = items
+                    .iter()
+                    .find(|item| {
+                        item.get("state")
+                            .and_then(Value::as_str)
+                            .map(|state| {
+                                state.eq_ignore_ascii_case("enabled")
+                                    || state.eq_ignore_ascii_case("warned")
+                            })
+                            .unwrap_or(true)
+                    })
+                    .or_else(|| items.first())
+                    .ok_or_else(|| {
+                        "no Azure subscriptions found for Microsoft bot channel registration"
+                            .to_string()
+                    })?;
+                let id = chosen
+                    .get("subscriptionId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        "Azure subscription response did not include subscriptionId".to_string()
+                    })?
+                    .to_string();
+                actions.push(json!({
+                    "action": "selected_subscription",
+                    "subscription_id": id,
+                    "display_name": chosen.get("displayName").cloned().unwrap_or(Value::Null),
+                    "candidates": items.len(),
+                }));
+                id
+            }
+            Ok((status, body)) => {
+                return Err(format!(
+                    "Azure subscription discovery failed (HTTP {status}): {}",
+                    azure_error_message(&body, "unknown error")
+                ));
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        body_str(body, "azure_subscription_id").to_string()
+    };
+    let resource_group = if body_str(body, "azure_resource_group").trim().is_empty() {
+        discover_or_default_resource_group(token, &subscription_id, &mut actions)?
+    } else {
+        body_str(body, "azure_resource_group").to_string()
+    };
+    let resource_group_location = first_non_empty(&[
+        body_str(body, "azure_resource_group_location"),
+        "westeurope",
+    ]);
+    let location = first_non_empty(&[body_str(body, "azure_location"), "global"]);
+    let bot_name = azure_safe_name(first_non_empty(&[
+        body_str(body, "azure_bot_name"),
+        body_str(body, "bot_display_name"),
+        bot_app_id,
+        "greentic-teams-bot",
+    ]));
+    if body_str(body, "azure_bot_name").trim().is_empty() {
+        actions.push(json!({
+            "action": "derived_bot_name",
+            "azure_bot_name": bot_name,
+        }));
+    }
+    let display_name = first_non_empty(&[body_str(body, "bot_display_name"), &bot_name]);
+    let azure_tenant_id = azure_tenant_id_for_single_tenant_bot(body, token)?;
+
+    let rg_url = format!(
+        "{AZURE_MANAGEMENT_BASE}/subscriptions/{}/resourcegroups/{}?api-version={AZURE_RESOURCE_GROUP_API_VERSION}",
+        encode(&subscription_id),
+        encode(&resource_group)
+    );
+    ensure_microsoft_bot_resource_group(
+        token,
+        &rg_url,
+        &resource_group,
+        resource_group_location,
+        &mut actions,
+    )?;
+
+    let bot_url = format!(
+        "{AZURE_MANAGEMENT_BASE}/subscriptions/{}/resourceGroups/{}/providers/Microsoft.BotService/botServices/{}?api-version={AZURE_BOT_API_VERSION}",
+        encode(&subscription_id),
+        encode(&resource_group),
+        encode(&bot_name)
+    );
+    let mut bot_properties = Map::new();
+    bot_properties.insert("displayName".to_string(), json!(display_name));
+    bot_properties.insert("endpoint".to_string(), json!(messaging_endpoint));
+    bot_properties.insert("msaAppId".to_string(), json!(bot_app_id));
+    bot_properties.insert("msaAppType".to_string(), json!("SingleTenant"));
+    bot_properties.insert("isCmekEnabled".to_string(), json!(false));
+    bot_properties.insert("publicNetworkAccess".to_string(), json!("Enabled"));
+    bot_properties.insert("msaAppTenantId".to_string(), json!(azure_tenant_id));
+    let bot_body = json!({
+        "location": location,
+        "sku": { "name": "F0" },
+        "kind": "azurebot",
+        "properties": bot_properties
+    });
+    match azure_arm_request(token, "PUT", &bot_url, Some(bot_body)) {
+        Ok((status, _)) if status < 300 => {}
+        Ok((status, body)) => {
+            return Err(format!(
+                "Microsoft bot channel registration create/update failed (HTTP {status}): {}",
+                azure_error_message(&body, "unknown error")
+            ));
+        }
+        Err(error) => return Err(error),
+    }
+
+    let channel_url = format!(
+        "{AZURE_MANAGEMENT_BASE}/subscriptions/{}/resourceGroups/{}/providers/Microsoft.BotService/botServices/{}/channels/MsTeamsChannel?api-version={AZURE_BOT_API_VERSION}",
+        encode(&subscription_id),
+        encode(&resource_group),
+        encode(&bot_name)
+    );
+    let channel_body = json!({
+        "location": location,
+        "properties": {
+            "channelName": "MsTeamsChannel",
+            "properties": {
+                "isEnabled": true,
+                "acceptedTerms": true
+            }
+        }
+    });
+    match azure_arm_request(token, "PUT", &channel_url, Some(channel_body)) {
+        Ok((status, _)) if status < 300 => {}
+        Ok((status, body)) => {
+            return Err(format!(
+                "Microsoft Teams bot channel enable failed (HTTP {status}): {}",
+                azure_error_message(&body, "unknown error")
+            ));
+        }
+        Err(error) => return Err(error),
+    }
+
+    Ok(json!({
+        "kind": "microsoft_bot_channel_registration",
+        "status": "registered",
+        "bot_name": bot_name,
+        "resource_group": resource_group,
+        "subscription_id": subscription_id,
+        "channel": "msteams",
+        "endpoint": messaging_endpoint,
+        "actions": actions,
+    }))
+}
+
+#[cfg(not(test))]
+fn discover_or_default_resource_group(
+    token: &str,
+    subscription_id: &str,
+    actions: &mut Vec<Value>,
+) -> Result<String, String> {
+    let default_group = "greentic-bots";
+    let groups_url = format!(
+        "{AZURE_MANAGEMENT_BASE}/subscriptions/{}/resourcegroups?api-version={AZURE_RESOURCE_GROUP_API_VERSION}",
+        encode(subscription_id)
+    );
+    match azure_arm_request(token, "GET", &groups_url, None) {
+        Ok((status, body)) if status < 300 => {
+            let items = body
+                .get("value")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let chosen = items
+                .iter()
+                .find(|item| {
+                    item.get("name")
+                        .and_then(Value::as_str)
+                        .map(|name| name.eq_ignore_ascii_case(default_group))
+                        .unwrap_or(false)
+                })
+                .or_else(|| {
+                    items.iter().find(|item| {
+                        item.get("name")
+                            .and_then(Value::as_str)
+                            .map(|name| name.to_ascii_lowercase().contains("greentic"))
+                            .unwrap_or(false)
+                    })
+                })
+                .or_else(|| items.first());
+            if let Some(item) = chosen
+                && let Some(name) = item.get("name").and_then(Value::as_str)
+            {
+                actions.push(json!({
+                    "action": "selected_resource_group",
+                    "resource_group": name,
+                    "candidates": items.len(),
+                }));
+                return Ok(name.to_string());
+            }
+        }
+        Ok((403, body)) => {
+            actions.push(json!({
+                "action": "defaulted_resource_group",
+                "resource_group": default_group,
+                "reason": "resource group listing was denied; continuing with the default name",
+                "discovery_error": azure_error_message(&body, "unknown error"),
+            }));
+            return Ok(default_group.to_string());
+        }
+        Ok((status, body)) => {
+            return Err(format!(
+                "Azure resource group discovery failed (HTTP {status}): {}",
+                azure_error_message(&body, "unknown error")
+            ));
+        }
+        Err(error) => return Err(error),
+    }
+    actions.push(json!({
+        "action": "defaulted_resource_group",
+        "resource_group": default_group,
+        "reason": "no existing resource groups were available",
+    }));
+    Ok(default_group.to_string())
+}
+
+#[cfg(not(test))]
+fn ensure_microsoft_bot_resource_group(
+    token: &str,
+    rg_url: &str,
+    resource_group: &str,
+    location: &str,
+    actions: &mut Vec<Value>,
+) -> Result<(), String> {
+    match azure_arm_request(token, "GET", rg_url, None) {
+        Ok((status, _)) if status < 300 => {
+            actions.push(json!({
+                "action": "selected_resource_group",
+                "resource_group": resource_group,
+            }));
+            return Ok(());
+        }
+        Ok((404, _)) => {}
+        Ok((403, _)) => {
+            actions.push(json!({
+                "action": "assumed_resource_group",
+                "resource_group": resource_group,
+                "reason": "resource group lookup was denied; continuing with configured/default name"
+            }));
+            return Ok(());
+        }
+        Ok((status, body)) => {
+            return Err(format!(
+                "Microsoft bot registration resource group lookup failed (HTTP {status}): {}",
+                azure_error_message(&body, "unknown error")
+            ));
+        }
+        Err(error) => return Err(error),
+    }
+
+    match azure_arm_request(token, "PUT", rg_url, Some(json!({ "location": location }))) {
+        Ok((status, _)) if status < 300 => {
+            actions.push(json!({
+                "action": "created_resource_group",
+                "resource_group": resource_group,
+                "location": location,
+            }));
+            Ok(())
+        }
+        Ok((403, body)) => Err(format!(
+            "Microsoft bot registration resource group {resource_group} does not exist or cannot be created. Use an existing resource group in Azure resource group, or grant Microsoft.Resources/subscriptions/resourcegroups/write. Azure said: {}",
+            azure_error_message(&body, "unknown error")
+        )),
+        Ok((status, body)) => Err(format!(
+            "Microsoft bot registration resource group create failed (HTTP {status}): {}",
+            azure_error_message(&body, "unknown error")
+        )),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(test)]
+fn register_microsoft_bot_channel(
+    body: &Value,
+    messaging_endpoint: &str,
+    _bot_app_id: &str,
+) -> Result<Value, String> {
+    Ok(json!({
+        "kind": "microsoft_bot_channel_registration",
+        "status": "registered",
+        "bot_name": azure_safe_name(body_str(body, "azure_bot_name")),
+        "channel": "msteams",
+        "endpoint": messaging_endpoint,
+    }))
+}
+
+#[cfg(not(test))]
+fn bot_framework_registration_key(tenant: &str, team: &str) -> String {
+    format!(
+        "messaging.teams.bot_framework.registration.{}.{}",
+        state_key_part(tenant),
+        state_key_part(team)
+    )
+}
+
+#[cfg(not(test))]
+fn bot_framework_app_registration_key(bot_app_id: &str) -> String {
+    format!(
+        "messaging.teams.bot_framework.app.{}",
+        state_key_part(bot_app_id)
+    )
+}
+
+#[cfg(not(test))]
+fn state_key_part(raw: &str) -> String {
+    let out: String = raw
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if out.is_empty() {
+        "default".to_string()
+    } else {
+        out
+    }
+}
+
+#[cfg(not(test))]
+fn persist_bot_framework_registration(
+    tenant: &str,
+    team: &str,
+    bot_app_id: &str,
+    registration: &Value,
+) -> Result<(), String> {
+    let bytes = serde_json::to_vec(registration)
+        .map_err(|_| "failed to serialize bot framework registration".to_string())?;
+    state_store::write(&bot_framework_registration_key(tenant, team), &bytes, None)
+        .map_err(|error| format!("bot framework registration state error: {}", error.message))?;
+    let app_index = json!({
+        "kind": "greentic_bot_framework_app_registration",
+        "bot_app_id": bot_app_id,
+        "registration_key": bot_framework_registration_key(tenant, team),
+        "tenant": tenant,
+        "team": team,
+        "messaging_endpoint": registration.get("messaging_endpoint").cloned().unwrap_or(Value::Null),
+    });
+    let app_bytes = serde_json::to_vec(&app_index)
+        .map_err(|_| "failed to serialize bot framework app registration".to_string())?;
+    state_store::write(
+        &bot_framework_app_registration_key(bot_app_id),
+        &app_bytes,
+        None,
+    )
+    .map_err(|error| {
+        format!(
+            "bot framework app registration state error: {}",
+            error.message
+        )
+    })?;
+    Ok(())
+}
+
+#[cfg(test)]
+fn persist_bot_framework_registration(
+    _tenant: &str,
+    _team: &str,
+    _bot_app_id: &str,
+    _registration: &Value,
+) -> Result<(), String> {
+    Ok(())
+}
+
+fn setup_blocked(error: &str) -> Value {
+    json!({
+        "ok": false,
+        "blocked": true,
+        "error": error
+    })
+}
 
 fn parse_config(config_json: &str) -> Result<ProviderConfig, String> {
     if config_json.trim().is_empty() {
@@ -1129,6 +2120,65 @@ mod tests {
         assert_eq!(out[0]["id"], "sub-1");
         assert_eq!(out[0]["resource"], "teams/t/channels/c/messages");
         assert_eq!(out[0]["notification_url"], "https://chat.example.com/hook");
+    }
+
+    #[test]
+    fn bot_framework_registration_setup_op_accepts_required_body() {
+        let out = handle_bot_framework_registration_body(&json!({
+            "provider_id": "messaging-teams",
+            "channel": "msteams",
+            "tenant": "demo",
+            "team": "default",
+            "bot_app_id": "bot-app",
+            "bot_app_password": "secret",
+            "bot_display_name": "Greentic Bot",
+            "public_base_url": "https://runtime.example.test",
+            "messaging_endpoint": "https://runtime.example.test/v1/messaging/ingress/messaging-teams/demo/default",
+            "azure_management_access_token": "management-token",
+            "azure_subscription_id": "subscription",
+            "azure_resource_group": "greentic-bots",
+            "azure_resource_group_location": "westeurope",
+            "azure_location": "global",
+            "azure_bot_name": "Greentic Teams Bot"
+        }));
+
+        assert_eq!(out["ok"], true);
+        assert_eq!(
+            out["target_messaging_endpoint"],
+            "https://runtime.example.test/v1/messaging/ingress/messaging-teams/demo/default"
+        );
+        assert_eq!(out["registration"]["kind"], "greentic_bot_framework");
+        assert_eq!(out["registration"]["status"], "registered");
+        assert_eq!(out["registration"]["bot_app_id"], "bot-app");
+        assert_eq!(
+            out["registration"]["messaging_endpoint"],
+            "https://runtime.example.test/v1/messaging/ingress/messaging-teams/demo/default"
+        );
+        assert!(out["registration"].get("bot_app_password").is_none());
+        assert_eq!(
+            out["registration"]["bot_app_password_ref"],
+            "setup_config.bot_app_password"
+        );
+        assert_eq!(
+            out["microsoft_bot_channel_registration"]["kind"],
+            "microsoft_bot_channel_registration"
+        );
+        assert_eq!(
+            out["microsoft_bot_channel_registration"]["bot_name"],
+            "greenticteamsbot"
+        );
+    }
+
+    #[test]
+    fn bot_framework_registration_setup_op_blocks_missing_body_fields() {
+        let out = handle_bot_framework_registration_body(&json!({
+            "provider_id": "messaging-teams",
+            "channel": "msteams"
+        }));
+
+        assert_eq!(out["ok"], false);
+        assert_eq!(out["blocked"], true);
+        assert_eq!(out["error"], "missing tenant");
     }
 
     #[test]

@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 async function progressText(page: Page) {
-  return page.locator('greentic-teams-setup-v4').getByText(/\d+ of 6 complete/).textContent();
+  return page.locator('greentic-teams-setup-v4').getByText(/\d+ of 7 complete/).textContent();
 }
 
 async function expectNoRegression(page: Page, expected: string) {
@@ -58,20 +58,28 @@ async function startThroughBotIdentity(page: Page, request: APIRequestContext) {
   await expect(page.getByText('Microsoft sign-in required')).toBeVisible();
   await expect(page.locator('span.code', { hasText: /GRAPH-CODE-/ })).toBeVisible();
   await clickWithOptionalPopup(page, /Open Microsoft device login/);
-  await expect(page.getByText('2 of 6 complete')).toBeVisible();
+  await expect(page.getByText('2 of 7 complete')).toBeVisible();
+}
+
+async function startThroughManagementConsent(page: Page, request: APIRequestContext) {
+  await startThroughBotIdentity(page, request);
+  await clickContinueAndWaitForNextRequest(page, request);
+  await expect(page.locator('span.code', { hasText: /MGMT-CODE-/ })).toBeVisible();
+  await clickWithOptionalPopup(page, /Open Microsoft device login/);
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
 }
 
 async function startThroughBotFrameworkRegistration(page: Page, request: APIRequestContext) {
-  await startThroughBotIdentity(page, request);
+  await startThroughManagementConsent(page, request);
   await clickContinueAndWaitForNextRequest(page, request);
-  await expect(page.getByText('3 of 6 complete')).toBeVisible();
+  await expect(page.getByText('4 of 7 complete')).toBeVisible();
 }
 
 test('Teams setup web component completes against a fake backend without progress regression', async ({ page, request }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Teams setup' })).toBeVisible();
-  await expect(page.getByText('0 of 6 complete')).toBeVisible();
+  await expect(page.getByText('0 of 7 complete')).toBeVisible();
 
   await page.getByText('Advanced configuration').click();
   await page.getByLabel('Bot display name').fill('Custom Greentic Bot');
@@ -89,15 +97,20 @@ test('Teams setup web component completes against a fake backend without progres
   await expect(page.locator('span.code', { hasText: 'GRAPH-CODE-2' })).toBeVisible();
 
   await clickWithOptionalPopup(page, /Open Microsoft device login/);
-  await expect(page.getByText('2 of 6 complete')).toBeVisible();
+  await expect(page.getByText('2 of 7 complete')).toBeVisible();
   await expect(page.getByText('Bot app identity is ready: bot-app-id-123.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue setup' }).click();
-  await expectNoRegression(page, '3 of 6 complete');
+  await expect(page.locator('span.code', { hasText: 'MGMT-CODE-1' })).toBeVisible();
+  await clickWithOptionalPopup(page, /Open Microsoft device login/);
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Continue setup' }).click();
+  await expectNoRegression(page, '4 of 7 complete');
   await expect(page.getByText('Bot endpoint updated to https://runtime.example.test/v1/messaging/ingress/messaging-teams/demo/default.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue setup' }).click();
-  await expect(page.getByText('4 of 6 complete')).toBeVisible();
+  await expect(page.getByText('5 of 7 complete')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add to Teams' })).toBeVisible();
 
   await clickWithOptionalPopup(page, /Add to Teams/);
@@ -105,7 +118,7 @@ test('Teams setup web component completes against a fake backend without progres
 
   await page.getByRole('button', { name: 'Verify Teams install' }).click();
   await expect(page.locator('[data-role="overall"]')).toHaveText('Setup complete');
-  await expect(page.getByText('6 of 6 complete')).toBeVisible();
+  await expect(page.getByText('7 of 7 complete')).toBeVisible();
 
   const requests = await request.get('/requests').then((res) => res.json());
   expect(requests.requests).toEqual(
@@ -124,7 +137,9 @@ test('Teams setup web component completes against a fake backend without progres
         body: expect.objectContaining({
           config: expect.not.objectContaining({
             oauth_user_code: expect.any(String),
+            azure_management_user_code: expect.any(String),
             graph_access_token: expect.any(String),
+            azure_management_access_token: expect.any(String),
           }),
         }),
       }),
@@ -157,23 +172,23 @@ test('configuration backend validation errors are shown and save succeeds on ret
 
 test('local preflight blocks Bot Framework registration until required runtime URL is supplied', async ({ page, request }) => {
   await resetScenario(request, 'missing-public-url');
-  await startThroughBotIdentity(page, request);
+  await startThroughManagementConsent(page, request);
 
   await page.getByRole('button', { name: 'Continue setup' }).click();
   await expect(page.getByText('Setup needs a public runtime URL before it can register the Teams bot endpoint. Start setup with a public runtime/tunnel URL configured, then refresh.')).toBeVisible();
-  await expect(page.getByText('2 of 6 complete')).toBeVisible();
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
 
   await page.getByText('Advanced configuration').click();
   await page.getByLabel('Public base URL').fill('https://fixed-runtime.example.test');
   await page.getByRole('button', { name: 'Continue setup' }).click();
-  await expect(page.getByText('3 of 6 complete')).toBeVisible();
+  await expect(page.getByText('4 of 7 complete')).toBeVisible();
 });
 
-test('2 of 6 generic pending setup renders Continue setup and posts next', async ({ page, request }) => {
+test('2 of 7 generic pending setup renders Continue setup and posts next', async ({ page, request }) => {
   await resetScenario(request, 'two-complete');
   await page.goto('/');
 
-  await expect(page.getByText('2 of 6 complete')).toBeVisible();
+  await expect(page.getByText('2 of 7 complete')).toBeVisible();
   await expect(page.getByText('click again to continue setup')).toBeVisible();
 
   const action = await page.locator('greentic-teams-setup-v4').evaluate((node: Element) => {
@@ -188,12 +203,45 @@ test('2 of 6 generic pending setup renders Continue setup and posts next', async
       expect.objectContaining({ path: '/api/next' }),
     ]),
   );
-  await expect(page.getByText('3 of 6 complete')).toBeVisible();
+  await expect(page.locator('span.code', { hasText: /MGMT-CODE-/ })).toBeVisible();
+  await clickWithOptionalPopup(page, /Open Microsoft device login/);
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
+});
+
+test('installed Teams app waits for a real bot message after opening chat', async ({ page, request }) => {
+  await resetScenario(request, 'waiting-first-message');
+  await page.goto('/');
+
+  await expect(page.getByText('6 of 7 complete')).toBeVisible();
+  await expect(page.getByText('Open the bot chat, send a message to the bot, then verify setup.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open bot chat' })).toBeVisible();
+
+  await clickWithOptionalPopup(page, /Open bot chat/);
+  await expect(page.getByRole('button', { name: 'Verify bot message' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Verify bot message' }).click();
+  await expect(page.locator('[data-role="overall"]')).toHaveText('Setup complete');
+  await expect(page.getByText('7 of 7 complete')).toBeVisible();
+});
+
+test('verify bot message blocks when the registered runtime tunnel is unreachable', async ({ page, request }) => {
+  await resetScenario(request, 'stale-runtime-tunnel');
+  await page.goto('/');
+
+  await expect(page.getByText('6 of 7 complete')).toBeVisible();
+  await clickWithOptionalPopup(page, /Open bot chat/);
+  await expect(page.getByRole('button', { name: 'Verify bot message' })).toBeVisible();
+
+  const before = await nextRequestCount(request);
+  await page.getByRole('button', { name: 'Verify bot message' }).click();
+  await expect(page.getByText('The registered Teams endpoint is not reachable from this browser. Start the Greentic runtime/tunnel, refresh setup so it registers the active public URL, then send a Teams message again.')).toBeVisible();
+  await expect(page.getByText('6 of 7 complete')).toBeVisible();
+  expect(await nextRequestCount(request)).toBe(before);
 });
 
 test('HTTP setup action failures show backend diagnostics and retry advances the step', async ({ page, request }) => {
   await resetScenario(request, 'next-http-503');
-  await startThroughBotIdentity(page, request);
+  await startThroughManagementConsent(page, request);
 
   await page.getByRole('button', { name: 'Continue setup' }).click();
   await expect(page.getByText('Step did not finish')).toBeVisible();
@@ -201,20 +249,20 @@ test('HTTP setup action failures show backend diagnostics and retry advances the
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Retry' }).click();
-  await expect(page.getByText('3 of 6 complete')).toBeVisible();
+  await expect(page.getByText('4 of 7 complete')).toBeVisible();
 });
 
 test('provider ok:false setup results are shown and the next retry succeeds', async ({ page, request }) => {
   await resetScenario(request, 'next-transient');
-  await startThroughBotIdentity(page, request);
+  await startThroughManagementConsent(page, request);
 
   await page.getByRole('button', { name: 'Continue setup' }).click();
   await expect(page.getByText('Setup error')).toBeVisible();
   await expect(page.locator('[data-role="outcome"] p')).toHaveText('retry Bot Framework registration');
-  await expect(page.getByText('2 of 6 complete')).toBeVisible();
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue setup' }).click();
-  await expect(page.getByText('3 of 6 complete')).toBeVisible();
+  await expect(page.getByText('4 of 7 complete')).toBeVisible();
 });
 
 test('Teams app catalog publish errors are visible and retry publishes the app', async ({ page, request }) => {
@@ -224,10 +272,10 @@ test('Teams app catalog publish errors are visible and retry publishes the app',
   await page.getByRole('button', { name: 'Continue setup' }).click();
   await expect(page.getByText('Setup error')).toBeVisible();
   await expect(page.locator('[data-role="outcome"] p')).toHaveText('retry Teams app catalog publish');
-  await expect(page.getByText('3 of 6 complete')).toBeVisible();
+  await expect(page.getByText('4 of 7 complete')).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue setup' }).click();
-  await expect(page.getByText('4 of 6 complete')).toBeVisible();
+  await expect(page.getByText('5 of 7 complete')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add to Teams' })).toBeVisible();
 });
 
@@ -238,11 +286,24 @@ test('device OAuth pending responses keep waiting and then advance without a sta
   await page.getByRole('button', { name: 'Continue setup' }).click();
   await expect(page.locator('span.code', { hasText: 'GRAPH-CODE-1' })).toBeVisible();
   await clickWithOptionalPopup(page, /Open Microsoft device login/);
-  await expect(page.getByText('2 of 6 complete')).toBeVisible();
+  await expect(page.getByText('2 of 7 complete')).toBeVisible();
 
   const requests = await request.get('/requests').then((res) => res.json());
   const oauthCompleteCalls = requests.requests.filter((entry: { path: string }) => entry.path === '/api/oauth/graph/complete');
   expect(oauthCompleteCalls.length).toBeGreaterThanOrEqual(2);
+});
+
+test('idle pending device OAuth starts polling after opening Microsoft login', async ({ page, request }) => {
+  await resetScenario(request, 'pending-oauth-started');
+  await page.goto('/');
+
+  await expect(page.locator('span.code', { hasText: 'GRAPH-CODE-IDLE' })).toBeVisible();
+  await clickWithOptionalPopup(page, /Open Microsoft device login/);
+  await expect(page.getByText('2 of 7 complete')).toBeVisible();
+
+  const requests = await request.get('/requests').then((res) => res.json());
+  const oauthCompleteCalls = requests.requests.filter((entry: { path: string }) => entry.path === '/api/oauth/graph/complete');
+  expect(oauthCompleteCalls.length).toBeGreaterThanOrEqual(1);
 });
 
 test('expired device codes are refreshed automatically and the OAuth flow recovers', async ({ page, request }) => {
@@ -252,7 +313,7 @@ test('expired device codes are refreshed automatically and the OAuth flow recove
   await page.getByRole('button', { name: 'Continue setup' }).click();
   await expect(page.locator('span.code', { hasText: 'GRAPH-CODE-1' })).toBeVisible();
   await clickWithOptionalPopup(page, /Open Microsoft device login/);
-  await expect(page.getByText('2 of 6 complete')).toBeVisible();
+  await expect(page.getByText('2 of 7 complete')).toBeVisible();
 
   const requests = await request.get('/requests').then((res) => res.json());
   expect(requests.scenario).toBe('oauth-expired-refresh');
@@ -260,6 +321,56 @@ test('expired device codes are refreshed automatically and the OAuth flow recove
   expect(requests.requests).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ path: '/api/oauth/graph/start' }),
+    ]),
+  );
+});
+
+test('management OAuth pending responses keep waiting and then advance', async ({ page, request }) => {
+  await resetScenario(request, 'management-oauth-pending-once');
+  await startThroughBotIdentity(page, request);
+
+  await page.getByRole('button', { name: 'Continue setup' }).click();
+  await expect(page.locator('span.code', { hasText: 'MGMT-CODE-1' })).toBeVisible();
+  await clickWithOptionalPopup(page, /Open Microsoft device login/);
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
+
+  const requests = await request.get('/requests').then((res) => res.json());
+  const oauthCompleteCalls = requests.requests.filter((entry: { path: string }) => entry.path === '/api/oauth/management/complete');
+  expect(oauthCompleteCalls.length).toBeGreaterThanOrEqual(2);
+});
+
+test('expired management device codes are refreshed automatically and recover', async ({ page, request }) => {
+  await resetScenario(request, 'management-oauth-expired-refresh');
+  await startThroughBotIdentity(page, request);
+
+  await page.getByRole('button', { name: 'Continue setup' }).click();
+  await expect(page.locator('span.code', { hasText: 'MGMT-CODE-1' })).toBeVisible();
+  await clickWithOptionalPopup(page, /Open Microsoft device login/);
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
+
+  const requests = await request.get('/requests').then((res) => res.json());
+  expect(requests.failures.managementExpiredCode).toBe(true);
+  expect(requests.requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: '/api/oauth/management/start' }),
+    ]),
+  );
+});
+
+test('declined management device login refreshes and recovers', async ({ page, request }) => {
+  await resetScenario(request, 'management-oauth-denied-refresh');
+  await startThroughBotIdentity(page, request);
+
+  await page.getByRole('button', { name: 'Continue setup' }).click();
+  await expect(page.locator('span.code', { hasText: 'MGMT-CODE-1' })).toBeVisible();
+  await clickWithOptionalPopup(page, /Open Microsoft device login/);
+  await expect(page.getByText('3 of 7 complete')).toBeVisible();
+
+  const requests = await request.get('/requests').then((res) => res.json());
+  expect(requests.failures.managementDeniedCode).toBe(true);
+  expect(requests.requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: '/api/oauth/management/start' }),
     ]),
   );
 });

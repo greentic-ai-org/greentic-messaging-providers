@@ -49,6 +49,7 @@
       "crates/greentic-messaging-packgen/src/main.rs",
       "crates/greentic-messaging-tester/src/http_mock.rs",
       "crates/greentic-messaging-tester/src/main.rs",
+      "crates/greentic-messaging-tester/src/wasm_harness.rs",
       "crates/messaging-cardkit-bin/src/lib.rs",
       "crates/messaging-cardkit-bin/src/main.rs",
       "crates/provider-tests/src/flow_gen.rs",

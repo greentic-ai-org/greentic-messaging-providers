@@ -74,6 +74,9 @@ for provider in "${PROVIDERS[@]}"; do
   done < <(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["components"]))')
   test_targets=()
   while IFS= read -r test_target; do
+    if [ -z "${test_target}" ]; then
+      continue
+    fi
     test_targets+=("${test_target}")
   done < <(printf '%s' "${resolved_json}" | python3 -c '
 import json
@@ -99,7 +102,7 @@ print("\n".join(dict.fromkeys(targets)))
   if [ "${pack}" = "messaging-teams" ]; then
     echo "-- answer-owned provider build: ${pack}"
     jq -e '.pack_create and .pack' messaging-teams/build-answer.json >/dev/null
-    node --check messaging-teams/assets/setup/greentic-teams-setup.js
+    node --input-type=module --check < messaging-teams/assets/setup/greentic-teams-setup.js
     bash -n messaging-teams/build_pack.sh scripts/test_teams_bot.sh
     awk '
       $0 == "cat > \"${WORK_DIR}/server.py\" <<'\''PY'\''" { in_server = 1; next }
@@ -109,6 +112,7 @@ print("\n".join(dict.fromkeys(targets)))
     python3 -m py_compile "${TMPDIR:-/tmp}/test_teams_bot_server.py"
     cargo test -p greentic-messaging-provider-common messaging_teams
     cargo test -p messaging-ingress-teams
+    bash tools/build_components/messaging-ingress-teams.sh
     cargo test -p provider-tests handles_bot_framework_adaptive_card_submit
     messaging-teams/build_pack.sh
     mkdir -p dist/packs

@@ -241,7 +241,7 @@ def save_state(values):
 def save_client_state(values):
     clean = dict(values or {})
     config = dict(clean.get("config") or {})
-    for key in ("oauth_kind", "oauth_device_code", "oauth_user_code"):
+    for key in ("oauth_kind", "oauth_device_code", "oauth_user_code", "azure_management_device_code", "azure_management_user_code"):
         config.pop(key, None)
     clean["config"] = config
     return save_state(clean)
@@ -255,7 +255,7 @@ def sanitize(value):
     token = cfg.get("bot_access_token")
     if token:
         cfg["bot_access_token"] = "set"
-    for key in ("azure_management_access_token", "graph_access_token", "oauth_device_code"):
+    for key in ("azure_management_access_token", "graph_access_token", "oauth_device_code", "azure_management_device_code"):
         if cfg.get(key):
             cfg[key] = "set"
     return clone
@@ -398,6 +398,14 @@ def oauth_client_id(kind, config):
     return (config.get("azure_setup_client_id") or "").strip()
 
 
+def oauth_device_code_key(kind):
+    return "oauth_device_code" if kind == "graph" else "azure_management_device_code"
+
+
+def oauth_user_code_key(kind):
+    return "oauth_user_code" if kind == "graph" else "azure_management_user_code"
+
+
 def start_oauth_device(kind, config):
     urls = oauth_device_urls(config)
     client_id = oauth_client_id(kind, config)
@@ -410,8 +418,8 @@ def start_oauth_device(kind, config):
     if result.get("ok") and isinstance(result.get("body"), dict):
         values = state()
         values["config"]["oauth_kind"] = kind
-        values["config"]["oauth_device_code"] = result["body"].get("device_code")
-        values["config"]["oauth_user_code"] = result["body"].get("user_code")
+        values["config"][oauth_device_code_key(kind)] = result["body"].get("device_code")
+        values["config"][oauth_user_code_key(kind)] = result["body"].get("user_code")
         values["last_oauth"] = {"kind": kind, "started": now_iso(), "response": result["body"]}
         save_state(values)
     append_event("oauth-device-start", {"kind": kind, "result": bearer_result_for_log(result)})
@@ -421,7 +429,7 @@ def start_oauth_device(kind, config):
 def complete_oauth_device(kind, config):
     urls = oauth_device_urls(config)
     client_id = oauth_client_id(kind, config)
-    device_code = (config.get("oauth_device_code") or "").strip()
+    device_code = (config.get(oauth_device_code_key(kind)) or "").strip()
     if not client_id or not device_code:
         return {"ok": False, "error": "start device login first"}
     result = form_request(urls["token_url"], {
@@ -437,7 +445,7 @@ def complete_oauth_device(kind, config):
         else:
             values["config"]["azure_management_access_token"] = token
         values["last_oauth"] = {"kind": kind, "completed": now_iso(), "result": bearer_result_for_log(result)}
-        values["remove_config_keys"] = ["oauth_device_code", "oauth_user_code", "oauth_kind"]
+        values["remove_config_keys"] = [oauth_device_code_key(kind), oauth_user_code_key(kind), "oauth_kind"]
         save_state(values)
     append_event("oauth-device-complete", {"kind": kind, "result": bearer_result_for_log(result)})
     return bearer_result_for_log(result)
@@ -449,7 +457,7 @@ def oauth_token_key(kind):
 
 def clear_pending_oauth(values=None):
     values = values or {}
-    values["remove_config_keys"] = ["oauth_device_code", "oauth_user_code", "oauth_kind"]
+    values["remove_config_keys"] = ["oauth_device_code", "oauth_user_code", "azure_management_device_code", "azure_management_user_code", "oauth_kind"]
     save_state(values)
     return state()
 
@@ -497,8 +505,9 @@ def pending_oauth_result(kind, result):
         for key in ("verification_uri", "verification_url", "user_code", "message", "expires_in", "interval"):
             if response.get(key) and not body.get(key):
                 body[key] = response[key]
-    if cfg.get("oauth_user_code") and not body.get("user_code"):
-        body["user_code"] = cfg.get("oauth_user_code")
+    user_code = cfg.get(oauth_user_code_key(kind))
+    if user_code and not body.get("user_code"):
+        body["user_code"] = user_code
     return {
         "ok": True,
         "step": f"wait_for_{kind}_login",
@@ -521,7 +530,7 @@ def restart_oauth_device(kind, previous):
 
 def start_or_resume_oauth_device(kind, step, next_text, reason, previous):
     cfg = state()["config"]
-    if (cfg.get("oauth_kind") or "").strip() == kind and (cfg.get("oauth_device_code") or "").strip():
+    if (cfg.get("oauth_kind") or "").strip() == kind and (cfg.get(oauth_device_code_key(kind)) or "").strip():
         result = pending_oauth_result(kind, {"ok": False, "status": 202, "body": {"error": "authorization_pending"}})
         result["reason"] = reason
         result["previous"] = previous
@@ -878,8 +887,11 @@ def setup_status():
         result = setup_result.get("result") if isinstance(setup_result.get("result"), dict) else {}
         blocked = result.get("admin_guidance")
     pending_oauth_detail = None
-    if (cfg.get("oauth_kind") or "").strip() and (cfg.get("oauth_user_code") or "").strip():
-        pending_oauth_detail = f"{cfg.get('oauth_kind')} device code {cfg.get('oauth_user_code')}"
+    pending_oauth_kind = (cfg.get("oauth_kind") or "").strip()
+    if pending_oauth_kind:
+        pending_oauth_code = (cfg.get(oauth_user_code_key(pending_oauth_kind)) or "").strip()
+        if pending_oauth_code:
+            pending_oauth_detail = f"{pending_oauth_kind} device code {pending_oauth_code}"
     items = [
         checklist_item("Graph admin consent", bool(cfg.get("graph_access_token") or values.get("last_app_registration") or teams_publish.get("ok") or teams_install.get("ok")), pending_oauth_detail if (cfg.get("oauth_kind") == "graph" and not cfg.get("graph_access_token")) else None),
         checklist_item(
@@ -1089,7 +1101,7 @@ def discover_azure_defaults(config):
 
 def next_setup_step(config):
     pending_kind = (config.get("oauth_kind") or "").strip()
-    pending_device = (config.get("oauth_device_code") or "").strip()
+    pending_device = (config.get(oauth_device_code_key(pending_kind)) or "").strip() if pending_kind else ""
     if not is_legacy_azure_runtime(config) and pending_kind and pending_kind != "graph":
         clear_pending_oauth()
         return next_setup_step(state()["config"])

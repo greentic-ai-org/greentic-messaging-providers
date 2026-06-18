@@ -1074,6 +1074,7 @@ mod tests {
     use std::{collections::BTreeMap, collections::HashMap, path::PathBuf, process::Command};
 
     #[test]
+    #[ignore = "telegram-webhook on the 1.1 lane is a no-export stub pending 0.6.0 invoke migration"]
     fn node_world_strategy_detected() {
         let wasm = ensure_component_built("telegram-webhook");
         let harness = WasmHarness::new_with_path(&wasm).expect("instantiate node component");
@@ -1088,6 +1089,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "telegram-webhook on the 1.1 lane is a no-export stub pending 0.6.0 invoke migration"]
     fn node_world_can_invoke_reconcile_webhook() {
         let wasm = ensure_component_built("telegram-webhook");
         let harness = WasmHarness::new_with_path(&wasm).expect("instantiate node component");

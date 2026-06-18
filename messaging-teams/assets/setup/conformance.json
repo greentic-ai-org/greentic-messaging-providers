@@ -13,8 +13,7 @@
     "graph_device_login_pending",
     "graph_device_login_expired",
     "graph_device_login_refresh_code",
-    "azure_management_token_expired",
-    "role_assignment_required",
+    "microsoft_bot_channel_registration_consent",
     "bot_framework_registration_before_publish",
     "teams_app_publish",
     "teams_app_install",
@@ -34,7 +33,7 @@
   "setup_component_contract": {
     "schema_id": "greentic.setup.web-component.v1",
     "module_asset": "assets/setup/greentic-teams-setup.js",
-    "tag_name": "greentic-teams-setup",
+    "tag_name": "greentic-teams-setup-v4",
     "generic_events": [
       "greentic-provider-setup-state",
       "greentic-provider-setup-result",
@@ -53,9 +52,7 @@
     "required_action_kinds": [
       "oauth_device_code",
       "microsoft_graph_application",
-      "bot_framework_registration",
-      "microsoft_graph_teams_app_catalog_publish",
-      "microsoft_graph_teams_app_user_install",
+      "provider_http",
       "runtime_observation"
     ],
     "provider_specific_setup_server_required": false
@@ -65,6 +62,6 @@
     "raw_controls_are_diagnostics": true,
     "node_botbuilder_sidecar_default": false,
     "node_botbuilder_sidecar_opt_in": true,
-    "azure_bot_service_required": false
+    "azure_bot_service_required": true
   }
 }

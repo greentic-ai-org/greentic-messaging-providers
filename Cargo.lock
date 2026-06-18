@@ -2127,8 +2127,9 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-teams"
-version = "0.5.16"
+version = "0.5.17"
 dependencies = [
+ "base64",
  "greentic-telemetry",
  "greentic-types",
  "serde",
@@ -2202,7 +2203,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-teams-graph"
-version = "0.5.16"
+version = "0.5.17"
 dependencies = [
  "base64",
  "chrono",
@@ -2249,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat-gui"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "base64",
  "chrono",
@@ -3329,7 +3330,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "teams"
-version = "0.5.16"
+version = "0.5.17"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",

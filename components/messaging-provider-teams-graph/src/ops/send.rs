@@ -328,7 +328,7 @@ fn adaptive_card(parsed: &Value) -> Option<Value> {
 
 fn adaptive_card_fallback(card: &Value) -> String {
     let mut parts = Vec::new();
-    collect_card_text(&card, &mut parts);
+    collect_card_text(card, &mut parts);
     let text = parts.join("\n");
     if text.trim().is_empty() {
         "[Adaptive Card]".to_string()

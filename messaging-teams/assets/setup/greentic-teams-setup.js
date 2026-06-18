@@ -345,7 +345,7 @@ const DEFAULT_TRANSLATIONS = {
     stepTimedOutTitle: "Step did not finish",
     stepTimedOut: "The expected next step did not appear before the timeout. Retry the action or use advanced diagnostics.",
     missingPublicBaseUrl: "Setup needs a public runtime URL before it can register the Teams bot endpoint. Start setup with a public runtime/tunnel URL configured, then refresh.",
-    missingRegistrationService: "Setup host has not provided a Greentic Bot Service registration endpoint yet. This is a setup/runtime integration issue, not an admin field.",
+    runtimeTunnelUnavailable: "The registered Teams endpoint is not reachable from this browser. Start the Greentic runtime/tunnel, refresh setup so it registers the active public URL, then send a Teams message again.",
     retry: "Retry",
     refreshCode: "Refresh code",
     nextAction: "Next action",
@@ -363,6 +363,8 @@ const DEFAULT_TRANSLATIONS = {
     addToTeams: "Add to Teams",
     verifyTeamsInstall: "Verify Teams install",
     openBotChat: "Open bot chat",
+    verifyBotMessage: "Verify bot message",
+    botMessageInstruction: "Open the bot chat, send a message to the bot, then verify setup. Keep the runtime tunnel running while Teams sends the message.",
     downloadPackage: "Download app package",
     openDeviceLogin: "Open Microsoft device login",
     copyCode: "Copy code",
@@ -382,11 +384,9 @@ const DEFAULT_TRANSLATIONS = {
       create_or_reuse_bot_app: "Bot app identity is ready.",
       reconcile_bot_framework_registration: "Greentic Bot Service registration was updated.",
       greentic_bot_service_ready: "Greentic Bot Service is ready.",
+      start_microsoft_bot_channel_registration_login: "Microsoft bot channel registration sign-in started.",
       publish_teams_app: "Teams app was published to the tenant catalog.",
-      install_teams_app_for_user: "Teams app was installed for this user.",
-      reconcile_azure_bot_resource: "Bot Framework endpoint was reconciled.",
-      start_azure_management_login: "Azure management sign-in started.",
-      discover_azure_defaults: "Azure target settings were discovered."
+      install_teams_app_for_user: "Teams app was installed for this user."
     },
     fields: {
       tenant: "Tenant",
@@ -396,17 +396,16 @@ const DEFAULT_TRANSLATIONS = {
       teams_app_id: "Teams app ID",
       bot_display_name: "Bot display name",
       public_base_url: "Public base URL",
-      bot_framework_registration_url: "Bot Framework registration URL",
       bot_app_id: "Microsoft Bot app ID",
       bot_app_password: "Microsoft Bot app password",
       azure_auth_tenant: "Azure auth tenant",
       graph_setup_client_id: "Graph setup client ID",
-      azure_setup_client_id: "Azure setup client ID",
+      azure_setup_client_id: "Azure management setup client ID",
       azure_subscription_id: "Azure subscription ID",
-      azure_resource_group: "Azure resource group",
+      azure_resource_group: "Bot registration resource group",
       azure_resource_group_location: "Resource group location",
-      azure_bot_name: "Azure Bot name",
-      azure_location: "Azure location"
+      azure_bot_name: "Bot channel registration name",
+      azure_location: "Bot channel registration location"
     }
   },
   nl: {
@@ -421,7 +420,7 @@ const DEFAULT_TRANSLATIONS = {
     stepTimedOutTitle: "Stap niet voltooid",
     stepTimedOut: "De verwachte volgende stap verscheen niet binnen de tijd. Probeer opnieuw of gebruik geavanceerde diagnostiek.",
     missingPublicBaseUrl: "Setup heeft een publieke runtime-URL nodig voordat de Teams-botendpoint geregistreerd kan worden. Start setup met een publieke runtime/tunnel-URL en vernieuw.",
-    missingRegistrationService: "De setup-host heeft nog geen Greentic Bot Service registratie-endpoint geleverd. Dit is een setup/runtime-integratieprobleem, geen beheerderveld.",
+    runtimeTunnelUnavailable: "De geregistreerde Teams-endpoint is niet bereikbaar vanuit deze browser. Start de Greentic runtime/tunnel, vernieuw setup zodat de actieve publieke URL wordt geregistreerd en stuur daarna opnieuw een Teams-bericht.",
     retry: "Opnieuw proberen",
     refreshCode: "Code vernieuwen",
     nextAction: "Volgende actie",
@@ -439,6 +438,8 @@ const DEFAULT_TRANSLATIONS = {
     addToTeams: "Toevoegen aan Teams",
     verifyTeamsInstall: "Teams-installatie controleren",
     openBotChat: "Botchat openen",
+    verifyBotMessage: "Botbericht controleren",
+    botMessageInstruction: "Open de botchat, stuur een bericht naar de bot en controleer daarna de setup. Laat de runtime-tunnel draaien terwijl Teams het bericht verstuurt.",
     downloadPackage: "App-pakket downloaden",
     openDeviceLogin: "Microsoft sign-in openen",
     copyCode: "Code kopieren",
@@ -675,6 +676,10 @@ export class GreenticTeamsSetup extends HTMLElement {
         this._manualActions.addToTeamsOpened = false;
         this._writeManualActions();
       }
+      if ((values.last_activity || values.last_webchat_conversation) && this._manualActions.openBotChatOpened) {
+        this._manualActions.openBotChatOpened = false;
+        this._writeManualActions();
+      }
       if (this._runState?.state === "timeout" && this._advanced(this._runState.before, this._snapshot(), this._runState.action)) {
         this._runState = null;
       }
@@ -715,7 +720,7 @@ export class GreenticTeamsSetup extends HTMLElement {
       this._emitSkipNext("action-already-running", action);
       return null;
     }
-    const preflight = this._preflightAction(action);
+    const preflight = await this._preflightAction(action);
     if (preflight) {
       this.setAttribute("advanced", "true");
       this._localError(preflight);
@@ -782,7 +787,7 @@ export class GreenticTeamsSetup extends HTMLElement {
           this._emit("state", { state: this._state });
           this._render();
           const after = this._snapshot();
-          if (this._advanced(before, after, waitAction)) {
+          if (this._continuePostCompleted(result) || this._runtimeObservationWaiting(result) || this._advanced(before, after, waitAction)) {
             this._runState = null;
             this._deviceLoginRunning = false;
             this._emit("action-complete", { action: waitAction, state: result });
@@ -811,10 +816,23 @@ export class GreenticTeamsSetup extends HTMLElement {
           this._deviceLoginRunning = true;
           this._render();
         }
+      } else if (waitAction.kind === "device-login" && waitAction.url) {
+        this._emit("device-login", { login: { url: waitAction.url } });
+        window.open(waitAction.url, "_blank", "noopener");
       } else if (waitAction.kind === "add-to-teams" && waitAction.url) {
         this._emitSkipNext("manual-add-to-teams", waitAction);
         window.open(waitAction.url, "_blank", "noopener");
         this._manualActions.addToTeamsOpened = true;
+        this._writeManualActions();
+        this._runState = null;
+        this._deviceLoginRunning = false;
+        this._emit("action-complete", { action: waitAction, state: this._state });
+        this._render();
+        return this._state;
+      } else if (waitAction.kind === "open-chat" && waitAction.url) {
+        this._emitSkipNext("manual-open-chat", waitAction);
+        window.open(waitAction.url, "_blank", "noopener");
+        this._manualActions.openBotChatOpened = true;
         this._writeManualActions();
         this._runState = null;
         this._deviceLoginRunning = false;
@@ -833,6 +851,11 @@ export class GreenticTeamsSetup extends HTMLElement {
       } else if (waitAction.url) {
         this._emitSkipNext("manual-url-action", waitAction);
         window.open(waitAction.url, "_blank", "noopener");
+        this._runState = null;
+        this._deviceLoginRunning = false;
+        this._emit("action-complete", { action: waitAction, state: this._state });
+        this._render();
+        return this._state;
       }
       const state = await this._waitForAdvance(before, waitAction);
       this._runState = null;
@@ -932,7 +955,27 @@ export class GreenticTeamsSetup extends HTMLElement {
           this._lastResult = result;
           this._emit("result", { result });
           if (result && result.ok) {
-            await this._request("POST", this._endpoint("next"), this._collectConfig());
+            if (result.setup_status) {
+              this._applyState(result);
+              this._emit("state", { state: this._state });
+              this._render();
+              const after = this._snapshot();
+              if (this._advanced(before, after, action)) {
+                return this._state;
+              }
+            }
+            const nextResult = await this._request("POST", this._endpoint("next"), this._collectConfig());
+            this._lastResult = nextResult;
+            this._emit("result", { result: nextResult });
+            if (nextResult && nextResult.setup_status) {
+              this._applyState(nextResult);
+              this._emit("state", { state: this._state });
+              this._render();
+              const after = this._snapshot();
+              if (this._continuePostCompleted(nextResult) || this._runtimeObservationWaiting(nextResult) || this._advanced(before, after, action)) {
+                return this._state;
+              }
+            }
             this._lastResult = null;
           } else if (deviceCodeInvalid(result)) {
             await this.refreshDeviceLoginCode(action);
@@ -1126,7 +1169,15 @@ export class GreenticTeamsSetup extends HTMLElement {
     const target = this.shadowRoot.querySelector('[data-role="next"]');
     if (!target) return;
     const status = this._status();
-    target.textContent = status.next || this._t("noNext");
+    const providerError = this._providerSetupError(this._latestSetupResult());
+    const next = status.next || "";
+    if (this._waitingForFirstBotMessage()) {
+      target.textContent = this._t("botMessageInstruction");
+      return;
+    }
+    target.textContent = providerError && /^fix provider setup (route|endpoint) and retry$/i.test(next)
+      ? providerError
+      : next || this._t("noNext");
   }
 
   _renderOutcome() {
@@ -1201,7 +1252,9 @@ export class GreenticTeamsSetup extends HTMLElement {
     const cfg = this._config();
     const values = this._state && this._state.values || {};
     const response = values.last_oauth && values.last_oauth.response || {};
-    const userCode = cfg.oauth_user_code || response.user_code || response.userCode;
+    const oauthKind = this._oauthKind();
+    const codeKey = oauthKind === "management" ? "azure_management_user_code" : "oauth_user_code";
+    const userCode = cfg[codeKey] || response.user_code || response.userCode;
     if (!userCode) return null;
     return {
       url: cfg.oauth_verification_uri || response.verification_uri || response.verification_url || "https://login.microsoft.com/device",
@@ -1213,7 +1266,6 @@ export class GreenticTeamsSetup extends HTMLElement {
   }
 
   _activeDeviceLogin() {
-    if (this._currentPendingStepId() !== "graph_admin_consent") return null;
     const login = findDeviceLogin(this._lastResult) || this._pendingLoginFromState();
     if (!login || this._oauthComplete(this._oauthKind())) return null;
     return login;
@@ -1222,7 +1274,7 @@ export class GreenticTeamsSetup extends HTMLElement {
   _staleManagedAction(action) {
     if (!action) return true;
     if (action.kind === "device-login") {
-      return this._currentPendingStepId() !== "graph_admin_consent" || this._oauthComplete(action.oauthKind || this._oauthKind());
+      return this._oauthComplete(action.oauthKind || this._oauthKind());
     }
     return false;
   }
@@ -1307,9 +1359,13 @@ export class GreenticTeamsSetup extends HTMLElement {
     const values = this._state && this._state.values || {};
     const publish = values.last_teams_app_publish || {};
     const install = values.last_teams_app_install || {};
+    const publishData = this._providerResponseData(publish);
+    const installData = this._providerResponseData(install);
+    const addToTeamsUrl = teams.add_to_teams_url || publishData.add_to_teams_url || installData.add_to_teams_url || "";
+    const openBotChatUrl = teams.open_bot_chat_url || installData.open_bot_chat_url || "";
     const firstMessage = values.last_activity || values.last_webchat_conversation;
 
-    if (publish.ok && !install.ok && teams.add_to_teams_url) {
+    if (publish.ok && !install.ok && addToTeamsUrl) {
       if (this._manualActions.addToTeamsOpened) {
         return {
           kind: "continue",
@@ -1319,7 +1375,21 @@ export class GreenticTeamsSetup extends HTMLElement {
       return {
         kind: "add-to-teams",
         label: this._t("addToTeams"),
-        url: teams.add_to_teams_url
+        url: addToTeamsUrl
+      };
+    }
+
+    if (install.ok && !firstMessage && openBotChatUrl) {
+      if (this._manualActions.openBotChatOpened) {
+        return {
+          kind: "continue",
+          label: this._t("verifyBotMessage")
+        };
+      }
+      return {
+        kind: "open-chat",
+        label: this._t("openBotChat"),
+        url: openBotChatUrl
       };
     }
 
@@ -1330,19 +1400,11 @@ export class GreenticTeamsSetup extends HTMLElement {
       };
     }
 
-    if (install.ok && !firstMessage && teams.open_bot_chat_url) {
+    if (openBotChatUrl) {
       return {
         kind: "open-chat",
         label: this._t("openBotChat"),
-        url: teams.open_bot_chat_url
-      };
-    }
-
-    if (teams.open_bot_chat_url) {
-      return {
-        kind: "open-chat",
-        label: this._t("openBotChat"),
-        url: teams.open_bot_chat_url
+        url: openBotChatUrl
       };
     }
 
@@ -1365,13 +1427,67 @@ export class GreenticTeamsSetup extends HTMLElement {
     return item && item.id || "";
   }
 
-  _preflightAction(action) {
+  _waitingForFirstBotMessage() {
+    const values = this._state && this._state.values || {};
+    const install = values.last_teams_app_install || {};
+    const installData = this._providerResponseData(install);
+    const teams = this._state && this._state.teams_app || {};
+    return Boolean(
+      install.ok
+        && (installData.open_bot_chat_url || teams.open_bot_chat_url)
+        && !(values.last_activity || values.last_webchat_conversation)
+    );
+  }
+
+  async _preflightAction(action) {
     if (!action || action.kind !== "continue") return "";
-    if (this._currentPendingStepId() !== "bot_framework_endpoint_registration") return "";
-    const cfg = this._mergedConfig();
-    if (!String(cfg.public_base_url || "").trim()) return this._t("missingPublicBaseUrl");
-    if (!String(cfg.bot_framework_registration_url || "").trim()) return this._t("missingRegistrationService");
+    const pending = this._currentPendingStepId();
+    if (pending === "bot_framework_endpoint_registration") {
+      const cfg = this._mergedConfig();
+      if (!String(cfg.public_base_url || "").trim()) return this._t("missingPublicBaseUrl");
+    }
+    if (pending === "first_bot_framework_post") {
+      return await this._runtimeIngressPreflight();
+    }
     return "";
+  }
+
+  async _runtimeIngressPreflight() {
+    const url = this._registeredMessagingEndpoint();
+    if (!url) return "";
+    try {
+      await this._probeUrl(url, 5000);
+      return "";
+    } catch {
+      return this._t("runtimeTunnelUnavailable");
+    }
+  }
+
+  _registeredMessagingEndpoint() {
+    const values = this._state && this._state.values || {};
+    const reconcile = this._providerResponseData((values.last_reconcile || {}).response || values.last_reconcile || {});
+    const registration = reconcile.registration || {};
+    const cfg = this._mergedConfig();
+    const configuredBase = String(cfg.public_base_url || "").replace(/\/+$/, "");
+    return reconcile.target_messaging_endpoint
+      || reconcile.current_messaging_endpoint
+      || registration.messaging_endpoint
+      || (configuredBase ? `${configuredBase}/v1/messaging/ingress/messaging-teams/${encodeURIComponent(cfg.tenant || "demo")}/${encodeURIComponent(cfg.team || "default")}` : "");
+  }
+
+  async _probeUrl(url, timeoutMs) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      await fetch(url, {
+        method: "GET",
+        mode: "no-cors",
+        cache: "no-store",
+        signal: controller.signal
+      });
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   _actionHtml(action) {
@@ -1444,11 +1560,12 @@ export class GreenticTeamsSetup extends HTMLElement {
       return "";
     }
     if (result.ok === false) {
-      return result.next || result.error || this._t("actionFailed");
+      return this._providerSetupError(result) || result.next || result.error || this._t("actionFailed");
     }
     const step = result.step || "";
-    const data = result.result && typeof result.result === "object" ? result.result : {};
-    if (step === "bot_framework_endpoint_registration" || step === "reconcile_bot_framework_registration" || step === "reconcile_azure_bot_resource") {
+    const rawData = result.result && typeof result.result === "object" ? result.result : {};
+    const data = this._providerResponseData(rawData);
+    if (step === "bot_framework_endpoint_registration" || step === "reconcile_bot_framework_registration") {
       const registration = data.registration && data.registration.body || {};
       const action = data.action || registration.action || "";
       const endpoint = data.target_messaging_endpoint || data.current_messaging_endpoint || registration.target_messaging_endpoint || registration.current_messaging_endpoint || "";
@@ -1484,9 +1601,17 @@ export class GreenticTeamsSetup extends HTMLElement {
   }
 
   _collectConfig() {
-    const config = this._mergedConfig();
+    const baseConfig = this._config();
+    const config = { ...baseConfig, ...this._draftConfig };
     this.shadowRoot.querySelectorAll("[data-field]").forEach((input) => {
-      config[input.dataset.field] = input.value;
+      const field = input.dataset.field;
+      const value = input.value;
+      if (value === "" && String(baseConfig[field] || "") !== "") {
+        delete this._draftConfig[field];
+        config[field] = baseConfig[field];
+        return;
+      }
+      config[field] = value;
     });
     const clientConfig = this._clientConfig(config);
     this._draftConfig = { ...this._draftConfig, ...clientConfig };
@@ -1498,6 +1623,8 @@ export class GreenticTeamsSetup extends HTMLElement {
       "oauth_kind",
       "oauth_device_code",
       "oauth_user_code",
+      "azure_management_device_code",
+      "azure_management_user_code",
       "graph_access_token",
       "azure_management_access_token",
       "bot_access_token"
@@ -1522,16 +1649,52 @@ export class GreenticTeamsSetup extends HTMLElement {
       blocked: Boolean(status.blocked),
       next: status.next || "",
       actionKind: action && action.kind || "",
-      lastStep: setup.step || "",
+      lastStep: setup.step || status.last_step || "",
       publishOk: Boolean((values.last_teams_app_publish || {}).ok),
       installOk: Boolean((values.last_teams_app_install || {}).ok),
       firstMessage: Boolean(values.last_activity || values.last_webchat_conversation)
     };
   }
 
+  _continuePostCompleted(result) {
+    if (!result || result.ok !== true || !result.setup_status) return false;
+    const status = result.setup_status || {};
+    return !status.blocked;
+  }
+
+  _runtimeObservationWaiting(result) {
+    if (!result || !result.setup_status) return false;
+    const setup = result.values && result.values.last_setup_result || {};
+    const payload = setup.result || {};
+    return setup.step === "first_bot_framework_post" && payload.waiting === true;
+  }
+
+  _providerSetupError(result) {
+    if (!result || typeof result !== "object") return "";
+    const body = result.body && typeof result.body === "object" ? result.body : {};
+    const nested = result.result && typeof result.result === "object" ? result.result : {};
+    const response = nested.response && typeof nested.response === "object" ? nested.response : {};
+    return response.error || nested.error || body.error || "";
+  }
+
+  _providerResponseData(result) {
+    if (!result || typeof result !== "object") return {};
+    const response = result.response && typeof result.response === "object" ? result.response : null;
+    if (!response) return result;
+    const innerResponse = response.response && typeof response.response === "object" ? response.response : null;
+    const body = innerResponse && typeof innerResponse.body_json === "object"
+      ? innerResponse.body_json
+      : innerResponse && typeof innerResponse.body === "object"
+        ? innerResponse.body
+        : null;
+    return body || response;
+  }
+
   _advanced(before, after, action) {
     if (after.blocked && !before.blocked) return true;
     if (after.done > before.done) return true;
+    if (action.kind === "continue" && after.lastStep && after.lastStep !== before.lastStep) return true;
+    if (action.kind === "continue" && after.next && after.next !== before.next) return true;
     if (after.done === before.done && action.kind === "device-login" && after.lastStep && after.lastStep !== before.lastStep) return true;
     if (after.actionKind && after.actionKind !== before.actionKind) return true;
     if (action.kind === "add-to-teams" && after.installOk) return true;
@@ -1587,7 +1750,7 @@ export class GreenticTeamsSetup extends HTMLElement {
     if (cfg.oauth_kind) return cfg.oauth_kind;
     const result = this._latestSetupResult() || this._lastResult || {};
     const step = result.step || "";
-    if (step.includes("management") || step.includes("azure")) return "management";
+    if (step.includes("management") || step.includes("azure") || step.includes("bot_channel_registration")) return "management";
     return "graph";
   }
 

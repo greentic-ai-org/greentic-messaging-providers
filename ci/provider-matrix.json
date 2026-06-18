@@ -220,7 +220,7 @@
     },
     "teams": {
       "pack": "messaging-teams-graph",
-      "version": "0.5.16",
+      "version": "0.5.17",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams-graph",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -259,7 +259,7 @@
     },
     "messaging-teams": {
       "pack": "messaging-teams",
-      "version": "0.5.16",
+      "version": "0.5.17",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -367,7 +367,7 @@
     },
     "webchat-gui": {
       "pack": "messaging-webchat-gui",
-      "version": "0.5.7",
+      "version": "0.5.8",
       "ghcr_target": "ghcr.io/greenticai/messaging-webchat-gui",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {

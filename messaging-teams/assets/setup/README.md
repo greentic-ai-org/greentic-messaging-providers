@@ -175,7 +175,7 @@ The generated pack declares:
 {
   "schema_id": "greentic.setup.web-component.v1",
   "provider_id": "messaging-teams",
-  "tag_name": "greentic-teams-setup",
+  "tag_name": "greentic-teams-setup-v4",
   "module_asset": "assets/setup/greentic-teams-setup.js",
   "module_url": "/v1/web/messaging-teams/setup/{tenant}/greentic-teams-setup.js",
   "asset_base_path": "/v1/web/messaging-teams/setup/{tenant}",
@@ -212,9 +212,10 @@ The contract declares `actions_schema_id: greentic.setup.actions.v1`. Each
 | --- | --- |
 | `graph_admin_consent` | `oauth_device_code` |
 | `bot_app_identity` | `microsoft_graph_application` |
-| `bot_framework_endpoint_registration` | `bot_framework_registration` |
-| `teams_app_publish` | `microsoft_graph_teams_app_catalog_publish` |
-| `teams_app_user_install` | `microsoft_graph_teams_app_user_install` |
+| `microsoft_bot_channel_registration_consent` | `oauth_device_code` |
+| `bot_framework_endpoint_registration` | `provider_http` |
+| `teams_app_publish` | `provider_http` |
+| `teams_app_user_install` | `provider_http` |
 | `first_bot_framework_post` | `runtime_observation` |
 
 The Graph OAuth action provides `client_id_default` for the Microsoft Graph
@@ -222,17 +223,24 @@ Command Line Tools public client. Admins can still override it with
 `graph_setup_client_id`, but the wizard must not require that value for the
 default path.
 
-The Bot Framework registration action requires:
+The Microsoft bot channel registration action uses a second device-code OAuth
+grant for Azure management (`https://management.azure.com/user_impersonation`).
+Admins can override its public client with `azure_setup_client_id`; otherwise it
+uses the same Microsoft Graph Command Line Tools public client default.
+
+The Bot Framework registration action is a provider-owned HTTP action. Its
+`path_template` is a setup-local route declared by this pack in
+`greentic.http-routes.v1`; the setup host invokes that pack route generically and
+does not need any Bot Framework-specific endpoint or setup runtime URL.
 
 - `public_base_url`: the public runtime base URL that Teams can reach.
-- `bot_framework_registration_url`: the Greentic Bot Service endpoint that
-  accepts `{ bot_app_id, bot_app_password, messaging_endpoint, channel }` and
-  registers the Teams bot app with the Bot Framework-compatible service.
 
 `greentic-setup` must implement those generic executor kinds and:
 
-- Ignore browser-submitted `oauth_kind`, `oauth_device_code`, `oauth_user_code`,
-  `graph_access_token`, `azure_management_access_token`, and `bot_access_token`.
+- Ignore browser-submitted `oauth_kind`, `oauth_device_code`,
+  `oauth_user_code`, `azure_management_device_code`,
+  `azure_management_user_code`, `graph_access_token`,
+  `azure_management_access_token`, and `bot_access_token`.
 - Persist OAuth/device-code state server side and only mutate it from
   `/oauth/{kind}/start` and `/oauth/{kind}/complete`.
 - Register or update the Bot Framework-compatible endpoint for the bot app id
@@ -243,3 +251,24 @@ The Bot Framework registration action requires:
 
 `greentic-start` (`gtc start`) should then focus on the configured provider:
 Teams ingress to Greentic and Greentic egress to Teams.
+
+## Validation
+
+The setup asset is an ES module. Syntax validation should use module parsing:
+
+```sh
+node --input-type=module --check < messaging-teams/assets/setup/greentic-teams-setup.js
+```
+
+Provider validation is covered by the repository gates:
+
+```sh
+./ci/local_check.sh
+greentic-dev coverage
+npm run test:messaging-teams-setup
+```
+
+The coverage policy intentionally excludes the tester wasm harness because it is
+host integration plumbing. The Teams setup state machine and package builder are
+covered by unit tests in `components/messaging-ingress-teams/src/setup.rs` and
+`components/messaging-ingress-teams/src/teams_pkg.rs`.

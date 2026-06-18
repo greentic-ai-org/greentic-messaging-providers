@@ -39,5 +39,6 @@ export declare class GreenticTeamsSetup extends HTMLElement {
 declare global {
   interface HTMLElementTagNameMap {
     "greentic-teams-setup": GreenticTeamsSetup;
+    "greentic-teams-setup-v4": GreenticTeamsSetup;
   }
 }

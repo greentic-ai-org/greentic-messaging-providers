@@ -215,6 +215,27 @@ extensions:
         - POST
         provider_op: ingest_http
         domain: messaging
+      - id: messaging-teams-bot-framework-registration
+        pattern: /v1/setup/messaging-teams/{{tenant}}/{{team}}/bot-framework-registration
+        methods:
+        - POST
+        setup_component_ref: messaging-ingress-teams
+        setup_op: bot-framework-registration
+        domain: messaging
+      - id: messaging-teams-app-publish
+        pattern: /v1/setup/messaging-teams/{{tenant}}/{{team}}/teams-app-publish
+        methods:
+        - POST
+        setup_component_ref: messaging-ingress-teams
+        setup_op: teams-app-publish
+        domain: messaging
+      - id: messaging-teams-app-install
+        pattern: /v1/setup/messaging-teams/{{tenant}}/{{team}}/teams-app-install
+        methods:
+        - POST
+        setup_component_ref: messaging-ingress-teams
+        setup_op: teams-app-install
+        domain: messaging
 """
 if "\nextensions:\n" not in text and not text.rstrip().endswith("extensions:"):
     text = text.rstrip() + "\n" + extensions

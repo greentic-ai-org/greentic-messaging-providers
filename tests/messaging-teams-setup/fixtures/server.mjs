@@ -13,6 +13,7 @@ const port = portArg >= 0 ? Number(process.argv[portArg + 1]) : 8811;
 const stepIds = [
   'graph_admin_consent',
   'bot_app_identity',
+  'microsoft_bot_channel_registration_consent',
   'bot_framework_endpoint_registration',
   'teams_app_publish',
   'teams_app_user_install',
@@ -22,6 +23,7 @@ const stepIds = [
 const stepLabels = {
   graph_admin_consent: 'graph admin consent',
   bot_app_identity: 'bot app identity',
+  microsoft_bot_channel_registration_consent: 'microsoft bot channel registration consent',
   bot_framework_endpoint_registration: 'bot framework endpoint registration',
   teams_app_publish: 'teams app publish',
   teams_app_user_install: 'teams app user install',
@@ -34,6 +36,7 @@ function initialState() {
     done: new Set(),
     staleSnapshots: [],
     oauthCompletePolls: 0,
+    managementOauthCompletePolls: 0,
     failures: {},
     requests: [],
     values: {
@@ -44,7 +47,6 @@ function initialState() {
         env: 'dev',
         bot_display_name: 'Greentic Bot',
         public_base_url: 'https://runtime.example.test',
-        bot_framework_registration_url: 'https://runtime.example.test/v1/setup/bot-framework/registration',
       },
       last_setup_result: null,
     },
@@ -73,6 +75,59 @@ function resetState(scenario = 'happy') {
       app_id: 'bot-app-id-123',
       bot_app_id: 'bot-app-id-123',
     }, 'click again to continue setup');
+  }
+  if (scenario === 'pending-oauth-started') {
+    startGraphLogin('GRAPH-CODE-IDLE');
+  }
+  if (scenario === 'waiting-first-message') {
+    for (const id of stepIds.slice(0, 6)) state.done.add(id);
+    state.values.oauth = {
+      graph: { ok: true, token_store_key: 'graph_access_token', completed_at: Date.now() },
+      management: { ok: true, token_store_key: 'azure_management_access_token', completed_at: Date.now() },
+    };
+    state.values.config.bot_app_id = 'bot-app-id-123';
+    state.values.config.bot_app_password = 'bot-secret-xyz';
+    state.values.last_teams_app_publish = {
+      ok: true,
+      action: 'publish',
+      add_to_teams_url: '/fake-teams/add',
+      catalog_app_id: 'teams-catalog-id-123',
+    };
+    state.values.last_teams_app_install = {
+      ok: true,
+      action: 'install',
+      open_bot_chat_url: '/fake-teams/chat',
+      installed_app_id: 'installed-app-id-123',
+    };
+    state.values.last_reconcile = {
+      ok: true,
+      response: {
+        ok: true,
+        target_messaging_endpoint: '/fake-ingress/messaging-teams/demo/default',
+        registration: {
+          status: 'registered',
+          messaging_endpoint: '/fake-ingress/messaging-teams/demo/default',
+        },
+      },
+    };
+    setResult('teams_app_user_install', true, state.values.last_teams_app_install, 'open the bot chat and send hello');
+  }
+  if (scenario === 'stale-runtime-tunnel') {
+    resetState('waiting-first-message');
+    state.scenario = scenario;
+    state.values.config.public_base_url = 'https://stale-runtime.trycloudflare.com';
+    state.values.last_reconcile = {
+      ok: true,
+      response: {
+        ok: true,
+        target_messaging_endpoint: 'http://127.0.0.1:9/v1/messaging/ingress/messaging-teams/demo/default',
+        registration: {
+          status: 'registered',
+          public_base_url: 'https://stale-runtime.trycloudflare.com',
+          messaging_endpoint: 'http://127.0.0.1:9/v1/messaging/ingress/messaging-teams/demo/default',
+        },
+      },
+    };
   }
 }
 
@@ -188,6 +243,35 @@ function startGraphLogin(userCode = 'GRAPH-CODE-1') {
   return publicState('authorize in the opened browser, then wait for setup to continue');
 }
 
+function startManagementLogin(userCode = 'MGMT-CODE-1') {
+  state.values.config.oauth_kind = 'management';
+  state.values.config.azure_management_user_code = userCode;
+  state.values.config.oauth_verification_uri = 'https://login.microsoft.test/device';
+  state.values.last_oauth = {
+    kind: 'management',
+    response: {
+      user_code: userCode,
+      verification_uri: 'https://login.microsoft.test/device',
+      expires_in: 900,
+      interval: 1,
+      message: `Enter ${userCode}`,
+    },
+  };
+  setResult('microsoft_bot_channel_registration_consent', false, {
+    ok: false,
+    pending_device_login: true,
+    login: {
+      user_code: userCode,
+      userCode: userCode,
+      url: 'https://login.microsoft.test/device',
+      expiresIn: 900,
+      interval: 1,
+    },
+    body: state.values.last_oauth.response,
+  }, 'authorize Microsoft bot channel registration, then wait for setup to continue');
+  return publicState('authorize Microsoft bot channel registration, then wait for setup to continue');
+}
+
 function nextStep() {
   const done = currentDone();
   if (done === 0 && !state.values.oauth?.graph?.ok) return startGraphLogin();
@@ -203,7 +287,8 @@ function nextStep() {
     });
     return publicState('click again to continue setup');
   }
-  if (done === 2) {
+  if (done === 2 && !state.values.oauth?.management?.ok) return startManagementLogin();
+  if (done === 3) {
     if (state.scenario === 'next-http-503' && !state.failures.botFrameworkHttp) {
       state.failures.botFrameworkHttp = true;
       return {
@@ -232,7 +317,7 @@ function nextStep() {
     state.staleSnapshots.push(before, before);
     return publicState('click again to continue setup');
   }
-  if (done === 3) {
+  if (done === 4) {
     if (state.scenario === 'publish-transient' && !state.failures.publish) {
       state.failures.publish = true;
       return {
@@ -250,7 +335,7 @@ function nextStep() {
     state.values.last_teams_app_publish = state.values.last_setup_result.result;
     return publicState('open the Add to Teams link, install the app, then continue');
   }
-  if (done === 4) {
+  if (done === 5) {
     complete('teams_app_user_install', {
       ok: true,
       action: 'install',
@@ -260,7 +345,7 @@ function nextStep() {
     state.values.last_teams_app_install = state.values.last_setup_result.result;
     return publicState('open the bot chat and send hello');
   }
-  if (done === 5) {
+  if (done === 6) {
     state.values.last_activity = {
       serviceUrl: 'https://smba.trafficmanager.net/emea/',
       conversation: { id: 'conversation-id-123' },
@@ -289,6 +374,7 @@ const server = http.createServer(async (req, res) => {
         scenario: state.scenario,
         failures: state.failures,
         oauthCompletePolls: state.oauthCompletePolls,
+        managementOauthCompletePolls: state.managementOauthCompletePolls,
         requests: state.requests,
       });
     }
@@ -324,7 +410,7 @@ const server = http.createServer(async (req, res) => {
         </html>`, 'text/html; charset=utf-8');
     }
     if (url.pathname === '/api/state' && req.method === 'GET') {
-      if (state.done.has('teams_app_user_install') && !state.done.has('first_bot_framework_post')) {
+      if (!['waiting-first-message', 'stale-runtime-tunnel'].includes(state.scenario) && state.done.has('teams_app_user_install') && !state.done.has('first_bot_framework_post')) {
         state.values.last_activity = {
           serviceUrl: 'https://smba.trafficmanager.net/emea/',
           conversation: { id: 'conversation-id-123' },
@@ -402,7 +488,65 @@ const server = http.createServer(async (req, res) => {
       complete('graph_admin_consent', { ok: true }, 'click again to continue setup');
       return responseJson(res, 200, { ok: true, step: 'graph_admin_consent' });
     }
-    if (url.pathname === '/fake-teams/add' || url.pathname === '/fake-teams/chat') {
+    if (url.pathname === '/api/oauth/management/start' && req.method === 'POST') {
+      const body = await readJson(req);
+      state.requests.push({ path: url.pathname, body });
+      return responseJson(res, 200, startManagementLogin('MGMT-CODE-2'));
+    }
+    if (url.pathname === '/api/oauth/management/complete' && req.method === 'POST') {
+      const body = await readJson(req);
+      state.requests.push({ path: url.pathname, body });
+      state.managementOauthCompletePolls += 1;
+      if (state.scenario === 'management-oauth-pending-once' && state.managementOauthCompletePolls === 1) {
+        return responseJson(res, 200, {
+          ok: false,
+          result: {
+            body: {
+              error: 'authorization_pending',
+              error_description: 'Authorization is pending.',
+              error_codes: [70016],
+            },
+          },
+        });
+      }
+      if (state.scenario === 'management-oauth-expired-refresh' && !state.failures.managementExpiredCode) {
+        state.failures.managementExpiredCode = true;
+        return responseJson(res, 200, {
+          ok: false,
+          result: {
+            body: {
+              error: 'expired_token',
+              error_description: 'The management device code expired.',
+              error_codes: [70020],
+            },
+          },
+        });
+      }
+      if (state.scenario === 'management-oauth-denied-refresh' && !state.failures.managementDeniedCode) {
+        state.failures.managementDeniedCode = true;
+        return responseJson(res, 200, {
+          ok: false,
+          result: {
+            body: {
+              error: 'authorization_declined',
+              error_description: 'The admin declined the management authorization.',
+              error_codes: [7000014],
+            },
+          },
+        });
+      }
+      state.done.add('microsoft_bot_channel_registration_consent');
+      state.values.oauth = {
+        ...(state.values.oauth || {}),
+        management: { ok: true, token_store_key: 'azure_management_access_token', completed_at: Date.now() },
+      };
+      state.values.config.azure_management_access_token = 'azure-management-token-123';
+      delete state.values.config.azure_management_user_code;
+      state.values.config.oauth_kind = 'graph';
+      complete('microsoft_bot_channel_registration_consent', { ok: true }, 'click again to continue setup');
+      return responseJson(res, 200, publicState('click again to continue setup'));
+    }
+    if (url.pathname === '/fake-teams/add' || url.pathname === '/fake-teams/chat' || url.pathname === '/fake-ingress/messaging-teams/demo/default') {
       return responseText(res, 200, 'fake teams');
     }
     return responseJson(res, 404, { ok: false, error: 'not found', path: url.pathname });
