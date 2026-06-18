@@ -19,6 +19,11 @@ webex
 whatsapp
 ```
 
+`teams` publishes the current Bot Framework-backed `messaging-teams` pack to
+`ghcr.io/<owner>/packs/messaging/messaging-teams`. Use
+`messaging-teams-graph` only when you intentionally need the legacy
+Graph-backed Teams provider.
+
 You can also ask the matrix script:
 
 ```bash
