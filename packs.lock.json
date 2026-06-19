@@ -12,7 +12,7 @@
       "file": "dist/packs/messaging-email.gtpack",
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-email:0.5.1",
       "digest": "sha256:77ae7b1f6e0de1e1c6cd6421dc844ee400f4c7ac8f0ec1a9ce35694a38fa349d",
-      "built_at": "2026-06-19T13:37:54Z"
+      "built_at": "2026-06-19T15:30:37Z"
     },
     {
       "name": "messaging-microsoft-email",

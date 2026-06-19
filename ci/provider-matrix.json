@@ -429,7 +429,7 @@
         "crates/provider-tests/tests/provider_core_webex.rs"
       ]
     },
-    "messaging-http": {
+    "http": {
       "pack": "messaging-http",
       "version": "0.1.0",
       "ghcr_target": "ghcr.io/greenticai/messaging-http",
@@ -454,7 +454,7 @@
         "scripts/check_answer_provider.sh"
       ]
     },
-    "messaging-websocket": {
+    "websocket": {
       "pack": "messaging-websocket",
       "version": "0.1.0",
       "ghcr_target": "ghcr.io/greenticai/messaging-websocket",
