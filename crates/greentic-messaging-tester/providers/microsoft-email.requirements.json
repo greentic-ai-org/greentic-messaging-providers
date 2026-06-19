@@ -1,0 +1,36 @@
+{
+  "provider": "microsoft-email",
+  "config": {
+    "required": [
+      { "key": "from_address", "type": "string", "example": "noreply@example.com" },
+      { "key": "graph_tenant_id", "type": "string", "example": "tenant-id" },
+      { "key": "ms_graph_client_id", "type": "string", "example": "client-id" }
+    ]
+  },
+  "secrets": {
+    "required": [
+      { "key": "FROM_ADDRESS", "example": "noreply@example.com" },
+      { "key": "GRAPH_TENANT_ID", "example": "tenant-id" },
+      { "key": "MS_GRAPH_CLIENT_ID", "example": "client-id" },
+      { "key": "MS_GRAPH_REFRESH_TOKEN", "example": "refresh-token" }
+    ],
+    "optional": [
+      { "key": "MS_GRAPH_CLIENT_SECRET", "example": "client-secret" }
+    ]
+  },
+  "values": {
+    "config": {
+      "from_address": "noreply@example.com",
+      "graph_tenant_id": "tenant-id",
+      "ms_graph_client_id": "client-id"
+    },
+    "secrets": {
+      "FROM_ADDRESS": "noreply@example.com",
+      "GRAPH_TENANT_ID": "tenant-id",
+      "MS_GRAPH_CLIENT_ID": "client-id",
+      "MS_GRAPH_REFRESH_TOKEN": "refresh-token"
+    },
+    "http": "mock",
+    "state": {}
+  }
+}

@@ -176,6 +176,7 @@ jobs:
   build-components:
     runs-on: ubuntu-latest
     needs: resolve-provider
+    if: ${{ needs.resolve-provider.outputs.components_csv != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -215,6 +216,7 @@ jobs:
   package-provider:
     runs-on: ubuntu-latest
     needs: [resolve-provider, lint, build-components]
+    if: ${{ always() && needs.resolve-provider.result == 'success' && needs.lint.result == 'success' && (needs.build-components.result == 'success' || needs.build-components.result == 'skipped') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -236,6 +238,7 @@ jobs:
           version: 1.2.0
 
       - name: Download component artifacts
+        if: ${{ needs.resolve-provider.outputs.components_csv != '' }}
         uses: actions/download-artifact@v4
         with:
           pattern: components-wasm-*
@@ -243,7 +246,7 @@ jobs:
           merge-multiple: true
 
       - name: Publish selected components
-        if: ${{ inputs.publish }}
+        if: ${{ inputs.publish && needs.resolve-provider.outputs.components_csv != '' }}
         env:
           VERSION: ${{ needs.resolve-provider.outputs.version }}
           PUBLISH_STABLE: "1"
@@ -253,19 +256,25 @@ jobs:
           ./tools/publish_oci.sh
 
       - name: Sync selected pack with OCI templates
+        if: ${{ needs.resolve-provider.outputs.components_csv != '' }}
         env:
           PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
         run: ./ci/steps/07_sync_packs.sh
 
       - name: Build and validate selected pack
+        if: ${{ needs.resolve-provider.outputs.components_csv != '' }}
         env:
           PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
           PACK_VERSION: ${{ needs.resolve-provider.outputs.version }}
           RUN_PUBLISH_PACKS: "1"
         run: ./ci/steps/11_build_packs.sh
 
+      - name: Build and validate answer-owned pack
+        if: ${{ needs.resolve-provider.outputs.components_csv == '' }}
+        run: scripts/check_answer_provider.sh "${{ needs.resolve-provider.outputs.pack }}"
+
       - name: Publish selected pack
-        if: ${{ inputs.publish }}
+        if: ${{ inputs.publish && needs.resolve-provider.outputs.components_csv != '' }}
         env:
           PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
           PACK_VERSION: ${{ needs.resolve-provider.outputs.version }}
@@ -273,6 +282,44 @@ jobs:
           PUBLISH_STABLE: "1"
           TEMPLATES_IMAGE: ghcr.io/greenticai/components/templates:latest
         run: ./tools/publish_packs_oci.sh
+
+      - name: Publish answer-owned pack
+        if: ${{ inputs.publish && needs.resolve-provider.outputs.components_csv == '' }}
+        env:
+          PACK: ${{ needs.resolve-provider.outputs.pack }}
+          VERSION: ${{ needs.resolve-provider.outputs.version }}
+          PACK_GHCR_TARGET: ${{ needs.resolve-provider.outputs.pack_ghcr_target }}
+          PUBLISH_LATEST: ${{ inputs.publish_latest && '1' || '0' }}
+          MEDIA_TYPE: application/vnd.greentic.gtpack.v1+zip
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          pack_path="dist/packs/${PACK}.gtpack"
+          if [ ! -f "${pack_path}" ]; then
+            echo "missing packaged artifact: ${pack_path}" >&2
+            exit 1
+          fi
+          pack_file="$(basename "${pack_path}")"
+          pack_dir="$(dirname "${pack_path}")"
+          push_ref() {
+            local ref="$1"
+            (
+              cd "${pack_dir}"
+              oras push \
+                --artifact-type "${MEDIA_TYPE}" \
+                --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
+                --annotation "org.opencontainers.image.revision=${GITHUB_SHA:-unknown}" \
+                --annotation "org.opencontainers.image.version=${VERSION}" \
+                --annotation "org.opencontainers.image.title=${PACK}" \
+                "${ref}" \
+                "${pack_file}:${MEDIA_TYPE}"
+            )
+          }
+          push_ref "${PACK_GHCR_TARGET}:${VERSION}"
+          push_ref "${PACK_GHCR_TARGET}:stable"
+          if [ "${PUBLISH_LATEST}" = "1" ]; then
+            push_ref "${PACK_GHCR_TARGET}:latest"
+          fi
 
       - name: Upload selected pack artifact
         uses: actions/upload-artifact@v4

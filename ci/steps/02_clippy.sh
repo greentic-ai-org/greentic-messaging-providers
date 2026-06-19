@@ -29,9 +29,11 @@ run_clippy() {
   if [ -n "${COMPONENT_MANIFESTS_JSON:-}" ]; then
     python3 - <<'PY' "${COMPONENT_MANIFESTS_JSON}"
 import json
+from pathlib import Path
 import sys
 for manifest in json.loads(sys.argv[1]):
-    print(manifest)
+    if Path(manifest).name == "Cargo.toml":
+        print(manifest)
 PY
     return
   fi
@@ -40,6 +42,7 @@ PY
 
 clippy_failed=0
 while IFS= read -r manifest; do
+  saw_manifest=1
   [ -z "${manifest}" ] && continue
   if [ "${manifest}" = "__workspace__" ]; then
     cargo clippy --workspace --all-targets || clippy_failed=1
@@ -47,6 +50,11 @@ while IFS= read -r manifest; do
     cargo clippy --manifest-path "${manifest}" --all-targets || clippy_failed=1
   fi
 done < <(run_clippy)
+
+if [ "${saw_manifest:-0}" -eq 0 ] && [ -n "${COMPONENT_MANIFESTS_JSON:-}" ]; then
+  echo "No Rust manifests selected for cargo clippy; skipping."
+  exit 0
+fi
 
 if [ "${clippy_failed}" -ne 0 ]; then
   if command -v rustup >/dev/null 2>&1; then
