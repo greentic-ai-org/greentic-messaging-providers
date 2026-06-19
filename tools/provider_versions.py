@@ -133,6 +133,25 @@ def update_answer_owned_pack_version(pack: str, version: str, old_version: str) 
     answer_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def validate_answer_owned_pack_version(provider_name: str, pack: str, expected: str, errors: list[str]) -> None:
+    answer_path = ROOT / pack / "build-answer.json"
+    if not answer_path.exists():
+        return
+
+    data = json.loads(answer_path.read_text())
+    found = data.get("pack_version")
+    if found != expected:
+        errors.append(f"{answer_path.relative_to(ROOT)}: pack_version {found} != provider {provider_name} {expected}")
+
+    for index, component in enumerate(data.get("runtime_components", [])):
+        component_version = component.get("version")
+        if component_version != expected:
+            errors.append(
+                f"{answer_path.relative_to(ROOT)}: runtime_components[{index}].version "
+                f"{component_version} != provider {provider_name} {expected}"
+            )
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     matrix = load_matrix()
     result = {
@@ -185,6 +204,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             found = json.loads(pack_manifest.read_text()).get("version")
             if found != expected:
                 errors.append(f"{pack_manifest.relative_to(ROOT)}: {found} != provider {name} {expected}")
+        validate_answer_owned_pack_version(name, provider["pack"], expected, errors)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)

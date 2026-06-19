@@ -69,6 +69,13 @@
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-whatsapp:0.5.3",
       "digest": "sha256:12034285e42292ca5a1d91bb3379d93b02aff23644bbb572457e0305aca81737",
       "built_at": "2026-06-18T16:02:20Z"
+    },
+    {
+      "name": "messaging-teams",
+      "file": "dist/packs/messaging-teams.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams:0.5.18",
+      "digest": "sha256:d4c53773f32019fe6640c6cd05ebdc9ca6cccce78b0e9de6696446564e0ef087",
+      "built_at": "2026-06-18T19:27:11Z"
     }
   ]
 }
