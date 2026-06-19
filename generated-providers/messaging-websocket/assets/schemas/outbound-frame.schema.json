@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Messaging WebSocket outbound frame",
+  "type": "object",
+  "required": ["session_id", "opcode", "data"],
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "opcode": {
+      "const": "text"
+    },
+    "data": {
+      "type": "string"
+    }
+  }
+}

@@ -13,6 +13,7 @@ use greentic_types::{
     Actor, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
 };
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::lifecycle_events::{mark_user_entered, user_entered_idempotency_key};
 use serde_json::{Value, json};
 
 fn debug_enabled() -> bool {
@@ -79,6 +80,31 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         from.clone(),
         msg_locale,
     );
+    if is_start_command(&text) {
+        let idempotency_key = user_entered_idempotency_key(
+            "telegram",
+            None,
+            chat_id.as_deref(),
+            from.as_deref(),
+            "start_command",
+        );
+        mark_user_entered(
+            &mut envelope.metadata,
+            "telegram",
+            "start_command",
+            idempotency_key,
+        );
+        if let Some(chat) = &chat_id {
+            envelope
+                .metadata
+                .insert("chat_id".to_string(), chat.clone());
+        }
+        if let Some(sender) = &from {
+            envelope
+                .metadata
+                .insert("user_id".to_string(), sender.clone());
+        }
+    }
 
     // Detect reply-to-bot messages (form input responses from ForceReply).
     // When user replies to a bot message that had a form prompt, mark the
@@ -259,6 +285,11 @@ fn build_telegram_envelope_with_locale(
     }
 }
 
+fn is_start_command(text: &str) -> bool {
+    let trimmed = text.trim();
+    trimmed == "/start" || trimmed.starts_with("/start ")
+}
+
 pub(crate) fn extract_message_text(value: &Value) -> String {
     value
         .get("text")
@@ -383,6 +414,41 @@ mod tests {
                 .get("reply_to_bot_message_id")
                 .map(String::as_str),
             Some("11")
+        );
+    }
+
+    #[test]
+    fn start_command_marks_user_entered_lifecycle_event() {
+        let out = ingest_body(json!({
+            "message": {
+                "message_id": 12,
+                "text": "/start demo",
+                "chat": {"id": 99},
+                "from": {"id": 42, "language_code": "en"}
+            }
+        }));
+
+        assert_eq!(out.status, 200);
+        let event = &out.events[0];
+        assert_eq!(
+            event.metadata.get("event_type").map(String::as_str),
+            Some("channel.user.entered")
+        );
+        assert_eq!(
+            event.metadata.get("autoStart").map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            event.metadata.get("provider").map(String::as_str),
+            Some("telegram")
+        );
+        assert_eq!(
+            event.metadata.get("reason").map(String::as_str),
+            Some("start_command")
+        );
+        assert_eq!(
+            event.metadata.get("idempotency_key").map(String::as_str),
+            Some("lifecycle.user_entered:telegram:_:99:42:start_command")
         );
     }
 

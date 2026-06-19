@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Messaging HTTP outbound request",
+  "type": "object",
+  "required": ["method", "url"],
+  "properties": {
+    "method": {
+      "enum": ["GET", "POST"]
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "headers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "timeout_ms": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

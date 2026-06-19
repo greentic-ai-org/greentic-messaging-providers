@@ -521,7 +521,12 @@ target_component_wasm_name() {
   fi
 }
 
-for dir in "${ROOT_DIR}/${PACKS_DIR}/"* "${extra_pack_dirs[@]}"; do
+pack_dirs=("${ROOT_DIR}/${PACKS_DIR}/"*)
+if [ "${#extra_pack_dirs[@]}" -gt 0 ]; then
+  pack_dirs+=("${extra_pack_dirs[@]}")
+fi
+
+for dir in "${pack_dirs[@]}"; do
   [ -d "${dir}" ] || continue
   pack_name="$(basename "${dir}")"
   pack_name="${pack_name%.pack}"

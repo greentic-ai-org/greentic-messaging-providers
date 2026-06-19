@@ -416,7 +416,7 @@ for provider, spec in matrix.get("providers", {}).items():
     version = spec.get("version")
     pack = spec.get("pack")
     if pack and version and version != workspace_version:
-        print(provider)
+        print(pack)
 PY
 )"
 if [ -n "${provider_version_overrides}" ]; then

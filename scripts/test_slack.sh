@@ -99,7 +99,7 @@ APP_NAME = WORK / "slack-app-name.txt"
 PUBLIC_URL_FILE = WORK / "public-url.txt"
 ADD_TO_SLACK_ACTION = {
     "id": "add_to_slack",
-    "title": "Add to Slack",
+    "title": "Setup Slack App",
     "kind": "oauth_authorize",
     "provider_id": "slack",
     "oauth_provider_id": "slack",
@@ -533,8 +533,8 @@ def page_html() -> bytes:
     <h2>Setup</h2>
     <div class="actionBox">
       <div class="row">
-        <button id="createAppBtn" type="button">Create Slack app</button>
-        <button id="addToSlackBtn" class="primary" type="button">Add to Slack</button>
+        <button id="createAppBtn" type="button">Setup Slack App</button>
+        <button id="addToSlackBtn" class="primary" type="button">Setup Slack App</button>
         <button id="openSlackAppBtn" type="button">Open in Slack</button>
         <button id="copyAddToSlackBtn" type="button">Copy install URL</button>
         <span class="muted">Create the app first, then install it to retrieve the bot token for sends.</span>
@@ -568,6 +568,8 @@ def page_html() -> bytes:
     <h2>Incoming Webhooks</h2>
     <div class="row">
       <button id="refreshBtn" type="button">Refresh</button>
+      <button id="simulateAppHomeBtn" type="button">Simulate App Home Open</button>
+      <button id="simulateMemberJoinBtn" type="button">Simulate Channel Join</button>
       <span id="status" class="muted"></span>
     </div>
     <pre id="events">[]</pre>
@@ -595,7 +597,7 @@ let currentInstallUrl = "";
 let currentSlackAppUrl = "";
 function refreshAddToSlackUrl(url) {{
   currentInstallUrl = url || "";
-  document.getElementById("addToSlackUrl").textContent = currentInstallUrl || "Create a Slack app to generate the install URL.";
+  document.getElementById("addToSlackUrl").textContent = currentInstallUrl || "Set up the Slack app to generate the install URL.";
   document.getElementById("addToSlackBtn").disabled = !currentInstallUrl;
   document.getElementById("copyAddToSlackBtn").disabled = !currentInstallUrl;
   return url;
@@ -636,12 +638,35 @@ document.getElementById("openSlackAppBtn").onclick = () => {{
 document.getElementById("createAppBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/create-app", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("saveBtn").onclick = () => post("/api/save", formValues());
 document.getElementById("sendBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/send", formValues()); }} finally {{ e.target.disabled = false; }} }};
+document.getElementById("simulateAppHomeBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/simulate/app-home-opened", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
+document.getElementById("simulateMemberJoinBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/simulate/member-joined-channel", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("refreshBtn").onclick = refresh;
 setInterval(refresh, 3000);
 refresh();
 </script>
 </body>
 </html>""".encode("utf-8")
+
+
+def simulate_slack_lifecycle(body: dict) -> dict:
+    path = "/v1/messaging/ingress/messaging-slack/default/default"
+    http_in = {
+        "method": "POST",
+        "path": path,
+        "headers": {"content-type": "application/json"},
+        "body": json.dumps(body),
+    }
+    http_path = WORK / f"slack-lifecycle-{int(time.time() * 1000)}.json"
+    http_path.write_text(json.dumps(http_in, indent=2) + "\n", encoding="utf-8")
+    result = run_tester([
+        "ingress",
+        "--provider", "slack",
+        "--values", str(VALUES),
+        "--http-in", str(http_path),
+        "--public-base-url", public_url(),
+    ])
+    append_event("simulate-lifecycle", {"http_in": str(http_path), "body": body, "result": result})
+    return result
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -753,7 +778,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": False,
                     "status": 2,
                     "stdout": "",
-                    "stderr": "Slack bot token is missing. Create the Slack app, then use Add to Slack to install it first.\n",
+                    "stderr": "Slack bot token is missing. Set up the Slack app first.\n",
                     "json": None,
                 }
                 append_event("send", {"target": target, "target_kind": target_kind, "result": result})
@@ -794,6 +819,31 @@ class Handler(BaseHTTPRequestHandler):
             ])
             append_event("send", {"target": target, "target_kind": target_kind, "result": result})
             self.send_json(result, 200 if result["ok"] else 500)
+            return
+        if path == "/api/simulate/app-home-opened":
+            result = simulate_slack_lifecycle({
+                "type": "event_callback",
+                "team_id": "TLOCAL",
+                "event": {
+                    "type": "app_home_opened",
+                    "user": "ULOCAL",
+                    "event_ts": str(time.time()),
+                },
+            })
+            self.send_json(result, 200 if result.get("ok") else 500)
+            return
+        if path == "/api/simulate/member-joined-channel":
+            result = simulate_slack_lifecycle({
+                "type": "event_callback",
+                "team_id": "TLOCAL",
+                "event": {
+                    "type": "member_joined_channel",
+                    "channel": "CLOCAL",
+                    "user": "ULOCAL",
+                    "event_ts": str(time.time()),
+                },
+            })
+            self.send_json(result, 200 if result.get("ok") else 500)
             return
         if path.startswith("/v1/messaging/ingress/"):
             length = int(self.headers.get("content-length") or "0")

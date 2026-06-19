@@ -13,6 +13,7 @@ use serde_json::{Map, Value, json};
 use sha2::Sha256;
 
 const SIGNING_SECRET_KEY: &str = "SLACK_SIGNING_SECRET";
+const USER_ENTERED_EVENT_TYPE: &str = "channel.user.entered";
 
 struct Component;
 
@@ -98,7 +99,9 @@ fn normalize_body(headers: &Map<String, Value>, body_json: &str) -> Result<Strin
     }
 
     let mut events = Vec::new();
-    if let Some(envelope) = envelope_from_payload(&payload) {
+    if let Some(envelope) = lifecycle_envelope_from_payload(&body_val, &payload) {
+        events.push(envelope);
+    } else if let Some(envelope) = envelope_from_payload(&payload) {
         events.push(envelope);
     }
 
@@ -108,6 +111,79 @@ fn normalize_body(headers: &Map<String, Value>, body_json: &str) -> Result<Strin
         "events": events,
     });
     serde_json::to_string(&normalized).map_err(|_| "other error: serialization failed".to_string())
+}
+
+fn lifecycle_envelope_from_payload(body: &Value, payload: &Value) -> Option<Value> {
+    let event_type = payload.get("type").and_then(Value::as_str)?;
+    let team_id = slack_team_id(body);
+    let (reason, session_id, channel_id, user_id) = match event_type {
+        "app_home_opened" => {
+            let user = payload.get("user").and_then(Value::as_str)?;
+            let channel = payload.get("channel").and_then(Value::as_str);
+            (
+                "app_home_opened",
+                channel.unwrap_or(user).to_string(),
+                channel,
+                Some(user),
+            )
+        }
+        "member_joined_channel" => {
+            let channel = payload.get("channel").and_then(Value::as_str)?;
+            let user = payload.get("user").and_then(Value::as_str)?;
+            (
+                "member_joined_channel",
+                channel.to_string(),
+                Some(channel),
+                Some(user),
+            )
+        }
+        _ => return None,
+    };
+    let mut envelope = envelope_from_parts(
+        "",
+        Some(session_id.as_str()),
+        user_id,
+        payload
+            .get("event_ts")
+            .or_else(|| payload.get("ts"))
+            .and_then(Value::as_str),
+    );
+    let metadata = envelope
+        .get_mut("metadata")
+        .and_then(Value::as_object_mut)
+        .expect("envelope metadata");
+    metadata.insert(
+        "event_type".to_string(),
+        Value::String(USER_ENTERED_EVENT_TYPE.to_string()),
+    );
+    metadata.insert("autoStart".to_string(), Value::String("true".to_string()));
+    metadata.insert("provider".to_string(), Value::String("slack".to_string()));
+    metadata.insert("reason".to_string(), Value::String(reason.to_string()));
+    metadata.insert(
+        "idempotency_key".to_string(),
+        Value::String(user_entered_idempotency_key(
+            "slack",
+            team_id.as_deref(),
+            channel_id.or(Some(session_id.as_str())),
+            user_id,
+            reason,
+        )),
+    );
+    if let Some(team_id) = team_id {
+        metadata.insert("team_id".to_string(), Value::String(team_id));
+    }
+    if let Some(channel_id) = channel_id {
+        metadata.insert(
+            "channel_id".to_string(),
+            Value::String(channel_id.to_string()),
+        );
+    } else {
+        metadata.remove("channel");
+    }
+    if let Some(user_id) = user_id {
+        metadata.insert("user_id".to_string(), Value::String(user_id.to_string()));
+    }
+    Some(envelope)
 }
 
 fn parse_slack_body(body_json: &str) -> Result<Value, String> {
@@ -146,11 +222,40 @@ fn envelope_from_payload(payload: &Value) -> Option<Value> {
         };
     let channel = slack_channel_id(payload);
     let sender = slack_user_id(payload);
+    let mut envelope = envelope_from_parts(
+        &text,
+        channel.as_deref(),
+        sender.as_deref(),
+        payload
+            .get("event_ts")
+            .or_else(|| payload.get("ts"))
+            .and_then(Value::as_str),
+    );
+    let metadata = envelope
+        .get_mut("metadata")
+        .and_then(Value::as_object_mut)
+        .expect("envelope metadata");
+    if let Some(ts) = payload.get("ts").and_then(Value::as_str) {
+        metadata.insert("ts".to_string(), Value::String(ts.to_string()));
+    }
+    if let Some(event_ts) = payload.get("event_ts").and_then(Value::as_str) {
+        metadata.insert("event_ts".to_string(), Value::String(event_ts.to_string()));
+    }
+    metadata.append(&mut action_metadata);
+
+    Some(envelope)
+}
+
+fn envelope_from_parts(
+    text: &str,
+    channel: Option<&str>,
+    sender: Option<&str>,
+    event_ts: Option<&str>,
+) -> Value {
+    let channel = channel.map(ToOwned::to_owned);
+    let sender = sender.map(ToOwned::to_owned);
     let channel_name = channel.clone().unwrap_or_else(|| "slack".to_string());
-    let envelope_id = payload
-        .get("event_ts")
-        .or_else(|| payload.get("ts"))
-        .and_then(Value::as_str)
+    let envelope_id = event_ts
         .filter(|value| !value.trim().is_empty())
         .map(|value| format!("slack:{value}"))
         .unwrap_or_else(|| format!("slack-{channel_name}"));
@@ -163,15 +268,8 @@ fn envelope_from_payload(payload: &Value) -> Option<Value> {
     if let Some(sender_id) = sender.as_ref() {
         metadata.insert("from".to_string(), Value::String(sender_id.clone()));
     }
-    if let Some(ts) = payload.get("ts").and_then(Value::as_str) {
-        metadata.insert("ts".to_string(), Value::String(ts.to_string()));
-    }
-    if let Some(event_ts) = payload.get("event_ts").and_then(Value::as_str) {
-        metadata.insert("event_ts".to_string(), Value::String(event_ts.to_string()));
-    }
-    metadata.append(&mut action_metadata);
 
-    Some(json!({
+    json!({
         "id": envelope_id,
         "tenant": {
             "env": "default",
@@ -186,7 +284,7 @@ fn envelope_from_payload(payload: &Value) -> Option<Value> {
         "text": text,
         "attachments": [],
         "metadata": metadata,
-    }))
+    })
 }
 
 fn block_action_text_and_metadata(payload: &Value) -> (String, Map<String, Value>) {
@@ -268,6 +366,49 @@ fn slack_user_id(payload: &Value) -> Option<String> {
         })
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
+}
+
+fn slack_team_id(body: &Value) -> Option<String> {
+    body.get("team_id")
+        .or_else(|| body.get("team"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            body.get("authorizations")
+                .and_then(Value::as_array)
+                .and_then(|items| items.first())
+                .and_then(|item| item.get("team_id"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn user_entered_idempotency_key(
+    provider: &str,
+    scope: Option<&str>,
+    conversation: Option<&str>,
+    user: Option<&str>,
+    reason: &str,
+) -> String {
+    format!(
+        "lifecycle.user_entered:{}:{}:{}:{}:{}",
+        key_part(provider),
+        key_part(scope.unwrap_or_default()),
+        key_part(conversation.unwrap_or_default()),
+        key_part(user.unwrap_or_default()),
+        key_part(reason)
+    )
+}
+
+fn key_part(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        "_".to_string()
+    } else {
+        trimmed.replace(':', "_")
+    }
 }
 
 fn is_slack_retry(headers: &Map<String, Value>) -> bool {
@@ -438,6 +579,62 @@ mod tests {
         assert_eq!(envelope.metadata["decision"], "approve");
         assert_eq!(envelope.metadata["count"], "2");
         assert_eq!(envelope.metadata["slack.action_id"], "approve");
+    }
+
+    #[test]
+    fn webhook_normalizes_app_home_opened_as_user_entered() {
+        let body = json!({
+            "type": "event_callback",
+            "team_id": "T1",
+            "event": {
+                "type": "app_home_opened",
+                "user": "U1",
+                "event_ts": "1780414157.651"
+            }
+        });
+
+        let out = normalize_body(&Map::new(), &body.to_string()).expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+        let envelope: greentic_types::ChannelMessageEnvelope =
+            serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
+
+        assert_eq!(envelope.session_id, "U1");
+        assert_eq!(envelope.metadata["event_type"], "channel.user.entered");
+        assert_eq!(envelope.metadata["autoStart"], "true");
+        assert_eq!(envelope.metadata["provider"], "slack");
+        assert_eq!(envelope.metadata["reason"], "app_home_opened");
+        assert_eq!(
+            envelope.metadata["idempotency_key"],
+            "lifecycle.user_entered:slack:T1:U1:U1:app_home_opened"
+        );
+    }
+
+    #[test]
+    fn webhook_normalizes_member_joined_channel_as_user_entered() {
+        let body = json!({
+            "type": "event_callback",
+            "team_id": "T1",
+            "event": {
+                "type": "member_joined_channel",
+                "channel": "C1",
+                "user": "U1",
+                "event_ts": "1780414157.652"
+            }
+        });
+
+        let out = normalize_body(&Map::new(), &body.to_string()).expect("normalized");
+        let parsed: Value = serde_json::from_str(&out).expect("json");
+        let envelope: greentic_types::ChannelMessageEnvelope =
+            serde_json::from_value(parsed["events"][0].clone()).expect("channel envelope");
+
+        assert_eq!(envelope.session_id, "C1");
+        assert_eq!(envelope.metadata["event_type"], "channel.user.entered");
+        assert_eq!(envelope.metadata["reason"], "member_joined_channel");
+        assert_eq!(envelope.metadata["channel_id"], "C1");
+        assert_eq!(
+            envelope.metadata["idempotency_key"],
+            "lifecycle.user_entered:slack:T1:C1:U1:member_joined_channel"
+        );
     }
 
     #[test]
