@@ -1,5 +1,7 @@
 use serde_json::{Map, Value, json};
 
+const USER_ENTERED_EVENT_TYPE: &str = "channel.user.entered";
+
 pub fn is_bot_framework_activity(body: &Value) -> bool {
     body.get("type").and_then(Value::as_str).is_some()
         && (body.get("serviceUrl").and_then(Value::as_str).is_some()
@@ -38,7 +40,10 @@ pub fn handle_bot_framework_activity(
     }
 
     let submit = extract_submit(activity);
-    let envelope = normalize_activity(activity, submit.as_ref());
+    let mut events = lifecycle_events(activity);
+    if events.is_empty() {
+        events.push(normalize_activity(activity, submit.as_ref()));
+    }
     let follow_up = follow_up_activity(activity, submit.as_ref());
     let invoke_response = if activity_type.eq_ignore_ascii_case("invoke") {
         Some(invoke_response_card(submit.as_ref()))
@@ -54,7 +59,7 @@ pub fn handle_bot_framework_activity(
         "service_url": service_url,
         "conversation_id": conversation_id,
         "event": activity,
-        "events": [envelope],
+        "events": events,
         "conversation": {
             "serviceUrl": service_url,
             "id": conversation_id
@@ -62,6 +67,148 @@ pub fn handle_bot_framework_activity(
         "reply_activity": follow_up,
         "invoke_response": invoke_response
     }))
+}
+
+fn lifecycle_events(activity: &Value) -> Vec<Value> {
+    let activity_type = activity_type(activity);
+    if activity_type.eq_ignore_ascii_case("conversationUpdate") {
+        return members_added_lifecycle_events(activity);
+    }
+    if activity_type.eq_ignore_ascii_case("installationUpdate") && installation_is_add(activity) {
+        return vec![build_user_entered_event(
+            activity,
+            activity
+                .get("from")
+                .and_then(|value| value.get("id"))
+                .and_then(Value::as_str),
+            "app_installed",
+        )];
+    }
+    Vec::new()
+}
+
+fn members_added_lifecycle_events(activity: &Value) -> Vec<Value> {
+    let bot_id = activity
+        .get("recipient")
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_str);
+    activity
+        .get("membersAdded")
+        .and_then(Value::as_array)
+        .map(|members| {
+            members
+                .iter()
+                .filter_map(|member| {
+                    let member_id = member.get("id").and_then(Value::as_str);
+                    if member_id.is_some() && member_id == bot_id {
+                        return None;
+                    }
+                    Some(build_user_entered_event(
+                        activity,
+                        member_id,
+                        "members_added",
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn installation_is_add(activity: &Value) -> bool {
+    activity
+        .get("action")
+        .or_else(|| activity.get("value").and_then(|value| value.get("action")))
+        .and_then(Value::as_str)
+        .is_none_or(|action| action.eq_ignore_ascii_case("add"))
+}
+
+fn build_user_entered_event(activity: &Value, user_id: Option<&str>, reason: &str) -> Value {
+    let activity_id = activity
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("activity");
+    let conversation_id = activity
+        .get("conversation")
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let tenant_id = activity
+        .get("channelData")
+        .and_then(|value| value.get("tenant"))
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let service_url = activity
+        .get("serviceUrl")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let user_id = user_id
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            activity
+                .get("from")
+                .and_then(|value| value.get("id"))
+                .and_then(Value::as_str)
+        })
+        .unwrap_or_default();
+
+    let mut metadata = Map::new();
+    insert_string(&mut metadata, "provider", "teams");
+    insert_string(&mut metadata, "source", "teams");
+    insert_string(&mut metadata, "activity_type", activity_type(activity));
+    insert_string(&mut metadata, "event_type", USER_ENTERED_EVENT_TYPE);
+    insert_string(&mut metadata, "autoStart", "true");
+    insert_string(&mut metadata, "reason", reason);
+    insert_string(&mut metadata, "service_url", service_url);
+    insert_string(&mut metadata, "conversation_id", conversation_id);
+    insert_string(&mut metadata, "tenant_id", tenant_id);
+    insert_string(&mut metadata, "user_id", user_id);
+    insert_string(
+        &mut metadata,
+        "idempotency_key",
+        &user_entered_idempotency_key(
+            "teams",
+            Some(tenant_id),
+            Some(conversation_id),
+            Some(user_id),
+            reason,
+        ),
+    );
+
+    let mut event = Map::new();
+    event.insert(
+        "id".to_string(),
+        Value::String(format!("teams-bot:{activity_id}:{reason}:{user_id}")),
+    );
+    event.insert(
+        "tenant".to_string(),
+        json!({
+            "env": "default",
+            "tenant": "default",
+            "tenant_id": if tenant_id.is_empty() { "default" } else { tenant_id },
+            "attempt": 0
+        }),
+    );
+    event.insert("channel".to_string(), Value::String("teams".to_string()));
+    event.insert(
+        "session_id".to_string(),
+        Value::String(if conversation_id.is_empty() {
+            "teams".to_string()
+        } else {
+            conversation_id.to_string()
+        }),
+    );
+    event.insert("text".to_string(), Value::String(String::new()));
+    event.insert("metadata".to_string(), Value::Object(metadata));
+    if !user_id.is_empty() {
+        event.insert("from".to_string(), json!({"id": user_id, "kind": "user"}));
+    } else if let Some(actor) = activity_actor(activity, "from") {
+        event.insert("from".to_string(), actor);
+    }
+    if let Some(actor) = activity_actor(activity, "recipient") {
+        event.insert("to".to_string(), Value::Array(vec![actor]));
+    }
+    Value::Object(event)
 }
 
 fn validate_bot_framework_auth(headers_json: &str) -> Result<(), String> {
@@ -358,6 +505,32 @@ fn insert_string(map: &mut Map<String, Value>, key: &str, value: &str) {
     }
 }
 
+fn user_entered_idempotency_key(
+    provider: &str,
+    scope: Option<&str>,
+    conversation: Option<&str>,
+    user: Option<&str>,
+    reason: &str,
+) -> String {
+    format!(
+        "lifecycle.user_entered:{}:{}:{}:{}:{}",
+        key_part(provider),
+        key_part(scope.unwrap_or_default()),
+        key_part(conversation.unwrap_or_default()),
+        key_part(user.unwrap_or_default()),
+        key_part(reason)
+    )
+}
+
+fn key_part(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        "_".to_string()
+    } else {
+        trimmed.replace(':', "_")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,6 +595,71 @@ mod tests {
             "approve"
         );
         assert_eq!(result["invoke_response"]["status"], 200);
+    }
+
+    #[test]
+    fn conversation_update_members_added_returns_user_entered_event() {
+        let result = handle_bot_framework_activity(
+            &headers(),
+            &json!({
+                "type": "conversationUpdate",
+                "id": "activity-2",
+                "serviceUrl": "https://smba.trafficmanager.net/emea/",
+                "channelId": "msteams",
+                "conversation": {"id": "conv-1", "conversationType": "personal"},
+                "from": {"id": "user-1", "name": "Ada"},
+                "recipient": {"id": "28:bot-id", "name": "Greentic"},
+                "membersAdded": [
+                    {"id": "28:bot-id", "name": "Greentic"},
+                    {"id": "user-1", "name": "Ada"}
+                ],
+                "channelData": {"tenant": {"id": "tenant-1"}}
+            }),
+        )
+        .expect("activity");
+
+        assert_eq!(result["ok"], true);
+        assert_eq!(result["events"].as_array().expect("events").len(), 1);
+        assert_eq!(result["events"][0]["session_id"], "conv-1");
+        assert_eq!(
+            result["events"][0]["metadata"]["event_type"],
+            "channel.user.entered"
+        );
+        assert_eq!(result["events"][0]["metadata"]["autoStart"], "true");
+        assert_eq!(result["events"][0]["metadata"]["reason"], "members_added");
+        assert_eq!(
+            result["events"][0]["metadata"]["idempotency_key"],
+            "lifecycle.user_entered:teams:tenant-1:conv-1:user-1:members_added"
+        );
+    }
+
+    #[test]
+    fn installation_update_add_returns_user_entered_event() {
+        let result = handle_bot_framework_activity(
+            &headers(),
+            &json!({
+                "type": "installationUpdate",
+                "id": "activity-3",
+                "action": "add",
+                "serviceUrl": "https://smba.trafficmanager.net/emea/",
+                "channelId": "msteams",
+                "conversation": {"id": "conv-1", "conversationType": "personal"},
+                "from": {"id": "user-1", "name": "Ada"},
+                "recipient": {"id": "28:bot-id", "name": "Greentic"},
+                "channelData": {"tenant": {"id": "tenant-1"}}
+            }),
+        )
+        .expect("activity");
+
+        assert_eq!(
+            result["events"][0]["metadata"]["event_type"],
+            "channel.user.entered"
+        );
+        assert_eq!(result["events"][0]["metadata"]["reason"], "app_installed");
+        assert_eq!(
+            result["events"][0]["metadata"]["idempotency_key"],
+            "lifecycle.user_entered:teams:tenant-1:conv-1:user-1:app_installed"
+        );
     }
 
     #[test]

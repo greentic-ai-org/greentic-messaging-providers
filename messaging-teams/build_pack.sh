@@ -134,6 +134,24 @@ web_component = setup_api.get("web_component") or {}
 web_component_inline = json.dumps(web_component, indent=6).replace("\n", "\n      ")
 backend_contract = setup_api.get("backend_contract") or {}
 backend_contract_inline = json.dumps(backend_contract, indent=6).replace("\n", "\n      ")
+setup_actions = setup_api.get("actions") or {
+    "schema_id": "greentic.setup.actions.v1",
+    "provider_id": "messaging-teams",
+    "actions": [
+        {
+            "id": "add-to-teams",
+            "label": "Add to Teams",
+            "kind": "deep_link",
+            "url_template": "{add_to_teams_url}",
+            "style": "primary",
+            "opens_new_window": True,
+            "copyable": True,
+            "requires": ["add_to_teams_url"],
+            "visible_when": {"setup_status.ok": True},
+        }
+    ],
+}
+setup_actions_inline = json.dumps(setup_actions, indent=6).replace("\n", "\n      ")
 asset_base_path = web_component.get("asset_base_path", "/v1/web/messaging-teams/setup/{tenant}")
 pack_version = answer.get("pack_version", "0.1.0")
 capabilities = {
@@ -184,6 +202,10 @@ extensions:
     kind: greentic.setup.backend-contract.v1
     version: "1"
     inline: {backend_contract_inline}
+  greentic.setup.actions.v1:
+    kind: greentic.setup.actions.v1
+    version: "1"
+    inline: {setup_actions_inline}
   messaging.provider_ingress.v1:
     kind: messaging.provider_ingress.v1
     version: "1"

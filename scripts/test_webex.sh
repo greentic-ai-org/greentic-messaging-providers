@@ -875,6 +875,7 @@ def page_html() -> bytes:
     <h2>Incoming Webhooks</h2>
     <div class="row">
       <button id="refreshBtn" type="button">Refresh</button>
+      <button id="simulateMembershipBtn" type="button">Simulate Membership Created</button>
       <span id="status" class="muted"></span>
     </div>
     <pre id="events">[]</pre>
@@ -916,6 +917,7 @@ document.getElementById("saveBtn").onclick = () => post("/api/save", formValues(
 document.getElementById("registerBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/register", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("sendBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/send", formValues()); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("cardTestsBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/card-tests", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
+document.getElementById("simulateMembershipBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/simulate/membership-created", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("useLastRoomBtn").onclick = () => {{
   const conv = window.lastWebexConversation || {{}};
   if (conv.room_id) {{
@@ -939,6 +941,39 @@ refresh();
 </script>
 </body>
 </html>""".encode("utf-8")
+
+
+def simulate_webex_membership(data: dict) -> dict:
+    tenant = data.get("tenant") or "default"
+    channel = data.get("channel") or "default"
+    path = webhook_path(tenant, channel)
+    body = {
+        "resource": "memberships",
+        "event": "created",
+        "data": {
+            "id": f"membership-{int(time.time() * 1000)}",
+            "roomId": data.get("send_to") or "room-local",
+            "personId": "person-local",
+            "personEmail": "ada@example.com",
+        },
+    }
+    http_in = {
+        "method": "POST",
+        "path": path,
+        "headers": {"content-type": "application/json"},
+        "body": json.dumps(body),
+    }
+    http_path = WORK / f"webex-lifecycle-{int(time.time() * 1000)}.json"
+    http_path.write_text(json.dumps(http_in, indent=2) + "\n", encoding="utf-8")
+    result = run_tester([
+        "ingress",
+        "--provider", "webex",
+        "--values", str(VALUES),
+        "--http-in", str(http_path),
+        "--public-base-url", public_url(),
+    ])
+    append_event("simulate-lifecycle", {"http_in": str(http_path), "body": body, "result": result})
+    return result
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1052,6 +1087,11 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"ok": False, "error": str(exc)}
                 append_event("adaptive-card-tests-error", result)
                 self.send_json(result, 500)
+            return
+        if path == "/api/simulate/membership-created":
+            data = self.read_json()
+            result = simulate_webex_membership(data)
+            self.send_json(result, 200 if result.get("ok") else 500)
             return
         if path.startswith("/v1/messaging/ingress/messaging-webex/"):
             length = int(self.headers.get("content-length") or "0")

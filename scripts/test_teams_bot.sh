@@ -1981,6 +1981,14 @@ def activity_text(activity):
     return strip_html(((activity.get("body") or {}).get("content") or ""))
 
 
+def lifecycle_key(provider, scope, conversation, user, reason):
+    def part(value):
+        value = str(value or "").strip()
+        return value.replace(":", "_") if value else "_"
+
+    return f"lifecycle.user_entered:{part(provider)}:{part(scope)}:{part(conversation)}:{part(user)}:{part(reason)}"
+
+
 def normalize_activity(activity, tenant, team):
     activity_id = activity.get("id") or f"activity-{int(time.time() * 1000)}"
     conversation = activity.get("conversation") or {}
@@ -2001,6 +2009,27 @@ def normalize_activity(activity, tenant, team):
         "raw_value": value or None,
         "action_id": action_id,
     }
+    if activity.get("type") == "conversationUpdate" and activity.get("membersAdded"):
+        human_members = [
+            member for member in activity.get("membersAdded") or []
+            if (member.get("id") or "") != (recipient.get("id") or "")
+        ]
+        user_id = (human_members[0].get("id") if human_members else sender.get("id")) or ""
+        metadata.update({
+            "event_type": "channel.user.entered",
+            "autoStart": "true",
+            "provider": "teams",
+            "reason": "members_added",
+            "user_id": user_id,
+            "idempotency_key": lifecycle_key(
+                "teams",
+                ((activity.get("channelData") or {}).get("tenant") or {}).get("id"),
+                conversation.get("id"),
+                user_id,
+                "members_added",
+            ),
+        })
+        text = ""
     metadata = {k: v for k, v in metadata.items() if v not in (None, "", {})}
     envelope = {
         "id": f"teams-bot:{activity_id}",
@@ -2951,6 +2980,7 @@ def page():
   </section>
   <section>
     <h2>Last Inbound</h2>
+    <button onclick="simulateConversationUpdate()">Simulate conversationUpdate</button>
     <pre id="lastInbound"></pre>
   </section>
   <section>
@@ -3041,6 +3071,7 @@ async function installTeamsApp(){{maybeOpenDeviceLogin(await api("/api/teams-app
 async function reconcile(){{await api("/api/azure/reconcile",collect(),"reconcileOut")}}
 async function verifyAzureBot(){{await api("/api/azure/verify",collect(),"reconcileOut")}}
 async function sendCard(){{await api("/api/send/card",{{...collect(), text:val("card_text")}},"sendOut")}}
+async function simulateConversationUpdate(){{await api("/api/simulate/conversation-update",collect(),"lastInbound")}}
 load(); setInterval(refresh,3000);
 </script>
 </body>
@@ -3236,6 +3267,34 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/send/card":
                 save_client_state(body)
                 self.send_json(send_card(state()["config"], body.get("text")))
+                return
+            if parsed.path == "/api/simulate/conversation-update":
+                save_client_state(body)
+                values = state()
+                cfg = values["config"]
+                tenant = cfg.get("tenant") or "default"
+                team = cfg.get("team") or "default"
+                activity = {
+                    "type": "conversationUpdate",
+                    "id": f"activity-{int(time.time() * 1000)}",
+                    "serviceUrl": "https://smba.trafficmanager.net/emea/",
+                    "channelId": "msteams",
+                    "conversation": {"id": "conv-local", "conversationType": "personal"},
+                    "from": {"id": "user-local", "name": "Local User"},
+                    "recipient": {"id": cfg.get("bot_app_id") or "28:bot-local", "name": cfg.get("bot_display_name") or "Greentic"},
+                    "membersAdded": [
+                        {"id": cfg.get("bot_app_id") or "28:bot-local", "name": cfg.get("bot_display_name") or "Greentic"},
+                        {"id": "user-local", "name": "Local User"},
+                    ],
+                    "channelData": {"tenant": {"id": tenant}, "team": {"id": team}},
+                }
+                envelope = normalize_activity(activity, tenant, team)
+                values["last_activity"] = activity
+                values["last_activity_received_at"] = now_iso()
+                values["last_envelope"] = envelope
+                save_state(values)
+                append_event("simulate-lifecycle", {"activity": activity, "envelope": envelope})
+                self.send_json({"ok": True, "activity": activity, "envelope": envelope})
                 return
             match = re.fullmatch(r"/v1/messaging/webchat/([^/]+)/v3/directline/tokens/generate", parsed.path)
             if match:

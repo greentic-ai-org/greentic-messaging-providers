@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const port = Number(process.env.WEBCHAT_GUI_TEST_PORT || 8799);
 const baseURL = `http://127.0.0.1:${port}`;
+const reuseExistingServer = process.env.WEBCHAT_GUI_REUSE_SERVER === '1' && !process.env.CI;
 
 export default defineConfig({
   testDir: './specs',
@@ -29,7 +30,7 @@ export default defineConfig({
   webServer: {
     command: `node fixtures/server.mjs --port ${port}`,
     url: `${baseURL}/healthz`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer,
     timeout: 30_000,
   },
   projects: [

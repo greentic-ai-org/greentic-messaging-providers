@@ -1023,10 +1023,53 @@ console.log('[runtime-bootstrap] loaded');
   // an expired token. The 60s buffer matches the rate-limit window — if the
   // server ever reduces TTL below the buffer, we just always refetch (which
   // is the same behaviour as having no cache).
-  // Local storage cache key, not credential material.
+  // Local storage cache key, not credential material. Include origin, tenant,
+  // env, token URL, and Direct Line domain so bundles sharing 127.0.0.1:8080
+  // cannot reuse credentials signed by another bundle's jwt_signing_key.
   // foxguard: ignore[js/no-hardcoded-secret]
-  var TOKEN_CACHE_KEY = 'greentic_dl_token';
+  var DIRECT_LINE_CACHE_VERSION = 'v2';
+  // foxguard: ignore[js/no-hardcoded-secret]
+  var LEGACY_TOKEN_CACHE_KEY = 'greentic_dl_token';
+  var LEGACY_CONVERSATION_CACHE_KEY = 'greentic_dl_conversation';
   var TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
+  var DIRECT_LINE_CONVERSATION_TTL_MS = 30 * 60 * 1000;
+
+  function stableCachePart(value) {
+    return encodeURIComponent(String(value || '').trim().toLowerCase());
+  }
+
+  function directLineTokenUrl() {
+    return backendBase(tenant) + '/token?env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
+  }
+
+  function directLineDomain() {
+    return backendBase(tenant) + '/v3/directline';
+  }
+
+  function directLineCacheKey(kind) {
+    return [
+      'greentic',
+      DIRECT_LINE_CACHE_VERSION,
+      'dl',
+      kind,
+      stableCachePart(window.location.origin),
+      stableCachePart(tenant),
+      stableCachePart(env),
+      stableCachePart(directLineTokenUrl()),
+      stableCachePart(directLineDomain())
+    ].join(':');
+  }
+
+  var TOKEN_CACHE_KEY = directLineCacheKey('token');
+  var CONVERSATION_CACHE_KEY = directLineCacheKey('conversation');
+  var DIRECT_LINE_AUTH_RETRY_KEY = directLineCacheKey('auth-retry');
+
+  function clearLegacyDirectLineCache() {
+    try { localStorage.removeItem(LEGACY_TOKEN_CACHE_KEY); } catch (_) {}
+    try { localStorage.removeItem(LEGACY_CONVERSATION_CACHE_KEY); } catch (_) {}
+  }
+
+  clearLegacyDirectLineCache();
 
   function readCachedToken() {
     try {
@@ -1052,6 +1095,51 @@ console.log('[runtime-bootstrap] loaded');
       };
       localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(record));
     } catch (_) {}
+  }
+
+  function readCachedConversation() {
+    try {
+      var raw = localStorage.getItem(CONVERSATION_CACHE_KEY);
+      if (!raw) return null;
+      var conv = JSON.parse(raw);
+      if (!conv || !conv.conversationId || !conv.streamUrl || !conv.timestamp) return null;
+      if ((Date.now() - conv.timestamp) >= DIRECT_LINE_CONVERSATION_TTL_MS) return null;
+      return conv;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeCachedConversation(payload) {
+    try {
+      if (!payload || !payload.conversationId) return;
+      payload.timestamp = Date.now();
+      localStorage.setItem(CONVERSATION_CACHE_KEY, JSON.stringify(payload));
+    } catch (_) {}
+  }
+
+  function clearDirectLineCache() {
+    try { localStorage.removeItem(TOKEN_CACHE_KEY); } catch (_) {}
+    try { localStorage.removeItem(CONVERSATION_CACHE_KEY); } catch (_) {}
+    clearLegacyDirectLineCache();
+  }
+
+  function resetDirectLineAuthRetry() {
+    try { sessionStorage.removeItem(DIRECT_LINE_AUTH_RETRY_KEY); } catch (_) {}
+  }
+
+  function reloadOnceAfterDirectLineAuthFailure() {
+    clearDirectLineCache();
+    try {
+      if (sessionStorage.getItem(DIRECT_LINE_AUTH_RETRY_KEY) === '1') return false;
+      sessionStorage.setItem(DIRECT_LINE_AUTH_RETRY_KEY, '1');
+    } catch (_) {
+      if (window.__GREENTIC_DIRECT_LINE_AUTH_RETRY__) return false;
+      window.__GREENTIC_DIRECT_LINE_AUTH_RETRY__ = true;
+    }
+    console.warn('[bootstrap] Direct Line returned 401; cleared cached token/conversation and reloading once');
+    window.location.reload();
+    return true;
   }
 
   function injectGuestIdIntoBody(init) {
@@ -1094,12 +1182,21 @@ console.log('[runtime-bootstrap] loaded');
     };
     XHRProto.send = function (body) {
       try {
+        this.__gtcBody = body;
         if (selectedLocale && this.__gtcMethod === 'POST') {
           var path = '';
           try { path = new URL(this.__gtcUrl, window.location.href).pathname; } catch (_) {}
           if (/\/v3\/directline\/conversations\/?$/i.test(path)) {
             this.setRequestHeader('X-Greentic-Locale', selectedLocale);
           }
+        }
+        var xhr = this;
+        var requestPath = '';
+        try { requestPath = new URL(xhr.__gtcUrl, window.location.href).pathname; } catch (_) {}
+        if (/\/v3\/directline\//i.test(requestPath)) {
+          xhr.addEventListener('loadend', function () {
+            if (xhr.status === 401) reloadOnceAfterDirectLineAuthFailure();
+          });
         }
       } catch (_) {
         // Header injection is best-effort; failure must not break the request.
@@ -1143,6 +1240,7 @@ console.log('[runtime-bootstrap] loaded');
         cloned.json().then(function (data) {
           if (data && data.token && data.expires_in) {
             writeCachedToken(data);
+            resetDirectLineAuthRetry();
             console.log('[bootstrap] cached new token, ttl=', data.expires_in, 's');
           }
         }).catch(function () {});
@@ -1166,29 +1264,20 @@ console.log('[runtime-bootstrap] loaded');
           init.headers['X-Greentic-Locale'] = selectedLocale;
         }
       }
-      var savedConv = null;
-      try { savedConv = localStorage.getItem('greentic_dl_conversation'); } catch (_) {}
+      var savedConv = readCachedConversation();
       if (savedConv) {
-        try {
-          var conv = JSON.parse(savedConv);
-          if (conv.conversationId && conv.streamUrl && conv.timestamp && (Date.now() - conv.timestamp) < 1800000) {
-            console.log('[bootstrap] reusing saved conversation:', conv.conversationId);
-            return Promise.resolve(new Response(JSON.stringify(conv), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' }
-            }));
-          } else if (conv.conversationId && !conv.streamUrl) {
-            try { localStorage.removeItem('greentic_dl_conversation'); } catch (_) {}
-            console.log('[bootstrap] ignoring saved conversation without streamUrl:', conv.conversationId);
-          }
-        } catch (_) {}
+        console.log('[bootstrap] reusing saved conversation:', savedConv.conversationId);
+        return Promise.resolve(new Response(JSON.stringify(savedConv), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }));
       }
       return originalFetch(input, init).then(function (response) {
+        if (response.status === 401 && reloadOnceAfterDirectLineAuthFailure()) return response;
         var cloned = response.clone();
         cloned.json().then(function (data) {
           if (data.conversationId) {
-            data.timestamp = Date.now();
-            try { localStorage.setItem('greentic_dl_conversation', JSON.stringify(data)); } catch (_) {}
+            writeCachedConversation(data);
             console.log('[bootstrap] saved conversation:', data.conversationId);
           }
         }).catch(function () {});

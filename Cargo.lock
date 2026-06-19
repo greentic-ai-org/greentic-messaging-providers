@@ -2114,7 +2114,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-slack"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "greentic-telemetry",
  "greentic-types",
@@ -2127,7 +2127,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-teams"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "base64",
  "greentic-telemetry",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-slack"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -2218,7 +2218,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-telegram"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "base64",
  "chrono",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat-gui"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "base64",
  "chrono",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webex"
-version = "0.5.11"
+version = "0.5.12"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",

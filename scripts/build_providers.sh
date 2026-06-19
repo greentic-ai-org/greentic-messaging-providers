@@ -32,18 +32,18 @@ if [ $# -gt 1 ]; then
 fi
 
 if [ -n "${PROVIDER_FILTER}" ]; then
-  PROVIDERS=("$(python3 ci/provider_matrix.py resolve-provider "${PROVIDER_FILTER}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])')")
+  PROVIDERS=("${PROVIDER_FILTER}")
 else
   PROVIDERS=()
-  while IFS= read -r provider; do
-    PROVIDERS+=("${provider}")
+  while IFS= read -r provider_ref; do
+    PROVIDERS+=("${provider_ref}")
   done < <(python3 - <<'PY'
 import json
 from pathlib import Path
 
 matrix = json.loads(Path("ci/provider-matrix.json").read_text())
-for provider in sorted(matrix["providers"]):
-    print(provider)
+for provider, spec in sorted(matrix["providers"].items()):
+    print(spec.get("pack") or provider)
 PY
 )
 fi
@@ -70,6 +70,9 @@ for provider in "${PROVIDERS[@]}"; do
   version="$(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
   components=()
   while IFS= read -r component; do
+    if [ -z "${component}" ]; then
+      continue
+    fi
     components+=("${component}")
   done < <(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["components"]))')
   test_targets=()
@@ -97,7 +100,18 @@ print("\n".join(dict.fromkeys(targets)))
   echo "== provider: ${provider} =="
   echo "  pack      : ${pack}"
   echo "  version   : ${version}"
-  echo "  components: ${components[*]}"
+  if [ "${#components[@]}" -gt 0 ]; then
+    echo "  components: ${components[*]}"
+  else
+    echo "  components: (none)"
+  fi
+
+  if [ -f "generated-providers/${pack}/build-answer.json" ]; then
+    echo "-- answer-owned provider check: ${pack}"
+    scripts/check_answer_provider.sh "${pack}"
+    echo
+    continue
+  fi
 
   if [ "${pack}" = "messaging-teams" ]; then
     echo "-- answer-owned provider build: ${pack}"
@@ -115,8 +129,7 @@ print("\n".join(dict.fromkeys(targets)))
     bash tools/build_components/messaging-ingress-teams.sh
     cargo test -p provider-tests handles_bot_framework_adaptive_card_submit
     messaging-teams/build_pack.sh
-    mkdir -p dist/packs
-    cp target/generated/messaging-teams.pack/dist/messaging-teams.pack.gtpack "dist/packs/${pack}.gtpack"
+    PACK_FILTER="${pack}" PACK_VERSION="${version}" ./ci/steps/11_build_packs.sh
     echo
     continue
   fi

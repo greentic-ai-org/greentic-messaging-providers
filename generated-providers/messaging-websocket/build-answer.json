@@ -1,0 +1,65 @@
+{
+  "schema_id": "greentic-messaging-provider.build-answer",
+  "schema_version": "1.0.0",
+  "provider_id": "messaging-websocket",
+  "pack_id": "messaging-websocket",
+  "component_id": "messaging-provider-websocket",
+  "pack_version": "0.1.0",
+  "source_layout": {
+    "src": "src",
+    "assets": "assets",
+    "tests": "tests",
+    "generated_pack_dir": "target/generated/messaging-websocket.pack"
+  },
+  "capabilities": [
+    "greentic.messaging.websocket.server.v1"
+  ],
+  "pack_create": {
+    "wizard_id": "greentic-pack.wizard.run",
+    "schema_id": "greentic-pack.wizard.answers",
+    "schema_version": "1.0.0",
+    "locale": "en-GB",
+    "answers": {
+      "create_pack_id": "messaging-websocket",
+      "create_pack_scaffold": true,
+      "dry_run": false,
+      "mode": "interactive",
+      "pack_dir": "target/generated/messaging-websocket.pack",
+      "run_build": false,
+      "run_delegate_component": false,
+      "run_delegate_flow": false,
+      "run_doctor": false,
+      "selected_actions": [
+        "main.create_application_pack",
+        "create_application_pack.start",
+        "main.exit"
+      ],
+      "sign": false
+    },
+    "locks": {}
+  },
+  "pack": {
+    "wizard_id": "greentic-pack.wizard.run",
+    "schema_id": "greentic-pack.wizard.answers",
+    "schema_version": "1.0.0",
+    "locale": "en-GB",
+    "answers": {
+      "dry_run": false,
+      "mode": "interactive",
+      "pack_dir": ".",
+      "run_build": false,
+      "run_delegate_component": false,
+      "run_delegate_flow": false,
+      "run_doctor": false,
+      "selected_actions": [
+        "main.update_application_pack",
+        "update_application_pack.run_update_validate",
+        "pipeline.update_validate",
+        "pipeline.sign_prompt.skip",
+        "main.exit"
+      ],
+      "sign": false
+    },
+    "locks": {}
+  }
+}
