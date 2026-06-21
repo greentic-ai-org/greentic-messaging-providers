@@ -255,7 +255,7 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
 }
 
 /// Handle `setup_app_registration` op — creates a Slack app and returns
-/// Slack-generated OAuth credentials for the subsequent Add to Slack step.
+/// Slack-generated OAuth credentials for the subsequent setup authorization step.
 pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
     let parsed: Value = match serde_json::from_slice(input_json) {
         Ok(val) => val,
@@ -384,10 +384,12 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
     if let Some(signing_secret) = signing_secret.as_deref() {
         put_secret_string(DEFAULT_SIGNING_SECRET_KEY, signing_secret);
     }
+    let slack_app_url = app_id.as_deref().map(slack_app_redirect_url);
     json_bytes(&json!({
         "ok": true,
         "app_id": app_id,
         "slack_app_id": app_id,
+        "slack_app_url": slack_app_url,
         "client_id": client_id,
         "slack_client_id": client_id,
         "client_secret": client_secret,
@@ -398,6 +400,10 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         "reused_existing_app": registration.reused,
         "slack_response": body,
     }))
+}
+
+fn slack_app_redirect_url(app_id: &str) -> String {
+    format!("https://slack.com/app_redirect?app={}", app_id.trim())
 }
 
 struct RegistrationResult {
@@ -1162,6 +1168,14 @@ mod tests {
         assert_eq!(
             config_access_token_from_input(&parsed).as_deref(),
             Some("xoxe-legacy")
+        );
+    }
+
+    #[test]
+    fn slack_app_redirect_url_targets_existing_app() {
+        assert_eq!(
+            slack_app_redirect_url("A123"),
+            "https://slack.com/app_redirect?app=A123"
         );
     }
 }

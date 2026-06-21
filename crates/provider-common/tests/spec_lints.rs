@@ -143,7 +143,7 @@ fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()>
             "messaging-slack",
             "add-to-slack",
             "Add to Slack",
-            "slack_add_url",
+            "slack_app_url",
         ),
         (
             "messaging-webex",

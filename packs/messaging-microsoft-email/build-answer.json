@@ -4,7 +4,7 @@
   "provider": {
     "id": "messaging-microsoft-email",
     "display_name": "Microsoft Email",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "kind": "application",
     "publisher": "Greentic",
     "description": "Microsoft Graph email messaging provider"
@@ -13,12 +13,16 @@
     {
       "id": "messaging-provider-email",
       "source": "components/messaging-provider-email",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": ["messaging"],
+      "supports": [
+        "messaging"
+      ],
       "profiles": {
         "default": "default",
-        "supported": ["default"]
+        "supported": [
+          "default"
+        ]
       },
       "capabilities": {
         "wasi": {
@@ -101,7 +105,9 @@
     ],
     "provider": {
       "provider_type": "messaging.email.microsoft_graph",
-      "capabilities": ["messaging"],
+      "capabilities": [
+        "messaging"
+      ],
       "ops": [
         "send",
         "reply",

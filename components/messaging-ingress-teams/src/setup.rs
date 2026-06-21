@@ -205,18 +205,8 @@ fn public_state(state: &Value, tenant: &str, next_override: Option<&str>) -> Val
         .unwrap_or_else(|| "Click Continue setup to start.".to_string());
 
     let publish_done = is_done(state, "teams_app_publish");
-    let values = state.get("values");
-    // Surface the real Teams deep links produced by the publish/install steps.
-    let add_to_teams_url = values
-        .and_then(|v| v.get("last_teams_app_publish"))
-        .and_then(|p| p.get("add_to_teams_url"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let open_bot_chat_url = values
-        .and_then(|v| v.get("last_teams_app_install"))
-        .and_then(|i| i.get("open_bot_chat_url"))
-        .cloned()
-        .unwrap_or(Value::Null);
+    let add_to_teams_url = setup_link_value(state, "add_to_teams_url");
+    let open_bot_chat_url = setup_link_value(state, "open_bot_chat_url");
 
     json!({
         "ok": true,
@@ -230,11 +220,38 @@ fn public_state(state: &Value, tenant: &str, next_override: Option<&str>) -> Val
         },
         "teams_app": {
             "ok": publish_done,
-            "add_to_teams_url": add_to_teams_url,
-            "open_bot_chat_url": open_bot_chat_url,
+            "add_to_teams_url": add_to_teams_url.clone(),
+            "open_bot_chat_url": open_bot_chat_url.clone(),
         },
+        "add_to_teams_url": add_to_teams_url,
+        "open_bot_chat_url": open_bot_chat_url,
         "values": state.get("values").cloned().unwrap_or_else(|| json!({})),
     })
+}
+
+fn setup_link_value(state: &Value, key: &str) -> Value {
+    let values = state.get("values");
+    for path in [
+        &["config", key][..],
+        &["last_teams_app_publish", key][..],
+        &["last_teams_app_install", key][..],
+        &["last_setup_result", "result", key][..],
+    ] {
+        if let Some(value) = value_at_path(values, path)
+            && value.as_str().is_some_and(|s| !s.trim().is_empty())
+        {
+            return value.clone();
+        }
+    }
+    Value::Null
+}
+
+fn value_at_path<'a>(root: Option<&'a Value>, path: &[&str]) -> Option<&'a Value> {
+    let mut current = root?;
+    for segment in path {
+        current = current.get(*segment)?;
+    }
+    Some(current)
 }
 
 // ── graph_admin_consent: Microsoft device-code OAuth ────────────────────────
@@ -947,7 +964,11 @@ fn teams_publish_step(state: &mut Value) -> &'static str {
 fn finalize_publish(state: &mut Value, catalog_id: &str, action: &str) -> &'static str {
     let add_url =
         format!("https://teams.microsoft.com/l/app/{catalog_id}?source=app-details-dialog");
-    config_mut(state).insert("teams_app_id".into(), json!(catalog_id));
+    {
+        let config = config_mut(state);
+        config.insert("teams_app_id".into(), json!(catalog_id));
+        config.insert("add_to_teams_url".into(), json!(add_url));
+    }
     let result = json!({ "ok": true, "action": action, "add_to_teams_url": add_url, "catalog_app_id": catalog_id });
     values_mut(state).insert("last_teams_app_publish".into(), result.clone());
     mark_done(state, "teams_app_publish");
@@ -1033,6 +1054,7 @@ fn teams_install_step(state: &mut Value) -> &'static str {
             let chat_url = format!(
                 "https://teams.microsoft.com/l/chat/0/0?users=28:{bot_app_id}&message=hello"
             );
+            config_mut(state).insert("open_bot_chat_url".into(), json!(chat_url));
             let result = json!({ "ok": true, "action": "install", "open_bot_chat_url": chat_url, "installed_for": user_id });
             values_mut(state).insert("last_teams_app_install".into(), result.clone());
             mark_done(state, "teams_app_user_install");
@@ -1302,8 +1324,42 @@ mod tests {
             Some("https://teams.microsoft.com/l/app/catalog-id")
         );
         assert_eq!(
+            view["add_to_teams_url"].as_str(),
+            Some("https://teams.microsoft.com/l/app/catalog-id")
+        );
+        assert_eq!(
             view["teams_app"]["open_bot_chat_url"].as_str(),
             Some("https://teams.microsoft.com/l/chat/0/0")
+        );
+        assert_eq!(
+            view["open_bot_chat_url"].as_str(),
+            Some("https://teams.microsoft.com/l/chat/0/0")
+        );
+    }
+
+    #[test]
+    fn public_state_preserves_final_links_after_later_retryable_block() {
+        let mut state = config_state(json!({
+            "bot_app_id": "00000000-0000-0000-0000-000000000001"
+        }));
+
+        finalize_publish(&mut state, "catalog-id", "publish");
+        step_fail(
+            &mut state,
+            "teams_app_user_install",
+            "could not resolve the signed-in user (GET /me failed)",
+        );
+
+        let view = public_state(&state, "demo", None);
+
+        assert_eq!(view["setup_status"]["ok"].as_bool(), Some(false));
+        assert_eq!(
+            view["add_to_teams_url"].as_str(),
+            Some("https://teams.microsoft.com/l/app/catalog-id?source=app-details-dialog")
+        );
+        assert_eq!(
+            view["teams_app"]["add_to_teams_url"].as_str(),
+            Some("https://teams.microsoft.com/l/app/catalog-id?source=app-details-dialog")
         );
     }
 

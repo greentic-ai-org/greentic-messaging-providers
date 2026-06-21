@@ -384,6 +384,78 @@ if [ "${pack_build_rc}" -ne 0 ]; then
 fi
 rm -f "${pack_build_log}"
 
+provider_version_overrides="$(python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+workspace_version = os.environ["PACK_VERSION"]
+matrix = json.loads(Path("ci/provider-matrix.json").read_text())
+for provider, spec in matrix.get("providers", {}).items():
+    version = spec.get("version")
+    pack = spec.get("pack")
+    if pack and version and version != workspace_version:
+        print(pack)
+PY
+)"
+if [ -n "${provider_version_overrides}" ]; then
+  echo "==> Restoring provider-specific pack versions"
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+workspace_version = os.environ["PACK_VERSION"]
+matrix = json.loads(Path("ci/provider-matrix.json").read_text())
+
+def replace_json_versions(value, version):
+    if isinstance(value, dict):
+        return {key: replace_json_versions(child, version) for key, child in value.items()}
+    if isinstance(value, list):
+        return [replace_json_versions(child, version) for child in value]
+    if isinstance(value, str) and value == workspace_version:
+        return version
+    return value
+
+def write_json(path: Path, version: str) -> None:
+    if not path.exists():
+        return
+    data = json.loads(path.read_text())
+    data = replace_json_versions(data, version)
+    if isinstance(data, dict) and data.get("version") == workspace_version:
+        data["version"] = version
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+def write_yaml_versions(path: Path, version: str) -> None:
+    if not path.exists():
+        return
+    lines = path.read_text().splitlines()
+    out = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("version:"):
+            current = stripped.split(":", 1)[1].strip().strip("'\"")
+            if current == workspace_version:
+                prefix = line.split("version:")[0] + "version: "
+                out.append(f"{prefix}{version}")
+                continue
+        out.append(line)
+    path.write_text("\n".join(out) + "\n")
+
+for spec in matrix.get("providers", {}).values():
+    pack = spec.get("pack")
+    version = spec.get("version")
+    if not pack or not version or version == workspace_version:
+        continue
+    pack_dir = Path("packs") / pack
+    write_yaml_versions(pack_dir / "pack.yaml", version)
+    write_json(pack_dir / "pack.manifest.json", version)
+    write_json(pack_dir / "build-answer.json", version)
+    for component_manifest in (pack_dir / "components").glob("*/component.manifest.json"):
+        write_json(component_manifest, version)
+PY
+fi
+
 if command -v greentic-pack >/dev/null 2>&1; then
   echo "Using existing greentic-pack: $(greentic-pack --version)"
 else
@@ -404,29 +476,5 @@ if [ "${cargo_test_rc}" -ne 0 ]; then
   exit "${cargo_test_rc}"
 fi
 rm -f "${cargo_test_log}"
-
-provider_version_overrides="$(python3 - <<'PY'
-import json
-import os
-from pathlib import Path
-
-workspace_version = os.environ["PACK_VERSION"]
-matrix = json.loads(Path("ci/provider-matrix.json").read_text())
-for provider, spec in matrix.get("providers", {}).items():
-    version = spec.get("version")
-    pack = spec.get("pack")
-    if pack and version and version != workspace_version:
-        print(pack)
-PY
-)"
-if [ -n "${provider_version_overrides}" ]; then
-  echo "==> Restoring provider-specific pack versions"
-  while IFS= read -r provider; do
-    [ -n "${provider}" ] || continue
-    bash scripts/build_providers.sh "${provider}"
-  done <<EOF
-${provider_version_overrides}
-EOF
-fi
 
 echo "All checks completed."

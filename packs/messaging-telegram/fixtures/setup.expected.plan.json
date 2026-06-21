@@ -1,7 +1,8 @@
 {
   "config_patch": {
     "enabled": true,
-    "public_base_url": "https://example.com"
+    "public_base_url": "https://example.com",
+    "bot_username": "greentic_test_bot"
   },
   "secrets_patch": {
     "set": {

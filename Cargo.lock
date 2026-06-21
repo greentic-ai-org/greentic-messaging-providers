@@ -2625,6 +2625,7 @@ dependencies = [
  "insta",
  "serde",
  "serde_json",
+ "serde_yaml_gtc",
  "sha2 0.11.0",
  "wasmtime",
  "wasmtime-wasi",

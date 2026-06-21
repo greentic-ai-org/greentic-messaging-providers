@@ -114,7 +114,7 @@
     },
     "email": {
       "pack": "messaging-email",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "ghcr_target": "ghcr.io/greenticai/messaging-email",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -149,7 +149,7 @@
     },
     "microsoft-email": {
       "pack": "messaging-microsoft-email",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "ghcr_target": "ghcr.io/greenticai/messaging-microsoft-email",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -184,7 +184,7 @@
     },
     "slack": {
       "pack": "messaging-slack",
-      "version": "0.5.12",
+      "version": "0.5.13",
       "ghcr_target": "ghcr.io/greenticai/messaging-slack",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
@@ -222,7 +222,7 @@
     },
     "teams": {
       "pack": "messaging-teams-graph",
-      "version": "0.5.17",
+      "version": "0.5.18",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams-graph",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -261,7 +261,7 @@
     },
     "messaging-teams": {
       "pack": "messaging-teams",
-      "version": "0.5.19",
+      "version": "0.5.20",
       "ghcr_target": "ghcr.io/greenticai/messaging-teams",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
@@ -294,7 +294,7 @@
     },
     "telegram": {
       "pack": "messaging-telegram",
-      "version": "0.5.4",
+      "version": "0.5.5",
       "ghcr_target": "ghcr.io/greenticai/messaging-telegram",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
@@ -395,7 +395,7 @@
     },
     "webex": {
       "pack": "messaging-webex",
-      "version": "0.5.12",
+      "version": "0.5.13",
       "ghcr_target": "ghcr.io/greenticai/messaging-webex",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
@@ -481,7 +481,7 @@
     },
     "whatsapp": {
       "pack": "messaging-whatsapp",
-      "version": "0.5.3",
+      "version": "0.5.4",
       "ghcr_target": "ghcr.io/greenticai/messaging-whatsapp",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
