@@ -18,6 +18,11 @@
       "minLength": 1,
       "description": "Public base URL used to build inbound webhook callback URLs."
     },
+    "bot_email": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Webex bot email address used to build the Add to WebEx setup link."
+    },
     "default_room_id": {
       "type": "string",
       "description": "Default room ID used when invocation omits destination."

@@ -253,11 +253,13 @@
       "add_to_teams_url": "string",
       "open_bot_chat_url": "string"
     },
-      "values": {
-        "config": "object",
-        "oauth": "object|null",
-        "last_reconcile": "object|null",
-        "last_teams_app_publish": "object|null",
+    "add_to_teams_url": "string|null",
+    "open_bot_chat_url": "string|null",
+    "values": {
+      "config": "object",
+      "oauth": "object|null",
+      "last_reconcile": "object|null",
+      "last_teams_app_publish": "object|null",
       "last_teams_app_install": "object|null",
       "last_activity": "object|null"
     }

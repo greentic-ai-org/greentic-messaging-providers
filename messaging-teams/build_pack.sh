@@ -147,7 +147,6 @@ setup_actions = setup_api.get("actions") or {
             "opens_new_window": True,
             "copyable": True,
             "requires": ["add_to_teams_url"],
-            "visible_when": {"setup_status.ok": True},
         }
     ],
 }

@@ -16,6 +16,11 @@
       "type": "string",
       "description": "Slack API base URL.",
       "default": "https://slack.com/api"
+    },
+    "slack_app_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Slack app redirect URL for opening the installed app."
     }
   },
   "required": ["public_base_url"],

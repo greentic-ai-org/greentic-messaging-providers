@@ -4,7 +4,7 @@
   "provider": {
     "id": "messaging-email",
     "display_name": "Email",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "kind": "application",
     "publisher": "Greentic",
     "description": "Legacy SMTP email messaging provider"
@@ -13,12 +13,16 @@
     {
       "id": "messaging-provider-email",
       "source": "components/messaging-provider-email",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "world": "greentic:component/component-v0-v6-v0@0.6.1",
-      "supports": ["messaging"],
+      "supports": [
+        "messaging"
+      ],
       "profiles": {
         "default": "default",
-        "supported": ["default"]
+        "supported": [
+          "default"
+        ]
       },
       "capabilities": {
         "wasi": {
@@ -107,8 +111,16 @@
     ],
     "provider": {
       "provider_type": "messaging.email.smtp",
-      "capabilities": ["messaging"],
-      "ops": ["send", "reply", "qa-spec", "apply-answers", "i18n-keys"],
+      "capabilities": [
+        "messaging"
+      ],
+      "ops": [
+        "send",
+        "reply",
+        "qa-spec",
+        "apply-answers",
+        "i18n-keys"
+      ],
       "config_schema_ref": "schemas/messaging/email/public.config.schema.json",
       "runtime": {
         "component_ref": "messaging-provider-email",

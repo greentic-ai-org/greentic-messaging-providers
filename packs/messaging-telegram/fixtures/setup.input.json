@@ -2,7 +2,8 @@
   "mode": "setup",
   "config": {
     "enabled": true,
-    "public_base_url": "https://example.com"
+    "public_base_url": "https://example.com",
+    "bot_username": "greentic_test_bot"
   },
   "secrets": {
     "TELEGRAM_BOT_TOKEN": "test-bot-token"
