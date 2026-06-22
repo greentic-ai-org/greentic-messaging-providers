@@ -204,6 +204,46 @@ fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()>
                 .any(|item| item.as_str() == Some(expected_requires)),
             "{pack} final action must require {expected_requires}"
         );
+
+        let setup_yaml = root.join("packs").join(pack).join("assets/setup.yaml");
+        let setup: Value = serde_yaml_bw::from_str(&fs::read_to_string(&setup_yaml)?)?;
+        let setup_actions = setup
+            .get("setup_actions")
+            .and_then(Value::as_sequence)
+            .ok_or_else(|| anyhow!("{pack} setup.yaml missing setup_actions"))?;
+        if pack == "messaging-slack" {
+            assert!(
+                setup_actions
+                    .iter()
+                    .any(|action| action.get("kind").and_then(Value::as_str)
+                        == Some("oauth_install_button")),
+                "messaging-slack setup.yaml must declare the generic registration/OAuth setup action"
+            );
+        } else {
+            let setup_action = setup_actions
+                .iter()
+                .find(|action| action.get("id").and_then(Value::as_str) == Some(expected_id))
+                .ok_or_else(|| anyhow!("{pack} setup.yaml missing final action {expected_id}"))?;
+            assert_eq!(
+                setup_action.get("label").and_then(Value::as_str),
+                Some(expected_label),
+                "{pack} setup.yaml final action label mismatch"
+            );
+            assert_eq!(
+                setup_action.get("kind").and_then(Value::as_str),
+                Some("deep_link"),
+                "{pack} setup.yaml final action must be a generic deep_link"
+            );
+            assert!(
+                setup_action
+                    .get("requires")
+                    .and_then(Value::as_sequence)
+                    .is_some_and(|requires| requires
+                        .iter()
+                        .any(|item| item.as_str() == Some(expected_requires))),
+                "{pack} setup.yaml final action must require {expected_requires}"
+            );
+        }
     }
 
     let teams_answer: JsonValue = serde_json::from_str(&fs::read_to_string(
@@ -240,6 +280,31 @@ fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()>
             .is_some_and(|requires| requires
                 .iter()
                 .any(|item| item.as_str() == Some("add_to_teams_url")))
+    );
+    let teams_setup: Value = serde_yaml_bw::from_str(&fs::read_to_string(
+        root.join("messaging-teams/assets/setup.yaml"),
+    )?)?;
+    let teams_setup_action = teams_setup
+        .get("setup_actions")
+        .and_then(Value::as_sequence)
+        .and_then(|actions| {
+            actions
+                .iter()
+                .find(|action| action.get("id").and_then(Value::as_str) == Some("add-to-teams"))
+        })
+        .ok_or_else(|| anyhow!("messaging-teams setup.yaml missing add-to-teams final action"))?;
+    assert_eq!(
+        teams_setup_action.get("kind").and_then(Value::as_str),
+        Some("deep_link")
+    );
+    assert!(
+        teams_setup_action
+            .get("requires")
+            .and_then(Value::as_sequence)
+            .is_some_and(|requires| requires
+                .iter()
+                .any(|item| item.as_str() == Some("add_to_teams_url"))),
+        "messaging-teams setup.yaml Add to Teams must require add_to_teams_url"
     );
 
     Ok(())

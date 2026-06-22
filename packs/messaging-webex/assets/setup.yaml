@@ -1,6 +1,16 @@
 provider_id: webex
 version: 1
 title: Webex provider setup
+setup_actions:
+  - id: add-to-webex
+    label: Add to WebEx
+    kind: deep_link
+    url_template: "https://web.webex.com/teams/messages/new?email={bot_email}"
+    style: primary
+    opens_new_window: true
+    copyable: true
+    requires:
+      - bot_email
 questions:
   - name: bot_email
     title: Webex bot email
