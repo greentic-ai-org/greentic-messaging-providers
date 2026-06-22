@@ -719,6 +719,7 @@ fn messaging_teams_source_is_answer_owned_with_setup_assets() -> Result<()> {
         "assets/setup/examples/basic.html",
         "assets/setup/conformance.json",
         "assets/setup/backend-contract.json",
+        "assets/setup.yaml",
         "assets/teams-app/manifest.template.json",
     ] {
         assert!(

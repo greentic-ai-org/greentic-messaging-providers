@@ -1,6 +1,16 @@
 provider_id: telegram
 version: 1
 title: Telegram provider setup
+setup_actions:
+  - id: add-to-telegram
+    label: Add to Telegram
+    kind: deep_link
+    url_template: "https://t.me/{bot_username}"
+    style: primary
+    opens_new_window: true
+    copyable: true
+    requires:
+      - bot_username
 questions:
   - name: public_base_url
     title: Public base URL
