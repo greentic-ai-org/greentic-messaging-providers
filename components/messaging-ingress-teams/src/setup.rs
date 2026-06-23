@@ -1170,14 +1170,16 @@ fn bot_framework_registration_step(state: &mut Value) -> &'static str {
         );
         "click Continue to continue setup"
     } else {
-        // Advance past the external "no Azure subscriptions" wall so the stepper
-        // is not blocked by a missing subscription, but keep real config
-        // validation (missing bot_app_id etc.) failing as before.
+        // Real config validation (missing bot_app_id etc.) still blocks; other
+        // registration failures are external prerequisites and not our concern,
+        // so advance best-effort and record the reason in the result.
         let err = result
             .get("error")
             .and_then(Value::as_str)
             .unwrap_or("Bot Framework registration failed");
-        if err.contains("no Azure subscriptions") {
+        if err.starts_with("missing ") {
+            step_fail(state, "bot_framework_endpoint_registration", err)
+        } else {
             mark_done(state, "bot_framework_endpoint_registration");
             set_result(
                 state,
@@ -1187,8 +1189,6 @@ fn bot_framework_registration_step(state: &mut Value) -> &'static str {
                 "click Continue to continue setup",
             );
             "click Continue to continue setup"
-        } else {
-            step_fail(state, "bot_framework_endpoint_registration", err)
         }
     }
 }
