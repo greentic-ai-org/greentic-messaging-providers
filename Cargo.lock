@@ -1367,7 +1367,7 @@ dependencies = [
  "clap",
  "greentic-interfaces",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "serde_yaml_gtc",
@@ -1383,7 +1383,7 @@ dependencies = [
  "greentic-messaging-provider-common",
  "greentic-messaging-renderer",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "insta",
  "serde",
  "serde_json",
@@ -1398,7 +1398,7 @@ dependencies = [
  "ciborium",
  "glob",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "once_cell",
  "schemars",
  "serde",
@@ -1415,7 +1415,7 @@ name = "greentic-messaging-renderer"
 version = "0.5.1"
 dependencies = [
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1433,7 +1433,7 @@ dependencies = [
  "greentic-interfaces-wasmtime",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "hmac",
  "http",
  "once_cell",
@@ -1493,9 +1493,9 @@ dependencies = [
 
 [[package]]
 name = "greentic-types"
-version = "1.1.0-dev.26731975668"
+version = "1.2.0-research.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fb312c75713c0f2cb24bb095fc0c5dcef211b75d973c964723a233752c7dbb1"
+checksum = "7d2a079903dae4d40cff9b2627feea1b19c47343b1066b55d7335ddfb055f7ac"
 dependencies = [
  "anyhow",
  "blake3",
@@ -2110,7 +2110,7 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
 ]
@@ -2139,9 +2139,10 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-slack"
-version = "0.5.4"
+version = "0.5.11"
 dependencies = [
  "greentic-telemetry",
+ "greentic-types 1.2.0-research.1",
  "hmac",
  "serde",
  "serde_json",
@@ -2154,6 +2155,7 @@ name = "messaging-ingress-teams"
 version = "0.5.9"
 dependencies = [
  "greentic-telemetry",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "urlencoding",
@@ -2187,7 +2189,7 @@ dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -2202,7 +2204,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -2212,12 +2214,12 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-slack"
-version = "0.5.4"
+version = "0.5.11"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "wit-bindgen 0.57.1",
@@ -2231,7 +2233,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "urlencoding",
@@ -2245,7 +2247,7 @@ dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "wit-bindgen 0.57.1",
@@ -2253,13 +2255,13 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat"
-version = "0.5.2"
+version = "0.5.4"
 dependencies = [
  "base64",
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "hmac",
  "serde",
  "serde_json",
@@ -2272,13 +2274,13 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat-gui"
-version = "0.5.4"
+version = "0.5.8"
 dependencies = [
  "base64",
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "hmac",
  "serde",
  "serde_json",
@@ -2291,12 +2293,12 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webex"
-version = "0.5.9"
+version = "0.5.11"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "hmac",
  "serde",
  "serde_json",
@@ -2312,7 +2314,7 @@ dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
  "wit-bindgen 0.57.1",
@@ -2642,7 +2644,7 @@ dependencies = [
  "greentic-interfaces-wasmtime",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "hmac",
  "insta",
  "serde",
@@ -3267,7 +3269,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slack"
-version = "0.5.4"
+version = "0.5.11"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -4432,7 +4434,7 @@ dependencies = [
 
 [[package]]
 name = "webchat"
-version = "0.5.2"
+version = "0.5.4"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -4450,7 +4452,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.0-dev.26731975668",
+ "greentic-types 1.2.0-research.1",
  "hmac",
  "serde",
  "serde_json",
@@ -4461,7 +4463,7 @@ dependencies = [
 
 [[package]]
 name = "webex"
-version = "0.5.9"
+version = "0.5.11"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -4473,7 +4475,7 @@ dependencies = [
 
 [[package]]
 name = "webex-webhook"
-version = "0.5.9"
+version = "0.5.11"
 dependencies = [
  "greentic-telemetry",
  "serde",
