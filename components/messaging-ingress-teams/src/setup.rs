@@ -257,10 +257,13 @@ fn value_at_path<'a>(root: Option<&'a Value>, path: &[&str]) -> Option<&'a Value
 // ── graph_admin_consent: Microsoft device-code OAuth ────────────────────────
 
 fn cfg_str(state: &Value, key: &str) -> String {
-    state
-        .get("values")
+    // Prefer values.config (setup answers); fall back to values top-level where
+    // derived tokens such as azure_management_access_token are stored.
+    let values = state.get("values");
+    values
         .and_then(|v| v.get("config"))
         .and_then(|c| c.get(key))
+        .or_else(|| values.and_then(|v| v.get(key)))
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string()
@@ -1268,6 +1271,21 @@ mod tests {
         let mut state = default_state();
         values_mut(&mut state).insert("config".into(), config);
         state
+    }
+
+    #[test]
+    fn cfg_str_reads_config_then_falls_back_to_values_top_level() {
+        // bot_app_id lives in config; the management token lives at values
+        // top-level (where management_poll stores it). Both must resolve.
+        let state = json!({"values": {
+            "config": {"bot_app_id": "app-123"},
+            "azure_management_access_token": "tok-xyz"
+        }});
+        assert_eq!(cfg_str(&state, "bot_app_id"), "app-123");
+        assert_eq!(cfg_str(&state, "azure_management_access_token"), "tok-xyz");
+        // config wins when a key exists in both places
+        let both = json!({"values": {"config": {"k": "from-config"}, "k": "from-values"}});
+        assert_eq!(cfg_str(&both, "k"), "from-config");
     }
 
     #[test]
