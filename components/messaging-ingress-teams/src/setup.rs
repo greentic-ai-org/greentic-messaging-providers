@@ -1200,6 +1200,29 @@ pub fn handle(method: &str, path: &str, body_json: &str) -> Option<Result<String
 
     let snapshot = match (method, action.as_str()) {
         ("GET", "") => {
+            // Settle any in-flight device login as the wizard polls GET state (it
+            // refreshes every few seconds), so a step advances on authorization
+            // even when the UI's own action-flow polling stalls.
+            let graph_pending = state
+                .get("values")
+                .and_then(|v| v.get("oauth_device"))
+                .and_then(|d| d.get("device_code"))
+                .and_then(Value::as_str)
+                .is_some_and(|c| !c.trim().is_empty());
+            if graph_pending && !is_done(&state, "graph_admin_consent") {
+                graph_poll(&mut state);
+                save_state(&tenant, &state);
+            }
+            let mgmt_pending = state
+                .get("values")
+                .and_then(|v| v.get("azure_management_device"))
+                .and_then(|d| d.get("device_code"))
+                .and_then(Value::as_str)
+                .is_some_and(|c| !c.trim().is_empty());
+            if mgmt_pending && !is_done(&state, "microsoft_bot_channel_registration_consent") {
+                management_poll(&mut state);
+                save_state(&tenant, &state);
+            }
             // first_bot_framework_post completes once a REAL inbound activity has been
             // observed (recorded into values.last_activity by record_activity()).
             let has_activity = state
