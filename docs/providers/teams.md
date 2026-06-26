@@ -2,28 +2,27 @@
 
 ## What It Does
 
-Teams connects Greentic to Microsoft Teams through Microsoft Graph. No Azure Bot Service is required for the default provider path.
+Teams connects Greentic to Microsoft Teams through a Bot Framework-compatible Teams app setup path, with Microsoft Graph used for setup-time app registration, Teams app catalog publish/install, and existing Graph-based provider operations.
 
 ## Features
 
-- Sends channel messages, channel replies, and chat messages through Microsoft Graph.
-- Uses delegated Microsoft OAuth tokens for Graph access.
+- Registers a Bot Framework-compatible Teams endpoint for inbound Teams activity.
+- Publishes and installs the Teams app through Microsoft Graph.
+- Uses delegated Microsoft OAuth tokens for Graph setup actions.
+- Uses Azure management OAuth for Microsoft Bot/Teams channel registration.
 - Supports Graph subscription lifecycle and Graph notification ingress.
-- Supports Microsoft OAuth device-code setup and validation for Graph credentials.
+- Supports Microsoft OAuth device-code setup and validation for Graph and Azure management credentials.
 - Includes diagnostics and subscription flows in the pack.
 
 ## Setup Inputs
 
 Common setup values include:
 
-- Microsoft app/client ID, only when it is not supplied by hosted config/env.
-- Microsoft tenant ID discovered after device-code login.
-- Graph refresh token from device-code login.
-- Optional test-only access token.
-- Default team/channel or chat destination.
-- Desired channel name. Setup should create this standard Teams channel when it
-  is missing, then persist the returned channel ID.
-- Public base URL only when enabling Graph change-notification ingress.
+- Public base URL for the active Greentic runtime/tunnel.
+- Bot display name.
+- Optional existing Bot app ID and Bot app password; setup can create these through Graph when not supplied.
+- Optional Azure subscription/resource group/location values for Bot channel registration.
+- Microsoft tenant/client values when they are not supplied by hosted config/env.
 
 ## Secrets
 
@@ -49,23 +48,23 @@ Nightly e2e uses `E2E_TEAMS_` GitHub Secrets. See [Provider nightly e2e](../prov
 2. Self-hosted: create a multi-tenant Entra app registration with public client/device-code flow enabled, then login.
 3. Manual/test: paste `tenant_id`, `client_id`, `refresh_token`, or test-only `access_token`.
 
-Default setup uses the Microsoft `organizations` device-code endpoints and does not need a redirect URL or client secret.
+Default setup uses Microsoft `organizations` device-code endpoints and does not need a redirect URL.
 
-Default delegated scopes:
+Default Graph delegated setup scopes:
 
 ```text
-offline_access openid profile User.Read Team.ReadBasic.All Channel.ReadBasic.All Channel.Create ChannelMessage.Send ChannelMessage.Read.All Chat.Read
+offline_access User.Read Application.ReadWrite.All AppCatalog.ReadWrite.All TeamsAppInstallation.ReadWriteForUser
 ```
 
-`Channel.Create` is required only for setup-time creation of a missing desired
-standard channel. The signed-in user must also be allowed by Teams policy to
-create channels in the selected Team.
+Default Azure management setup scope:
+
+```text
+offline_access https://management.azure.com/user_impersonation
+```
 
 ## Limitations
 
-- This is not a native Bot Framework bot.
-- It does not handle Bot Framework command routing by default.
-- Messages are sent as the Graph-authorized identity according to Microsoft Graph permissions.
+- Setup requires Microsoft Bot/Teams channel registration for the Bot Framework-compatible endpoint.
 - Graph notification webhooks require a public HTTPS callback URL.
 - Teams message subscriptions require Graph read consent such as `ChannelMessage.Read.All`.
 
@@ -73,18 +72,18 @@ create channels in the selected Team.
 
 - `components/teams/`
 - `components/messaging-ingress-teams/`
-- `components/messaging-provider-teams/`
-- `packs/messaging-teams/`
+- `components/messaging-provider-teams-graph/`
+- `packs/messaging-teams-graph/`
 - `e2e/providers/teams/`
 
 ## Focused Checks
 
 ```bash
-cargo test -p messaging-provider-teams
+cargo test -p messaging-provider-teams-graph
 cargo test -p messaging-ingress-teams
 scripts/build_providers.sh teams
 ```
 
 ## Agent Notes
 
-Keep Graph credential names explicit and never log tokens. Azure Bot Service credentials are legacy-only and not part of the default path.
+Keep Graph, Azure management, and Bot Framework credential names explicit and never log tokens.

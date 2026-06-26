@@ -7,15 +7,13 @@ questions:
     kind: string
     required: true
     help: "WhatsApp Business phone number ID from Meta Developer Portal"
-    placeholder: "1234567890"
     group: Connection
     docs_url: "https://developers.facebook.com/apps"
   - name: public_base_url
     title: Public base URL
     kind: string
     required: true
-    help: "Public-facing URL for webhook callbacks"
-    placeholder: "https://xxxx.trycloudflare.com"
+    help: "Public-facing URL for webhook callbacks. Use the runtime or tunnel URL shown by the setup host."
     group: Connection
     validate:
       regex: "^https://"
@@ -24,13 +22,13 @@ questions:
     kind: string
     required: true
     help: "WhatsApp Business Account ID from Meta Developer Portal"
-    placeholder: "1234567890"
     group: Connection
     docs_url: "https://developers.facebook.com/apps"
   - name: api_base_url
     title: API base URL
     kind: string
     required: true
+    default: "https://graph.facebook.com"
     help: "WhatsApp Cloud API base URL (default: https://graph.facebook.com)"
     placeholder: "https://graph.facebook.com"
     group: Connection
@@ -40,6 +38,7 @@ questions:
     title: API version
     kind: string
     required: true
+    default: "v17.0"
     help: "WhatsApp Cloud API version"
     placeholder: "v17.0"
     group: Connection
@@ -57,5 +56,4 @@ questions:
     required: true
     secret: true
     help: "Custom token for webhook verification (you choose this value)"
-    placeholder: "my-verify-token"
     group: Authentication

@@ -314,7 +314,7 @@ impl ProviderId {
     fn component_name(&self) -> &'static str {
         match self {
             ProviderId::Slack => "messaging-provider-slack",
-            ProviderId::Teams => "messaging-provider-teams",
+            ProviderId::Teams => "messaging-provider-teams-graph",
             ProviderId::Telegram => "messaging-provider-telegram",
             ProviderId::Webchat => "messaging-provider-webchat",
             ProviderId::Webex => "messaging-provider-webex",

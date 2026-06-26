@@ -426,7 +426,7 @@ Providers export localization keys and Fluent (`.ftl`) bundles for user-facing s
 greentic-messaging-providers/
 ├── components/
 │   ├── messaging-provider-slack/        # Slack
-│   ├── messaging-provider-teams/        # Microsoft Teams
+│   ├── messaging-provider-teams-graph/        # Microsoft Teams
 │   ├── messaging-provider-telegram/     # Telegram
 │   ├── messaging-provider-webex/        # Cisco Webex
 │   ├── messaging-provider-webchat/      # BotFramework WebChat
@@ -447,7 +447,7 @@ greentic-messaging-providers/
 │   └── greentic-messaging-planned/      # Render plan types
 ├── packs/                               # .gtpack build definitions per provider
 │   ├── messaging-slack/
-│   ├── messaging-teams/
+│   ├── messaging-teams-graph/
 │   ├── messaging-telegram/
 │   ├── messaging-webex/
 │   ├── messaging-webchat/
@@ -615,9 +615,9 @@ cat > /tmp/secrets.json << 'EOF'
     {"uri": "secrets://dev/default/_/messaging-email/graph_tenant_id", "format": "text", "value": {"type": "text", "text": "<tenant-id>"}},
     {"uri": "secrets://dev/default/_/messaging-email/ms_graph_client_id", "format": "text", "value": {"type": "text", "text": "<client-id>"}},
     {"uri": "secrets://dev/default/_/messaging-email/ms_graph_refresh_token", "format": "text", "value": {"type": "text", "text": "<refresh-token>"}},
-    {"uri": "secrets://dev/demo/_/messaging-teams/ms_graph_tenant_id", "format": "text", "value": {"type": "text", "text": "<tenant-id>"}},
-    {"uri": "secrets://dev/demo/_/messaging-teams/ms_graph_client_id", "format": "text", "value": {"type": "text", "text": "<client-id>"}},
-    {"uri": "secrets://dev/demo/_/messaging-teams/ms_graph_refresh_token", "format": "text", "value": {"type": "text", "text": "<refresh-token>"}}
+    {"uri": "secrets://dev/demo/_/messaging-teams-graph/ms_graph_tenant_id", "format": "text", "value": {"type": "text", "text": "<tenant-id>"}},
+    {"uri": "secrets://dev/demo/_/messaging-teams-graph/ms_graph_client_id", "format": "text", "value": {"type": "text", "text": "<client-id>"}},
+    {"uri": "secrets://dev/demo/_/messaging-teams-graph/ms_graph_refresh_token", "format": "text", "value": {"type": "text", "text": "<refresh-token>"}}
   ]
 }
 EOF
@@ -665,7 +665,7 @@ gtc op demo send \
 
 # Teams (MS Graph channel message)
 gtc op demo send \
-  --bundle demo-bundle --provider messaging-teams \
+  --bundle demo-bundle --provider messaging-teams-graph \
   --to "team_id:channel_id" --text "Hello from Greentic" \
   --tenant demo --env dev
 
@@ -789,7 +789,7 @@ cargo test -p greentic-messaging-renderer
 | `messaging-provider-dummy` | 7 | QA ops + send |
 | `messaging-provider-telegram` | 11 | QA ops + send + ingress |
 | `messaging-provider-slack` | 8 | QA ops + send |
-| `messaging-provider-teams` | 10 | QA ops + send + config |
+| `messaging-provider-teams-graph` | 10 | QA ops + send + config |
 | `messaging-provider-webex` | 12 | QA ops + send + ingress |
 | `messaging-provider-webchat` | 16 | QA ops + send + integration |
 | `messaging-provider-whatsapp` | 11 | QA ops + send + ingress |

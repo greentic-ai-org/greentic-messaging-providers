@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use anyhow::{Context, Result, anyhow};
 use provider_common::component_v0_6::{
@@ -48,7 +49,7 @@ const PROVIDERS: &[ProviderSpec] = &[
     },
     ProviderSpec {
         id: "teams",
-        component: "messaging-provider-teams",
+        component: "messaging-provider-teams-graph",
     },
     ProviderSpec {
         id: "telegram",
@@ -70,6 +71,15 @@ const PROVIDERS: &[ProviderSpec] = &[
 
 const PROVIDERS_REQUIRING_SECRET_PROMPTS: &[&str] =
     &["dummy", "email", "slack", "telegram", "webex", "whatsapp"];
+
+static REGISTRY_FIXTURE_LOCK: Mutex<()> = Mutex::new(());
+
+fn run_registry_fixture_test<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    let _guard = REGISTRY_FIXTURE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    f()
+}
 
 struct ProviderFixtureBytes {
     describe: Vec<u8>,
@@ -695,374 +705,383 @@ fn resolver_read(provider_id: &str, file_name: &str) -> Result<Vec<u8>> {
 
 #[test]
 fn registry_fixtures_are_stable_and_valid() -> Result<()> {
-    ensure_components_built();
-    for spec in PROVIDERS {
-        let generated = generate_provider_fixtures(*spec)?;
-        let dir = provider_fixture_dir(spec.id);
-        assert_fixture_stable(
-            &dir.join("describe.cbor"),
-            &generated.describe,
-            &format!("{}/describe.cbor", spec.id),
-        )?;
-        assert_fixture_stable(
-            &dir.join("qa_setup.cbor"),
-            &generated.qa_setup,
-            &format!("{}/qa_setup.cbor", spec.id),
-        )?;
-        assert_fixture_stable(
-            &dir.join("apply_setup_config.cbor"),
-            &generated.apply_setup_config,
-            &format!("{}/apply_setup_config.cbor", spec.id),
-        )?;
-        validate_provider_fixtures(*spec, &generated)?;
-    }
-    Ok(())
+    run_registry_fixture_test(|| {
+        ensure_components_built();
+        for spec in PROVIDERS {
+            let generated = generate_provider_fixtures(*spec)?;
+            let dir = provider_fixture_dir(spec.id);
+            assert_fixture_stable(
+                &dir.join("describe.cbor"),
+                &generated.describe,
+                &format!("{}/describe.cbor", spec.id),
+            )?;
+            assert_fixture_stable(
+                &dir.join("qa_setup.cbor"),
+                &generated.qa_setup,
+                &format!("{}/qa_setup.cbor", spec.id),
+            )?;
+            assert_fixture_stable(
+                &dir.join("apply_setup_config.cbor"),
+                &generated.apply_setup_config,
+                &format!("{}/apply_setup_config.cbor", spec.id),
+            )?;
+            validate_provider_fixtures(*spec, &generated)?;
+        }
+        Ok(())
+    })
 }
 
 #[test]
 fn fixture_resolver_flow_add_update_remove_smoke() -> Result<()> {
-    ensure_components_built();
-    const TENANT_ID: &str = "tenant-fixture";
+    run_registry_fixture_test(|| {
+        ensure_components_built();
+        const TENANT_ID: &str = "tenant-fixture";
 
-    for spec in PROVIDERS {
-        let mut harness = ComponentHarness::new(spec.component)?;
-        let describe_bytes = harness.call_describe()?;
-        let describe: DescribePayload =
-            decode_cbor(&describe_bytes).map_err(|e| anyhow!("decode describe: {e}"))?;
-        let qa_setup_bytes = harness.call_qa_setup()?;
-        let qa_setup: QaSpec =
-            decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
-        let setup_answers = setup_answers_for_provider(spec.id, &qa_setup);
-        let setup_bytes = harness.call_apply(QaMode::Setup, setup_answers)?;
-        let setup_value: Value =
-            decode_cbor(&setup_bytes).map_err(|e| anyhow!("decode setup apply: {e}"))?;
-        let setup_ok = setup_value
-            .get("ok")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !setup_ok {
-            return Err(anyhow!(
-                "{} setup apply was not ok: {}",
+        for spec in PROVIDERS {
+            let mut harness = ComponentHarness::new(spec.component)?;
+            let describe_bytes = harness.call_describe()?;
+            let describe: DescribePayload =
+                decode_cbor(&describe_bytes).map_err(|e| anyhow!("decode describe: {e}"))?;
+            let qa_setup_bytes = harness.call_qa_setup()?;
+            let qa_setup: QaSpec =
+                decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
+            let setup_answers = setup_answers_for_provider(spec.id, &qa_setup);
+            let setup_bytes = harness.call_apply(QaMode::Setup, setup_answers)?;
+            let setup_value: Value =
+                decode_cbor(&setup_bytes).map_err(|e| anyhow!("decode setup apply: {e}"))?;
+            let setup_ok = setup_value
+                .get("ok")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if !setup_ok {
+                return Err(anyhow!(
+                    "{} setup apply was not ok: {}",
+                    spec.id,
+                    setup_value
+                ));
+            }
+            let setup_config = apply_result_config(&setup_value)?;
+            validate_value_against_schema(&setup_config, &describe.config_schema, "$.config")
+                .with_context(|| format!("{} setup config schema validation failed", spec.id))?;
+
+            let config_key = messaging_config_key(spec.id, TENANT_ID, None);
+            let provenance_key = messaging_provenance_key(spec.id, TENANT_ID, None);
+            let state_key = messaging_state_key(spec.id, TENANT_ID, None, "session");
+            let describe_hash = sha256_hex(&describe_bytes);
+            let artifact_bytes = fs::read(component_path(spec.component))
+                .with_context(|| format!("read component artifact for {}", spec.id))?;
+            let artifact_digest = sha256_hex(&artifact_bytes);
+            let provenance = ProviderProvenance {
+                describe_hash,
+                artifact_digest,
+                schema_hash: describe.schema_hash.clone(),
+            };
+
+            let mut store = BTreeMap::new();
+            let mut secrets_store = BTreeMap::new();
+            store.insert(config_key.clone(), canonical_cbor_bytes(&setup_config));
+            store.insert(provenance_key.clone(), canonical_cbor_bytes(&provenance));
+            store.insert(
+                state_key.clone(),
+                canonical_cbor_bytes(&json!({"ok": true})),
+            );
+            let provider_secret_key = provider_owned_secret_key(spec.id, TENANT_ID, None);
+            secrets_store.insert(provider_secret_key.clone(), b"secret".to_vec());
+
+            let upgrade_seed = resolve_upgrade_seed(&mut store, spec.id, TENANT_ID, None);
+            let mut update_answers = serde_json::Map::new();
+            if let Some(existing_config) = upgrade_seed.existing_config {
+                update_answers.insert("existing_config".to_string(), existing_config);
+            }
+            let update_bytes =
+                harness.call_apply(QaMode::Upgrade, Value::Object(update_answers))?;
+            let update_value: Value =
+                decode_cbor(&update_bytes).map_err(|e| anyhow!("decode update apply: {e}"))?;
+            let update_ok = update_value
+                .get("ok")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if !update_ok {
+                return Err(anyhow!(
+                    "{} update apply was not ok: {}",
+                    spec.id,
+                    update_value
+                ));
+            }
+            let update_config = apply_result_config(&update_value)?;
+            validate_value_against_schema(&update_config, &describe.config_schema, "$.config")
+                .with_context(|| format!("{} update config schema validation failed", spec.id))?;
+            store.insert(config_key.clone(), canonical_cbor_bytes(&update_config));
+
+            let remove_bytes = harness.call_apply(QaMode::Remove, json!({}))?;
+            let remove_value: Value =
+                decode_cbor(&remove_bytes).map_err(|e| anyhow!("decode remove apply: {e}"))?;
+            let remove_ok = remove_value
+                .get("ok")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if !remove_ok {
+                return Err(anyhow!(
+                    "{} remove apply was not ok: {}",
+                    spec.id,
+                    remove_value
+                ));
+            }
+            let cleanup = remove_value
+                .get("remove")
+                .and_then(|value| value.get("cleanup"))
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("{} remove result missing cleanup steps", spec.id))?;
+
+            let execution = apply_remove_cleanup(
+                &mut store,
+                &mut secrets_store,
                 spec.id,
-                setup_value
-            ));
-        }
-        let setup_config = apply_result_config(&setup_value)?;
-        validate_value_against_schema(&setup_config, &describe.config_schema, "$.config")
-            .with_context(|| format!("{} setup config schema validation failed", spec.id))?;
+                TENANT_ID,
+                None,
+                cleanup,
+                CleanupCapabilities {
+                    state: false,
+                    http: false,
+                    secrets: false,
+                },
+            );
+            if store.contains_key(&config_key) {
+                return Err(anyhow!("{} remove did not delete config key", spec.id));
+            }
+            if store.contains_key(&provenance_key) {
+                return Err(anyhow!("{} remove did not delete provenance key", spec.id));
+            }
+            if !store.contains_key(&state_key) {
+                return Err(anyhow!(
+                    "{} remove should keep state when state capability is missing",
+                    spec.id
+                ));
+            }
+            if execution.diagnostics.is_empty() {
+                return Err(anyhow!(
+                    "{} remove should emit skipped diagnostics when state capability is missing",
+                    spec.id
+                ));
+            }
+            if !execution.http_actions.is_empty() {
+                return Err(anyhow!(
+                    "{} should not execute HTTP cleanup actions without http capability",
+                    spec.id
+                ));
+            }
+            if !secrets_store.contains_key(&provider_secret_key) {
+                return Err(anyhow!(
+                    "{} remove should keep provider secrets when secrets capability is missing",
+                    spec.id
+                ));
+            }
 
-        let config_key = messaging_config_key(spec.id, TENANT_ID, None);
-        let provenance_key = messaging_provenance_key(spec.id, TENANT_ID, None);
-        let state_key = messaging_state_key(spec.id, TENANT_ID, None, "session");
-        let describe_hash = sha256_hex(&describe_bytes);
-        let artifact_bytes = fs::read(component_path(spec.component))
-            .with_context(|| format!("read component artifact for {}", spec.id))?;
-        let artifact_digest = sha256_hex(&artifact_bytes);
-        let provenance = ProviderProvenance {
-            describe_hash,
-            artifact_digest,
-            schema_hash: describe.schema_hash.clone(),
-        };
-
-        let mut store = BTreeMap::new();
-        let mut secrets_store = BTreeMap::new();
-        store.insert(config_key.clone(), canonical_cbor_bytes(&setup_config));
-        store.insert(provenance_key.clone(), canonical_cbor_bytes(&provenance));
-        store.insert(
-            state_key.clone(),
-            canonical_cbor_bytes(&json!({"ok": true})),
-        );
-        let provider_secret_key = provider_owned_secret_key(spec.id, TENANT_ID, None);
-        secrets_store.insert(provider_secret_key.clone(), b"secret".to_vec());
-
-        let upgrade_seed = resolve_upgrade_seed(&mut store, spec.id, TENANT_ID, None);
-        let mut update_answers = serde_json::Map::new();
-        if let Some(existing_config) = upgrade_seed.existing_config {
-            update_answers.insert("existing_config".to_string(), existing_config);
-        }
-        let update_bytes = harness.call_apply(QaMode::Upgrade, Value::Object(update_answers))?;
-        let update_value: Value =
-            decode_cbor(&update_bytes).map_err(|e| anyhow!("decode update apply: {e}"))?;
-        let update_ok = update_value
-            .get("ok")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !update_ok {
-            return Err(anyhow!(
-                "{} update apply was not ok: {}",
+            let execution = apply_remove_cleanup(
+                &mut store,
+                &mut secrets_store,
                 spec.id,
-                update_value
-            ));
+                TENANT_ID,
+                None,
+                cleanup,
+                CleanupCapabilities {
+                    state: true,
+                    http: true,
+                    secrets: true,
+                },
+            );
+            if !execution.diagnostics.is_empty() {
+                return Err(anyhow!(
+                    "{} remove emitted diagnostics unexpectedly with state capability",
+                    spec.id
+                ));
+            }
+            let expects_http_actions = cleanup.iter().filter_map(Value::as_str).any(|step| {
+                step == "best_effort_revoke_webhooks" || step == "best_effort_revoke_tokens"
+            });
+            if expects_http_actions && execution.http_actions.is_empty() {
+                return Err(anyhow!(
+                    "{} remove did not execute expected HTTP best-effort cleanup actions",
+                    spec.id
+                ));
+            }
+            if store.contains_key(&state_key) {
+                return Err(anyhow!(
+                    "{} remove did not delete provider state keys",
+                    spec.id
+                ));
+            }
+            if cleanup
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|step| step == "best_effort_delete_provider_owned_secrets")
+                && secrets_store.contains_key(&provider_secret_key)
+            {
+                return Err(anyhow!(
+                    "{} remove did not delete provider-owned secrets",
+                    spec.id
+                ));
+            }
         }
-        let update_config = apply_result_config(&update_value)?;
-        validate_value_against_schema(&update_config, &describe.config_schema, "$.config")
-            .with_context(|| format!("{} update config schema validation failed", spec.id))?;
-        store.insert(config_key.clone(), canonical_cbor_bytes(&update_config));
-
-        let remove_bytes = harness.call_apply(QaMode::Remove, json!({}))?;
-        let remove_value: Value =
-            decode_cbor(&remove_bytes).map_err(|e| anyhow!("decode remove apply: {e}"))?;
-        let remove_ok = remove_value
-            .get("ok")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !remove_ok {
-            return Err(anyhow!(
-                "{} remove apply was not ok: {}",
-                spec.id,
-                remove_value
-            ));
-        }
-        let cleanup = remove_value
-            .get("remove")
-            .and_then(|value| value.get("cleanup"))
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("{} remove result missing cleanup steps", spec.id))?;
-
-        let execution = apply_remove_cleanup(
-            &mut store,
-            &mut secrets_store,
-            spec.id,
-            TENANT_ID,
-            None,
-            cleanup,
-            CleanupCapabilities {
-                state: false,
-                http: false,
-                secrets: false,
-            },
-        );
-        if store.contains_key(&config_key) {
-            return Err(anyhow!("{} remove did not delete config key", spec.id));
-        }
-        if store.contains_key(&provenance_key) {
-            return Err(anyhow!("{} remove did not delete provenance key", spec.id));
-        }
-        if !store.contains_key(&state_key) {
-            return Err(anyhow!(
-                "{} remove should keep state when state capability is missing",
-                spec.id
-            ));
-        }
-        if execution.diagnostics.is_empty() {
-            return Err(anyhow!(
-                "{} remove should emit skipped diagnostics when state capability is missing",
-                spec.id
-            ));
-        }
-        if !execution.http_actions.is_empty() {
-            return Err(anyhow!(
-                "{} should not execute HTTP cleanup actions without http capability",
-                spec.id
-            ));
-        }
-        if !secrets_store.contains_key(&provider_secret_key) {
-            return Err(anyhow!(
-                "{} remove should keep provider secrets when secrets capability is missing",
-                spec.id
-            ));
-        }
-
-        let execution = apply_remove_cleanup(
-            &mut store,
-            &mut secrets_store,
-            spec.id,
-            TENANT_ID,
-            None,
-            cleanup,
-            CleanupCapabilities {
-                state: true,
-                http: true,
-                secrets: true,
-            },
-        );
-        if !execution.diagnostics.is_empty() {
-            return Err(anyhow!(
-                "{} remove emitted diagnostics unexpectedly with state capability",
-                spec.id
-            ));
-        }
-        let expects_http_actions = cleanup.iter().filter_map(Value::as_str).any(|step| {
-            step == "best_effort_revoke_webhooks" || step == "best_effort_revoke_tokens"
-        });
-        if expects_http_actions && execution.http_actions.is_empty() {
-            return Err(anyhow!(
-                "{} remove did not execute expected HTTP best-effort cleanup actions",
-                spec.id
-            ));
-        }
-        if store.contains_key(&state_key) {
-            return Err(anyhow!(
-                "{} remove did not delete provider state keys",
-                spec.id
-            ));
-        }
-        if cleanup
-            .iter()
-            .filter_map(Value::as_str)
-            .any(|step| step == "best_effort_delete_provider_owned_secrets")
-            && secrets_store.contains_key(&provider_secret_key)
-        {
-            return Err(anyhow!(
-                "{} remove did not delete provider-owned secrets",
-                spec.id
-            ));
-        }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
 fn fixture_resolver_legacy_key_migration_smoke() -> Result<()> {
-    ensure_components_built();
-    const TENANT_ID: &str = "tenant-legacy";
+    run_registry_fixture_test(|| {
+        ensure_components_built();
+        const TENANT_ID: &str = "tenant-legacy";
 
-    for spec in PROVIDERS {
-        let mut harness = ComponentHarness::new(spec.component)?;
-        let describe_bytes = harness.call_describe()?;
-        let describe: DescribePayload =
-            decode_cbor(&describe_bytes).map_err(|e| anyhow!("decode describe: {e}"))?;
-        let qa_setup_bytes = harness.call_qa_setup()?;
-        let qa_setup: QaSpec =
-            decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
-        let setup_bytes = harness.call_apply(
-            QaMode::Setup,
-            setup_answers_for_provider(spec.id, &qa_setup),
-        )?;
-        let setup_value: Value =
-            decode_cbor(&setup_bytes).map_err(|e| anyhow!("decode setup apply: {e}"))?;
-        let setup_config = apply_result_config(&setup_value)?;
-        let config_key = messaging_config_key(spec.id, TENANT_ID, None);
-        let provenance_key = messaging_provenance_key(spec.id, TENANT_ID, None);
+        for spec in PROVIDERS {
+            let mut harness = ComponentHarness::new(spec.component)?;
+            let describe_bytes = harness.call_describe()?;
+            let describe: DescribePayload =
+                decode_cbor(&describe_bytes).map_err(|e| anyhow!("decode describe: {e}"))?;
+            let qa_setup_bytes = harness.call_qa_setup()?;
+            let qa_setup: QaSpec =
+                decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
+            let setup_bytes = harness.call_apply(
+                QaMode::Setup,
+                setup_answers_for_provider(spec.id, &qa_setup),
+            )?;
+            let setup_value: Value =
+                decode_cbor(&setup_bytes).map_err(|e| anyhow!("decode setup apply: {e}"))?;
+            let setup_config = apply_result_config(&setup_value)?;
+            let config_key = messaging_config_key(spec.id, TENANT_ID, None);
+            let provenance_key = messaging_provenance_key(spec.id, TENANT_ID, None);
 
-        let mut legacy_store = BTreeMap::new();
-        let legacy_config_key = legacy_messaging_config_keys(spec.id, TENANT_ID, None)
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("{} no legacy config key candidates", spec.id))?;
-        let legacy_provenance_key = legacy_messaging_provenance_keys(spec.id, TENANT_ID, None)
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("{} no legacy provenance key candidates", spec.id))?;
-        legacy_store.insert(
-            legacy_config_key.clone(),
-            canonical_cbor_bytes(&setup_config),
-        );
-        legacy_store.insert(
-            legacy_provenance_key.clone(),
-            canonical_cbor_bytes(&ProviderProvenance {
-                describe_hash: "describe".to_string(),
-                artifact_digest: "artifact".to_string(),
-                schema_hash: describe.schema_hash.clone(),
-            }),
-        );
+            let mut legacy_store = BTreeMap::new();
+            let legacy_config_key = legacy_messaging_config_keys(spec.id, TENANT_ID, None)
+                .into_iter()
+                .next()
+                .ok_or_else(|| anyhow!("{} no legacy config key candidates", spec.id))?;
+            let legacy_provenance_key = legacy_messaging_provenance_keys(spec.id, TENANT_ID, None)
+                .into_iter()
+                .next()
+                .ok_or_else(|| anyhow!("{} no legacy provenance key candidates", spec.id))?;
+            legacy_store.insert(
+                legacy_config_key.clone(),
+                canonical_cbor_bytes(&setup_config),
+            );
+            legacy_store.insert(
+                legacy_provenance_key.clone(),
+                canonical_cbor_bytes(&ProviderProvenance {
+                    describe_hash: "describe".to_string(),
+                    artifact_digest: "artifact".to_string(),
+                    schema_hash: describe.schema_hash.clone(),
+                }),
+            );
 
-        let migrated = resolve_upgrade_seed(&mut legacy_store, spec.id, TENANT_ID, None);
-        if migrated.existing_config.is_none() {
-            return Err(anyhow!(
-                "{} legacy config was not migrated to canonical key",
-                spec.id
-            ));
-        }
-        if migrated.migrated_config_from.is_none() {
-            return Err(anyhow!(
-                "{} expected legacy config migration marker",
-                spec.id
-            ));
-        }
-        if migrated.migrated_provenance_from.is_none() {
-            return Err(anyhow!(
-                "{} expected legacy provenance migration marker",
-                spec.id
-            ));
-        }
-        if !legacy_store.contains_key(&config_key) || !legacy_store.contains_key(&provenance_key) {
-            return Err(anyhow!(
-                "{} canonical keys missing after legacy migration",
-                spec.id
-            ));
-        }
-        if legacy_store.contains_key(&legacy_config_key)
-            || legacy_store.contains_key(&legacy_provenance_key)
-        {
-            return Err(anyhow!(
-                "{} legacy keys should be removed after migration",
-                spec.id
-            ));
-        }
-
-        let mut migrated_answers = serde_json::Map::new();
-        migrated_answers.insert(
-            "existing_config".to_string(),
-            migrated
-                .existing_config
-                .ok_or_else(|| anyhow!("{} missing migrated existing config", spec.id))?,
-        );
-        let migrated_update =
-            harness.call_apply(QaMode::Upgrade, Value::Object(migrated_answers))?;
-        let migrated_update_value: Value =
-            decode_cbor(&migrated_update).map_err(|e| anyhow!("decode migrated update: {e}"))?;
-        if !migrated_update_value
-            .get("ok")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Err(anyhow!(
-                "{} upgrade failed with migrated legacy config: {}",
-                spec.id,
-                migrated_update_value
-            ));
-        }
-
-        let mut invalid_store = BTreeMap::new();
-        invalid_store.insert(legacy_config_key, b"not-cbor".to_vec());
-        let fallback_seed = resolve_upgrade_seed(&mut invalid_store, spec.id, TENANT_ID, None);
-        if fallback_seed.existing_config.is_some() {
-            return Err(anyhow!(
-                "{} invalid legacy payload unexpectedly converted",
-                spec.id
-            ));
-        }
-        if fallback_seed.diagnostics.is_empty() {
-            return Err(anyhow!(
-                "{} expected diagnostics for invalid legacy payload",
-                spec.id
-            ));
-        }
-
-        let qa_upgrade_bytes = harness.call_qa(QaMode::Upgrade)?;
-        let qa_upgrade: QaSpec =
-            decode_cbor(&qa_upgrade_bytes).map_err(|e| anyhow!("decode qa upgrade: {e}"))?;
-        let mut fallback_answers = setup_answers_for_provider(spec.id, &qa_upgrade);
-        if let Some(map) = fallback_answers.as_object_mut() {
-            map.insert("existing_config".to_string(), json!({}));
-        }
-        let fallback_update = harness.call_apply(QaMode::Upgrade, fallback_answers)?;
-        let fallback_update_value: Value =
-            decode_cbor(&fallback_update).map_err(|e| anyhow!("decode fallback update: {e}"))?;
-        if !fallback_update_value
-            .get("ok")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Err(anyhow!(
-                "{} upgrade fallback did not produce valid config: {}",
-                spec.id,
-                fallback_update_value
-            ));
-        }
-        let fallback_config = apply_result_config(&fallback_update_value)?;
-        validate_value_against_schema(&fallback_config, &describe.config_schema, "$.config")
-            .with_context(|| {
-                format!(
-                    "{} fallback update config schema validation failed",
+            let migrated = resolve_upgrade_seed(&mut legacy_store, spec.id, TENANT_ID, None);
+            if migrated.existing_config.is_none() {
+                return Err(anyhow!(
+                    "{} legacy config was not migrated to canonical key",
                     spec.id
-                )
-            })?;
-        invalid_store.insert(config_key, canonical_cbor_bytes(&fallback_config));
-    }
+                ));
+            }
+            if migrated.migrated_config_from.is_none() {
+                return Err(anyhow!(
+                    "{} expected legacy config migration marker",
+                    spec.id
+                ));
+            }
+            if migrated.migrated_provenance_from.is_none() {
+                return Err(anyhow!(
+                    "{} expected legacy provenance migration marker",
+                    spec.id
+                ));
+            }
+            if !legacy_store.contains_key(&config_key)
+                || !legacy_store.contains_key(&provenance_key)
+            {
+                return Err(anyhow!(
+                    "{} canonical keys missing after legacy migration",
+                    spec.id
+                ));
+            }
+            if legacy_store.contains_key(&legacy_config_key)
+                || legacy_store.contains_key(&legacy_provenance_key)
+            {
+                return Err(anyhow!(
+                    "{} legacy keys should be removed after migration",
+                    spec.id
+                ));
+            }
 
-    Ok(())
+            let mut migrated_answers = serde_json::Map::new();
+            migrated_answers.insert(
+                "existing_config".to_string(),
+                migrated
+                    .existing_config
+                    .ok_or_else(|| anyhow!("{} missing migrated existing config", spec.id))?,
+            );
+            let migrated_update =
+                harness.call_apply(QaMode::Upgrade, Value::Object(migrated_answers))?;
+            let migrated_update_value: Value = decode_cbor(&migrated_update)
+                .map_err(|e| anyhow!("decode migrated update: {e}"))?;
+            if !migrated_update_value
+                .get("ok")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                return Err(anyhow!(
+                    "{} upgrade failed with migrated legacy config: {}",
+                    spec.id,
+                    migrated_update_value
+                ));
+            }
+
+            let mut invalid_store = BTreeMap::new();
+            invalid_store.insert(legacy_config_key, b"not-cbor".to_vec());
+            let fallback_seed = resolve_upgrade_seed(&mut invalid_store, spec.id, TENANT_ID, None);
+            if fallback_seed.existing_config.is_some() {
+                return Err(anyhow!(
+                    "{} invalid legacy payload unexpectedly converted",
+                    spec.id
+                ));
+            }
+            if fallback_seed.diagnostics.is_empty() {
+                return Err(anyhow!(
+                    "{} expected diagnostics for invalid legacy payload",
+                    spec.id
+                ));
+            }
+
+            let qa_upgrade_bytes = harness.call_qa(QaMode::Upgrade)?;
+            let qa_upgrade: QaSpec =
+                decode_cbor(&qa_upgrade_bytes).map_err(|e| anyhow!("decode qa upgrade: {e}"))?;
+            let mut fallback_answers = setup_answers_for_provider(spec.id, &qa_upgrade);
+            if let Some(map) = fallback_answers.as_object_mut() {
+                map.insert("existing_config".to_string(), json!({}));
+            }
+            let fallback_update = harness.call_apply(QaMode::Upgrade, fallback_answers)?;
+            let fallback_update_value: Value = decode_cbor(&fallback_update)
+                .map_err(|e| anyhow!("decode fallback update: {e}"))?;
+            if !fallback_update_value
+                .get("ok")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                return Err(anyhow!(
+                    "{} upgrade fallback did not produce valid config: {}",
+                    spec.id,
+                    fallback_update_value
+                ));
+            }
+            let fallback_config = apply_result_config(&fallback_update_value)?;
+            validate_value_against_schema(&fallback_config, &describe.config_schema, "$.config")
+                .with_context(|| {
+                    format!(
+                        "{} fallback update config schema validation failed",
+                        spec.id
+                    )
+                })?;
+            invalid_store.insert(config_key, canonical_cbor_bytes(&fallback_config));
+        }
+
+        Ok(())
+    })
 }
 
 #[test]
@@ -1103,61 +1122,65 @@ fn fixture_resolver_operator_setup_smoke() -> Result<()> {
 
 #[test]
 fn fixture_resolver_negative_validation_smoke() -> Result<()> {
-    ensure_components_built();
-    for spec in PROVIDERS {
-        let mut harness = ComponentHarness::new(spec.component)?;
-        let qa_setup_bytes = harness.call_qa_setup()?;
-        let qa_setup: QaSpec =
-            decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
-        let has_url_question = qa_setup
-            .questions
-            .iter()
-            .any(|question| question.required && question.id.contains("url"));
-        if !has_url_question {
-            continue;
+    run_registry_fixture_test(|| {
+        ensure_components_built();
+        for spec in PROVIDERS {
+            let mut harness = ComponentHarness::new(spec.component)?;
+            let qa_setup_bytes = harness.call_qa_setup()?;
+            let qa_setup: QaSpec =
+                decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
+            let has_url_question = qa_setup
+                .questions
+                .iter()
+                .any(|question| question.required && question.id.contains("url"));
+            if !has_url_question {
+                continue;
+            }
+            let invalid_answers = setup_answers_with_invalid_urls(&qa_setup);
+            let apply_bytes = harness.call_apply(QaMode::Setup, invalid_answers)?;
+            let apply_value: Value = decode_cbor(&apply_bytes).map_err(anyhow::Error::msg)?;
+            let ok = apply_value
+                .get("ok")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if ok {
+                return Err(anyhow!(
+                    "{} setup accepted invalid URL input: {}",
+                    spec.id,
+                    apply_value
+                ));
+            }
         }
-        let invalid_answers = setup_answers_with_invalid_urls(&qa_setup);
-        let apply_bytes = harness.call_apply(QaMode::Setup, invalid_answers)?;
-        let apply_value: Value = decode_cbor(&apply_bytes).map_err(anyhow::Error::msg)?;
-        let ok = apply_value
-            .get("ok")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if ok {
-            return Err(anyhow!(
-                "{} setup accepted invalid URL input: {}",
-                spec.id,
-                apply_value
-            ));
-        }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
 fn fixture_resolver_missing_secret_prompt_smoke() -> Result<()> {
-    ensure_components_built();
-    for spec in PROVIDERS {
-        if !PROVIDERS_REQUIRING_SECRET_PROMPTS.contains(&spec.id) {
-            continue;
+    run_registry_fixture_test(|| {
+        ensure_components_built();
+        for spec in PROVIDERS {
+            if !PROVIDERS_REQUIRING_SECRET_PROMPTS.contains(&spec.id) {
+                continue;
+            }
+            let mut harness = ComponentHarness::new(spec.component)?;
+            let qa_setup_bytes = harness.call_qa_setup()?;
+            let qa_setup: QaSpec =
+                decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
+            let has_secretish_prompt = qa_setup.questions.iter().any(|question| {
+                question.id.contains("token")
+                    || question.id.contains("secret")
+                    || question.id.contains("password")
+            });
+            if !has_secretish_prompt {
+                return Err(anyhow!(
+                    "{} setup QA does not include secret prompt",
+                    spec.id
+                ));
+            }
         }
-        let mut harness = ComponentHarness::new(spec.component)?;
-        let qa_setup_bytes = harness.call_qa_setup()?;
-        let qa_setup: QaSpec =
-            decode_cbor(&qa_setup_bytes).map_err(|e| anyhow!("decode qa setup: {e}"))?;
-        let has_secretish_prompt = qa_setup.questions.iter().any(|question| {
-            question.id.contains("token")
-                || question.id.contains("secret")
-                || question.id.contains("password")
-        });
-        if !has_secretish_prompt {
-            return Err(anyhow!(
-                "{} setup QA does not include secret prompt",
-                spec.id
-            ));
-        }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]

@@ -14,8 +14,8 @@ use greentic_types::messaging::universal_dto::{HttpInV1, HttpOutV1};
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
 use serde_json::{Value, json};
 
-use super::build_slack_envelope;
 use super::modal::{handle_view_submission, open_slack_modal};
+use super::{build_slack_envelope, mark_slack_user_entered};
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::{ProviderConfig, load_config, resolve_bot_token};
 
@@ -124,6 +124,23 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         return http_out_v1_bytes(&out);
     }
 
+    let team_id = slack_team_id(&body_val);
+    if let Some(envelope) = lifecycle_envelope_from_payload(&payload, team_id.as_deref()) {
+        let normalized = json!({
+            "ok": true,
+            "event": body_val,
+            "channel": envelope.metadata.get("channel_id").cloned(),
+        });
+        let normalized_bytes = serde_json::to_vec(&normalized).unwrap_or_else(|_| b"{}".to_vec());
+        let out = HttpOutV1 {
+            status: 200,
+            headers: Vec::new(),
+            body_b64: STANDARD.encode(&normalized_bytes),
+            events: vec![envelope],
+        };
+        return http_out_v1_bytes(&out);
+    }
+
     let text = payload
         .get("text")
         .and_then(Value::as_str)
@@ -162,6 +179,66 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         events: vec![envelope],
     };
     http_out_v1_bytes(&out)
+}
+
+fn lifecycle_envelope_from_payload(
+    payload: &Value,
+    team_id: Option<&str>,
+) -> Option<greentic_types::ChannelMessageEnvelope> {
+    let event_type = payload.get("type").and_then(Value::as_str)?;
+    let (reason, session_id, channel_id, user_id) = match event_type {
+        "app_home_opened" => {
+            let user = payload.get("user").and_then(Value::as_str)?;
+            let channel = payload.get("channel").and_then(Value::as_str);
+            (
+                "app_home_opened",
+                channel.unwrap_or(user).to_string(),
+                channel,
+                Some(user),
+            )
+        }
+        "member_joined_channel" => {
+            let channel = payload.get("channel").and_then(Value::as_str)?;
+            let user = payload.get("user").and_then(Value::as_str)?;
+            (
+                "member_joined_channel",
+                channel.to_string(),
+                Some(channel),
+                Some(user),
+            )
+        }
+        _ => return None,
+    };
+    let mut envelope = build_slack_envelope(
+        String::new(),
+        Some(session_id),
+        user_id.map(ToOwned::to_owned),
+    );
+    mark_slack_user_entered(&mut envelope, reason, team_id, channel_id, user_id);
+    if let Some(event_ts) = payload.get("event_ts").and_then(Value::as_str) {
+        envelope.id = format!("slack:{event_ts}");
+        envelope
+            .metadata
+            .insert("event_ts".to_string(), event_ts.to_string());
+    }
+    Some(envelope)
+}
+
+fn slack_team_id(body: &Value) -> Option<String> {
+    body.get("team_id")
+        .or_else(|| body.get("team"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            body.get("authorizations")
+                .and_then(Value::as_array)
+                .and_then(|items| items.first())
+                .and_then(|item| item.get("team_id"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(ToOwned::to_owned)
+        })
 }
 
 /// Process a Slack `block_actions` interaction (button click).
@@ -440,6 +517,68 @@ mod tests {
         assert_eq!(out.events.len(), 1);
         assert_eq!(out.events[0].text.as_deref(), Some("hello"));
         assert_eq!(out.events[0].metadata["channel"], "C1");
+    }
+
+    #[test]
+    fn ingest_app_home_opened_produces_user_entered_envelope() {
+        let out = parse_out(ingest_http(&request(
+            br#"{"type":"event_callback","team_id":"T1","event":{"type":"app_home_opened","user":"U1","event_ts":"1780414157.651"}}"#,
+            json!([]),
+        )));
+
+        assert_eq!(out.status, 200);
+        assert_eq!(out.events.len(), 1);
+        let event = &out.events[0];
+        assert_eq!(event.session_id, "U1");
+        assert_eq!(
+            event.metadata.get("event_type").map(String::as_str),
+            Some("channel.user.entered")
+        );
+        assert_eq!(
+            event.metadata.get("autoStart").map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            event.metadata.get("provider").map(String::as_str),
+            Some("slack")
+        );
+        assert_eq!(
+            event.metadata.get("reason").map(String::as_str),
+            Some("app_home_opened")
+        );
+        assert_eq!(
+            event.metadata.get("idempotency_key").map(String::as_str),
+            Some("lifecycle.user_entered:slack:T1:U1:U1:app_home_opened")
+        );
+    }
+
+    #[test]
+    fn ingest_member_joined_channel_produces_user_entered_envelope() {
+        let out = parse_out(ingest_http(&request(
+            br#"{"type":"event_callback","team_id":"T1","event":{"type":"member_joined_channel","channel":"C1","user":"U1","event_ts":"1780414157.652"}}"#,
+            json!([]),
+        )));
+
+        assert_eq!(out.status, 200);
+        assert_eq!(out.events.len(), 1);
+        let event = &out.events[0];
+        assert_eq!(event.session_id, "C1");
+        assert_eq!(
+            event.metadata.get("event_type").map(String::as_str),
+            Some("channel.user.entered")
+        );
+        assert_eq!(
+            event.metadata.get("reason").map(String::as_str),
+            Some("member_joined_channel")
+        );
+        assert_eq!(
+            event.metadata.get("channel_id").map(String::as_str),
+            Some("C1")
+        );
+        assert_eq!(
+            event.metadata.get("idempotency_key").map(String::as_str),
+            Some("lifecycle.user_entered:slack:T1:C1:U1:member_joined_channel")
+        );
     }
 
     #[test]

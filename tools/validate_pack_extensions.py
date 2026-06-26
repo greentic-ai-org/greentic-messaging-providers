@@ -139,6 +139,12 @@ def validate_pack(path: Path) -> None:
     if not isinstance(extensions, dict):
         raise ValueError(f"{path} manifest has no extensions map")
 
+    if path.stem == "messaging-teams":
+        ingress = extensions.get("messaging.provider_ingress.v1")
+        if not isinstance(ingress, dict):
+            raise ValueError(f"{path} missing ingress extension messaging.provider_ingress.v1")
+        return
+
     ext = extensions.get(PROVIDER_EXTENSION_ID)
     if ext is None:
         keys = ", ".join(sorted(k for k in extensions.keys() if isinstance(k, str)))
@@ -153,7 +159,7 @@ def validate_pack(path: Path) -> None:
                 f"{path} provider extension kind={kind!r}, expected {PROVIDER_EXTENSION_ID!r}"
             )
 
-    if path.stem == "messaging-teams":
+    if path.stem == "messaging-teams-graph":
         validate_teams_subscription_desired_state(path, manifest)
 
     if path.stem in GENERATED_SECRET_REQUIREMENTS:

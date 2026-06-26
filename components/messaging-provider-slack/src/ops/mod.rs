@@ -33,6 +33,7 @@ pub(crate) use webhook::{setup_app_registration, setup_webhook};
 use greentic_types::{
     Actor, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
 };
+use provider_common::lifecycle_events::{mark_user_entered, user_entered_idempotency_key};
 
 /// Build a minimal [`ChannelMessageEnvelope`] for inbound Slack events.
 ///
@@ -79,6 +80,40 @@ pub(super) fn build_slack_envelope(
         attachments: Vec::new(),
         metadata,
         extensions: Default::default(),
+    }
+}
+
+pub(super) fn mark_slack_user_entered(
+    envelope: &mut ChannelMessageEnvelope,
+    reason: &str,
+    team_id: Option<&str>,
+    channel_id: Option<&str>,
+    user_id: Option<&str>,
+) {
+    let idempotency_key = user_entered_idempotency_key(
+        "slack",
+        team_id,
+        channel_id.or(Some(envelope.session_id.as_str())),
+        user_id,
+        reason,
+    );
+    mark_user_entered(&mut envelope.metadata, "slack", reason, idempotency_key);
+    if let Some(team_id) = team_id.filter(|value| !value.trim().is_empty()) {
+        envelope
+            .metadata
+            .insert("team_id".to_string(), team_id.to_string());
+    }
+    if let Some(channel_id) = channel_id.filter(|value| !value.trim().is_empty()) {
+        envelope
+            .metadata
+            .insert("channel_id".to_string(), channel_id.to_string());
+    } else {
+        envelope.metadata.remove("channel");
+    }
+    if let Some(user_id) = user_id.filter(|value| !value.trim().is_empty()) {
+        envelope
+            .metadata
+            .insert("user_id".to_string(), user_id.to_string());
     }
 }
 

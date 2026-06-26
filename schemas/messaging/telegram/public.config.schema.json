@@ -18,6 +18,11 @@
       "minLength": 1,
       "description": "Public base URL for inbound webhook callbacks."
     },
+    "bot_username": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Telegram bot username used to build the Add to Telegram setup link."
+    },
     "default_chat_id": {
       "type": "string",
       "description": "Default chat id used when an invocation does not supply one."

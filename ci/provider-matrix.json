@@ -16,7 +16,7 @@
     "messaging-ingress-whatsapp",
     "messaging-provider-dummy",
     "messaging-provider-telegram",
-    "messaging-provider-teams",
+    "messaging-provider-teams-graph",
     "messaging-provider-email",
     "messaging-provider-slack",
     "messaging-provider-webex",
@@ -30,10 +30,13 @@
     "messaging-microsoft-email",
     "messaging-slack",
     "messaging-teams",
+    "messaging-teams-graph",
     "messaging-telegram",
     "messaging-webchat",
     "messaging-webchat-gui",
     "messaging-webex",
+    "messaging-http",
+    "messaging-websocket",
     "messaging-whatsapp"
   ],
   "shared_paths": [
@@ -111,7 +114,7 @@
     },
     "email": {
       "pack": "messaging-email",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "ghcr_target": "ghcr.io/greenticai/messaging-email",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -146,7 +149,7 @@
     },
     "microsoft-email": {
       "pack": "messaging-microsoft-email",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "ghcr_target": "ghcr.io/greenticai/messaging-microsoft-email",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
@@ -181,9 +184,9 @@
     },
     "slack": {
       "pack": "messaging-slack",
-      "version": "0.5.4",
+      "version": "0.5.13",
       "ghcr_target": "ghcr.io/greenticai/messaging-slack",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
         "external_service": "slack",
         "required_secrets": [
@@ -218,9 +221,9 @@
       ]
     },
     "teams": {
-      "pack": "messaging-teams",
-      "version": "0.5.9",
-      "ghcr_target": "ghcr.io/greenticai/messaging-teams",
+      "pack": "messaging-teams-graph",
+      "version": "0.5.18",
+      "ghcr_target": "ghcr.io/greenticai/messaging-teams-graph",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
         "external_service": "microsoft-teams",
@@ -240,27 +243,60 @@
       "components": [
         "teams",
         "messaging-ingress-teams",
-        "messaging-provider-teams"
+        "messaging-provider-teams-graph"
       ],
       "manifests": [
         "components/teams/Cargo.toml",
         "components/messaging-ingress-teams/Cargo.toml",
-        "components/messaging-provider-teams/Cargo.toml"
+        "components/messaging-provider-teams-graph/Cargo.toml"
       ],
       "paths": [
         "components/teams/",
         "components/messaging-ingress-teams/",
-        "components/messaging-provider-teams/",
-        "packs/messaging-teams/",
+        "components/messaging-provider-teams-graph/",
+        "packs/messaging-teams-graph/",
         "ci/secrets/teams.secrets-pack.yaml",
         "crates/provider-tests/tests/provider_core_teams.rs"
       ]
     },
+    "messaging-teams": {
+      "pack": "messaging-teams",
+      "version": "0.5.21",
+      "ghcr_target": "ghcr.io/greenticai/messaging-teams",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
+      "e2e": {
+        "external_service": "microsoft-teams-bot-framework",
+        "required_secrets": [],
+        "optional_secrets": [
+          "GREENTIC_TEAMS_BOT_APP_ID",
+          "GREENTIC_TEAMS_BOT_APP_PASSWORD",
+          "GREENTIC_TEAMS_BOT_TENANT"
+        ],
+        "fixture_path": "e2e/providers/teams",
+        "test_command": "scripts/test_teams_bot.sh",
+        "operation": "Bot Framework Teams activity ingress and Adaptive Card invoke handling",
+        "readback": "local provider ingress contract validation"
+      },
+      "components": [
+        "messaging-ingress-teams"
+      ],
+      "manifests": [
+        "components/messaging-ingress-teams/Cargo.toml"
+      ],
+      "paths": [
+        "messaging-teams/",
+        "components/messaging-ingress-teams/",
+        "tools/build_components/messaging-ingress-teams.sh",
+        "scripts/test_teams_bot.sh",
+        "crates/provider-tests/tests/provider_ingress_components.rs",
+        "crates/provider-common/tests/pack_metadata.rs"
+      ]
+    },
     "telegram": {
       "pack": "messaging-telegram",
-      "version": "0.5.4",
+      "version": "0.5.6",
       "ghcr_target": "ghcr.io/greenticai/messaging-telegram",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
         "external_service": "telegram",
         "required_secrets": [
@@ -297,9 +333,9 @@
     },
     "webchat": {
       "pack": "messaging-webchat",
-      "version": "0.5.2",
+      "version": "0.5.5",
       "ghcr_target": "ghcr.io/greenticai/messaging-webchat",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
         "external_service": "webchat",
         "required_secrets": [
@@ -333,7 +369,7 @@
     },
     "webchat-gui": {
       "pack": "messaging-webchat-gui",
-      "version": "0.5.4",
+      "version": "0.5.9",
       "ghcr_target": "ghcr.io/greenticai/messaging-webchat-gui",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
@@ -359,9 +395,9 @@
     },
     "webex": {
       "pack": "messaging-webex",
-      "version": "0.5.9",
+      "version": "0.5.14",
       "ghcr_target": "ghcr.io/greenticai/messaging-webex",
-      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
         "external_service": "webex",
         "required_secrets": [
@@ -393,9 +429,59 @@
         "crates/provider-tests/tests/provider_core_webex.rs"
       ]
     },
+    "http": {
+      "pack": "messaging-http",
+      "version": "0.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-http",
+      "shared_crate_dependency": null,
+      "e2e": {
+        "external_service": "http",
+        "required_secrets": [],
+        "optional_secrets": [],
+        "fixture_path": "generated-providers/messaging-http/tests",
+        "test_command": "scripts/check_answer_provider.sh messaging-http",
+        "operation": "answer-owned HTTP provider generation and mapping smoke",
+        "readback": "local source tests plus generated pack validation"
+      },
+      "components": [],
+      "manifests": [
+        "generated-providers/messaging-http/build-answer.json"
+      ],
+      "paths": [
+        "generated-providers/messaging-http/",
+        "scripts/generate_answer_provider.sh",
+        "scripts/package_answer_provider.sh",
+        "scripts/check_answer_provider.sh"
+      ]
+    },
+    "websocket": {
+      "pack": "messaging-websocket",
+      "version": "0.1.0",
+      "ghcr_target": "ghcr.io/greenticai/messaging-websocket",
+      "shared_crate_dependency": null,
+      "e2e": {
+        "external_service": "websocket",
+        "required_secrets": [],
+        "optional_secrets": [],
+        "fixture_path": "generated-providers/messaging-websocket/tests",
+        "test_command": "scripts/check_answer_provider.sh messaging-websocket",
+        "operation": "answer-owned WebSocket provider generation and mapping smoke",
+        "readback": "local source tests plus generated pack validation"
+      },
+      "components": [],
+      "manifests": [
+        "generated-providers/messaging-websocket/build-answer.json"
+      ],
+      "paths": [
+        "generated-providers/messaging-websocket/",
+        "scripts/generate_answer_provider.sh",
+        "scripts/package_answer_provider.sh",
+        "scripts/check_answer_provider.sh"
+      ]
+    },
     "whatsapp": {
       "pack": "messaging-whatsapp",
-      "version": "0.5.3",
+      "version": "0.5.4",
       "ghcr_target": "ghcr.io/greenticai/messaging-whatsapp",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {

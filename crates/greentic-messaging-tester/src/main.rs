@@ -81,6 +81,16 @@ enum Command {
         #[arg(long, value_name = "DESTINATION_KIND")]
         to_kind: Option<String>,
     },
+    Invoke {
+        #[arg(long)]
+        provider: String,
+        #[arg(long)]
+        op: String,
+        #[arg(long, value_name = "INPUT_JSON")]
+        input: PathBuf,
+        #[arg(long, value_name = "VALUES_JSON")]
+        values: Option<PathBuf>,
+    },
     Ingress {
         #[arg(long)]
         provider: String,
@@ -218,6 +228,12 @@ fn run(cli: Cli) -> Result<(), CliError> {
             to,
             to_kind,
         } => handle_send(provider, values, text, card, to, to_kind),
+        Command::Invoke {
+            provider,
+            op,
+            input,
+            values,
+        } => handle_invoke(provider, op, input, values),
         Command::Ingress {
             provider,
             values,
@@ -428,7 +444,7 @@ fn handle_send(
         &secrets,
         http_mode,
         history.clone(),
-        None,
+        values.response_queue(),
     ) {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -459,6 +475,52 @@ fn handle_send(
         "result": send_result,
     });
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    Ok(())
+}
+
+fn handle_invoke(
+    provider: String,
+    op: String,
+    input_path: PathBuf,
+    values_path: Option<PathBuf>,
+) -> Result<(), CliError> {
+    let input_bytes =
+        fs::read(&input_path).map_err(|err| CliError::HttpInput(input_path.clone(), err.into()))?;
+    let (secrets, http_mode, responses) = if let Some(path) = values_path {
+        let values = Values::load(&path).map_err(|err| CliError::ValuesLoad(path.clone(), err))?;
+        (
+            values.secret_bytes(),
+            values.http_mode(),
+            values.response_queue(),
+        )
+    } else {
+        (HashMap::new(), HttpMode::Mock, None)
+    };
+    let harness = WasmHarness::new(&provider).map_err(CliError::WasmLoad)?;
+    let history = new_history();
+    let out_bytes = match harness.invoke(
+        &op,
+        input_bytes,
+        &secrets,
+        http_mode,
+        history.clone(),
+        responses,
+    ) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            log_http_history(&op, &history);
+            return Err(map_invoke_error(err));
+        }
+    };
+    match serde_json::from_slice::<Value>(&out_bytes) {
+        Ok(value) => {
+            ensure_ok(&value, &op)?;
+            println!("{}", serde_json::to_string_pretty(&value).unwrap());
+        }
+        Err(_) => {
+            println!("{}", String::from_utf8_lossy(&out_bytes));
+        }
+    }
     Ok(())
 }
 
@@ -1489,6 +1551,7 @@ mod tests {
             to: serde_json::Map::new(),
             http: None,
             state: serde_json::Map::new(),
+            responses: Vec::new(),
         };
 
         assert_eq!(
@@ -1514,6 +1577,7 @@ mod tests {
             to: serde_json::Map::new(),
             http: None,
             state: serde_json::Map::new(),
+            responses: Vec::new(),
         };
 
         let input = build_provider_webhook_input(&values, "https://new.example.com".to_string());

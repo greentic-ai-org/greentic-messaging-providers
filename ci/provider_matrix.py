@@ -33,6 +33,17 @@ def load_matrix() -> dict:
 
 def normalize_provider(raw: str, matrix: dict) -> str:
     value = raw.strip().lower()
+    if value in matrix["providers"] and value != "teams":
+        return value
+    for name, provider in matrix["providers"].items():
+        if value == provider.get("pack", "").lower():
+            return name
+    # The public Teams provider is the Bot Framework-backed messaging-teams pack.
+    # Keep the legacy Graph provider reachable by its explicit pack id above.
+    if value == "teams" and "messaging-teams" in matrix["providers"]:
+        return "messaging-teams"
+    if value in matrix["providers"]:
+        return value
     if value.startswith("messaging-"):
         value = value[len("messaging-") :]
     if value in matrix["providers"]:

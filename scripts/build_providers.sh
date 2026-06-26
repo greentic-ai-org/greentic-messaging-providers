@@ -32,18 +32,18 @@ if [ $# -gt 1 ]; then
 fi
 
 if [ -n "${PROVIDER_FILTER}" ]; then
-  PROVIDERS=("$(python3 ci/provider_matrix.py resolve-provider "${PROVIDER_FILTER}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["provider"])')")
+  PROVIDERS=("${PROVIDER_FILTER}")
 else
   PROVIDERS=()
-  while IFS= read -r provider; do
-    PROVIDERS+=("${provider}")
+  while IFS= read -r provider_ref; do
+    PROVIDERS+=("${provider_ref}")
   done < <(python3 - <<'PY'
 import json
 from pathlib import Path
 
 matrix = json.loads(Path("ci/provider-matrix.json").read_text())
-for provider in sorted(matrix["providers"]):
-    print(provider)
+for provider, spec in sorted(matrix["providers"].items()):
+    print(spec.get("pack") or provider)
 PY
 )
 fi
@@ -70,13 +70,69 @@ for provider in "${PROVIDERS[@]}"; do
   version="$(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
   components=()
   while IFS= read -r component; do
+    if [ -z "${component}" ]; then
+      continue
+    fi
     components+=("${component}")
   done < <(printf '%s' "${resolved_json}" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["components"]))')
+  test_targets=()
+  while IFS= read -r test_target; do
+    if [ -z "${test_target}" ]; then
+      continue
+    fi
+    test_targets+=("${test_target}")
+  done < <(printf '%s' "${resolved_json}" | python3 -c '
+import json
+import sys
+from pathlib import Path
+
+provider = json.load(sys.stdin)
+targets = []
+for path in provider.get("paths", []):
+    p = Path(path)
+    if len(p.parts) == 4 and p.parts[:3] == ("crates", "provider-tests", "tests") and p.suffix == ".rs":
+        targets.append(f"provider-tests:{p.stem}")
+    elif len(p.parts) == 4 and p.parts[:3] == ("crates", "provider-common", "tests") and p.suffix == ".rs":
+        targets.append(f"greentic-messaging-provider-common:{p.stem}")
+print("\n".join(dict.fromkeys(targets)))
+')
 
   echo "== provider: ${provider} =="
   echo "  pack      : ${pack}"
   echo "  version   : ${version}"
-  echo "  components: ${components[*]}"
+  if [ "${#components[@]}" -gt 0 ]; then
+    echo "  components: ${components[*]}"
+  else
+    echo "  components: (none)"
+  fi
+
+  if [ -f "generated-providers/${pack}/build-answer.json" ]; then
+    echo "-- answer-owned provider check: ${pack}"
+    scripts/check_answer_provider.sh "${pack}"
+    echo
+    continue
+  fi
+
+  if [ "${pack}" = "messaging-teams" ]; then
+    echo "-- answer-owned provider build: ${pack}"
+    jq -e '.pack_create and .pack' messaging-teams/build-answer.json >/dev/null
+    node --input-type=module --check < messaging-teams/assets/setup/greentic-teams-setup.js
+    bash -n messaging-teams/build_pack.sh scripts/test_teams_bot.sh
+    awk '
+      $0 == "cat > \"${WORK_DIR}/server.py\" <<'\''PY'\''" { in_server = 1; next }
+      in_server && $0 == "PY" { exit }
+      in_server { print }
+    ' scripts/test_teams_bot.sh > "${TMPDIR:-/tmp}/test_teams_bot_server.py"
+    python3 -m py_compile "${TMPDIR:-/tmp}/test_teams_bot_server.py"
+    cargo test -p greentic-messaging-provider-common messaging_teams
+    cargo test -p messaging-ingress-teams
+    bash tools/build_components/messaging-ingress-teams.sh
+    cargo test -p provider-tests handles_bot_framework_adaptive_card_submit
+    messaging-teams/build_pack.sh
+    PACK_FILTER="${pack}" PACK_VERSION="${version}" ./ci/steps/11_build_packs.sh
+    echo
+    continue
+  fi
 
   if [ -f "packs/${pack}/build-answer.json" ]; then
     echo "-- validate build answer: ${pack}"
@@ -99,6 +155,17 @@ for provider in "${PROVIDERS[@]}"; do
     fi
     BUILT_COMPONENTS+=("${component}")
   done
+
+  if [ "${#test_targets[@]}" -gt 0 ]; then
+    for test_target in "${test_targets[@]}"; do
+      test_package="${test_target%%:*}"
+      test_name="${test_target#*:}"
+      echo "-- test ${test_package}: ${test_name}"
+      cargo test -p "${test_package}" --test "${test_name}"
+    done
+  else
+    echo "-- test provider: no focused provider test target declared"
+  fi
 
   echo "-- stage pack inputs: ${pack}"
   python3 - "${pack}" "${components[@]}" <<'PY'

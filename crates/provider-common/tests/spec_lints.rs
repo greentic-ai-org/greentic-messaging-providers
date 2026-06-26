@@ -103,6 +103,11 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
         .iter()
         .find(|action| action.get("id").and_then(Value::as_str) == Some("add_to_slack"))
         .ok_or_else(|| anyhow!("slack setup.yaml missing add_to_slack action"))?;
+    assert_eq!(
+        oauth_action.get("label").and_then(Value::as_str),
+        Some("Setup Slack App"),
+        "Slack setup-flow action must be labelled Setup Slack App; Add to Slack is reserved for the generic final action"
+    );
 
     assert_eq!(
         registration.get("app_id_output").and_then(Value::as_str),
@@ -112,7 +117,7 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
     assert_eq!(
         registration.get("client_id_output").and_then(Value::as_str),
         Some("slack_client_id"),
-        "Slack registration must persist the OAuth client id under the key Add to Slack reads"
+        "Slack registration must persist the OAuth client id under the key Slack setup reads"
     );
     assert_eq!(
         registration
@@ -124,7 +129,182 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
     assert_eq!(
         oauth_action.get("client_id_field").and_then(Value::as_str),
         registration.get("client_id_output").and_then(Value::as_str),
-        "Slack Add to Slack button must use the registered OAuth client id output"
+        "Slack setup button must use the registered OAuth client id output"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()> {
+    let root = workspace_root();
+    for (pack, expected_id, expected_label, expected_requires) in [
+        (
+            "messaging-slack",
+            "add-to-slack",
+            "Add to Slack",
+            "slack_app_url",
+        ),
+        (
+            "messaging-webex",
+            "add-to-webex",
+            "Add to WebEx",
+            "bot_email",
+        ),
+        (
+            "messaging-telegram",
+            "add-to-telegram",
+            "Add to Telegram",
+            "bot_username",
+        ),
+    ] {
+        let pack_yaml = root.join("packs").join(pack).join("pack.yaml");
+        let value: Value = serde_yaml_bw::from_str(&fs::read_to_string(&pack_yaml)?)?;
+        let inline = value
+            .get("extensions")
+            .and_then(|extensions| extensions.get("greentic.setup.actions.v1"))
+            .and_then(|entry| entry.get("inline"))
+            .ok_or_else(|| anyhow!("{pack} missing greentic.setup.actions.v1 inline metadata"))?;
+        assert_eq!(
+            inline.get("schema_id").and_then(Value::as_str),
+            Some("greentic.setup.actions.v1"),
+            "{pack} action descriptor must declare schema id"
+        );
+        let action = inline
+            .get("actions")
+            .and_then(Value::as_sequence)
+            .and_then(|actions| {
+                actions
+                    .iter()
+                    .find(|action| action.get("id").and_then(Value::as_str) == Some(expected_id))
+            })
+            .ok_or_else(|| anyhow!("{pack} missing final action {expected_id}"))?;
+        assert_eq!(
+            action.get("label").and_then(Value::as_str),
+            Some(expected_label)
+        );
+        assert_eq!(
+            action.get("kind").and_then(Value::as_str),
+            Some("deep_link")
+        );
+        assert!(
+            action
+                .get("url_template")
+                .and_then(Value::as_str)
+                .is_some_and(|template| template.contains(&format!("{{{expected_requires}}}"))),
+            "{pack} final action URL template must reference {expected_requires}"
+        );
+        let requires = action
+            .get("requires")
+            .and_then(Value::as_sequence)
+            .ok_or_else(|| anyhow!("{pack} final action missing requires"))?;
+        assert!(
+            requires
+                .iter()
+                .any(|item| item.as_str() == Some(expected_requires)),
+            "{pack} final action must require {expected_requires}"
+        );
+
+        let setup_yaml = root.join("packs").join(pack).join("assets/setup.yaml");
+        let setup: Value = serde_yaml_bw::from_str(&fs::read_to_string(&setup_yaml)?)?;
+        let setup_actions = setup
+            .get("setup_actions")
+            .and_then(Value::as_sequence)
+            .ok_or_else(|| anyhow!("{pack} setup.yaml missing setup_actions"))?;
+        if pack == "messaging-slack" {
+            assert!(
+                setup_actions
+                    .iter()
+                    .any(|action| action.get("kind").and_then(Value::as_str)
+                        == Some("oauth_install_button")),
+                "messaging-slack setup.yaml must declare the generic registration/OAuth setup action"
+            );
+        } else {
+            let setup_action = setup_actions
+                .iter()
+                .find(|action| action.get("id").and_then(Value::as_str) == Some(expected_id))
+                .ok_or_else(|| anyhow!("{pack} setup.yaml missing final action {expected_id}"))?;
+            assert_eq!(
+                setup_action.get("label").and_then(Value::as_str),
+                Some(expected_label),
+                "{pack} setup.yaml final action label mismatch"
+            );
+            assert_eq!(
+                setup_action.get("kind").and_then(Value::as_str),
+                Some("deep_link"),
+                "{pack} setup.yaml final action must be a generic deep_link"
+            );
+            assert!(
+                setup_action
+                    .get("requires")
+                    .and_then(Value::as_sequence)
+                    .is_some_and(|requires| requires
+                        .iter()
+                        .any(|item| item.as_str() == Some(expected_requires))),
+                "{pack} setup.yaml final action must require {expected_requires}"
+            );
+        }
+    }
+
+    let teams_answer: JsonValue = serde_json::from_str(&fs::read_to_string(
+        root.join("messaging-teams").join("build-answer.json"),
+    )?)?;
+    let teams_actions = teams_answer
+        .pointer("/setup_api/actions")
+        .ok_or_else(|| anyhow!("messaging-teams build answer missing setup_api.actions"))?;
+    assert_eq!(
+        teams_actions.get("schema_id").and_then(JsonValue::as_str),
+        Some("greentic.setup.actions.v1")
+    );
+    let add_to_teams = teams_actions
+        .get("actions")
+        .and_then(JsonValue::as_array)
+        .and_then(|actions| {
+            actions
+                .iter()
+                .find(|action| action.get("id").and_then(JsonValue::as_str) == Some("add-to-teams"))
+        })
+        .ok_or_else(|| anyhow!("messaging-teams missing add-to-teams final action"))?;
+    assert_eq!(
+        add_to_teams.get("label").and_then(JsonValue::as_str),
+        Some("Add to Teams")
+    );
+    assert_eq!(
+        add_to_teams.get("kind").and_then(JsonValue::as_str),
+        Some("deep_link")
+    );
+    assert!(
+        add_to_teams
+            .get("requires")
+            .and_then(JsonValue::as_array)
+            .is_some_and(|requires| requires
+                .iter()
+                .any(|item| item.as_str() == Some("add_to_teams_url")))
+    );
+    let teams_setup: Value = serde_yaml_bw::from_str(&fs::read_to_string(
+        root.join("messaging-teams/assets/setup.yaml"),
+    )?)?;
+    let teams_setup_action = teams_setup
+        .get("setup_actions")
+        .and_then(Value::as_sequence)
+        .and_then(|actions| {
+            actions
+                .iter()
+                .find(|action| action.get("id").and_then(Value::as_str) == Some("add-to-teams"))
+        })
+        .ok_or_else(|| anyhow!("messaging-teams setup.yaml missing add-to-teams final action"))?;
+    assert_eq!(
+        teams_setup_action.get("kind").and_then(Value::as_str),
+        Some("deep_link")
+    );
+    assert!(
+        teams_setup_action
+            .get("requires")
+            .and_then(Value::as_sequence)
+            .is_some_and(|requires| requires
+                .iter()
+                .any(|item| item.as_str() == Some("add_to_teams_url"))),
+        "messaging-teams setup.yaml Add to Teams must require add_to_teams_url"
     );
 
     Ok(())
@@ -204,7 +384,7 @@ fn teams_setup_persists_discovery_labels_and_modes() -> Result<()> {
     let root = workspace_root();
     let setup_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("assets")
         .join("setup.yaml");
     let value: Value = serde_yaml_bw::from_str(&fs::read_to_string(&setup_path)?)?;
@@ -216,8 +396,8 @@ fn teams_setup_persists_discovery_labels_and_modes() -> Result<()> {
         .get("graph_channel")
         .ok_or_else(|| anyhow!("Teams setup must describe Graph channel mode"))?;
     assert!(
-        setup_modes.get("bot_framework").is_some(),
-        "Teams setup must describe Bot Framework mode"
+        setup_modes.get("bot_framework").is_none(),
+        "Teams Graph setup must not advertise Bot Framework mode"
     );
     let provisioning = graph_channel
         .get("provisioning")
@@ -359,16 +539,16 @@ fn teams_subscription_manifest_declares_generic_desired_state_metadata() -> Resu
     let root = workspace_root();
     let manifest_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("pack.manifest.json");
     let desired_fixture_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("fixtures")
         .join("subscriptions.desired-state-metadata.expected.json");
     let component_config_fixture_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("fixtures")
         .join("subscriptions.component-config.expected.json");
     let manifest: JsonValue = serde_json::from_str(&fs::read_to_string(&manifest_path)?)?;
@@ -532,7 +712,7 @@ fn teams_pack_manifest_declares_channel_provisioning_contract() -> Result<()> {
     let root = workspace_root();
     let manifest_path = root
         .join("packs")
-        .join("messaging-teams")
+        .join("messaging-teams-graph")
         .join("pack.manifest.json");
     let manifest: JsonValue = serde_json::from_str(&fs::read_to_string(&manifest_path)?)?;
     let extensions = manifest
@@ -701,6 +881,57 @@ fn webchat_gui_setup_has_presentation_mode_and_standalone_nav_links() -> Result<
             .and_then(|visible| visible.get("eq"))
             .and_then(Value::as_str),
         Some("standalone")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
+    let root = workspace_root();
+    let runtime_path = root
+        .join("packs")
+        .join("messaging-webchat-gui")
+        .join("assets")
+        .join("webchat-gui")
+        .join("runtime-bootstrap.js");
+    let runtime = fs::read_to_string(&runtime_path)?;
+
+    assert!(
+        runtime.contains("DIRECT_LINE_CACHE_VERSION"),
+        "webchat-gui runtime must version Direct Line cache keys"
+    );
+    assert!(
+        runtime.contains("directLineCacheKey"),
+        "webchat-gui runtime must build scoped Direct Line cache keys"
+    );
+    assert!(
+        runtime.contains("stableCachePart(window.location.origin)")
+            && runtime.contains("stableCachePart(tenant)")
+            && runtime.contains("stableCachePart(env)")
+            && runtime.contains("stableCachePart(directLineTokenUrl())")
+            && runtime.contains("stableCachePart(directLineDomain())"),
+        "webchat-gui Direct Line cache key must include origin, tenant, env, token URL, and domain"
+    );
+    assert!(
+        runtime.contains("LEGACY_TOKEN_CACHE_KEY = 'greentic_dl_token'")
+            && runtime.contains("LEGACY_CONVERSATION_CACHE_KEY = 'greentic_dl_conversation'")
+            && runtime.contains("clearLegacyDirectLineCache"),
+        "webchat-gui runtime must clear legacy global Direct Line cache keys"
+    );
+    assert!(
+        !runtime.contains("localStorage.getItem('greentic_dl_token')")
+            && !runtime.contains("localStorage.setItem('greentic_dl_token'")
+            && !runtime.contains("localStorage.getItem('greentic_dl_conversation')")
+            && !runtime.contains("localStorage.setItem('greentic_dl_conversation'"),
+        "webchat-gui runtime must not read or write global Direct Line cache keys"
+    );
+    assert!(
+        runtime.contains("reloadOnceAfterDirectLineAuthFailure")
+            && runtime.contains("response.status === 401")
+            && runtime.contains("xhr.status === 401")
+            && runtime.contains("sessionStorage.setItem(DIRECT_LINE_AUTH_RETRY_KEY, '1')"),
+        "webchat-gui runtime must clear Direct Line cache and retry once after 401"
     );
 
     Ok(())

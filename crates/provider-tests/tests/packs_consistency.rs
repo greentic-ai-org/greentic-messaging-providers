@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use greentic_types::provider::PROVIDER_EXTENSION_ID;
@@ -23,6 +23,43 @@ fn version_from_yaml(path: &PathBuf) -> Result<String> {
         }
     }
     Err(anyhow::anyhow!("version not found in {}", path.display()))
+}
+
+fn setup_question_names(pack_dir: &Path) -> Result<HashSet<String>> {
+    let setup_path = pack_dir.join("assets/setup.yaml");
+    if !setup_path.exists() {
+        return Ok(HashSet::new());
+    }
+    let setup: serde_yaml::Value = serde_yaml::from_slice(&fs::read(&setup_path)?)
+        .with_context(|| format!("parsing {}", setup_path.display()))?;
+    Ok(setup
+        .get("questions")
+        .and_then(serde_yaml::Value::as_sequence)
+        .into_iter()
+        .flatten()
+        .filter_map(|question| question.get("name").and_then(serde_yaml::Value::as_str))
+        .map(str::to_string)
+        .collect())
+}
+
+fn setup_contract_config_outputs(manifest: &Value) -> HashSet<String> {
+    manifest
+        .get("extensions")
+        .and_then(|ext| ext.get(PROVIDER_EXTENSION_ID))
+        .and_then(|ext| ext.get("inline"))
+        .and_then(|inline| inline.get("providers"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|provider| provider.get("setup_contract"))
+        .filter_map(|contract| contract.get("config_out"))
+        .filter_map(Value::as_object)
+        .flat_map(|config_out| config_out.keys().cloned())
+        .collect()
+}
+
+fn known_provider_derived_setup_outputs(_pack_name: &str) -> HashSet<&'static str> {
+    HashSet::new()
 }
 
 #[test]
@@ -212,6 +249,171 @@ fn packs_have_consistent_manifests_and_artifacts() -> Result<()> {
             );
         }
     }
+
+    Ok(())
+}
+
+#[test]
+fn final_setup_action_requires_are_public_setup_outputs() -> Result<()> {
+    let root = workspace_root();
+    let packs_dir = root.join("packs");
+    for entry in fs::read_dir(&packs_dir).context("reading packs dir")? {
+        let entry = entry?;
+        let pack_dir = entry.path();
+        if !pack_dir.is_dir() {
+            continue;
+        }
+        let manifest_path = pack_dir.join("pack.manifest.json");
+        if !manifest_path.exists() {
+            continue;
+        }
+        let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)
+            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let Some(actions) = manifest
+            .get("extensions")
+            .and_then(|ext| ext.get("greentic.setup.actions.v1"))
+            .and_then(|ext| ext.get("inline"))
+            .and_then(|inline| inline.get("actions"))
+            .and_then(Value::as_array)
+        else {
+            continue;
+        };
+
+        let setup_questions = setup_question_names(&pack_dir)?;
+        let config_outputs = setup_contract_config_outputs(&manifest);
+        let pack_name = pack_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        let derived_outputs = known_provider_derived_setup_outputs(pack_name);
+        for action in actions {
+            let action_id = action
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("<unknown>");
+            if pack_name == "messaging-slack" && action_id == "add-to-slack" {
+                assert_eq!(
+                    action.get("url_template").and_then(Value::as_str),
+                    Some("{slack_app_url}"),
+                    "messaging-slack final Add to Slack should open the installed app, not OAuth authorization"
+                );
+                assert!(
+                    action
+                        .get("requires")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .any(|value| value.as_str() == Some("slack_app_url")),
+                    "messaging-slack Add to Slack should require slack_app_url"
+                );
+            }
+            for required in action
+                .get("requires")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                assert!(
+                    setup_questions.contains(required)
+                        || config_outputs.contains(required)
+                        || derived_outputs.contains(required),
+                    "{} action {action_id} requires `{required}` but it is not collected by setup.yaml or exposed by setup_contract.config_out",
+                    pack_dir.display()
+                );
+            }
+        }
+    }
+
+    let teams_answer: Value =
+        serde_json::from_slice(&fs::read(root.join("messaging-teams/build-answer.json"))?)?;
+    let teams_actions = teams_answer
+        .pointer("/setup_api/actions/actions")
+        .and_then(Value::as_array)
+        .expect("messaging-teams setup actions");
+    let add_to_teams = teams_actions
+        .iter()
+        .find(|action| action.get("id").and_then(Value::as_str) == Some("add-to-teams"))
+        .expect("Add to Teams action");
+    assert_eq!(
+        add_to_teams.pointer("/requires/0").and_then(Value::as_str),
+        Some("add_to_teams_url")
+    );
+    assert!(
+        add_to_teams.get("visible_when").is_none(),
+        "Add to Teams must resolve from its required public link value, not setup_status.ok"
+    );
+    let backend_contract: Value = serde_json::from_slice(&fs::read(
+        root.join("messaging-teams/assets/setup/backend-contract.json"),
+    )?)?;
+    assert_eq!(
+        backend_contract
+            .pointer("/state_shape/teams_app/add_to_teams_url")
+            .and_then(Value::as_str),
+        Some("string")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn required_setup_questions_do_not_use_placeholder_without_default() -> Result<()> {
+    let root = workspace_root();
+    let packs_dir = root.join("packs");
+    for entry in fs::read_dir(&packs_dir).context("reading packs dir")? {
+        let entry = entry?;
+        let setup_path = entry.path().join("assets/setup.yaml");
+        if !setup_path.exists() {
+            continue;
+        }
+        let setup: serde_yaml::Value = serde_yaml::from_slice(&fs::read(&setup_path)?)
+            .with_context(|| format!("parsing {}", setup_path.display()))?;
+        for question in setup
+            .get("questions")
+            .and_then(serde_yaml::Value::as_sequence)
+            .into_iter()
+            .flatten()
+        {
+            let required = question
+                .get("required")
+                .and_then(serde_yaml::Value::as_bool)
+                .unwrap_or(false);
+            if !required || question.get("placeholder").is_none() {
+                continue;
+            }
+            let has_default = question.get("default").is_some()
+                || question.get("default_value").is_some()
+                || question.get("default_from_context").is_some();
+            assert!(
+                has_default,
+                "{} required setup question `{}` uses placeholder text without a real default",
+                setup_path.display(),
+                question
+                    .get("name")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("<unknown>")
+            );
+        }
+    }
+
+    let telegram_setup: serde_yaml::Value = serde_yaml::from_slice(&fs::read(
+        root.join("packs/messaging-telegram/assets/setup.yaml"),
+    )?)?;
+    let telegram_api_base = telegram_setup
+        .get("questions")
+        .and_then(serde_yaml::Value::as_sequence)
+        .into_iter()
+        .flatten()
+        .find(|question| {
+            question.get("name").and_then(serde_yaml::Value::as_str) == Some("api_base_url")
+        })
+        .expect("telegram api_base_url setup question");
+    assert_eq!(
+        telegram_api_base
+            .get("default")
+            .and_then(serde_yaml::Value::as_str),
+        Some("https://api.telegram.org")
+    );
 
     Ok(())
 }

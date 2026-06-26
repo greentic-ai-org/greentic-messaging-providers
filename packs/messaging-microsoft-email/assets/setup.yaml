@@ -7,7 +7,6 @@ questions:
     kind: string
     required: true
     help: "Sender email address"
-    placeholder: "bot@yourdomain.com"
     group: Connection
   - name: graph_tenant_id
     title: Graph tenant ID
@@ -15,7 +14,6 @@ questions:
     required: true
     secret: true
     help: "Azure AD tenant ID (Directory ID)"
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     group: Authentication
     docs_url: "https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/Overview"
   - name: ms_graph_client_id
@@ -24,7 +22,6 @@ questions:
     required: true
     secret: true
     help: "Azure AD app registration client/application ID"
-    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     group: Authentication
     docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
   - name: ms_graph_refresh_token

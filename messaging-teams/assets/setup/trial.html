@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Greentic Teams Setup — trial</title>
+    <script type="module" src="./greentic-teams-setup.js"></script>
+    <style>
+      body { margin: 0; padding: 24px; background: #eef2f7; color: #0f172a;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+      main { width: min(1120px, 100%); margin: 0 auto; }
+      greentic-teams-setup { --gts-accent: #0f766e; --gts-accent-hover: #115e59; --gts-accent-soft: #ccfbf1; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <greentic-teams-setup
+        provider-id="messaging-teams"
+        api-base=""
+        locale="en"
+        advanced="true"
+        poll-interval="2000"
+        state-path="/v1/messaging/setup/messaging-teams/demo"
+        next-path="/v1/messaging/setup/messaging-teams/demo/next"
+        config-path="/v1/messaging/setup/messaging-teams/demo/config"
+        oauth-start-path="/v1/messaging/setup/messaging-teams/demo/oauth/{kind}/start"
+        oauth-complete-path="/v1/messaging/setup/messaging-teams/demo/oauth/{kind}/complete"
+        package-path="/v1/messaging/setup/messaging-teams/demo/teams-app/package.zip">
+      </greentic-teams-setup>
+    </main>
+    <script>
+      document.addEventListener("greentic-provider-setup-complete", (event) => {
+        console.log("Provider setup complete", event.detail && event.detail.providerId);
+      });
+    </script>
+  </body>
+</html>

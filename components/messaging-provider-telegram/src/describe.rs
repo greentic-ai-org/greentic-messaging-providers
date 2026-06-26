@@ -41,6 +41,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "telegram.schema.config.enabled.description",
     "telegram.schema.config.public_base_url.title",
     "telegram.schema.config.public_base_url.description",
+    "telegram.schema.config.bot_username.title",
+    "telegram.schema.config.bot_username.description",
     "telegram.schema.config.default_chat_id.title",
     "telegram.schema.config.default_chat_id.description",
     "telegram.schema.config.api_base_url.title",
@@ -53,6 +55,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "telegram.qa.remove.title",
     "telegram.qa.setup.enabled",
     "telegram.qa.setup.public_base_url",
+    "telegram.qa.setup.bot_username",
     "telegram.qa.setup.default_chat_id",
     "telegram.qa.setup.api_base_url",
     "telegram.qa.setup.telegram_bot_token",
@@ -61,6 +64,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
 pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
     ("enabled", "telegram.qa.setup.enabled", true),
     ("public_base_url", "telegram.qa.setup.public_base_url", true),
+    ("bot_username", "telegram.qa.setup.bot_username", true),
     (
         "default_chat_id",
         "telegram.qa.setup.default_chat_id",
@@ -154,6 +158,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "telegram.schema.config.public_base_url.description",
         "Public URL for webhook callbacks",
     ),
+    ("telegram.schema.config.bot_username.title", "Bot username"),
+    (
+        "telegram.schema.config.bot_username.description",
+        "Telegram bot username used to build the Add to Telegram setup link",
+    ),
     (
         "telegram.schema.config.default_chat_id.title",
         "Default chat ID",
@@ -181,6 +190,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("telegram.qa.remove.title", "Remove"),
     ("telegram.qa.setup.enabled", "Enable provider"),
     ("telegram.qa.setup.public_base_url", "Public base URL"),
+    ("telegram.qa.setup.bot_username", "Bot username"),
     ("telegram.qa.setup.default_chat_id", "Default chat ID"),
     ("telegram.qa.setup.api_base_url", "API base URL"),
     ("telegram.qa.setup.telegram_bot_token", "Telegram bot token"),
@@ -336,6 +346,14 @@ fn config_schema() -> SchemaIr {
                     "telegram.schema.config.public_base_url.title",
                     "telegram.schema.config.public_base_url.description",
                     "uri",
+                ),
+            ),
+            (
+                "bot_username",
+                false,
+                schema_str(
+                    "telegram.schema.config.bot_username.title",
+                    "telegram.schema.config.bot_username.description",
                 ),
             ),
             (

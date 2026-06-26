@@ -96,6 +96,62 @@ def provider_version(matrix: dict, name: str) -> str:
     return provider["version"]
 
 
+def resolve_provider_name(raw: str, matrix: dict) -> str:
+    value = raw.strip().lower()
+    if value in matrix["providers"]:
+        return value
+    stripped = value.removeprefix("messaging-")
+    if stripped in matrix["providers"]:
+        return stripped
+    raise SystemExit(f"unknown provider: {raw}")
+
+
+def update_answer_owned_pack_version(pack: str, version: str, old_version: str) -> None:
+    answer_path = ROOT / pack / "build-answer.json"
+    if not answer_path.exists():
+        return
+
+    data = json.loads(answer_path.read_text())
+
+    def walk(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"pack_version", "version"} and item == old_version:
+                    value[key] = version
+                elif isinstance(item, str) and old_version in item:
+                    value[key] = item.replace(old_version, version)
+                else:
+                    walk(item)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, str) and old_version in item:
+                    value[index] = item.replace(old_version, version)
+                else:
+                    walk(item)
+
+    walk(data)
+    answer_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def validate_answer_owned_pack_version(provider_name: str, pack: str, expected: str, errors: list[str]) -> None:
+    answer_path = ROOT / pack / "build-answer.json"
+    if not answer_path.exists():
+        return
+
+    data = json.loads(answer_path.read_text())
+    found = data.get("pack_version")
+    if found != expected:
+        errors.append(f"{answer_path.relative_to(ROOT)}: pack_version {found} != provider {provider_name} {expected}")
+
+    for index, component in enumerate(data.get("runtime_components", [])):
+        component_version = component.get("version")
+        if component_version != expected:
+            errors.append(
+                f"{answer_path.relative_to(ROOT)}: runtime_components[{index}].version "
+                f"{component_version} != provider {provider_name} {expected}"
+            )
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     matrix = load_matrix()
     result = {
@@ -123,9 +179,7 @@ def cmd_shared(args: argparse.Namespace) -> int:
 
 def cmd_provider(args: argparse.Namespace) -> int:
     matrix = load_matrix()
-    name = args.provider.strip().lower().removeprefix("messaging-")
-    if name not in matrix["providers"]:
-        raise SystemExit(f"unknown provider: {args.provider}")
+    name = resolve_provider_name(args.provider, matrix)
     print(provider_version(matrix, name))
     return 0
 
@@ -150,6 +204,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             found = json.loads(pack_manifest.read_text()).get("version")
             if found != expected:
                 errors.append(f"{pack_manifest.relative_to(ROOT)}: {found} != provider {name} {expected}")
+        validate_answer_owned_pack_version(name, provider["pack"], expected, errors)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
@@ -160,9 +215,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def cmd_set_provider(args: argparse.Namespace) -> int:
     matrix = load_matrix()
-    name = args.provider.strip().lower().removeprefix("messaging-")
-    if name not in matrix["providers"]:
-        raise SystemExit(f"unknown provider: {args.provider}")
+    name = resolve_provider_name(args.provider, matrix)
     provider = matrix["providers"][name]
     old_version = provider["version"]
     provider["version"] = args.version
@@ -173,6 +226,7 @@ def cmd_set_provider(args: argparse.Namespace) -> int:
         write_pack_yaml_version(pack_yaml, args.version, old_version)
     if pack_manifest.exists():
         update_manifest_json_versions(pack_manifest, args.version)
+    update_answer_owned_pack_version(provider["pack"], args.version, old_version)
     write_matrix(matrix)
     print(f"set {name} to {args.version}")
     return 0

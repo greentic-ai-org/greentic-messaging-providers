@@ -10,6 +10,11 @@ cd "${ROOT_DIR}"
 BUILD=1
 EXTRA_ARGS=()
 
+if [ -z "${WEBCHAT_GUI_TEST_PORT:-}" ]; then
+  WEBCHAT_GUI_TEST_PORT="$((8700 + ($$ % 1000)))"
+  export WEBCHAT_GUI_TEST_PORT
+fi
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-build)
@@ -37,4 +42,8 @@ if [ "${BUILD}" -eq 1 ]; then
   scripts/build_providers.sh webchat-gui
 fi
 
-npm run test:webchat-gui -- "${EXTRA_ARGS[@]}"
+if [ "${#EXTRA_ARGS[@]}" -gt 0 ]; then
+  npm run test:webchat-gui -- "${EXTRA_ARGS[@]}"
+else
+  npm run test:webchat-gui
+fi

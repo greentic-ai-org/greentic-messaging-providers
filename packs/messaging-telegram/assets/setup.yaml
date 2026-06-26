@@ -1,16 +1,31 @@
 provider_id: telegram
 version: 1
 title: Telegram provider setup
+setup_actions:
+  - id: add-to-telegram
+    label: Add to Telegram
+    kind: deep_link
+    url_template: "https://t.me/{bot_username}"
+    style: primary
+    opens_new_window: true
+    copyable: true
+    requires:
+      - bot_username
 questions:
   - name: public_base_url
     title: Public base URL
     kind: string
     required: true
-    help: "Public-facing URL for webhook callbacks"
-    placeholder: "https://xxxx.trycloudflare.com"
+    help: "Public-facing URL for webhook callbacks. Use the runtime or tunnel URL shown by the setup host."
     group: Connection
     validate:
       regex: "^https://"
+  - name: bot_username
+    title: Bot username
+    kind: string
+    required: true
+    help: "Telegram bot username from @BotFather, without the leading @. This is used for the final Add to Telegram link."
+    group: Connection
   - name: default_chat_id
     title: Default chat ID
     kind: string
@@ -21,6 +36,7 @@ questions:
     title: API base URL
     kind: string
     required: true
+    default: "https://api.telegram.org"
     help: "Telegram Bot API base URL (default: https://api.telegram.org)"
     placeholder: "https://api.telegram.org"
     group: Connection
@@ -32,6 +48,5 @@ questions:
     required: true
     secret: true
     help: "Token from @BotFather"
-    placeholder: "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ"
     group: Authentication
     docs_url: "https://t.me/BotFather"

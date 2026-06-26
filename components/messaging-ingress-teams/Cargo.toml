@@ -9,6 +9,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+base64.workspace = true
 greentic-telemetry = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
@@ -28,4 +29,5 @@ world = "messaging-ingress-teams"
 "greentic:state" = { path = "wit/messaging-ingress-teams/deps/state" }
 "greentic:telemetry" = { path = "wit/messaging-ingress-teams/deps/telemetry" }
 "greentic:interfaces-types" = { path = "wit/messaging-ingress-teams/deps/interfaces-types" }
+"greentic:provider-schema-core" = { path = "wit/messaging-ingress-teams/deps/provider-schema-core" }
 "provider:common" = { path = "wit/messaging-ingress-teams/deps/provider-common" }

@@ -1,0 +1,67 @@
+{
+  "schema_id": "greentic.messaging-teams.setup-conformance",
+  "schema_version": "1.0.0",
+  "provider_id": "messaging-teams",
+  "source_layout": {
+    "assets": "messaging-teams/assets",
+    "src": "messaging-teams/src",
+    "build_answer": "messaging-teams/build-answer.json"
+  },
+  "setup_states": [
+    "fresh_setup",
+    "graph_device_login_start",
+    "graph_device_login_pending",
+    "graph_device_login_expired",
+    "graph_device_login_refresh_code",
+    "microsoft_bot_channel_registration_consent",
+    "bot_framework_registration_before_publish",
+    "teams_app_publish",
+    "teams_app_install",
+    "open_bot_chat",
+    "first_activity_received",
+    "send_test_card",
+    "adaptive_card_action_received"
+  ],
+  "runtime_cases": [
+    "bot_framework_activity_ingestion",
+    "bot_framework_authentication_failure",
+    "bot_framework_message_normalization",
+    "adaptive_card_submit_normalization",
+    "adaptive_card_follow_up_response",
+    "conversation_context_available"
+  ],
+  "setup_component_contract": {
+    "schema_id": "greentic.setup.web-component.v1",
+    "module_asset": "assets/setup/greentic-teams-setup.js",
+    "tag_name": "greentic-teams-setup-v4",
+    "generic_events": [
+      "greentic-provider-setup-state",
+      "greentic-provider-setup-result",
+      "greentic-provider-setup-action-start",
+      "greentic-provider-setup-action-complete",
+      "greentic-provider-setup-action-timeout",
+      "greentic-provider-setup-device-login",
+      "greentic-provider-setup-error",
+      "greentic-provider-setup-complete"
+    ],
+    "completion_state_path": "setup_status.ok"
+  },
+  "setup_backend_contract": {
+    "schema_id": "greentic.setup.backend-contract.v1",
+    "actions_schema_id": "greentic.setup.actions.v1",
+    "required_action_kinds": [
+      "oauth_device_code",
+      "microsoft_graph_application",
+      "provider_http",
+      "runtime_observation"
+    ],
+    "provider_specific_setup_server_required": false
+  },
+  "tester_contract": {
+    "one_button_step_execution": true,
+    "raw_controls_are_diagnostics": true,
+    "node_botbuilder_sidecar_default": false,
+    "node_botbuilder_sidecar_opt_in": true,
+    "azure_bot_service_required": true
+  }
+}

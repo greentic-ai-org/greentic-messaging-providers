@@ -19,7 +19,7 @@ Definition of meaningful schema (for this audit):
 | messaging-provider-dummy | (none) | n/a | n/a | no operations declared |
 | messaging-provider-email | (none) | n/a | n/a | no operations declared |
 | messaging-provider-slack | (none) | n/a | n/a | no operations declared |
-| messaging-provider-teams | (none) | n/a | n/a | no operations declared |
+| messaging-provider-teams-graph | (none) | n/a | n/a | no operations declared |
 | messaging-provider-telegram | (none) | n/a | n/a | no operations declared |
 | messaging-provider-webchat | (none) | n/a | n/a | no operations declared |
 | messaging-provider-webex | (none) | n/a | n/a | no operations declared |

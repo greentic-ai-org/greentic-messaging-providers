@@ -38,6 +38,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.schema.config.enabled.description",
     "webex.schema.config.public_base_url.title",
     "webex.schema.config.public_base_url.description",
+    "webex.schema.config.bot_email.title",
+    "webex.schema.config.bot_email.description",
     "webex.schema.config.default_room_id.title",
     "webex.schema.config.default_room_id.description",
     "webex.schema.config.default_to_person_email.title",
@@ -54,12 +56,15 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webex.qa.remove.title",
     "webex.qa.setup.enabled",
     "webex.qa.setup.public_base_url",
+    "webex.qa.setup.bot_email",
     "webex.qa.setup.api_base_url",
     "webex.qa.setup.bot_token",
 ];
 
-pub(crate) const SETUP_QUESTIONS: &[QaQuestionDef] =
-    &[("bot_token", "webex.qa.setup.bot_token", true)];
+pub(crate) const SETUP_QUESTIONS: &[QaQuestionDef] = &[
+    ("bot_email", "webex.qa.setup.bot_email", true),
+    ("bot_token", "webex.qa.setup.bot_token", true),
+];
 
 pub(crate) const DEFAULT_KEYS: &[&str] = &["bot_token"];
 
@@ -200,6 +205,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "webex.schema.config.public_base_url.description",
         "Public URL for callbacks",
     ),
+    ("webex.schema.config.bot_email.title", "Bot email"),
+    (
+        "webex.schema.config.bot_email.description",
+        "Webex bot email address used to build the Add to WebEx setup link",
+    ),
     ("webex.schema.config.default_room_id.title", "Room ID"),
     (
         "webex.schema.config.default_room_id.description",
@@ -234,6 +244,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("webex.qa.remove.title", "Remove"),
     ("webex.qa.setup.enabled", "Enable provider"),
     ("webex.qa.setup.public_base_url", "Public base URL"),
+    ("webex.qa.setup.bot_email", "Bot email"),
     ("webex.qa.setup.default_room_id", "Room ID"),
     ("webex.qa.setup.default_to_person_email", "Person email"),
     ("webex.qa.setup.api_base_url", "API base URL"),
@@ -306,6 +317,14 @@ pub(crate) fn config_schema() -> SchemaIr {
                     "webex.schema.config.public_base_url.title",
                     "webex.schema.config.public_base_url.description",
                     "uri",
+                ),
+            ),
+            (
+                "bot_email",
+                false,
+                schema_str(
+                    "webex.schema.config.bot_email.title",
+                    "webex.schema.config.bot_email.description",
                 ),
             ),
             (

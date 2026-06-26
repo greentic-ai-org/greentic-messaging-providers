@@ -37,7 +37,7 @@ greentic-messaging-providers/     ← INI REPO UTAMA KAMU
 │   ├── messaging-provider-webchat/src/lib.rs
 │   ├── messaging-provider-dummy/src/lib.rs      ← referensi paling simple
 │   ├── messaging-provider-slack/src/lib.rs
-│   ├── messaging-provider-teams/src/lib.rs
+│   ├── messaging-provider-teams-graph/src/lib.rs
 │   ├── messaging-provider-whatsapp/src/lib.rs
 │   ├── messaging-provider-email/src/lib.rs
 │   ├── messaging-ingress-telegram/src/lib.rs    ← custom webhook handler

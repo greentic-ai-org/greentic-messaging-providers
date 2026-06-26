@@ -9,7 +9,17 @@ use serde::Serialize;
 use ureq::{Body, agent};
 
 pub type HttpHistory = Arc<Mutex<Vec<HttpCall>>>;
-pub type HttpResponseQueue = Arc<Mutex<VecDeque<(u16, Vec<u8>)>>>;
+pub type HttpResponseQueue = Arc<Mutex<VecDeque<MockHttpResponse>>>;
+
+#[derive(Debug, Clone)]
+pub struct MockHttpResponse {
+    pub status: u16,
+    pub body: Vec<u8>,
+    // When set, this canned response is only served to a request whose URL
+    // contains this substring (e.g. "/oauth2/v2.0/token" vs "/messages").
+    // Lets a multi-endpoint provider be mocked by URL instead of call order.
+    pub url_contains: Option<String>,
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum HttpMode {
@@ -88,7 +98,6 @@ pub fn new_history() -> HttpHistory {
     Arc::new(Mutex::new(Vec::new()))
 }
 
-#[cfg(test)]
 pub fn new_response_queue() -> HttpResponseQueue {
     Arc::new(Mutex::new(VecDeque::new()))
 }
@@ -96,10 +105,28 @@ pub fn new_response_queue() -> HttpResponseQueue {
 const MOCK_RESPONSE_BODY: &[u8] =
     br#"{"ok":true,"result":{"url":"https://example.invalid/mock-webhook"},"description":"mock response"}"#;
 
-#[cfg(test)]
 pub fn queue_mock_response(queue: &HttpResponseQueue, status: u16, body: Vec<u8>) {
     if let Ok(mut guard) = queue.lock() {
-        guard.push_back((status, body));
+        guard.push_back(MockHttpResponse {
+            status,
+            body,
+            url_contains: None,
+        });
+    }
+}
+
+pub fn queue_mock_response_for(
+    queue: &HttpResponseQueue,
+    status: u16,
+    body: Vec<u8>,
+    url_contains: impl Into<String>,
+) {
+    if let Ok(mut guard) = queue.lock() {
+        guard.push_back(MockHttpResponse {
+            status,
+            body,
+            url_contains: Some(url_contains.into()),
+        });
     }
 }
 
@@ -110,11 +137,28 @@ pub fn clear_mock_responses(queue: &HttpResponseQueue) {
     }
 }
 
-pub fn mock_response(queue: Option<&HttpResponseQueue>) -> http_client::ResponseV1_1 {
+// Prefer a response whose `url_contains` matches the request URL; otherwise
+// fall back to the next order-based (url-less) response, then the generic body.
+pub fn mock_response(
+    queue: Option<&HttpResponseQueue>,
+    request_url: &str,
+) -> http_client::ResponseV1_1 {
     let (status, body) = if let Some(queue) = queue {
         if let Ok(mut guard) = queue.lock() {
-            guard
-                .pop_front()
+            let matched = guard.iter().position(|r| {
+                r.url_contains
+                    .as_deref()
+                    .is_some_and(|needle| request_url.contains(needle))
+            });
+            let picked = match matched {
+                Some(pos) => guard.remove(pos),
+                None => {
+                    let ordered = guard.iter().position(|r| r.url_contains.is_none());
+                    ordered.and_then(|pos| guard.remove(pos))
+                }
+            };
+            picked
+                .map(|r| (r.status, r.body))
                 .unwrap_or((200, MOCK_RESPONSE_BODY.to_vec()))
         } else {
             (200, MOCK_RESPONSE_BODY.to_vec())

@@ -6,7 +6,9 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::http_mock::HttpMode;
+use crate::http_mock::{
+    HttpMode, HttpResponseQueue, new_response_queue, queue_mock_response, queue_mock_response_for,
+};
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Values {
@@ -21,6 +23,27 @@ pub struct Values {
     #[serde(default)]
     #[allow(dead_code)]
     pub state: Map<String, Value>,
+    // Ordered canned responses for mock HTTP, one popped per outbound call.
+    // Lets multi-leg providers (e.g. Teams: OAuth token then Graph send) be
+    // exercised in mock mode without a live backend.
+    #[serde(default)]
+    pub responses: Vec<MockResponseSpec>,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct MockResponseSpec {
+    #[serde(default = "default_status")]
+    pub status: u16,
+    #[serde(default)]
+    pub body: Value,
+    // Optional URL substring this response is bound to (e.g. "/oauth2/v2.0/token").
+    // When omitted, responses are served in declaration order.
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+fn default_status() -> u16 {
+    200
 }
 
 impl Values {
@@ -30,6 +53,27 @@ impl Values {
         let values: Values = serde_json::from_slice(&bytes)
             .with_context(|| format!("failed to parse {}", path.as_ref().display()))?;
         Ok(values)
+    }
+
+    // Build a mock response queue from `responses`, or None to fall back to
+    // the generic canned body. A string body is sent verbatim; any other JSON
+    // value is serialized.
+    pub fn response_queue(&self) -> Option<HttpResponseQueue> {
+        if self.responses.is_empty() {
+            return None;
+        }
+        let queue = new_response_queue();
+        for spec in &self.responses {
+            let body = match &spec.body {
+                Value::String(s) => s.clone().into_bytes(),
+                other => serde_json::to_vec(other).unwrap_or_default(),
+            };
+            match &spec.url {
+                Some(url) => queue_mock_response_for(&queue, spec.status, body, url.clone()),
+                None => queue_mock_response(&queue, spec.status, body),
+            }
+        }
+        Some(queue)
     }
 
     pub fn http_mode(&self) -> HttpMode {
@@ -85,6 +129,7 @@ mod tests {
             to: Map::new(),
             http: None,
             state: Map::new(),
+            responses: Vec::new(),
         };
         assert!(matches!(values.http_mode(), HttpMode::Mock));
     }
@@ -100,6 +145,7 @@ mod tests {
             to: Map::new(),
             http: None,
             state: Map::new(),
+            responses: Vec::new(),
         };
         let bytes = values.secret_bytes();
         assert_eq!(

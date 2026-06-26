@@ -11,6 +11,7 @@ use greentic_types::ChannelMessageEnvelope;
 use greentic_types::messaging::universal_dto::{HttpInV1, HttpOutV1};
 use hmac::{Hmac, KeyInit, Mac};
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::lifecycle_events::{mark_user_entered, user_entered_idempotency_key};
 use provider_common::redact;
 use provider_common::telemetry::{self, Field, Level, event, field};
 use serde_json::{Value, json};
@@ -198,6 +199,66 @@ pub(crate) fn handle_webhook_event(body: &Value, cfg: &ProviderConfig) -> Ingest
         );
         return IngestOutcome {
             envelope: None,
+            status: 200,
+            error: None,
+        };
+    }
+
+    if resource == "memberships" && event == "created" {
+        let membership_id = message_id.clone();
+        let session_id = webhook_room
+            .clone()
+            .unwrap_or_else(|| membership_id.clone().unwrap_or_else(|| "webex".to_string()));
+        let sender = pick_sender(&webhook_person_email, &webhook_person_id);
+        let mut metadata = build_webhook_metadata(
+            resource,
+            event,
+            membership_id.as_ref(),
+            webhook_room.as_ref(),
+            webhook_person_email.as_ref(),
+            webhook_person_id.as_ref(),
+            None,
+            None,
+            cfg.default_locale.as_ref(),
+            Some(200),
+        );
+        let idempotency_key = user_entered_idempotency_key(
+            "webex",
+            None,
+            webhook_room.as_deref(),
+            webhook_person_id
+                .as_deref()
+                .or(webhook_person_email.as_deref()),
+            "space_membership_created",
+        );
+        mark_user_entered(
+            &mut metadata,
+            "webex",
+            "space_membership_created",
+            idempotency_key,
+        );
+        if let Some(room_id) = &webhook_room {
+            metadata.insert("room_id".to_string(), room_id.clone());
+        }
+        if let Some(person_id) = &webhook_person_id {
+            metadata.insert("user_id".to_string(), person_id.clone());
+        }
+        if let Some(person_email) = &webhook_person_email {
+            metadata.insert("person_email".to_string(), person_email.clone());
+        }
+        if let Some(membership_id) = &membership_id {
+            metadata.insert("membership_id".to_string(), membership_id.clone());
+        }
+        let envelope = build_webhook_envelope(
+            String::new(),
+            session_id,
+            sender,
+            metadata,
+            Vec::new(),
+            membership_id.as_ref(),
+        );
+        return IngestOutcome {
+            envelope: Some(envelope),
             status: 200,
             error: None,
         };
@@ -581,6 +642,67 @@ mod signature_tests {
         assert_eq!(outcome.status, 200);
         assert!(outcome.error.is_none());
         assert!(outcome.envelope.is_none());
+    }
+
+    #[test]
+    fn membership_created_returns_user_entered_envelope_without_message_lookup() {
+        let cfg = ProviderConfig {
+            enabled: true,
+            public_base_url: "https://example.com".to_string(),
+            default_room_id: None,
+            default_to_person_email: None,
+            api_base_url: Some(DEFAULT_API_BASE.to_string()),
+            bot_token: None,
+            webhook_secret: None,
+            default_locale: None,
+        };
+        let outcome = handle_webhook_event(
+            &json!({
+                "resource": "memberships",
+                "event": "created",
+                "data": {
+                    "id": "membership-1",
+                    "roomId": "room-1",
+                    "personId": "person-1",
+                    "personEmail": "ada@example.com"
+                }
+            }),
+            &cfg,
+        );
+
+        assert_eq!(outcome.status, 200);
+        assert!(outcome.error.is_none());
+        let envelope = outcome.envelope.expect("envelope");
+        assert_eq!(envelope.session_id, "room-1");
+        assert_eq!(envelope.text.as_deref(), Some(""));
+        assert_eq!(
+            envelope.metadata.get("event_type").map(String::as_str),
+            Some("channel.user.entered")
+        );
+        assert_eq!(
+            envelope.metadata.get("autoStart").map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            envelope.metadata.get("provider").map(String::as_str),
+            Some("webex")
+        );
+        assert_eq!(
+            envelope.metadata.get("reason").map(String::as_str),
+            Some("space_membership_created")
+        );
+        assert_eq!(
+            envelope.metadata.get("idempotency_key").map(String::as_str),
+            Some("lifecycle.user_entered:webex:_:room-1:person-1:space_membership_created")
+        );
+        assert_eq!(
+            envelope.metadata.get("room_id").map(String::as_str),
+            Some("room-1")
+        );
+        assert_eq!(
+            envelope.metadata.get("user_id").map(String::as_str),
+            Some("person-1")
+        );
     }
 
     #[test]

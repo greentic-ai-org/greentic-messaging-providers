@@ -3,7 +3,7 @@ version: 1
 title: Slack provider setup
 setup_actions:
   - id: add_to_slack
-    label: Add to Slack
+    label: Setup Slack App
     kind: oauth_install_button
     provider_id: slack
     oauth_provider_id: slack

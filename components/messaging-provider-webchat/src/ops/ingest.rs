@@ -11,6 +11,7 @@ use base64::{Engine as _, engine::general_purpose};
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 use provider_common::helpers::json_bytes;
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::lifecycle_events::{mark_user_entered, user_entered_idempotency_key};
 use provider_common::redact;
 use provider_common::telemetry::{self, Field, Level, field};
 use serde_json::{Value, json};
@@ -229,9 +230,30 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             &tenant_id,
             BTreeMap::new(),
         );
+        let idempotency_key = user_entered_idempotency_key(
+            "webchat",
+            Some(&tenant_id),
+            Some(&envelope.session_id),
+            envelope.from.as_ref().map(|actor| actor.id.as_str()),
+            "conversation_started",
+        );
+        mark_user_entered(
+            &mut envelope.metadata,
+            "webchat",
+            "conversation_started",
+            idempotency_key,
+        );
         envelope
             .metadata
-            .insert("autoStart".to_string(), "true".to_string());
+            .insert("tenant_id".to_string(), tenant_id.clone());
+        envelope
+            .metadata
+            .insert("conversation_id".to_string(), envelope.session_id.clone());
+        if let Some(actor) = &envelope.from {
+            envelope
+                .metadata
+                .insert("user_id".to_string(), actor.id.clone());
+        }
         // Carry the picker locale through to the runner so the auto-start
         // welcome card is rendered in the user's language. Without this the
         // first card always renders in `en` because POST /conversations has

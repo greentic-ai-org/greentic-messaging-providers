@@ -1,0 +1,267 @@
+{
+  "schema_id": "greentic.setup.backend-contract.v1",
+  "schema_version": "1.0.0",
+  "provider_id": "messaging-teams",
+  "base_path": "/v1/messaging/setup/messaging-teams/{tenant}",
+  "routes": {
+    "state": "GET /v1/messaging/setup/messaging-teams/{tenant}",
+    "next": "POST /v1/messaging/setup/messaging-teams/{tenant}/next",
+    "config": "POST /v1/messaging/setup/messaging-teams/{tenant}/config",
+    "oauth_start": "POST /v1/messaging/setup/messaging-teams/{tenant}/oauth/{kind}/start",
+    "oauth_complete": "POST /v1/messaging/setup/messaging-teams/{tenant}/oauth/{kind}/complete",
+    "teams_app_package": "GET /v1/messaging/setup/messaging-teams/{tenant}/teams-app/package.zip"
+  },
+  "server_owned_config_keys": [
+    "oauth_kind",
+    "oauth_device_code",
+    "oauth_user_code",
+    "azure_management_device_code",
+    "azure_management_user_code",
+    "graph_access_token",
+    "azure_management_access_token",
+    "bot_access_token"
+  ],
+  "required_order": [
+    "graph_admin_consent",
+    "bot_app_identity",
+    "microsoft_bot_channel_registration_consent",
+    "bot_framework_endpoint_registration",
+    "teams_app_publish",
+    "teams_app_user_install",
+    "first_bot_framework_post"
+  ],
+  "actions_schema_id": "greentic.setup.actions.v1",
+  "actions": [
+    {
+      "id": "graph_admin_consent",
+      "label": "Authorize Microsoft Graph setup access",
+      "description": "Use Microsoft device-code OAuth to grant the delegated Graph permissions needed to create the bot app registration and publish/install the Teams app.",
+      "executor": {
+        "kind": "oauth_device_code",
+        "provider": "microsoft_identity",
+        "authority_url_template": "https://login.microsoftonline.com/{authority_tenant}",
+        "authority_tenant_config_key": "azure_auth_tenant",
+        "authority_tenant_default": "organizations",
+        "client_id_config_key": "graph_setup_client_id",
+        "client_id_default": "14d82eec-204b-4c2f-b7e8-296a70dab67e",
+        "client_id_default_name": "Microsoft Graph Command Line Tools",
+        "scopes": [
+          "https://graph.microsoft.com/Application.ReadWrite.All",
+          "https://graph.microsoft.com/AppCatalog.ReadWrite.All",
+          "https://graph.microsoft.com/TeamsAppInstallation.ReadWriteForUser",
+          "https://graph.microsoft.com/User.Read"
+        ],
+        "oauth_kind": "graph",
+        "token_store_key": "graph_access_token",
+        "device_code_store_key": "oauth_device_code",
+        "user_code_store_key": "oauth_user_code"
+      },
+      "completion": {
+        "state_path": "oauth.graph.ok",
+        "exists": true
+      }
+    },
+    {
+      "id": "bot_app_identity",
+      "label": "Create or reuse the Bot Framework app identity",
+      "description": "Create or update the Microsoft Entra application used by Bot Framework and generate the client secret stored by setup.",
+      "requires": [
+        "graph_admin_consent"
+      ],
+      "executor": {
+        "kind": "microsoft_graph_application",
+        "graph_token_store_key": "graph_access_token",
+        "display_name_config_key": "bot_display_name",
+        "app_id_config_key": "bot_app_id",
+        "client_secret_config_key": "bot_app_password",
+        "password_display_name": "Greentic Teams bot setup secret",
+        "sign_in_audience": "AzureADMyOrg"
+      },
+      "completion": {
+        "state_path": "config.bot_app_id",
+        "exists": true
+      }
+    },
+    {
+      "id": "microsoft_bot_channel_registration_consent",
+      "label": "Authorize Microsoft Teams bot channel registration",
+      "description": "Use Microsoft device-code OAuth to grant management access for registering the Greentic Bot Framework endpoint with the Microsoft Teams bot channel registry.",
+      "requires": [
+        "bot_app_identity"
+      ],
+      "executor": {
+        "kind": "oauth_device_code",
+        "provider": "microsoft_identity",
+        "authority_url_template": "https://login.microsoftonline.com/{authority_tenant}",
+        "authority_tenant_config_key": "azure_auth_tenant",
+        "authority_tenant_default": "organizations",
+        "client_id_config_key": "azure_setup_client_id",
+        "client_id_default": "14d82eec-204b-4c2f-b7e8-296a70dab67e",
+        "client_id_default_name": "Microsoft Graph Command Line Tools",
+        "scopes": [
+          "https://management.azure.com/user_impersonation"
+        ],
+        "oauth_kind": "management",
+        "token_store_key": "azure_management_access_token",
+        "device_code_store_key": "azure_management_device_code",
+        "user_code_store_key": "azure_management_user_code"
+      },
+      "completion": {
+        "state_path": "oauth.management.ok",
+        "exists": true
+      }
+    },
+    {
+      "id": "bot_framework_endpoint_registration",
+      "label": "Register the Bot Framework endpoint",
+      "description": "Register or update the Greentic Bot Service/Bot Framework endpoint so Teams can POST activities to the active Greentic runtime tunnel.",
+      "requires": [
+        "microsoft_bot_channel_registration_consent"
+      ],
+      "executor": {
+        "kind": "provider_http",
+        "path_template": "/v1/setup/messaging-teams/{tenant}/{team}/bot-framework-registration",
+        "body": {
+          "provider_id": "messaging-teams",
+          "channel": "msteams",
+          "bot_app_id": "{bot_app_id}",
+          "bot_app_password": "{bot_app_password}",
+          "messaging_endpoint": "{public_base_url}/v1/messaging/ingress/messaging-teams/{tenant}/{team}",
+          "public_base_url": "{public_base_url}",
+          "bot_display_name": "{bot_display_name}",
+          "azure_management_access_token": "{azure_management_access_token}",
+          "azure_auth_tenant": "{azure_auth_tenant}",
+          "azure_subscription_id": "{azure_subscription_id}",
+          "azure_resource_group": "{azure_resource_group}",
+          "azure_resource_group_location": "{azure_resource_group_location}",
+          "azure_location": "{azure_location}",
+          "azure_bot_name": "{azure_bot_name}",
+          "tenant": "{tenant}",
+          "team": "{team}"
+        },
+        "state_store_key": "last_reconcile"
+      },
+      "completion": {
+        "state_path": "last_reconcile.ok",
+        "equals": true
+      }
+    },
+    {
+      "id": "teams_app_publish",
+      "label": "Publish the Teams app",
+      "description": "Build the Teams app package from the pack template and publish it to the tenant app catalog.",
+      "requires": [
+        "bot_framework_endpoint_registration"
+      ],
+      "executor": {
+        "kind": "provider_http",
+        "path_template": "/v1/setup/messaging-teams/{tenant}/{team}/teams-app-publish",
+        "body": {
+          "provider_id": "messaging-teams",
+          "graph_access_token": "{graph_access_token}",
+          "bot_app_id": "{bot_app_id}",
+          "bot_display_name": "{bot_display_name}",
+          "teams_app_version": "{teams_app_version}",
+          "tenant": "{tenant}",
+          "team": "{team}"
+        },
+        "state_store_key": "last_teams_app_publish"
+      },
+      "completion": {
+        "state_path": "last_teams_app_publish.ok",
+        "equals": true
+      }
+    },
+    {
+      "id": "teams_app_user_install",
+      "label": "Install the Teams app for the current user",
+      "description": "Install the published Teams app for the setup user and expose Add to Teams and Open bot chat links for manual fallback.",
+      "requires": [
+        "teams_app_publish"
+      ],
+      "executor": {
+        "kind": "provider_http",
+        "path_template": "/v1/setup/messaging-teams/{tenant}/{team}/teams-app-install",
+        "body": {
+          "provider_id": "messaging-teams",
+          "graph_access_token": "{graph_access_token}",
+          "bot_app_id": "{bot_app_id}",
+          "tenant": "{tenant}",
+          "team": "{team}"
+        },
+        "state_store_key": "last_teams_app_install",
+        "links": {
+          "add_to_teams_url_template": "https://teams.microsoft.com/l/app/{teams_app_id}?source=app-details-dialog",
+          "open_bot_chat_url_template": "https://teams.microsoft.com/l/chat/0/0?users=28:{bot_app_id}&message=hello"
+        }
+      },
+      "completion": {
+        "state_path": "last_teams_app_install.ok",
+        "equals": true
+      }
+    },
+    {
+      "id": "first_bot_framework_post",
+      "label": "Wait for the first Teams message",
+      "description": "Wait until greentic-start receives a Teams Bot Framework activity for this tenant/team and persists the conversation proof used by card egress tests. This requires the Greentic runtime tunnel to still be running and the Bot Framework endpoint registration to point at the active public runtime URL.",
+      "requires": [
+        "teams_app_user_install"
+      ],
+      "executor": {
+        "kind": "runtime_observation",
+        "source": "greentic-start",
+        "event": "bot_framework_activity_received",
+        "provider_id": "messaging-teams",
+        "tenant_config_key": "tenant",
+        "team_config_key": "team",
+        "state_store_key": "last_activity",
+        "requires_live_public_ingress": true,
+        "public_base_url_config_key": "public_base_url",
+        "registered_endpoint_state_path": "last_reconcile.response.target_messaging_endpoint"
+      },
+      "completion": {
+        "state_path": "last_activity",
+        "exists": true
+      }
+    }
+  ],
+  "guards": [
+    {
+      "id": "server-owned-oauth-state",
+      "description": "greentic-setup must ignore browser-submitted OAuth/device-code fields and use setup-owned persisted OAuth state only."
+    },
+    {
+      "id": "register-before-open-teams",
+      "description": "greentic-setup must not expose Add to Teams or Open bot chat as the next action until the Bot Framework-compatible endpoint is registered for the bot app id and the Teams channel is enabled."
+    },
+    {
+      "id": "manual-install-is-not-complete",
+      "description": "Manual Teams app installation may unblock opening chat, but provider setup is not complete until greentic-start receives the first Bot Framework POST."
+    },
+    {
+      "id": "runtime-ingress-required-for-final-observation",
+      "description": "When resuming setup at first_bot_framework_post, greentic-setup must verify that the runtime and public tunnel are alive. If the public_base_url is stale or changed, it must rerun Bot Framework endpoint registration before offering Verify bot message."
+    }
+  ],
+  "state_shape": {
+    "setup_status": {
+      "ok": "boolean",
+      "items": "array",
+      "next": "string"
+    },
+    "teams_app": {
+      "add_to_teams_url": "string",
+      "open_bot_chat_url": "string"
+    },
+    "add_to_teams_url": "string|null",
+    "open_bot_chat_url": "string|null",
+    "values": {
+      "config": "object",
+      "oauth": "object|null",
+      "last_reconcile": "object|null",
+      "last_teams_app_publish": "object|null",
+      "last_teams_app_install": "object|null",
+      "last_activity": "object|null"
+    }
+  }
+}

@@ -20,6 +20,7 @@ pub mod ac_converter;
 pub mod component_v0_6;
 pub mod helpers;
 pub mod http_compat;
+pub mod lifecycle_events;
 pub mod identify;
 pub mod lifecycle_keys;
 pub mod qa_helpers;
