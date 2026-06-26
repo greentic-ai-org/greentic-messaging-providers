@@ -1145,14 +1145,17 @@ fn bot_framework_registration_step(state: &mut Value) -> &'static str {
         );
         "click Continue to continue setup"
     } else {
-        step_fail(
+        // Advance even when registration could not complete (e.g. no Azure
+        // subscription) so the stepper is not walled; result records the reason.
+        mark_done(state, "bot_framework_endpoint_registration");
+        set_result(
             state,
             "bot_framework_endpoint_registration",
-            result
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("Bot Framework registration failed"),
-        )
+            true,
+            result,
+            "click Continue to continue setup",
+        );
+        "click Continue to continue setup"
     }
 }
 
