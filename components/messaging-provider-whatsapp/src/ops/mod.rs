@@ -5,6 +5,7 @@
 //! it did when they lived in a single `ops.rs` file.
 
 mod encode;
+mod identify;
 mod ingest;
 mod render;
 mod reply;
@@ -12,6 +13,7 @@ mod send;
 mod send_payload;
 
 pub(crate) use encode::encode_op;
+pub(crate) use identify::{IDENTIFY_HINT_JSON, extract_phone_number_id};
 pub(crate) use ingest::ingest_http;
 pub(crate) use render::render_plan;
 pub(crate) use reply::handle_reply;

@@ -1,7 +1,9 @@
 //! `setup_webhook` op for the Telegram provider.
 //!
-//! Calls the Telegram Bot API `setWebhook` endpoint with the standard greentic
-//! ingress URL: `{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}`.
+//! Calls the Telegram Bot API `setWebhook`. The caller may pass a fully-formed
+//! `webhook_url` (the revision-serve model builds `{prefix}/webhook/telegram`);
+//! otherwise it falls back to the legacy
+//! `{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}` path.
 //! Accepts config either as top-level fields or under a
 //! nested `"config"` object, and falls back to the secrets store for the bot
 //! token when no explicit value is supplied.
@@ -18,7 +20,9 @@ use crate::bindings::greentic::http::http_client as client;
 /// ```json
 /// {
 ///   "bot_token": "123:ABC",
-///   "public_base_url": "https://example.ngrok-free.app",
+///   "webhook_url": "https://host/bot/webhook/telegram", // optional, takes precedence
+///   "secret_token": "<endpoint provider_id>",           // optional, IID discriminator
+///   "public_base_url": "https://example.ngrok-free.app", // legacy fallback
 ///   "api_base_url": "https://api.telegram.org",   // optional
 ///   "provider_id": "messaging-telegram",           // optional, default
 ///   "tenant": "default",                           // optional, default
@@ -27,7 +31,7 @@ use crate::bindings::greentic::http::http_client as client;
 /// ```
 ///
 /// Calls: POST {api_base}/bot{token}/setWebhook
-///   { "url": "{public_base_url}/v1/messaging/ingress/{provider_id}/{tenant}/{team}" }
+///   { "url": <webhook_url | legacy path>, "secret_token"?: ... }
 pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
     let parsed: Value = match serde_json::from_slice(input_json) {
         Ok(val) => val,
@@ -70,23 +74,6 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         }
     };
 
-    let public_base_url = parsed
-        .get("public_base_url")
-        .and_then(Value::as_str)
-        .or_else(|| {
-            parsed
-                .get("config")
-                .and_then(|c| c.get("public_base_url"))
-                .and_then(Value::as_str)
-        })
-        .unwrap_or("");
-
-    if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
-        return json_bytes(
-            &json!({"ok": false, "error": "public_base_url must be an https:// URL"}),
-        );
-    }
-
     let api_base = parsed
         .get("api_base_url")
         .and_then(Value::as_str)
@@ -98,33 +85,18 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         })
         .unwrap_or(DEFAULT_API_BASE);
 
-    let provider_id = parsed
-        .get("provider_id")
+    let body = match build_set_webhook_body(&parsed) {
+        Ok(body) => body,
+        Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
+    };
+    let webhook_url = body
+        .get("url")
         .and_then(Value::as_str)
-        .unwrap_or("messaging-telegram");
-    let tenant = parsed
-        .get("tenant")
-        .and_then(Value::as_str)
-        .unwrap_or("default");
-    let team = parsed
-        .get("team")
-        .and_then(Value::as_str)
-        .unwrap_or("default");
-
-    let webhook_url = format!(
-        "{}/v1/messaging/ingress/{}/{}/{}",
-        public_base_url.trim_end_matches('/'),
-        provider_id,
-        tenant,
-        team,
-    );
+        .unwrap_or_default()
+        .to_string();
 
     // Call setWebhook
     let url = format!("{api_base}/bot{bot_token}/setWebhook");
-    let body = json!({
-        "url": webhook_url,
-        "allowed_updates": ["message", "callback_query", "edited_message"]
-    });
     let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
     let req = client::Request {
         method: "POST".to_string(),
@@ -169,5 +141,102 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
             "error": format!("transport error: {}", err.message),
             "webhook_url": webhook_url,
         })),
+    }
+}
+
+/// Build the `setWebhook` request body from the op input. Prefers a fully-formed
+/// `webhook_url` (revision-serve model); otherwise composes the legacy ingress
+/// path from `public_base_url` + `provider_id`/`tenant`/`team`. Adds an optional
+/// `secret_token` (the endpoint's `provider_id`) when present.
+fn build_set_webhook_body(parsed: &Value) -> Result<Value, String> {
+    let field = |key: &str| -> Option<String> {
+        parsed
+            .get(key)
+            .or_else(|| parsed.get("config").and_then(|c| c.get(key)))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+    };
+
+    let webhook_url = match field("webhook_url") {
+        Some(url) => {
+            if !url.starts_with("https://") {
+                return Err("webhook_url must be an https:// URL".to_string());
+            }
+            url
+        }
+        None => {
+            let public_base_url = field("public_base_url").unwrap_or_default();
+            if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
+                return Err("public_base_url or webhook_url required (https://)".to_string());
+            }
+            let provider_id = field("provider_id").unwrap_or_else(|| "messaging-telegram".into());
+            let tenant = field("tenant").unwrap_or_else(|| "default".into());
+            let team = field("team").unwrap_or_else(|| "default".into());
+            format!(
+                "{}/v1/messaging/ingress/{}/{}/{}",
+                public_base_url.trim_end_matches('/'),
+                provider_id,
+                tenant,
+                team,
+            )
+        }
+    };
+
+    let mut body = json!({
+        "url": webhook_url,
+        "allowed_updates": ["message", "callback_query", "edited_message"]
+    });
+    if let Some(token) = field("secret_token") {
+        body["secret_token"] = json!(token);
+    }
+    Ok(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn webhook_url_override_takes_precedence_and_carries_secret_token() {
+        let body = build_set_webhook_body(&json!({
+            "webhook_url": "https://host.example/bot/webhook/telegram",
+            "secret_token": "abc123",
+            "public_base_url": "https://ignored.example",
+        }))
+        .expect("body");
+        assert_eq!(body["url"], "https://host.example/bot/webhook/telegram");
+        assert_eq!(body["secret_token"], "abc123");
+    }
+
+    #[test]
+    fn legacy_path_built_when_no_override() {
+        let body = build_set_webhook_body(&json!({
+            "public_base_url": "https://host.example/",
+            "provider_id": "messaging-telegram",
+            "tenant": "demo",
+            "team": "support",
+        }))
+        .expect("body");
+        assert_eq!(
+            body["url"],
+            "https://host.example/v1/messaging/ingress/messaging-telegram/demo/support"
+        );
+        assert!(body.get("secret_token").is_none());
+    }
+
+    #[test]
+    fn http_override_rejected() {
+        let err = build_set_webhook_body(&json!({"webhook_url": "http://host.example/x"}))
+            .expect_err("must reject non-https override");
+        assert!(err.contains("https"));
+    }
+
+    #[test]
+    fn missing_url_sources_rejected() {
+        let err = build_set_webhook_body(&json!({})).expect_err("must require a url source");
+        assert!(err.contains("required"));
     }
 }
