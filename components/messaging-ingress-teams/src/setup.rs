@@ -407,6 +407,16 @@ fn graph_start(state: &mut Value) -> &'static str {
 /// Poll the token endpoint once for the in-flight device code. Marks
 /// graph_admin_consent done on success; keeps waiting on authorization_pending.
 fn graph_poll(state: &mut Value) -> &'static str {
+    // Already authorized — repeated polls (the wizard polls on a loop) must not
+    // re-issue a fresh device code, or the step never settles to done.
+    let have_token = state
+        .get("values")
+        .and_then(|v| v.get("graph_access_token"))
+        .and_then(Value::as_str)
+        .is_some_and(|t| !t.trim().is_empty());
+    if have_token || is_done(state, "graph_admin_consent") {
+        return "click Continue to continue setup";
+    }
     let device_code = state
         .get("values")
         .and_then(|v| v.get("oauth_device"))
@@ -1286,6 +1296,22 @@ mod tests {
         // config wins when a key exists in both places
         let both = json!({"values": {"config": {"k": "from-config"}, "k": "from-values"}});
         assert_eq!(cfg_str(&both, "k"), "from-config");
+    }
+
+    #[test]
+    fn graph_poll_does_not_reissue_after_token_acquired() {
+        // After success the device code is cleared; a repeated poll must report
+        // done, not mint a fresh code (which made the stepper stall forever).
+        let mut state = default_state();
+        values_mut(&mut state).insert("graph_access_token".into(), json!("tok-abc"));
+        let msg = graph_poll(&mut state);
+        assert_eq!(msg, "click Continue to continue setup");
+        let reissued = state
+            .get("values")
+            .and_then(|v| v.get("oauth_device"))
+            .map(|d| !d.is_null())
+            .unwrap_or(false);
+        assert!(!reissued, "graph_poll re-issued a code after the token was acquired");
     }
 
     #[test]
