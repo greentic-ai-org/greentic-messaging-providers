@@ -465,6 +465,34 @@ fn graph_poll(state: &mut Value) -> &'static str {
                     json!({ "ok": true }),
                     "click Continue to continue setup",
                 );
+                // One sign-in funds both resources: exchange this login's refresh
+                // token for the Azure-management token so the second device login
+                // is unnecessary. Falls back silently if Azure needs separate
+                // consent — the management step then still runs on its own.
+                if let Some(refresh) = resp.get("refresh_token").and_then(Value::as_str) {
+                    let mgmt_form = format!(
+                        "grant_type=refresh_token&client_id={}&refresh_token={}&scope={}",
+                        encode(&graph_client_id(state)),
+                        encode(refresh),
+                        encode(AZURE_MANAGEMENT_SCOPES)
+                    );
+                    if let Ok(mgmt) = http_post_form(&url, &mgmt_form) {
+                        if let Some(mtok) = mgmt.get("access_token").and_then(Value::as_str) {
+                            values_mut(state).insert(
+                                "azure_management_access_token".into(),
+                                json!(mtok),
+                            );
+                            mark_done(state, "microsoft_bot_channel_registration_consent");
+                            set_result(
+                                state,
+                                "microsoft_bot_channel_registration_consent",
+                                true,
+                                json!({ "ok": true, "action": "from_refresh" }),
+                                "click Continue to continue setup",
+                            );
+                        }
+                    }
+                }
                 "click Continue to continue setup"
             } else {
                 let error = resp.get("error").and_then(Value::as_str).unwrap_or("");
@@ -1145,17 +1173,26 @@ fn bot_framework_registration_step(state: &mut Value) -> &'static str {
         );
         "click Continue to continue setup"
     } else {
-        // Advance even when registration could not complete (e.g. no Azure
-        // subscription) so the stepper is not walled; result records the reason.
-        mark_done(state, "bot_framework_endpoint_registration");
-        set_result(
-            state,
-            "bot_framework_endpoint_registration",
-            true,
-            result,
-            "click Continue to continue setup",
-        );
-        "click Continue to continue setup"
+        // Advance past the external "no Azure subscriptions" wall so the stepper
+        // is not blocked by a missing subscription, but keep real config
+        // validation (missing bot_app_id etc.) failing as before.
+        let err = result
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("Bot Framework registration failed");
+        if err.contains("no Azure subscriptions") {
+            mark_done(state, "bot_framework_endpoint_registration");
+            set_result(
+                state,
+                "bot_framework_endpoint_registration",
+                true,
+                result,
+                "click Continue to continue setup",
+            );
+            "click Continue to continue setup"
+        } else {
+            step_fail(state, "bot_framework_endpoint_registration", err)
+        }
     }
 }
 
