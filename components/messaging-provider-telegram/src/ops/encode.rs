@@ -133,23 +133,25 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
     let att_fields: Vec<(String, String)> = envelope
         .attachments
         .iter()
-        .map(|att| {
+        .filter_map(|att| {
+            let url = att.url.clone()?;
             let mt = att.mime_type.to_lowercase();
-            if mt.starts_with("video/") {
-                ("tg_video".to_string(), att.url.clone())
+            let key = if mt.starts_with("video/") {
+                "tg_video"
             } else if mt == "audio/ogg" || mt.starts_with("audio/ogg;") || mt == "audio/opus" {
-                ("tg_voice".to_string(), att.url.clone())
+                "tg_voice"
             } else if mt.starts_with("audio/") {
-                ("tg_audio".to_string(), att.url.clone())
+                "tg_audio"
             } else if mt == "image/webp" {
-                ("tg_sticker".to_string(), att.url.clone())
+                "tg_sticker"
             } else if mt == "image/gif" {
-                ("tg_animation".to_string(), att.url.clone())
+                "tg_animation"
             } else if mt.starts_with("image/") {
-                ("tg_photo".to_string(), att.url.clone())
+                "tg_photo"
             } else {
-                ("tg_document".to_string(), att.url.clone())
-            }
+                "tg_document"
+            };
+            Some((key.to_string(), url))
         })
         .collect();
     for (k, v) in att_fields {
@@ -251,19 +253,22 @@ mod tests {
         let attachments = vec![
             Attachment {
                 mime_type: "image/png".to_string(),
-                url: "https://cdn/new.png".to_string(),
+                url: Some("https://cdn/new.png".to_string()),
+                content: None,
                 name: None,
                 size_bytes: None,
             },
             Attachment {
                 mime_type: "audio/ogg".to_string(),
-                url: "https://cdn/voice.ogg".to_string(),
+                url: Some("https://cdn/voice.ogg".to_string()),
+                content: None,
                 name: None,
                 size_bytes: None,
             },
             Attachment {
                 mime_type: "application/pdf".to_string(),
-                url: "https://cdn/file.pdf".to_string(),
+                url: Some("https://cdn/file.pdf".to_string()),
+                content: None,
                 name: None,
                 size_bytes: None,
             },

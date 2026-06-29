@@ -274,7 +274,8 @@ impl ProviderHarness {
         let body_json = serde_json::to_vec(body).unwrap_or_default();
         let config = match self.provider {
             ProviderId::Teams => json!({
-                "setup_mode": "bot_framework",
+                "tenant_id": "test-tenant-id",
+                "client_id": "test-client-id",
                 "ms_bot_app_id": "test-bot-app-id",
                 "skip_jwt_validation": true
             }),

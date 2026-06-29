@@ -485,11 +485,8 @@ mod tests {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string(),
-                url: a
-                    .get("url")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
+                url: a.get("url").and_then(Value::as_str).map(String::from),
+                content: None,
                 name: a.get("name").and_then(Value::as_str).map(String::from),
                 size_bytes: None,
             })
