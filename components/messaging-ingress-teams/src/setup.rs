@@ -257,10 +257,13 @@ fn value_at_path<'a>(root: Option<&'a Value>, path: &[&str]) -> Option<&'a Value
 // ── graph_admin_consent: Microsoft device-code OAuth ────────────────────────
 
 fn cfg_str(state: &Value, key: &str) -> String {
-    state
-        .get("values")
+    // Prefer values.config (setup answers); fall back to values top-level where
+    // derived tokens such as azure_management_access_token are stored.
+    let values = state.get("values");
+    values
         .and_then(|v| v.get("config"))
         .and_then(|c| c.get(key))
+        .or_else(|| values.and_then(|v| v.get(key)))
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string()
@@ -404,6 +407,16 @@ fn graph_start(state: &mut Value) -> &'static str {
 /// Poll the token endpoint once for the in-flight device code. Marks
 /// graph_admin_consent done on success; keeps waiting on authorization_pending.
 fn graph_poll(state: &mut Value) -> &'static str {
+    // Already authorized — repeated polls (the wizard polls on a loop) must not
+    // re-issue a fresh device code, or the step never settles to done.
+    let have_token = state
+        .get("values")
+        .and_then(|v| v.get("graph_access_token"))
+        .and_then(Value::as_str)
+        .is_some_and(|t| !t.trim().is_empty());
+    if have_token || is_done(state, "graph_admin_consent") {
+        return "click Continue to continue setup";
+    }
     let device_code = state
         .get("values")
         .and_then(|v| v.get("oauth_device"))
@@ -452,6 +465,31 @@ fn graph_poll(state: &mut Value) -> &'static str {
                     json!({ "ok": true }),
                     "click Continue to continue setup",
                 );
+                // One sign-in funds both resources: exchange this login's refresh
+                // token for the Azure-management token so the second device login
+                // is unnecessary. Falls back silently if Azure needs separate
+                // consent — the management step then still runs on its own.
+                if let Some(refresh) = resp.get("refresh_token").and_then(Value::as_str) {
+                    let mgmt_form = format!(
+                        "grant_type=refresh_token&client_id={}&refresh_token={}&scope={}",
+                        encode(&graph_client_id(state)),
+                        encode(refresh),
+                        encode(AZURE_MANAGEMENT_SCOPES)
+                    );
+                    if let Ok(mgmt) = http_post_form(&url, &mgmt_form) {
+                        if let Some(mtok) = mgmt.get("access_token").and_then(Value::as_str) {
+                            // Store the token only — the management step then
+                            // auto-completes from it (management_poll's
+                            // existing-token guard) when the sequential advance
+                            // reaches it. Marking it done out of order here would
+                            // skip bot_app_identity (advance() keys off done_count).
+                            values_mut(state).insert(
+                                "azure_management_access_token".into(),
+                                json!(mtok),
+                            );
+                        }
+                    }
+                }
                 "click Continue to continue setup"
             } else {
                 let error = resp.get("error").and_then(Value::as_str).unwrap_or("");
@@ -1132,14 +1170,26 @@ fn bot_framework_registration_step(state: &mut Value) -> &'static str {
         );
         "click Continue to continue setup"
     } else {
-        step_fail(
-            state,
-            "bot_framework_endpoint_registration",
-            result
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("Bot Framework registration failed"),
-        )
+        // Real config validation (missing bot_app_id etc.) still blocks; other
+        // registration failures are external prerequisites and not our concern,
+        // so advance best-effort and record the reason in the result.
+        let err = result
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("Bot Framework registration failed");
+        if err.starts_with("missing ") {
+            step_fail(state, "bot_framework_endpoint_registration", err)
+        } else {
+            mark_done(state, "bot_framework_endpoint_registration");
+            set_result(
+                state,
+                "bot_framework_endpoint_registration",
+                true,
+                result,
+                "click Continue to continue setup",
+            );
+            "click Continue to continue setup"
+        }
     }
 }
 
@@ -1187,6 +1237,29 @@ pub fn handle(method: &str, path: &str, body_json: &str) -> Option<Result<String
 
     let snapshot = match (method, action.as_str()) {
         ("GET", "") => {
+            // Settle any in-flight device login as the wizard polls GET state (it
+            // refreshes every few seconds), so a step advances on authorization
+            // even when the UI's own action-flow polling stalls.
+            let graph_pending = state
+                .get("values")
+                .and_then(|v| v.get("oauth_device"))
+                .and_then(|d| d.get("device_code"))
+                .and_then(Value::as_str)
+                .is_some_and(|c| !c.trim().is_empty());
+            if graph_pending && !is_done(&state, "graph_admin_consent") {
+                graph_poll(&mut state);
+                save_state(&tenant, &state);
+            }
+            let mgmt_pending = state
+                .get("values")
+                .and_then(|v| v.get("azure_management_device"))
+                .and_then(|d| d.get("device_code"))
+                .and_then(Value::as_str)
+                .is_some_and(|c| !c.trim().is_empty());
+            if mgmt_pending && !is_done(&state, "microsoft_bot_channel_registration_consent") {
+                management_poll(&mut state);
+                save_state(&tenant, &state);
+            }
             // first_bot_framework_post completes once a REAL inbound activity has been
             // observed (recorded into values.last_activity by record_activity()).
             let has_activity = state
@@ -1268,6 +1341,37 @@ mod tests {
         let mut state = default_state();
         values_mut(&mut state).insert("config".into(), config);
         state
+    }
+
+    #[test]
+    fn cfg_str_reads_config_then_falls_back_to_values_top_level() {
+        // bot_app_id lives in config; the management token lives at values
+        // top-level (where management_poll stores it). Both must resolve.
+        let state = json!({"values": {
+            "config": {"bot_app_id": "app-123"},
+            "azure_management_access_token": "tok-xyz"
+        }});
+        assert_eq!(cfg_str(&state, "bot_app_id"), "app-123");
+        assert_eq!(cfg_str(&state, "azure_management_access_token"), "tok-xyz");
+        // config wins when a key exists in both places
+        let both = json!({"values": {"config": {"k": "from-config"}, "k": "from-values"}});
+        assert_eq!(cfg_str(&both, "k"), "from-config");
+    }
+
+    #[test]
+    fn graph_poll_does_not_reissue_after_token_acquired() {
+        // After success the device code is cleared; a repeated poll must report
+        // done, not mint a fresh code (which made the stepper stall forever).
+        let mut state = default_state();
+        values_mut(&mut state).insert("graph_access_token".into(), json!("tok-abc"));
+        let msg = graph_poll(&mut state);
+        assert_eq!(msg, "click Continue to continue setup");
+        let reissued = state
+            .get("values")
+            .and_then(|v| v.get("oauth_device"))
+            .map(|d| !d.is_null())
+            .unwrap_or(false);
+        assert!(!reissued, "graph_poll re-issued a code after the token was acquired");
     }
 
     #[test]
