@@ -786,8 +786,7 @@ fn register_microsoft_bot_channel(
                     })
                     .or_else(|| items.first())
                     .ok_or_else(|| {
-                        "no Azure subscriptions found for Microsoft bot channel registration"
-                            .to_string()
+                        "Microsoft bot channel registration could not be completed".to_string()
                     })?;
                 let id = chosen
                     .get("subscriptionId")
