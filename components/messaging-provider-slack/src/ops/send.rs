@@ -124,23 +124,25 @@ pub(crate) fn handle_send(input_json: &[u8], is_reply: bool) -> Vec<u8> {
         let slack_attachments: Vec<Value> = envelope
             .attachments
             .iter()
-            .map(|a| {
+            .filter_map(|a| {
+                let url = a.url.as_ref()?;
                 let mime = a.mime_type.to_lowercase();
                 let title = a.name.clone().unwrap_or_else(|| "attachment".to_string());
-                if mime.starts_with("image/") {
+                let value = if mime.starts_with("image/") {
                     json!({
                         "fallback": title.clone(),
-                        "image_url": a.url,
+                        "image_url": url,
                         "title": title,
                     })
                 } else {
                     json!({
                         "fallback": title.clone(),
                         "title": title,
-                        "title_link": a.url,
-                        "text": a.url,
+                        "title_link": url,
+                        "text": url,
                     })
-                }
+                };
+                Some(value)
             })
             .collect();
         payload

@@ -296,7 +296,8 @@ fn build_webex_attachment(message_id: &str, idx: usize, value: &Value) -> Option
         .or_else(|| value.get("sizeBytes").and_then(|v| v.as_u64()));
     Some(Attachment {
         mime_type,
-        url,
+        url: Some(url),
+        content: None,
         name,
         size_bytes,
     })
@@ -531,11 +532,20 @@ mod tests {
         let attachments = convert_webex_attachments("msg-1", &data);
 
         assert_eq!(attachments.len(), 3);
-        assert_eq!(attachments[0].url, "https://cdn.example/a.png");
-        assert_eq!(attachments[1].url, "https://cdn.example/card.json");
+        assert_eq!(
+            attachments[0].url.as_deref(),
+            Some("https://cdn.example/a.png")
+        );
+        assert_eq!(
+            attachments[1].url.as_deref(),
+            Some("https://cdn.example/card.json")
+        );
         assert_eq!(attachments[1].name.as_deref(), Some("card"));
         assert_eq!(attachments[1].size_bytes, Some(42));
-        assert_eq!(attachments[2].url, "webex:msg-1:attachment:2");
+        assert_eq!(
+            attachments[2].url.as_deref(),
+            Some("webex:msg-1:attachment:2")
+        );
         assert_eq!(attachments[2].size_bytes, Some(7));
     }
 

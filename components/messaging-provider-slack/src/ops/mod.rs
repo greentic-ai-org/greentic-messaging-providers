@@ -190,7 +190,8 @@ mod tests {
                 "attachments".to_string(),
                 serde_json::to_value(vec![Attachment {
                     mime_type: "image/png".to_string(),
-                    url: "https://example.com/image.png".to_string(),
+                    url: Some("https://example.com/image.png".to_string()),
+                    content: None,
                     name: None,
                     size_bytes: None,
                 }])
