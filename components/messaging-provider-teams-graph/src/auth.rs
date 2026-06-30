@@ -97,7 +97,6 @@ pub(crate) fn graph_refresh_token_form(cfg: &ProviderConfig, refresh_token: &str
     )
 }
 
-#[allow(dead_code)]
 pub(crate) fn acquire_bot_token(cfg: &ProviderConfig) -> Result<String, String> {
     let app_id = cfg
         .ms_bot_app_id

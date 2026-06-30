@@ -675,11 +675,18 @@ fn azure_arm_request(
 
 #[cfg(not(test))]
 fn azure_error_message(body: &Value, fallback: &str) -> String {
-    body.get("error")
+    if let Some(message) = body
+        .get("error")
         .and_then(|error| error.get("message"))
         .and_then(Value::as_str)
-        .unwrap_or(fallback)
-        .to_string()
+    {
+        return message.to_string();
+    }
+    if body.is_null() {
+        return fallback.to_string();
+    }
+    // Surface the raw API response when it doesn't match the standard error shape.
+    serde_json::to_string(body).unwrap_or_else(|_| fallback.to_string())
 }
 
 fn azure_safe_name(raw: &str) -> String {
@@ -786,7 +793,10 @@ fn register_microsoft_bot_channel(
                     })
                     .or_else(|| items.first())
                     .ok_or_else(|| {
-                        "Microsoft bot channel registration could not be completed".to_string()
+                        format!(
+                            "Azure subscription discovery returned no subscriptions (HTTP {status}): {}",
+                            serde_json::to_string(&body).unwrap_or_else(|_| "<unparseable body>".to_string())
+                        )
                     })?;
                 let id = chosen
                     .get("subscriptionId")

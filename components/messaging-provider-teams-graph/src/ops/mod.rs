@@ -13,6 +13,7 @@
 //! `build_team_envelope` is shared between `send` and `ingest` because both
 //! produce synthetic envelopes from inbound Bot Framework payloads.
 
+mod connector;
 mod encode;
 mod ingest;
 mod provision;

@@ -102,6 +102,16 @@
       "manifest_source": "components/messaging-ingress-teams/component.manifest.json",
       "manifest_target": "components/messaging-ingress-teams/component.manifest.json",
       "world": "root:component/root"
+    },
+    {
+      "id": "messaging-provider-teams-graph",
+      "version": "0.5.21",
+      "build_script": "tools/build_components/messaging-provider-teams-graph.sh",
+      "source": "target/components/messaging-provider-teams-graph.wasm",
+      "target": "components/messaging-provider-teams-graph/component.wasm",
+      "manifest_source": "components/messaging-provider-teams-graph/component.manifest.json",
+      "manifest_target": "components/messaging-provider-teams-graph/component.manifest.json",
+      "world": "root:component/root"
     }
   ],
   "setup_api": {
