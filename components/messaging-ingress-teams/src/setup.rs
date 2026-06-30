@@ -476,18 +476,15 @@ fn graph_poll(state: &mut Value) -> &'static str {
                         encode(refresh),
                         encode(AZURE_MANAGEMENT_SCOPES)
                     );
-                    if let Ok(mgmt) = http_post_form(&url, &mgmt_form) {
-                        if let Some(mtok) = mgmt.get("access_token").and_then(Value::as_str) {
-                            // Store the token only — the management step then
-                            // auto-completes from it (management_poll's
-                            // existing-token guard) when the sequential advance
-                            // reaches it. Marking it done out of order here would
-                            // skip bot_app_identity (advance() keys off done_count).
-                            values_mut(state).insert(
-                                "azure_management_access_token".into(),
-                                json!(mtok),
-                            );
-                        }
+                    // Store the token only — the management step then auto-completes
+                    // from it (management_poll's existing-token guard) when the
+                    // sequential advance reaches it. Marking it done out of order here
+                    // would skip bot_app_identity (advance() keys off done_count).
+                    if let Ok(mgmt) = http_post_form(&url, &mgmt_form)
+                        && let Some(mtok) = mgmt.get("access_token").and_then(Value::as_str)
+                    {
+                        values_mut(state)
+                            .insert("azure_management_access_token".into(), json!(mtok));
                     }
                 }
                 "click Continue to continue setup"
@@ -1371,7 +1368,10 @@ mod tests {
             .and_then(|v| v.get("oauth_device"))
             .map(|d| !d.is_null())
             .unwrap_or(false);
-        assert!(!reissued, "graph_poll re-issued a code after the token was acquired");
+        assert!(
+            !reissued,
+            "graph_poll re-issued a code after the token was acquired"
+        );
     }
 
     #[test]
