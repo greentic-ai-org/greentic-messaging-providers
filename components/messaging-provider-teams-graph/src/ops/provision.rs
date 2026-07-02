@@ -122,6 +122,7 @@ pub(crate) fn maybe_ensure_channel_config(config: &mut ProviderConfigOut) -> Res
         bot_display_name: config.bot_display_name.clone(),
         messaging_endpoint: config.messaging_endpoint.clone(),
         default_service_url: None,
+        skip_jwt_validation: None,
     };
     let token = acquire_graph_token(&provider_config)?;
     let result = ensure_channel_with_token(&provider_config, &token, &team_id, &desired_name)?;
@@ -360,6 +361,7 @@ mod tests {
             bot_display_name: None,
             messaging_endpoint: None,
             default_service_url: None,
+            skip_jwt_validation: None,
         }
     }
 

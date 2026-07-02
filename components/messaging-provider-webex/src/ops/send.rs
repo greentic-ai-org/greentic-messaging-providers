@@ -156,7 +156,7 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         let files: Vec<Value> = envelope
             .attachments
             .iter()
-            .map(|a| Value::String(a.url.clone()))
+            .filter_map(|a| a.url.clone().map(Value::String))
             .collect();
         body_map.insert("files".into(), Value::Array(files));
     }
@@ -429,7 +429,8 @@ mod tests {
                 "attachments".to_string(),
                 serde_json::to_value(vec![Attachment {
                     mime_type: "image/png".to_string(),
-                    url: "https://example.com/image.png".to_string(),
+                    url: Some("https://example.com/image.png".to_string()),
+                    content: None,
                     name: None,
                     size_bytes: None,
                 }])

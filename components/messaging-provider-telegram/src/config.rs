@@ -8,6 +8,8 @@ use crate::DEFAULT_API_BASE;
 pub(crate) struct ProviderConfig {
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
+    // Default so a per-field override (e.g. just `api_base_url`) deserializes; egress never reads it.
+    #[serde(default)]
     pub(crate) public_base_url: String,
     #[serde(default)]
     pub(crate) default_chat_id: Option<String>,
@@ -61,17 +63,14 @@ pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), Stri
 }
 
 pub(crate) fn parse_config_value(val: &Value) -> Result<ProviderConfig, String> {
-    let cfg = serde_json::from_value::<ProviderConfig>(val.clone())
-        .map_err(|e| format!("invalid config: {e}"))?;
-    validate_provider_config(cfg)
+    serde_json::from_value::<ProviderConfig>(val.clone())
+        .map_err(|e| format!("invalid config: {e}"))
 }
 
 #[cfg(test)]
 #[allow(dead_code)]
 pub(crate) fn parse_config_bytes(bytes: &[u8]) -> Result<ProviderConfig, String> {
-    let cfg = serde_json::from_slice::<ProviderConfig>(bytes)
-        .map_err(|e| format!("invalid config: {e}"))?;
-    validate_provider_config(cfg)
+    serde_json::from_slice::<ProviderConfig>(bytes).map_err(|e| format!("invalid config: {e}"))
 }
 
 pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
@@ -108,13 +107,6 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         api_base_url: Some(DEFAULT_API_BASE.to_string()),
         bot_token: None,
     })
-}
-
-fn validate_provider_config(cfg: ProviderConfig) -> Result<ProviderConfig, String> {
-    if cfg.public_base_url.trim().is_empty() {
-        return Err("invalid config: public_base_url cannot be empty".to_string());
-    }
-    Ok(cfg)
 }
 
 pub(crate) fn get_bot_token(cfg: &ProviderConfig) -> Result<String, String> {
@@ -199,18 +191,12 @@ mod tests {
     }
 
     #[test]
-    fn validate_provider_config_rejects_empty_public_base_url() {
-        let err = validate_provider_config(ProviderConfig {
-            enabled: true,
-            public_base_url: "  ".to_string(),
-            default_chat_id: None,
-            api_base_url: None,
-            bot_token: None,
-        })
-        .unwrap_err();
-        assert_eq!(
-            err,
-            "invalid config: public_base_url cannot be empty".to_string()
-        );
+    fn load_config_accepts_api_base_url_override_without_public_base_url() {
+        let cfg = load_config(&json!({
+            "config": { "api_base_url": "http://sink.local" }
+        }))
+        .expect("a per-field api_base_url override must parse on its own");
+        assert_eq!(cfg.api_base_url.as_deref(), Some("http://sink.local"));
+        assert_eq!(cfg.public_base_url, "");
     }
 }

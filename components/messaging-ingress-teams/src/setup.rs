@@ -483,10 +483,8 @@ fn graph_poll(state: &mut Value) -> &'static str {
                             // existing-token guard) when the sequential advance
                             // reaches it. Marking it done out of order here would
                             // skip bot_app_identity (advance() keys off done_count).
-                            values_mut(state).insert(
-                                "azure_management_access_token".into(),
-                                json!(mtok),
-                            );
+                            values_mut(state)
+                                .insert("azure_management_access_token".into(), json!(mtok));
                         }
                     }
                 }
@@ -1371,7 +1369,10 @@ mod tests {
             .and_then(|v| v.get("oauth_device"))
             .map(|d| !d.is_null())
             .unwrap_or(false);
-        assert!(!reissued, "graph_poll re-issued a code after the token was acquired");
+        assert!(
+            !reissued,
+            "graph_poll re-issued a code after the token was acquired"
+        );
     }
 
     #[test]
