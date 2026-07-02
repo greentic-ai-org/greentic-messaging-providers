@@ -109,7 +109,7 @@ jobs:
         run: cargo clippy -p greentic-messaging-provider-common --all-targets -- -D warnings
 
       - name: cargo test
-        run: cargo test -p greentic-messaging-provider-common
+        run: cargo test -p greentic-messaging-provider-common --lib
 
       - name: cargo publish dry-run
         run: cargo publish --dry-run -p greentic-messaging-provider-common
