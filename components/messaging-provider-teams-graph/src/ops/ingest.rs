@@ -368,7 +368,9 @@ mod tests {
         app_id: Option<&str>,
         skip_jwt: Option<bool>,
     ) -> Vec<u8> {
-        build_ingest_input_with_mode(auth_header, app_id, skip_jwt, true)
+        // graph mode: bot_framework setup_mode is rejected by validate_provider_config,
+        // so ingest JWT tests must use a loadable graph config carrying ms_bot_app_id.
+        build_ingest_input_with_mode(auth_header, app_id, skip_jwt, false)
     }
 
     fn build_ingest_input_with_mode(

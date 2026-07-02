@@ -663,9 +663,9 @@ mod tests {
         let make_cfg = || ProviderConfig {
             enabled: true,
             public_base_url: None,
-            setup_mode: Some("bot_framework".to_string()),
-            tenant_id: String::new(),
-            client_id: String::new(),
+            setup_mode: None,
+            tenant_id: "tenant".to_string(),
+            client_id: "client".to_string(),
             refresh_token: None,
             client_secret: None,
             access_token: None,
