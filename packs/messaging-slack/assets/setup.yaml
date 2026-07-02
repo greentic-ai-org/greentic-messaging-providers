@@ -4,6 +4,7 @@ title: Slack provider setup
 setup_actions:
   - id: add_to_slack
     label: Setup Slack App
+    description: "Creates your Slack app and links its Event Subscriptions & Interactivity request URLs to this bundle's message endpoint, then installs it to your workspace. After it completes, DM the bot to test. If the bundle's public URL changes, re-run this step to re-point the URLs."
     kind: oauth_install_button
     provider_id: slack
     oauth_provider_id: slack
@@ -16,6 +17,7 @@ setup_actions:
       - channels:join
       - im:history
       - im:write
+      - app_mentions:read
     client_id_source: registration
     client_id_field: slack_client_id
     app_name_template: "{{ bundle_name }} Slack"
@@ -36,14 +38,18 @@ questions:
     kind: string
     required: true
     secret: true
-    help: "Short-lived access token generated at api.slack.com -> Your Apps -> App Configuration Tokens"
+    help: "Open api.slack.com/apps, find the 'Your App Configuration Tokens' panel at the top, click Generate Token, then copy the Access Token (starts with xoxe.xoxp-). Short-lived (~12h) — the refresh token below renews it."
+    placeholder: "xoxe.xoxp-..."
     group: Authentication
-    docs_url: "https://api.slack.com/apps"
+    docs_url: "https://api.slack.com/authentication/config-tokens"
+    create_url: "https://api.slack.com/apps"
   - name: slack_configuration_refresh_token
     title: Slack Configuration Refresh Token
     kind: string
     required: true
     secret: true
-    help: "Refresh token generated alongside the Slack configuration access token. Used to rotate expired access tokens automatically."
+    help: "From the same 'Generate Token' step on api.slack.com/apps, copy the Refresh Token (starts with xoxe-1-). It rotates the access token automatically when it expires."
+    placeholder: "xoxe-1-..."
     group: Authentication
-    docs_url: "https://api.slack.com/apps"
+    docs_url: "https://api.slack.com/authentication/config-tokens"
+    create_url: "https://api.slack.com/apps"

@@ -532,23 +532,32 @@ def page_html() -> bytes:
   <section>
     <h2>Setup</h2>
     <div class="actionBox">
+      <strong>Path A — build a new app from configuration tokens</strong>
+      <p class="muted">Get both tokens here: <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps ↗</a> → top panel "Your App Configuration Tokens" → <em>Generate Token</em>. It shows the access + refresh token together.</p>
+      <div class="grid">
+        <label>Configuration access token* (xoxe.xoxp-…)<input id="slack_configuration_access_token" type="password" autocomplete="off" placeholder="xoxe.xoxp-..."></label>
+        <label>Configuration refresh token* (xoxe-1-…)<input id="slack_configuration_refresh_token" type="password" autocomplete="off" placeholder="xoxe-1-..."></label>
+      </div>
       <div class="row">
-        <button id="createAppBtn" type="button">Setup Slack App</button>
-        <button id="addToSlackBtn" class="primary" type="button">Setup Slack App</button>
+        <button id="createAppBtn" type="button">Step 1 · Create app</button>
+        <button id="addToSlackBtn" class="primary" type="button">Step 2 · Install to workspace</button>
         <button id="openSlackAppBtn" type="button">Open in Slack</button>
         <button id="copyAddToSlackBtn" type="button">Copy install URL</button>
-        <span class="muted">Create the app first, then install it to retrieve the bot token for sends.</span>
+        <button id="saveBtn" type="button">Save values only</button>
       </div>
+      <p class="muted">Step 1 creates the app; Step 2 installs it and captures the bot token used for sends.</p>
       <pre id="addToSlackUrl"></pre>
       <pre id="appInfo">{{}}</pre>
     </div>
-    <div class="grid">
-      <label>Configuration access token*<input id="slack_configuration_access_token" type="password" autocomplete="off" placeholder="xoxe-..."></label>
-      <label>Configuration refresh token*<input id="slack_configuration_refresh_token" type="password" autocomplete="off" placeholder="xoxe-..."></label>
-    </div>
-    <p class="muted">Other setup values are derived after Slack creates and installs the app.</p>
-    <div class="row">
-      <button id="saveBtn" type="button">Save values only</button>
+    <div class="actionBox">
+      <strong>Path B — use an existing bot token (skip Steps 1–2)</strong>
+      <p class="muted">Find it at <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps ↗</a> → your app → <em>OAuth &amp; Permissions</em> → "Bot User OAuth Token". Lets you Send immediately.</p>
+      <div class="grid">
+        <label>Bot User OAuth Token (xoxb-…)<input id="direct_bot_token" type="password" autocomplete="off" placeholder="xoxb-..."></label>
+      </div>
+      <div class="row">
+        <button id="useBotTokenBtn" type="button">Use this bot token</button>
+      </div>
     </div>
   </section>
   <section>
@@ -581,7 +590,7 @@ def page_html() -> bytes:
 </main>
 <script>
 const setupAction = {json.dumps(ADD_TO_SLACK_ACTION)};
-const ids = ["slack_configuration_access_token","slack_configuration_refresh_token","send_to","send_kind","send_text"];
+const ids = ["slack_configuration_access_token","slack_configuration_refresh_token","direct_bot_token","send_to","send_kind","send_text"];
 const persistedIds = ["send_to","send_kind","send_text"];
 for (const id of ids) {{
   const saved = persistedIds.includes(id) ? localStorage.getItem("slackTester." + id) : null;
@@ -636,6 +645,7 @@ document.getElementById("openSlackAppBtn").onclick = () => {{
   window.open(currentSlackAppUrl, "_blank", "noopener");
 }};
 document.getElementById("createAppBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/create-app", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
+document.getElementById("useBotTokenBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/use-bot-token", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("saveBtn").onclick = () => post("/api/save", formValues());
 document.getElementById("sendBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/send", formValues()); }} finally {{ e.target.disabled = false; }} }};
 document.getElementById("simulateAppHomeBtn").onclick = async e => {{ e.target.disabled = true; try {{ await post("/api/simulate/app-home-opened", formValues()); await refresh(); }} finally {{ e.target.disabled = false; }} }};
@@ -750,6 +760,32 @@ class Handler(BaseHTTPRequestHandler):
             values = persist_values(data)
             append_event("values-saved", {"values_path": str(VALUES)})
             self.send_json({"ok": True, "values_path": str(VALUES), "values": values})
+            return
+        if path == "/api/use-bot-token":
+            data = self.read_json()
+            token = (data.get("direct_bot_token") or "").strip()
+            if not token.startswith("xoxb-"):
+                self.send_json({"ok": False, "error": "Bot token must start with xoxb-"}, 400)
+                return
+            try:
+                auth = slack_api_post("auth.test", token=token)
+            except RuntimeError as exc:
+                self.send_json({"ok": False, "error": str(exc)}, 400)
+                return
+            info = read_json_file(APP_INFO)
+            info["bot_token"] = token
+            if auth.get("app_id"):
+                info["app_id"] = auth["app_id"]
+            if auth.get("team_id"):
+                info["team"] = {"id": auth.get("team_id"), "name": auth.get("team")}
+            write_json_file(APP_INFO, info)
+            persist_values({})
+            append_event("bot-token-set", {"ok": True, "team": auth.get("team"), "team_id": auth.get("team_id")})
+            self.send_json({
+                "ok": True,
+                "app_info": sanitized_app_info(),
+                "auth": {"team": auth.get("team"), "team_id": auth.get("team_id"), "user_id": auth.get("user_id")},
+            })
             return
         if path == "/api/create-app":
             try:
@@ -903,33 +939,42 @@ GREENTIC_SLACK_PORT="${PORT}" \
   python3 "${WORK_DIR}/server.py" >"${SERVER_LOG}" 2>&1 &
 SERVER_PID=$!
 
-"${CLOUDFLARED_BIN}" tunnel --url "http://127.0.0.1:${PORT}" --no-autoupdate >"${CLOUDFLARED_LOG}" 2>&1 &
-CLOUDFLARED_PID=$!
+# Reuse a long-lived external tunnel when EXTERNAL_PUBLIC_URL is set; otherwise spin up a throwaway quick tunnel.
+CLOUDFLARED_PID=""
+PUBLIC_URL=""
+if [ -n "${EXTERNAL_PUBLIC_URL:-}" ]; then
+  PUBLIC_URL="${EXTERNAL_PUBLIC_URL%/}"
+  printf '%s\n' "${PUBLIC_URL}" > "${PUBLIC_URL_FILE}"
+else
+  "${CLOUDFLARED_BIN}" tunnel --url "http://127.0.0.1:${PORT}" --no-autoupdate >"${CLOUDFLARED_LOG}" 2>&1 &
+  CLOUDFLARED_PID=$!
+fi
 
 cleanup() {
-  kill "${CLOUDFLARED_PID}" "${SERVER_PID}" >/dev/null 2>&1 || true
+  kill ${CLOUDFLARED_PID} "${SERVER_PID}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-PUBLIC_URL=""
-for _ in $(seq 1 60); do
-  if ! kill -0 "${SERVER_PID}" >/dev/null 2>&1; then
-    echo "server exited. Log:" >&2
-    sed -n '1,120p' "${SERVER_LOG}" >&2 || true
-    exit 1
-  fi
-  if ! kill -0 "${CLOUDFLARED_PID}" >/dev/null 2>&1; then
-    echo "cloudflared exited. Log:" >&2
-    sed -n '1,160p' "${CLOUDFLARED_LOG}" >&2 || true
-    exit 1
-  fi
-  PUBLIC_URL="$(grep -Eo 'https://[-a-zA-Z0-9.]+\.trycloudflare\.com' "${CLOUDFLARED_LOG}" | head -1 || true)"
-  if [ -n "${PUBLIC_URL}" ]; then
-    printf '%s\n' "${PUBLIC_URL}" > "${PUBLIC_URL_FILE}"
-    break
-  fi
-  sleep 1
-done
+if [ -z "${PUBLIC_URL}" ]; then
+  for _ in $(seq 1 60); do
+    if ! kill -0 "${SERVER_PID}" >/dev/null 2>&1; then
+      echo "server exited. Log:" >&2
+      sed -n '1,120p' "${SERVER_LOG}" >&2 || true
+      exit 1
+    fi
+    if ! kill -0 "${CLOUDFLARED_PID}" >/dev/null 2>&1; then
+      echo "cloudflared exited. Log:" >&2
+      sed -n '1,160p' "${CLOUDFLARED_LOG}" >&2 || true
+      exit 1
+    fi
+    PUBLIC_URL="$(grep -Eo 'https://[-a-zA-Z0-9.]+\.trycloudflare\.com' "${CLOUDFLARED_LOG}" | head -1 || true)"
+    if [ -n "${PUBLIC_URL}" ]; then
+      printf '%s\n' "${PUBLIC_URL}" > "${PUBLIC_URL_FILE}"
+      break
+    fi
+    sleep 1
+  done
+fi
 
 if [ -z "${PUBLIC_URL}" ]; then
   echo "timed out waiting for cloudflared public URL. Log:" >&2

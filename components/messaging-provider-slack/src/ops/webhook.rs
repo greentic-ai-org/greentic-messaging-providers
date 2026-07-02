@@ -134,55 +134,36 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         }
     };
 
-    // Revision-serve passes a fully-formed `webhook_url`; legacy fills it from
-    // `public_base_url` + the ingress path segments.
-    let webhook_url = match parsed
-        .get("webhook_url")
-        .or_else(|| parsed.get("config").and_then(|c| c.get("webhook_url")))
+    let public_base_url = parsed
+        .get("public_base_url")
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        Some(url) => {
-            if !url.starts_with("https://") {
-                return json_bytes(
-                    &json!({"ok": false, "error": "webhook_url must be an https:// URL"}),
-                );
-            }
-            url.to_string()
-        }
-        None => {
-            let public_base_url = parsed
-                .get("public_base_url")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
-                return json_bytes(&json!({
-                    "ok": false,
-                    "error": "public_base_url or webhook_url required (https://)"
-                }));
-            }
-            let provider_id = parsed
-                .get("provider_id")
-                .and_then(Value::as_str)
-                .unwrap_or("messaging-slack");
-            let tenant = parsed
-                .get("tenant")
-                .and_then(Value::as_str)
-                .unwrap_or("default");
-            let team = parsed
-                .get("team")
-                .and_then(Value::as_str)
-                .unwrap_or("default");
-            format!(
-                "{}/v1/messaging/ingress/{}/{}/{}",
-                public_base_url.trim_end_matches('/'),
-                provider_id,
-                tenant,
-                team,
-            )
-        }
-    };
+        .unwrap_or("");
+    if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
+        return json_bytes(
+            &json!({"ok": false, "error": "public_base_url must be an https:// URL"}),
+        );
+    }
+
+    let provider_id = parsed
+        .get("provider_id")
+        .and_then(Value::as_str)
+        .unwrap_or("messaging-slack");
+    let tenant = parsed
+        .get("tenant")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
+    let team = parsed
+        .get("team")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
+
+    let webhook_url = format!(
+        "{}/v1/messaging/ingress/{}/{}/{}",
+        public_base_url.trim_end_matches('/'),
+        provider_id,
+        tenant,
+        team,
+    );
 
     // Step 1: Export current manifest (with token refresh on auth failure)
     let mut config_token = config_token_input;
@@ -661,13 +642,13 @@ fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
         "oauth_config": {
             "redirect_urls": [callback_url],
             "scopes": {
-                "bot": ["chat:write", "channels:read", "channels:history", "channels:join", "im:history", "im:write"],
+                "bot": ["chat:write", "channels:read", "channels:history", "channels:join", "im:history", "im:write", "app_mentions:read"],
             },
         },
         "settings": {
             "event_subscriptions": {
                 "request_url": ingress_url,
-                "bot_events": ["message.im"],
+                "bot_events": ["message.im", "app_mention", "message.channels"],
             },
             "interactivity": {
                 "is_enabled": true,
@@ -830,6 +811,8 @@ fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
         obj.insert("request_url".to_string(), json!(webhook_url));
         let bot_events = obj.entry("bot_events").or_insert_with(|| json!([]));
         push_unique_string(bot_events, "message.im");
+        push_unique_string(bot_events, "app_mention");
+        push_unique_string(bot_events, "message.channels");
     }
 
     // interactivity.request_url + is_enabled
