@@ -16,13 +16,15 @@ questions:
     title: Webex bot email
     kind: string
     required: true
-    help: "Email address assigned to your Webex bot. This is used for the final Add to WebEx link."
+    help: "Email address assigned to your Webex bot. Shown on the bot's page after you create it."
     group: Connection
+    create_url: "https://developer.webex.com/my-apps/new/bot"
   - name: webex_bot_token
     title: Webex bot token
     kind: string
     required: true
     secret: true
-    help: "Access token from your Webex bot. You can generate one by creating a bot at https://developer.webex.com/my-apps."
+    help: "Bot access token, shown once when you create the bot. If you lost it, open the bot and regenerate."
     group: Authentication
-    docs_url: "https://developer.webex.com/my-apps"
+    docs_url: "https://developer.webex.com/docs/bots"
+    create_url: "https://developer.webex.com/my-apps/new/bot"
