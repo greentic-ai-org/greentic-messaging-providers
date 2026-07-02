@@ -153,20 +153,21 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
 
         // Map attachments by mime_type (only if corresponding wa_* not already set).
         for att in &encode_message.attachments {
+            let Some(url) = &att.url else { continue };
             let mime = att.mime_type.as_str();
             if mime.starts_with("video/") && !obj.contains_key("wa_video") {
-                obj.insert("wa_video".into(), json!(att.url));
+                obj.insert("wa_video".into(), json!(url));
                 if let Some(ref name) = att.name {
                     obj.entry("wa_video_caption").or_insert_with(|| json!(name));
                 }
             } else if mime.starts_with("audio/") && !obj.contains_key("wa_audio") {
-                obj.insert("wa_audio".into(), json!(att.url));
+                obj.insert("wa_audio".into(), json!(url));
             } else if mime == "image/webp" && !obj.contains_key("wa_sticker") {
-                obj.insert("wa_sticker".into(), json!(att.url));
+                obj.insert("wa_sticker".into(), json!(url));
             } else if mime.starts_with("image/") && !obj.contains_key("wa_image") {
-                obj.insert("wa_image".into(), json!(att.url));
+                obj.insert("wa_image".into(), json!(url));
             } else if !obj.contains_key("wa_document") {
-                obj.insert("wa_document".into(), json!(att.url));
+                obj.insert("wa_document".into(), json!(url));
                 if let Some(ref name) = att.name {
                     obj.insert("wa_document_filename".into(), json!(name));
                 }

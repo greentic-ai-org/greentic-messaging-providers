@@ -310,7 +310,9 @@ pub(crate) fn encode_op(input_json: &[u8]) -> Vec<u8> {
             .map(|a| {
                 let mut entry = serde_json::Map::new();
                 entry.insert("mime_type".to_string(), Value::String(a.mime_type.clone()));
-                entry.insert("url".to_string(), Value::String(a.url.clone()));
+                if let Some(url) = &a.url {
+                    entry.insert("url".to_string(), Value::String(url.clone()));
+                }
                 if let Some(name) = &a.name {
                     entry.insert("name".to_string(), Value::String(name.clone()));
                 }

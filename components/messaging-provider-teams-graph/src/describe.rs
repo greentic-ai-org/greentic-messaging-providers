@@ -73,6 +73,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "teams.schema.config.desired_channel_name.description",
     "teams.schema.config.messaging_endpoint.title",
     "teams.schema.config.messaging_endpoint.description",
+    "teams.schema.config.skip_jwt_validation.title",
+    "teams.schema.config.skip_jwt_validation.description",
     // QA titles
     "teams.qa.default.title",
     "teams.qa.setup.title",
@@ -326,6 +328,14 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "teams.schema.config.messaging_endpoint.description",
         "Deprecated legacy field; ignored by the Graph provider",
     ),
+    (
+        "teams.schema.config.skip_jwt_validation.title",
+        "Skip JWT validation",
+    ),
+    (
+        "teams.schema.config.skip_jwt_validation.description",
+        "Dev-only: bypass inbound JWT validation. Must not be enabled in production.",
+    ),
     // QA titles
     ("teams.qa.default.title", "Default"),
     ("teams.qa.setup.title", "Setup"),
@@ -549,6 +559,14 @@ fn config_schema() -> SchemaIr {
                     "teams.schema.config.messaging_endpoint.title",
                     "teams.schema.config.messaging_endpoint.description",
                     "uri",
+                ),
+            ),
+            (
+                "skip_jwt_validation",
+                false,
+                schema_bool_ir(
+                    "teams.schema.config.skip_jwt_validation.title",
+                    "teams.schema.config.skip_jwt_validation.description",
                 ),
             ),
         ],
