@@ -1,12 +1,13 @@
 //! Provider operations for the SMS (Twilio) messaging component.
 //!
-//! Task 1 scaffolds these as stubs; inbound parse, signature validation, and
-//! egress are filled in by later tasks in this epic.
+//! Egress (`render_plan`/`encode`/`send_payload`) is filled in by later tasks
+//! in this epic; inbound parse + `X-Twilio-Signature` validation are done.
 
 mod encode;
 mod ingest;
 mod render;
 mod send_payload;
+mod signature;
 mod webhook;
 
 pub(crate) use encode::encode_op;

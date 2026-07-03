@@ -2233,8 +2233,10 @@ dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
  "greentic-types 1.2.0-research.1",
+ "hmac",
  "serde",
  "serde_json",
+ "sha1",
  "urlencoding",
  "wit-bindgen 0.57.1",
 ]
