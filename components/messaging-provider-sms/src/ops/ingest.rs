@@ -3,7 +3,7 @@ use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 use greentic_types::{
     Actor, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
 };
-use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
+use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in_with_config};
 use std::collections::BTreeMap;
 
 use super::signature::valid_twilio_signature;
@@ -16,7 +16,7 @@ fn ingest_http_with_auth_token(input_json: &[u8], auth_token: Option<&str>) -> V
     // Try native greentic-types format first, fall back to operator format
     let request = match serde_json::from_slice::<HttpInV1>(input_json) {
         Ok(req) => req,
-        Err(_) => match parse_operator_http_in(input_json) {
+        Err(_) => match parse_operator_http_in_with_config(input_json) {
             Ok(req) => req,
             Err(err) => return http_out_error(400, &format!("invalid http input: {err}")),
         },
@@ -160,7 +160,7 @@ fn signature_ok(
     let Some(url) = signed_url(request) else {
         return false;
     };
-    valid_twilio_signature(token, &url, form, &header_sig)
+    valid_twilio_signature(token, &url, form, header_sig.trim())
 }
 
 fn find_header(headers: &[Header], name: &str) -> Option<String> {
