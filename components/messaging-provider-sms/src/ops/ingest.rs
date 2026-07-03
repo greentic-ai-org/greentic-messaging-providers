@@ -89,6 +89,9 @@ fn build_sms_envelope(
     if num_media > 0 {
         metadata.insert("media_dropped".to_string(), num_media.to_string());
     }
+    // Per-sender session so distinct phone numbers texting one Twilio number
+    // don't collide into a shared conversation (session key = pack:flow:session_id).
+    let session_id = from.clone();
     let sender = Actor {
         id: from,
         kind: Some("user".into()),
@@ -101,7 +104,7 @@ fn build_sms_envelope(
         id: format!("sms-{message_sid}"),
         tenant: TenantCtx::new(env, tenant),
         channel: "sms".to_string(),
-        session_id: "sms".to_string(),
+        session_id,
         reply_scope: None,
         from: Some(sender),
         to: vec![destination],
@@ -266,6 +269,8 @@ mod tests {
         assert_eq!(env.text.as_deref(), Some("hello agent"));
         assert_eq!(env.correlation_id.as_deref(), Some("SM123"));
         assert!(env.from.as_ref().is_some_and(|a| a.id == "+15551230001"));
+        // Per-sender session isolation: distinct senders must not share a session.
+        assert_eq!(env.session_id, "+15551230001");
         assert_eq!(env.to.len(), 1);
         assert_eq!(env.to[0].id, "+15559990000");
         assert!(env.attachments.is_empty());
