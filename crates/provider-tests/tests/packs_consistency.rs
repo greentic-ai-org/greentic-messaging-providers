@@ -472,9 +472,7 @@ fn template_tokens(s: &str) -> HashSet<String> {
             }
             if let Some(rel) = s[i + 1..].find('}') {
                 let tok = &s[i + 1..i + 1 + rel];
-                if !tok.is_empty()
-                    && tok.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                {
+                if !tok.is_empty() && tok.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                     out.insert(tok.to_string());
                 }
                 i = i + 1 + rel + 1;

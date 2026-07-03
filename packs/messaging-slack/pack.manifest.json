@@ -1,6 +1,6 @@
 {
   "name": "messaging-slack",
-  "version": "0.5.13",
+  "version": "0.5.14",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Slack messaging provider \u2014 Bot API with Events API ingress",
