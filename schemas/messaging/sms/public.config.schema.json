@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SMS (Twilio) Provider-Core Config",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Enable this provider.",
+      "default": true
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
