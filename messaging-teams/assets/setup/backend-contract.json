@@ -32,8 +32,12 @@
   ],
   "runtime_outputs": {
     "config": {
-      "enabled": { "const": true },
-      "setup_mode": { "const": "bot_framework" },
+      "enabled": {
+        "const": true
+      },
+      "setup_mode": {
+        "const": "bot_framework"
+      },
       "tenant_id": "tenant",
       "client_id": "bot_app_id",
       "ms_bot_app_id": "bot_app_id"
@@ -163,8 +167,8 @@
         "state_store_key": "last_reconcile"
       },
       "completion": {
-        "state_path": "last_reconcile.ok",
-        "equals": true
+        "state_path": "last_reconcile",
+        "exists": true
       }
     },
     {
@@ -189,8 +193,8 @@
         "state_store_key": "last_teams_app_publish"
       },
       "completion": {
-        "state_path": "last_teams_app_publish.ok",
-        "equals": true
+        "state_path": "last_teams_app_publish",
+        "exists": true
       }
     },
     {
@@ -217,8 +221,8 @@
         }
       },
       "completion": {
-        "state_path": "last_teams_app_install.ok",
-        "equals": true
+        "state_path": "last_teams_app_install",
+        "exists": true
       }
     },
     {

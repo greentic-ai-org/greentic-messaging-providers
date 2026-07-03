@@ -142,6 +142,9 @@ pub struct QaQuestionSpec {
     pub label: I18nText,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub help: Option<I18nText>,
+    /// Link to where the credential can be created (e.g. provider dev portal).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub help_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<I18nText>,
     pub kind: QuestionKind,

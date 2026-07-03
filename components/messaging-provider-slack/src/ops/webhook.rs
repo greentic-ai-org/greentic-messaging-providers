@@ -642,13 +642,13 @@ fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
         "oauth_config": {
             "redirect_urls": [callback_url],
             "scopes": {
-                "bot": ["chat:write", "channels:read", "channels:history", "channels:join", "im:history", "im:write"],
+                "bot": ["chat:write", "channels:read", "channels:history", "channels:join", "im:history", "im:write", "app_mentions:read"],
             },
         },
         "settings": {
             "event_subscriptions": {
                 "request_url": ingress_url,
-                "bot_events": ["message.im"],
+                "bot_events": ["message.im", "app_mention", "message.channels"],
             },
             "interactivity": {
                 "is_enabled": true,
@@ -811,6 +811,8 @@ fn update_manifest_urls(manifest: &mut Value, webhook_url: &str) {
         obj.insert("request_url".to_string(), json!(webhook_url));
         let bot_events = obj.entry("bot_events").or_insert_with(|| json!([]));
         push_unique_string(bot_events, "message.im");
+        push_unique_string(bot_events, "app_mention");
+        push_unique_string(bot_events, "message.channels");
     }
 
     // interactivity.request_url + is_enabled

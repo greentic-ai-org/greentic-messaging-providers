@@ -55,6 +55,7 @@ pub fn qa_q(key: &str, text_key: &str, required: bool) -> QaQuestionSpec {
         id: key.to_string(),
         label: i18n(text_key),
         help: None,
+        help_url: None,
         error: None,
         kind: crate::component_v0_6::QuestionKind::Text,
         required,
@@ -69,6 +70,7 @@ pub fn qa_inline_json(key: &str, text_key: &str, required: bool) -> QaQuestionSp
         id: key.to_string(),
         label: i18n(text_key),
         help: None,
+        help_url: None,
         error: None,
         kind: crate::component_v0_6::QuestionKind::InlineJson { schema: None },
         required,
@@ -88,6 +90,7 @@ pub fn qa_inline_json_with_schema(
         id: key.to_string(),
         label: i18n(text_key),
         help: None,
+        help_url: None,
         error: None,
         kind: crate::component_v0_6::QuestionKind::InlineJson {
             schema: Some(schema),
@@ -109,6 +112,7 @@ pub fn qa_asset_ref(
         id: key.to_string(),
         label: i18n(text_key),
         help: None,
+        help_url: None,
         error: None,
         kind: crate::component_v0_6::QuestionKind::AssetRef {
             file_types,
@@ -134,6 +138,7 @@ pub fn qa_asset_ref_with_base(
         id: key.to_string(),
         label: i18n(text_key),
         help: None,
+        help_url: None,
         error: None,
         kind: crate::component_v0_6::QuestionKind::AssetRef {
             file_types,
@@ -668,6 +673,19 @@ pub fn qa_spec_for_mode(
             questions: Vec::new(),
             defaults: Default::default(),
         },
+    }
+}
+
+/// Attach guided create/help links to matching questions by id.
+///
+/// `links` maps a question id to a URL where that credential can be created
+/// (e.g. the provider's developer portal). Ids not present in the spec are
+/// ignored, so one link table can cover every mode.
+pub fn apply_help_urls(spec: &mut QaSpec, links: &[(&str, &str)]) {
+    for q in &mut spec.questions {
+        if let Some((_, url)) = links.iter().find(|(id, _)| *id == q.id) {
+            q.help_url = Some((*url).to_string());
+        }
     }
 }
 

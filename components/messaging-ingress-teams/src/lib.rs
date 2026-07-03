@@ -489,10 +489,17 @@ pub(crate) fn handle_bot_framework_registration_body(body: &Value) -> Value {
         .get("bot_app_id")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    // Best-effort: the Azure Bot resource is not required to advance setup. If it
+    // can't be created (e.g. no reachable Azure subscription), record the reason
+    // and continue so publish/install/egress can still be exercised.
     let channel_registration =
         match register_microsoft_bot_channel(body, messaging_endpoint, bot_app_id) {
             Ok(value) => value,
-            Err(error) => return setup_blocked(&error),
+            Err(error) => json!({
+                "kind": "microsoft_bot_channel_registration",
+                "status": "skipped",
+                "warning": error,
+            }),
         };
     let registration = bot_framework_registration_record(body, messaging_endpoint);
     if let Err(error) = persist_bot_framework_registration(tenant, team, bot_app_id, &registration)
