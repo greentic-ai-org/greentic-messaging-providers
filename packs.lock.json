@@ -69,6 +69,13 @@
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-whatsapp:0.5.3",
       "digest": "sha256:6e7c0a478955248f3431361444672ecb23db637f268cfcbc4917131eb0cc81e2",
       "built_at": "2026-06-02T07:59:34Z"
+    },
+    {
+      "name": "messaging-sms",
+      "file": "dist/packs/messaging-sms.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-sms:0.5.1",
+      "digest": "sha256:752c44b81893d02398d866481d99deb1c1424fc0f17c57ea7b00342a9aae5b31",
+      "built_at": "2026-07-03T02:02:08Z"
     }
   ]
 }

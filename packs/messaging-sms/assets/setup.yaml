@@ -1,0 +1,31 @@
+provider_id: sms
+version: 1
+title: SMS (Twilio) provider setup
+questions:
+  - name: account_sid
+    title: Twilio Account SID
+    kind: string
+    required: true
+    secret: true
+    help: "Twilio Account SID from the Twilio Console"
+    placeholder: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    group: Authentication
+    docs_url: "https://console.twilio.com"
+  - name: auth_token
+    title: Twilio Auth Token
+    kind: string
+    required: true
+    secret: true
+    help: "Twilio Auth Token from the Twilio Console; also used to validate inbound webhook signatures"
+    group: Authentication
+    docs_url: "https://console.twilio.com"
+  - name: from_number
+    title: Twilio phone number (From)
+    kind: string
+    required: true
+    secret: true
+    help: "Twilio phone number (E.164 format) used as the sender for outbound SMS"
+    placeholder: "+15551234567"
+    group: Connection
+    validate:
+      regex: "^\\+[1-9]\\d{1,14}$"

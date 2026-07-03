@@ -1,0 +1,175 @@
+{
+  "name": "messaging-sms",
+  "version": "0.5.1",
+  "kind": "application",
+  "publisher": "Greentic",
+  "description": "Twilio SMS messaging provider \u2014 conversational inbound + outbound",
+  "component_sources": [
+    {
+      "id": "messaging-provider-sms",
+      "version": "0.5.1",
+      "world": "greentic:component/component-v0-v6-v0@0.6.1",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {
+          "secrets-store": true,
+          "http-client": true
+        }
+      },
+      "wasm": "components/messaging-provider-sms/component.wasm",
+      "manifest": "components/messaging-provider-sms/component.manifest.json"
+    }
+  ],
+  "components": [
+    "messaging-provider-sms"
+  ],
+  "config_schema": {
+    "provider_config": {
+      "format": "json",
+      "path": "schemas/messaging/sms/public.config.schema.json"
+    }
+  },
+  "extensions": {
+    "greentic.ext.capabilities.v1": {
+      "kind": "greentic.ext.capabilities.v1",
+      "version": "0.5.1",
+      "inline": {
+        "schema_version": 1,
+        "offers": [
+          {
+            "offer_id": "messaging-sms-v1",
+            "cap_id": "greentic.cap.messaging.provider.v1",
+            "version": "0.5.1",
+            "provider": {
+              "component_ref": "messaging-provider-sms",
+              "op": "messaging.configure"
+            },
+            "priority": 100,
+            "requires_setup": true,
+            "setup": {
+              "qa_ref": "components/messaging-provider-sms"
+            }
+          }
+        ]
+      }
+    },
+    "greentic.http-routes.v1": {
+      "kind": "greentic.http-routes.v1",
+      "version": "0.5.1",
+      "inline": {
+        "schema_version": 1,
+        "routes": [
+          {
+            "domain": "messaging",
+            "id": "sms-ingest",
+            "methods": [
+              "GET",
+              "POST"
+            ],
+            "pattern": "/v1/messaging/ingress/messaging-sms/{tenant}/{team}",
+            "provider_op": "ingest_http"
+          }
+        ]
+      }
+    },
+    "greentic.messaging.validators.v1": {
+      "kind": "greentic.messaging.validators.v1",
+      "version": "0.5.1",
+      "inline": {
+        "validators": [
+          {
+            "component_ref": "oci://ghcr.io/greenticai/validators/messaging:0.4.19",
+            "id": "greentic.validators.messaging",
+            "world": "greentic:pack-validate/pack-validator@0.1.0"
+          }
+        ]
+      }
+    },
+    "greentic.provider-extension.v1": {
+      "kind": "greentic.provider-extension.v1",
+      "version": "0.5.1",
+      "inline": {
+        "providers": [
+          {
+            "provider_type": "messaging.sms.twilio",
+            "capabilities": [
+              "messaging"
+            ],
+            "ops": [
+              "ingest_http",
+              "render_plan",
+              "encode",
+              "send_payload",
+              "setup_webhook",
+              "qa-spec",
+              "apply-answers",
+              "i18n-keys"
+            ],
+            "config_schema_ref": "schemas/messaging/sms/public.config.schema.json",
+            "setup_contract": {
+              "version": 1,
+              "config_out": {},
+              "secrets_out": [
+                {
+                  "answer_key": "account_sid",
+                  "secret_key": "TWILIO_ACCOUNT_SID"
+                },
+                {
+                  "answer_key": "auth_token",
+                  "secret_key": "TWILIO_AUTH_TOKEN"
+                },
+                {
+                  "answer_key": "from_number",
+                  "secret_key": "TWILIO_FROM_NUMBER"
+                }
+              ]
+            },
+            "runtime": {
+              "component_ref": "messaging-provider-sms",
+              "export": "schema-core-api",
+              "world": "greentic:provider/schema-core@1.0.0"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "messaging": {
+    "adapters": [
+      {
+        "component": "messaging-provider-sms",
+        "kind": "egress",
+        "name": "messaging.sms.twilio"
+      }
+    ]
+  },
+  "secret_requirements": [
+    {
+      "name": "TWILIO_ACCOUNT_SID",
+      "scope": "tenant",
+      "description": "Twilio Account SID used to authenticate REST API calls."
+    },
+    {
+      "name": "TWILIO_AUTH_TOKEN",
+      "scope": "tenant",
+      "description": "Twilio Auth Token used for REST API calls and inbound webhook signature validation."
+    },
+    {
+      "name": "TWILIO_FROM_NUMBER",
+      "scope": "tenant",
+      "description": "Twilio phone number (E.164) used as the sender for outbound SMS."
+    }
+  ]
+}

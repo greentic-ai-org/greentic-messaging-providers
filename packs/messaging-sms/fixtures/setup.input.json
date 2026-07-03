@@ -1,0 +1,11 @@
+{
+  "mode": "setup",
+  "config": {
+    "enabled": true
+  },
+  "secrets": {
+    "account_sid": "AC_test_1234567890",
+    "auth_token": "test-auth-token",
+    "from_number": "+15005550006"
+  }
+}

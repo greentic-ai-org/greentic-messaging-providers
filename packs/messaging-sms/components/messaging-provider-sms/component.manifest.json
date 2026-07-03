@@ -1,0 +1,114 @@
+{
+  "id": "messaging-provider-sms",
+  "name": "messaging-provider-sms",
+  "version": "0.5.1",
+  "world": "greentic:component/component-v0-v6-v0@0.6.1",
+  "description": "Provider-core Twilio SMS messaging provider (conversational).",
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
+  "config_schema": {
+    "provider_config": {
+      "format": "json",
+      "path": "schemas/messaging/sms/public.config.schema.json"
+    }
+  },
+  "secret_requirements": [
+    {
+      "name": "TWILIO_ACCOUNT_SID",
+      "scope": "tenant",
+      "description": "Twilio Account SID used to authenticate REST API calls."
+    },
+    {
+      "name": "TWILIO_AUTH_TOKEN",
+      "scope": "tenant",
+      "description": "Twilio Auth Token used for REST API calls and inbound webhook signature validation."
+    },
+    {
+      "name": "TWILIO_FROM_NUMBER",
+      "scope": "tenant",
+      "description": "Twilio phone number (E.164) used as the sender for outbound SMS."
+    }
+  ],
+  "operations": [
+    {
+      "name": "qa-spec",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "default",
+              "setup",
+              "upgrade",
+              "remove"
+            ]
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "CBOR-encoded QA specification",
+        "additionalProperties": true,
+        "properties": {
+          "questions": {
+            "type": "array",
+            "description": "List of questions in the QA spec"
+          }
+        }
+      }
+    },
+    {
+      "name": "apply-answers",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "default",
+              "setup",
+              "upgrade",
+              "remove"
+            ]
+          },
+          "answers_cbor": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "CBOR-encoded answers"
+          }
+        },
+        "required": [
+          "mode",
+          "answers_cbor"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "CBOR-encoded result with config and optional cleanup plan",
+        "additionalProperties": true,
+        "properties": {
+          "config": {
+            "type": "object",
+            "description": "Provider configuration"
+          }
+        }
+      }
+    }
+  ],
+  "capabilities": {
+    "wasi": {},
+    "host": {}
+  }
+}

@@ -15,6 +15,16 @@ pub struct RedactionRule {
     pub strategy: String,
 }
 
+/// A tenant- or environment-scoped secret a component needs injected at
+/// runtime. Feeds `component.manifest.json` `secret_requirements` generation
+/// (single source of truth: `describe()`, never hand-written).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SecretRequirement {
+    pub name: String,
+    pub scope: String,
+    pub description: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DescribePayload {
     pub provider: String,
