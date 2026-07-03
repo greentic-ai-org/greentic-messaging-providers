@@ -44,7 +44,10 @@ impl TestHostState {
     {
         Self {
             table: ResourceTable::new(),
-            wasi_ctx: WasiCtxBuilder::new().inherit_stdio().build(),
+            wasi_ctx: WasiCtxBuilder::new()
+                .inherit_stdio()
+                .env("GREENTIC_TEAMS_INSECURE_DEV", "1")
+                .build(),
             last_request: RefCell::new(None),
             secrets,
             http_handler: Arc::new(Mutex::new(Box::new(handler))),

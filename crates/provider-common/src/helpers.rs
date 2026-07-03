@@ -245,6 +245,45 @@ pub fn send_payload_success() -> Vec<u8> {
     })
 }
 
+/// Scan a `media` array on `handle_send`'s result for any entry whose `ok` is
+/// `false` and downgrade to an `Err` listing the failures. Use this inside a
+/// `send_payload` wrapper when `handle_send` may pre-send media as separate
+/// API calls and report their outcomes alongside (but not folded into) the
+/// top-level `ok`.
+///
+/// Each entry is read as `{ "ok": bool, "type"?: str, "error"|"detail"?: str }`.
+/// Missing `type` defaults to `"media"`. Missing detail defaults to
+/// `"unknown error"`. Returns `Ok(())` when the array is absent or every
+/// entry is `ok: true`.
+pub fn check_media_results(result: &Value, media_key: &str) -> Result<(), String> {
+    let Some(media) = result.get(media_key).and_then(Value::as_array) else {
+        return Ok(());
+    };
+    let failures: Vec<String> = media
+        .iter()
+        .filter(|m| m.get("ok").and_then(Value::as_bool) == Some(false))
+        .map(|m| {
+            let kind = m.get("type").and_then(Value::as_str).unwrap_or("media");
+            let detail = m
+                .get("error")
+                .or_else(|| m.get("detail"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown error");
+            format!("{kind}: {detail}")
+        })
+        .collect();
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "media send failed ({} of {}): [{}]",
+            failures.len(),
+            media.len(),
+            failures.join("; ")
+        ))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Phase 2 — CBOR-JSON invoke bridge
 // ---------------------------------------------------------------------------
@@ -958,5 +997,49 @@ mod tests {
             warnings.iter().any(|w| w["code"] == "text_truncated"),
             "expected text_truncated warning"
         );
+    }
+
+    #[test]
+    fn check_media_results_passes_when_no_media_array() {
+        let value = json!({ "ok": true });
+        assert!(check_media_results(&value, "media").is_ok());
+    }
+
+    #[test]
+    fn check_media_results_passes_when_all_media_ok() {
+        let value = json!({
+            "ok": true,
+            "media": [
+                { "type": "image", "ok": true },
+                { "type": "document", "ok": true },
+            ],
+        });
+        assert!(check_media_results(&value, "media").is_ok());
+    }
+
+    #[test]
+    fn check_media_results_downgrades_when_any_media_failed_with_type() {
+        let value = json!({
+            "ok": true,
+            "media": [
+                { "type": "image", "ok": true },
+                { "type": "video", "ok": false, "detail": "Err(\"transport\")" },
+            ],
+        });
+        let err = check_media_results(&value, "media").expect_err("must downgrade");
+        assert!(err.contains("media send failed (1 of 2)"));
+        assert!(err.contains("video: Err"));
+    }
+
+    #[test]
+    fn check_media_results_falls_back_to_media_label_when_type_absent() {
+        let value = json!({
+            "ok": true,
+            "media": [
+                { "ok": false, "error": "sendPhoto returned status 400" },
+            ],
+        });
+        let err = check_media_results(&value, "media").expect_err("must downgrade");
+        assert!(err.contains("media: sendPhoto returned status 400"));
     }
 }

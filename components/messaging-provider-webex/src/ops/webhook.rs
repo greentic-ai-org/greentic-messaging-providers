@@ -48,10 +48,6 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         Ok(token) => token,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
-    let public_base_url = match resolve_public_base_url(&parsed, cfg.as_ref()) {
-        Ok(url) => url,
-        Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
-    };
     let api_base = resolve_api_base_url(&parsed, cfg.as_ref());
     let tenant = input_string(&parsed, "tenant").unwrap_or_else(|| "default".to_string());
     let channel = input_string(&parsed, "channel")
@@ -59,7 +55,26 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         .or_else(|| input_string(&parsed, "provider_instance_id"))
         .unwrap_or_else(|| "default".to_string());
     let instance = sanitize_name_part(&format!("{tenant}-{channel}"));
-    let target_url = build_target_url(&public_base_url, &tenant, &channel);
+
+    // Revision-serve passes a fully-formed `webhook_url`; legacy derives the
+    // Webex target URL from `public_base_url` + tenant/channel.
+    let target_url = match input_string(&parsed, "webhook_url") {
+        Some(url) => {
+            if !url.starts_with("https://") {
+                return json_bytes(
+                    &json!({"ok": false, "error": "webhook_url must be an https:// URL"}),
+                );
+            }
+            url
+        }
+        None => {
+            let public_base_url = match resolve_public_base_url(&parsed, cfg.as_ref()) {
+                Ok(url) => url,
+                Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
+            };
+            build_target_url(&public_base_url, &tenant, &channel)
+        }
+    };
     let room_id = input_string(&parsed, "room_id")
         .or_else(|| input_string(&parsed, "webex_room_id"))
         .or_else(|| cfg.as_ref().and_then(|c| c.default_room_id.clone()));

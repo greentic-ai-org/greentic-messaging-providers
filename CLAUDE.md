@@ -66,6 +66,11 @@ cargo clippy --workspace --all-targets
 - `packs/` — Packaged provider bundles (`.gtpack` archives containing WASMs, flows, schemas)
 - `wit/` — WebAssembly Interface Type definitions
 - `tests/` — Integration tests (host-side WASM provider tests)
+- `schemas/` — JSON Schema definitions for provider configs and manifests
+- `specs/` — Specification documents
+- `e2e/` — End-to-end Playwright tests (webchat-gui)
+- `demo-bundle/` — Demo bundle fixtures for local testing
+- `scripts/` — Operational scripts (`publish_provider.sh`, etc.)
 - `ci/` — CI scripts; `ci/local_check.sh` orchestrates all steps, `ci/steps/` has individual scripts
 
 ### WIT Component Model
@@ -112,6 +117,10 @@ Each `components/messaging-provider-*` follows this pattern:
 
 **AC extractor security:** `crates/greentic-messaging-renderer/src/ac_extract.rs` enforces `MAX_AC_DEPTH = 32` on recursive card walking to prevent stack overflow from pathologically nested cards.
 
+### Ingress Components
+
+Four ingress components (`messaging-ingress-{slack,teams,telegram,whatsapp}`) handle inbound webhook payloads, parsing provider-specific formats into normalized `IngressEnvelope`s. These are distinct from the egress `messaging-provider-*` components and live under `components/messaging-ingress-*/`.
+
 ### Key Crates
 
 - **provider-common** — `ProviderError`, `ProviderCapabilitiesV1`, `RenderTier`, schema helpers, QA helpers, test macros (`standard_provider_tests!`)
@@ -119,15 +128,19 @@ Each `components/messaging-provider-*` follows this pattern:
 - **messaging-cardkit** — Offline Adaptive Card rendering per platform
 - **provider-tests** — WASM test harness, fixture validation, conformance tests
 - **greentic-messaging-tester** — CLI for testing providers (`send`, `ingress`, `requirements`)
+- **messaging-core** — Core messaging types and traits shared across providers
+- **provider-runtime-config** — Runtime config resolution for provider components
+- **webchat-directline-core** — Direct Line protocol types for WebChat provider
+- **greentic-messaging-packgen** — Pack generation tooling for messaging providers
 
 ## Version Management
 
 The workspace version in root `Cargo.toml` must stay in sync with:
 - All `component.manifest.json` files (55 files across `components/` and `packs/`)
-- All `pack.yaml` files (12 files in `packs/`)
-- All `pack.manifest.json` files (12 files in `packs/`)
+- All `pack.yaml` files (11 files in `packs/`)
+- All `pack.manifest.json` files (11 files in `packs/`)
 
-Run `./tools/sync_packs.sh` to synchronize versions from `Cargo.toml` to all manifests and pack files.
+Run `./tools/sync_packs.sh` to synchronize versions from `Cargo.toml` to all manifests and pack files. After syncing, update `packs.lock.json` with `python3 tools/update_packs_lock.py`.
 
 ## Adding/Modifying Provider Schemas
 
@@ -146,12 +159,12 @@ The `messaging-webchat-gui` pack includes:
 
 ### Skin System
 - Skins live in `packs/messaging-webchat-gui/assets/webchat-gui/skins/`
-- `default/` and `demo/` skins are self-contained (point to own files, not `_template`)
+- `default/` and `3aigent/` skins are self-contained (point to own files, not `_template`)
 - Each skin has: `skin.json`, `fullpage/index.html`, `fullpage/page.css`, `webchat/styleOptions.json`, `webchat/hostconfig.json`, `webchat/hooks.js`, `assets/` (logo, favicon, hero)
 - Skin `default/` serves as template for bundle scaffold — copied and renamed to tenant name
 
 ### Tenant Config
-- `config/tenants/default.json` — OAuth providers (Guest, Microsoft, Google) + i18n branding
+- `config/tenants/default.json` and `greentic.json` — OAuth providers (Guest, Microsoft, Google) + i18n branding
 - OAuth providers are `enabled: false` by default — user enables via capability or manual config
 - Tenant config is scaffolded per-tenant when bundle_assets capability is enabled
 
@@ -169,7 +182,7 @@ Before adding new core types or interfaces, check if they exist in shared Greent
 ## CI/CD
 
 - Rust toolchain: **1.95.0**
-- GitHub Actions: `.github/workflows/build-and-publish.yml` (fmt, clippy, schema check, build+test, packs)
+- GitHub Actions: `.github/workflows/provider-build-publish.yml` (fmt, clippy, schema check, build+test, packs); `provider-orchestrator.yml` (matrix dispatch across providers)
 - Required env vars for OCI publishing: `GHCR_USERNAME`, `GHCR_TOKEN` (see `.env.example`)
 
 ## Code Style

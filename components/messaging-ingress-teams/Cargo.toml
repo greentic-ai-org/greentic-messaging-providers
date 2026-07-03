@@ -1,7 +1,7 @@
 [package]
 name = "messaging-ingress-teams"
 edition.workspace = true
-version = "0.5.19"
+version = "0.5.9"
 license.workspace = true
 publish = false
 
@@ -17,7 +17,7 @@ urlencoding.workspace = true
 wit-bindgen.workspace = true
 
 [dev-dependencies]
-greentic-types.workspace = true
+greentic-types = { workspace = true }
 
 [package.metadata.component]
 package = "greentic:messaging-ingress-teams"

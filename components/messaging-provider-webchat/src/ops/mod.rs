@@ -25,6 +25,7 @@
 mod encode;
 mod envelope;
 mod helpers;
+mod identify;
 mod ingest;
 mod oauth;
 mod render;
@@ -32,6 +33,7 @@ mod send;
 mod send_payload;
 
 pub(crate) use encode::encode_op;
+pub(crate) use identify::{IDENTIFY_HINT_JSON, extract_recipient_id};
 pub(crate) use ingest::{handle_ingest, ingest_http};
 pub(crate) use render::render_plan;
 pub(crate) use send::handle_send;

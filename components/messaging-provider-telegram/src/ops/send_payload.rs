@@ -10,7 +10,9 @@
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use greentic_types::messaging::universal_dto::SendPayloadInV1;
-use provider_common::helpers::{json_bytes, send_payload_error, send_payload_success};
+use provider_common::helpers::{
+    check_media_results, json_bytes, send_payload_error, send_payload_success,
+};
 use serde_json::{Value, json};
 
 use crate::bindings::greentic::http::http_client as client;
@@ -53,16 +55,19 @@ pub(crate) fn forward_send_payload(payload: &Value) -> Result<(), String> {
         .get("ok")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if ok {
-        Ok(())
-    } else {
+    if !ok {
         let message = result_value
             .get("error")
             .and_then(Value::as_str)
             .map(|s| s.to_string())
             .unwrap_or_else(|| "send_payload failed".to_string());
-        Err(message)
+        return Err(message);
     }
+    // `handle_send` returns `ok: true` for the final text/photo/group send
+    // even when separately-sent pre-send media (sendVideo/sendDocument/etc.)
+    // failed. The new-model host egress wouldn't retry — downgrade to a
+    // retriable failure.
+    check_media_results(&result_value, "media")
 }
 
 pub(crate) fn handle_reply(input_json: &[u8]) -> Vec<u8> {

@@ -608,6 +608,7 @@ mod tests {
             bot_display_name: None,
             messaging_endpoint: None,
             default_service_url: None,
+            skip_jwt_validation: None,
         }
     }
 

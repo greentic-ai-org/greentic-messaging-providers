@@ -90,10 +90,9 @@ pub(crate) fn attachment_to_directline(attachment: &Attachment) -> Value {
         "contentType".to_string(),
         Value::String(attachment.mime_type.clone()),
     );
-    map.insert(
-        "contentUrl".to_string(),
-        Value::String(attachment.url.clone()),
-    );
+    if let Some(url) = &attachment.url {
+        map.insert("contentUrl".to_string(), Value::String(url.clone()));
+    }
     if let Some(name) = &attachment.name {
         map.insert("name".to_string(), Value::String(name.clone()));
     }
@@ -159,7 +158,8 @@ mod tests {
     fn sample_attachment() -> Attachment {
         Attachment {
             mime_type: "image/png".to_string(),
-            url: "https://cdn.example.com/img.png".to_string(),
+            url: Some("https://cdn.example.com/img.png".to_string()),
+            content: None,
             name: Some("diagram.png".to_string()),
             size_bytes: Some(1024),
         }
@@ -250,13 +250,15 @@ mod tests {
         let attachments = vec![
             Attachment {
                 mime_type: "image/png".to_string(),
-                url: "https://e/1".to_string(),
+                url: Some("https://e/1".to_string()),
+                content: None,
                 name: None,
                 size_bytes: None,
             },
             Attachment {
                 mime_type: "application/pdf".to_string(),
-                url: "https://e/2".to_string(),
+                url: Some("https://e/2".to_string()),
+                content: None,
                 name: Some("doc.pdf".to_string()),
                 size_bytes: None,
             },
