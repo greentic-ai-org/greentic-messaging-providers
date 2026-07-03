@@ -2226,6 +2226,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "messaging-provider-sms"
+version = "0.5.1"
+dependencies = [
+ "base64",
+ "greentic-messaging-provider-common",
+ "greentic-telemetry",
+ "greentic-types 1.2.0-research.1",
+ "serde",
+ "serde_json",
+ "wit-bindgen 0.57.1",
+]
+
+[[package]]
 name = "messaging-provider-teams"
 version = "0.5.9"
 dependencies = [
