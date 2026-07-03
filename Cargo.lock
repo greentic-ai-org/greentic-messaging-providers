@@ -2235,6 +2235,7 @@ dependencies = [
  "greentic-types 1.2.0-research.1",
  "serde",
  "serde_json",
+ "urlencoding",
  "wit-bindgen 0.57.1",
 ]
 
