@@ -1,0 +1,7 @@
+{
+  "payload": {
+    "text": "Greentic HTTP provider e2e smoke",
+    "event": "smoke.test",
+    "id": "${E2E_HTTP_REQUEST_ID}"
+  }
+}

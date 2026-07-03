@@ -170,9 +170,16 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
 }
 
 pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), String> {
-    if config.setup_mode.as_deref() == Some("bot_framework") {
+    if config.setup_mode.as_deref() == Some("bot_framework")
+        && config
+            .ms_bot_app_id
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .is_empty()
+    {
         return Err(
-            "config validation failed: bot_framework mode is not supported by messaging.teams.graph"
+            "config validation failed: ms_bot_app_id is required for bot_framework mode"
                 .to_string(),
         );
     }
@@ -214,11 +221,15 @@ pub(crate) fn validate_provider_config(mut cfg: ProviderConfig) -> Result<Provid
     cfg.messaging_endpoint = normalize_optional_string(cfg.messaging_endpoint);
     cfg.default_service_url = normalize_optional_string(cfg.default_service_url);
 
-    if cfg.setup_mode.as_deref() == Some("bot_framework") {
-        return Err(
-            "invalid config: bot_framework mode is not supported by messaging.teams.graph"
-                .to_string(),
-        );
+    if cfg.setup_mode.as_deref() == Some("bot_framework")
+        && cfg
+            .ms_bot_app_id
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .is_empty()
+    {
+        return Err("invalid config: ms_bot_app_id is required for bot_framework mode".to_string());
     }
     if cfg.tenant_id.is_empty() {
         return Err("invalid config: tenant_id cannot be empty".to_string());
@@ -598,17 +609,32 @@ mod tests {
     }
 
     #[test]
-    fn load_config_rejects_bot_framework_shape() {
-        let err = load_config(&json!({
+    fn load_config_accepts_bot_framework_shape() {
+        let cfg = load_config(&json!({
             "setup_mode": "bot_framework",
+            "tenant_id": "tenant",
+            "client_id": "bot-app-id",
             "ms_bot_app_id": "bot-app-id",
             "ms_bot_app_password": "bot-secret",
             "bot_display_name": "Greentic Bot",
             "messaging_endpoint": "https://example.com/api/messages"
         }))
-        .expect_err("bot framework config is not part of graph provider");
+        .expect("bot framework config is accepted in bot mode");
 
-        assert!(err.contains("bot_framework mode is not supported"));
+        assert_eq!(cfg.setup_mode.as_deref(), Some("bot_framework"));
+        assert_eq!(cfg.ms_bot_app_id.as_deref(), Some("bot-app-id"));
+    }
+
+    #[test]
+    fn load_config_rejects_bot_framework_without_app_id() {
+        let err = load_config(&json!({
+            "setup_mode": "bot_framework",
+            "tenant_id": "tenant",
+            "client_id": "client"
+        }))
+        .expect_err("bot mode requires ms_bot_app_id");
+
+        assert!(err.contains("ms_bot_app_id is required for bot_framework mode"));
     }
 
     #[test]

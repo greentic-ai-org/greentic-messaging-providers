@@ -457,6 +457,7 @@ fn qa_q(key: &str, text: &str, required: bool) -> QaQuestionSpec {
         id: key.to_string(),
         label: i18n(text),
         help: None,
+        help_url: None,
         error: None,
         kind: provider_common::component_v0_6::QuestionKind::Text,
         required,

@@ -64,6 +64,74 @@ def test_lifecycle_event_normalization():
     assert event["payload"] == {"ip": "127.0.0.1"}
 
 
+def test_inbound_bearer_auth_accepts_and_rejects():
+    cfg = {"auth": {"type": "bearer", "token": "secret"}}
+    ok = websocket_provider.inbound_frame_to_envelope(
+        websocket_provider.WebSocketFrame("s-1", "{}", headers={"Authorization": "Bearer secret"}),
+        cfg,
+    )
+    assert ok["provider"] == "messaging-websocket"
+
+    try:
+        websocket_provider.inbound_frame_to_envelope(
+            websocket_provider.WebSocketFrame("s-1", "{}", headers={"Authorization": "Bearer nope"}),
+            cfg,
+        )
+    except websocket_provider.WebSocketProviderError as err:
+        assert err.code == "unauthorized"
+    else:
+        raise AssertionError("expected unauthorized")
+
+
+def test_inbound_rejects_binary_frame():
+    try:
+        websocket_provider.inbound_frame_to_envelope(
+            websocket_provider.WebSocketFrame("s-1", b"\x00\x01")
+        )
+    except websocket_provider.WebSocketProviderError as err:
+        assert err.code == "unsupported_frame"
+    else:
+        raise AssertionError("expected unsupported_frame")
+
+
+def test_inbound_rejects_malformed_json():
+    try:
+        websocket_provider.inbound_frame_to_envelope(
+            websocket_provider.WebSocketFrame("s-1", "{")
+        )
+    except websocket_provider.WebSocketProviderError as err:
+        assert err.code == "invalid_json"
+    else:
+        raise AssertionError("expected invalid_json")
+
+
+def test_outbound_requires_session_id():
+    try:
+        websocket_provider.outbound_message_to_frame({"payload": {"x": 1}})
+    except websocket_provider.WebSocketProviderError as err:
+        assert err.code == "missing_session"
+    else:
+        raise AssertionError("expected missing_session")
+
+
+def test_outbound_rejects_non_object_payload():
+    try:
+        websocket_provider.outbound_message_to_frame({"session_id": "s-1", "payload": "nope"})
+    except websocket_provider.WebSocketProviderError as err:
+        assert err.code == "invalid_payload"
+    else:
+        raise AssertionError("expected invalid_payload")
+
+
+def test_lifecycle_rejects_unsupported_event():
+    try:
+        websocket_provider.lifecycle_event("s-1", "explode")
+    except websocket_provider.WebSocketProviderError as err:
+        assert err.code == "unsupported_lifecycle"
+    else:
+        raise AssertionError("expected unsupported_lifecycle")
+
+
 if __name__ == "__main__":
     for name, value in sorted(globals().items()):
         if name.startswith("test_") and callable(value):

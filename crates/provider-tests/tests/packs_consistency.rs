@@ -433,3 +433,182 @@ fn assert_unique_component_ids(component_ids: &[&str], context: &str) {
         "duplicate component ids in {context}: {duplicates:?}"
     );
 }
+
+/// Every `assets/setup.yaml` (in `packs/` plus the root `messaging-teams` bot pack).
+fn setup_yaml_paths(root: &Path) -> Vec<(String, PathBuf)> {
+    let mut out = Vec::new();
+    if let Ok(entries) = fs::read_dir(root.join("packs")) {
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            let setup = dir.join("assets/setup.yaml");
+            if setup.exists() {
+                let name = dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default()
+                    .to_string();
+                out.push((name, setup));
+            }
+        }
+    }
+    let teams = root.join("messaging-teams/assets/setup.yaml");
+    if teams.exists() {
+        out.push(("messaging-teams".to_string(), teams));
+    }
+    out
+}
+
+/// Single-brace `{token}` placeholders in a deep-link `url_template`
+/// (handlebars `{{ ... }}` are skipped — they are not setup outputs).
+fn template_tokens(s: &str) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            if i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                i += 2;
+                continue;
+            }
+            if let Some(rel) = s[i + 1..].find('}') {
+                let tok = &s[i + 1..i + 1 + rel];
+                if !tok.is_empty() && tok.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    out.insert(tok.to_string());
+                }
+                i = i + 1 + rel + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Generic guard for the "Add to X" buttons shown at the end of setup:
+/// every declared `setup_action` is well-formed for its kind, deep-link
+/// templates only reference values the action declares it `requires`, and the
+/// install-style channels still render a button (regression guard).
+#[test]
+fn setup_actions_are_wellformed_and_present() -> Result<()> {
+    let root = workspace_root();
+    let known_kinds = ["deep_link", "oauth_install_button", "oauth_device_code"];
+    let expected_with_actions = [
+        "messaging-teams",
+        "messaging-slack",
+        "messaging-telegram",
+        "messaging-webex",
+    ];
+    let mut have_actions: HashSet<String> = HashSet::new();
+
+    for (pack, path) in setup_yaml_paths(&root) {
+        let setup: serde_yaml::Value = serde_yaml::from_slice(&fs::read(&path)?)
+            .with_context(|| format!("parsing {}", path.display()))?;
+        let Some(actions) = setup
+            .get("setup_actions")
+            .and_then(serde_yaml::Value::as_sequence)
+        else {
+            continue;
+        };
+        if !actions.is_empty() {
+            have_actions.insert(pack.clone());
+        }
+        for action in actions {
+            let id = action
+                .get("id")
+                .and_then(serde_yaml::Value::as_str)
+                .unwrap_or_default();
+            assert!(!id.is_empty(), "{pack}: a setup_action is missing `id`");
+            let kind = action
+                .get("kind")
+                .and_then(serde_yaml::Value::as_str)
+                .unwrap_or_default();
+            assert!(
+                known_kinds.contains(&kind),
+                "{pack}: setup_action `{id}` has unknown kind {kind:?} (expected one of {known_kinds:?})"
+            );
+            assert!(
+                action
+                    .get("label")
+                    .and_then(serde_yaml::Value::as_str)
+                    .is_some_and(|l| !l.is_empty()),
+                "{pack}: setup_action `{id}` is missing `label`"
+            );
+            match kind {
+                "deep_link" => {
+                    let tmpl = action
+                        .get("url_template")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or_default();
+                    assert!(
+                        !tmpl.is_empty(),
+                        "{pack}: deep_link `{id}` is missing `url_template`"
+                    );
+                    let requires: HashSet<String> = action
+                        .get("requires")
+                        .and_then(serde_yaml::Value::as_sequence)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(serde_yaml::Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                    for tok in template_tokens(tmpl) {
+                        assert!(
+                            requires.contains(&tok),
+                            "{pack}: deep_link `{id}` url_template uses {{{tok}}} but does not declare it in `requires` {requires:?}"
+                        );
+                    }
+                }
+                "oauth_install_button" => {
+                    assert!(
+                        action
+                            .get("authorize_url")
+                            .and_then(serde_yaml::Value::as_str)
+                            .is_some_and(|u| !u.is_empty()),
+                        "{pack}: oauth_install_button `{id}` is missing `authorize_url`"
+                    );
+                    let src = action
+                        .get("client_id_source")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or_default();
+                    assert!(
+                        !src.is_empty(),
+                        "{pack}: oauth_install_button `{id}` is missing `client_id_source`"
+                    );
+                    if src == "registration" {
+                        let reg = action.get("registration");
+                        assert!(
+                            reg.and_then(|r| r.get("component_ref"))
+                                .and_then(serde_yaml::Value::as_str)
+                                .is_some(),
+                            "{pack}: oauth_install_button `{id}` registration is missing `component_ref`"
+                        );
+                        assert!(
+                            reg.and_then(|r| r.get("op"))
+                                .and_then(serde_yaml::Value::as_str)
+                                .is_some(),
+                            "{pack}: oauth_install_button `{id}` registration is missing `op`"
+                        );
+                    }
+                }
+                "oauth_device_code" => {
+                    assert!(
+                        action
+                            .get("provider")
+                            .and_then(serde_yaml::Value::as_str)
+                            .is_some_and(|p| !p.is_empty()),
+                        "{pack}: oauth_device_code `{id}` is missing `provider`"
+                    );
+                }
+                _ => unreachable!("kind already validated against known_kinds"),
+            }
+        }
+    }
+
+    for pack in expected_with_actions {
+        assert!(
+            have_actions.contains(pack),
+            "{pack}: expected an add-to-X setup_action at end of setup, found none"
+        );
+    }
+    Ok(())
+}

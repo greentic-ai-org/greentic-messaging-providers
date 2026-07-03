@@ -14,6 +14,7 @@ use crate::config::{
 };
 
 use super::build_team_envelope;
+use super::connector::bot_connector_send;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum GraphDestination {
@@ -56,6 +57,17 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         Ok(value) => value,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
+    if let Some((service_url, conversation_id)) = connector_target(&parsed, &envelope, &cfg) {
+        return bot_connector_send(
+            &cfg,
+            &service_url,
+            &conversation_id,
+            &text,
+            &content_type,
+            card.as_ref(),
+            "sent",
+        );
+    }
     let destination = match resolve_destination(&parsed, &cfg, &envelope) {
         Ok(dest) => dest,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
@@ -68,6 +80,33 @@ pub(crate) fn handle_send(input_json: &[u8]) -> Vec<u8> {
         card.as_ref(),
         "sent",
     )
+}
+
+/// Bot Framework conversation reply target. Returns `Some((service_url,
+/// conversation_id))` only in `bot_framework` setup mode when both are known, so
+/// Graph-mode deployments never route through the connector path.
+fn connector_target(
+    parsed: &Value,
+    envelope: &ChannelMessageEnvelope,
+    cfg: &ProviderConfig,
+) -> Option<(String, String)> {
+    if cfg.setup_mode.as_deref() != Some("bot_framework") {
+        return None;
+    }
+    let service_url = string_field(parsed, "service_url")
+        .or_else(|| envelope.metadata.get("service_url").cloned())
+        .or_else(|| cfg.default_service_url.clone())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())?;
+    // `session_id` is set to the Bot Framework conversation id by the ingress
+    // (bot_framework.rs) and is the field greentic reliably preserves onto reply
+    // envelopes, so fall back to it when metadata was not carried through.
+    let conversation_id = string_field(parsed, "conversation_id")
+        .or_else(|| envelope.metadata.get("conversation_id").cloned())
+        .or_else(|| Some(envelope.session_id.clone()))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty() && value != "teams")?;
+    Some((service_url, conversation_id))
 }
 
 pub(crate) fn handle_reply(input_json: &[u8]) -> Vec<u8> {
@@ -571,6 +610,68 @@ mod tests {
             default_service_url: None,
             skip_jwt_validation: None,
         }
+    }
+
+    fn bot_envelope(
+        session_id: &str,
+        service_url: Option<&str>,
+        conversation_id: Option<&str>,
+    ) -> ChannelMessageEnvelope {
+        use greentic_types::{EnvId, MessageMetadata, TenantCtx, TenantId};
+        let mut metadata = MessageMetadata::new();
+        if let Some(value) = service_url {
+            metadata.insert("service_url".to_string(), value.to_string());
+        }
+        if let Some(value) = conversation_id {
+            metadata.insert("conversation_id".to_string(), value.to_string());
+        }
+        ChannelMessageEnvelope {
+            id: "msg".to_string(),
+            tenant: TenantCtx::new(
+                EnvId::try_from("default").expect("env"),
+                TenantId::try_from("default").expect("tenant"),
+            ),
+            channel: "teams".to_string(),
+            session_id: session_id.to_string(),
+            reply_scope: None,
+            from: None,
+            to: Vec::new(),
+            correlation_id: None,
+            text: Some("hi".to_string()),
+            attachments: Vec::new(),
+            metadata,
+            extensions: Default::default(),
+        }
+    }
+
+    #[test]
+    fn connector_target_requires_bot_mode() {
+        // Default (graph) mode never routes to the connector, even with context.
+        let env = bot_envelope("conv:1", Some("https://svc"), Some("conv:1"));
+        assert!(connector_target(&json!({}), &env, &cfg()).is_none());
+    }
+
+    #[test]
+    fn connector_target_uses_metadata_and_session_fallback() {
+        let mut cfg = cfg();
+        cfg.setup_mode = Some("bot_framework".to_string());
+        cfg.ms_bot_app_id = Some("bot-app".to_string());
+        cfg.default_service_url = Some("https://smba.example".to_string());
+
+        let env = bot_envelope("conv:meta", Some("https://svc.meta"), Some("conv:meta"));
+        assert_eq!(
+            connector_target(&json!({}), &env, &cfg),
+            Some(("https://svc.meta".to_string(), "conv:meta".to_string()))
+        );
+
+        let session_only = bot_envelope("conv:sess", None, None);
+        assert_eq!(
+            connector_target(&json!({}), &session_only, &cfg),
+            Some(("https://smba.example".to_string(), "conv:sess".to_string()))
+        );
+
+        let placeholder = bot_envelope("teams", None, None);
+        assert!(connector_target(&json!({}), &placeholder, &cfg).is_none());
     }
 
     #[test]

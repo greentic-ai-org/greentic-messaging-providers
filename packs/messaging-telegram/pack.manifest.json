@@ -1,6 +1,6 @@
 {
   "name": "messaging-telegram",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Telegram messaging provider \u2014 bot API with webhook ingress",
