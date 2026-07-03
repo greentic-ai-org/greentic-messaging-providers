@@ -3,7 +3,9 @@ use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 use greentic_types::{
     Actor, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
 };
-use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in_with_config};
+use provider_common::http_compat::{
+    http_out_error, http_out_v1_bytes, parse_operator_http_in_with_config,
+};
 use std::collections::BTreeMap;
 
 use super::signature::valid_twilio_signature;

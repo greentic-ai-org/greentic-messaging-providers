@@ -2,19 +2,19 @@
   "schema_version": 1,
   "status": "ok",
   "exit_code": 0,
-  "generated_at_utc": "2026-03-15T14:19:18.047126+00:00",
+  "generated_at_utc": "2026-07-03T02:01:36.313587+00:00",
   "log_path": "dist/pack_validation.log",
   "failed_pack": null,
   "failure": null,
   "detail": null,
   "packs": [
     {
-      "pack": "messaging-dummy",
+      "pack": "messaging-sms",
       "status": "validated",
       "stage": "build_packs_only",
       "failure": null,
       "detail": null,
-      "artifact": "dist/packs/messaging-dummy.gtpack"
+      "artifact": "dist/packs/messaging-sms.gtpack"
     }
   ]
 }

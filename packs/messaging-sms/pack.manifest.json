@@ -3,7 +3,7 @@
   "version": "0.5.1",
   "kind": "application",
   "publisher": "Greentic",
-  "description": "Twilio SMS messaging provider — conversational inbound + outbound",
+  "description": "Twilio SMS messaging provider \u2014 conversational inbound + outbound",
   "component_sources": [
     {
       "id": "messaging-provider-sms",

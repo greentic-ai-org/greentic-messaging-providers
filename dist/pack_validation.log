@@ -1,12 +1,13 @@
-staged /projects/ai/greentic-ng/greentic-messaging-providers/.tmp/quick-target/components/provision.wasm -> /projects/ai/greentic-ng/greentic-messaging-providers/components/provision/provision.wasm
-staged /projects/ai/greentic-ng/greentic-messaging-providers/.tmp/quick-target/components/questions.wasm -> /projects/ai/greentic-ng/greentic-messaging-providers/components/questions/questions.wasm
-staged /projects/ai/greentic-ng/greentic-messaging-providers/.tmp/quick-target/components/templates.wasm -> /projects/ai/greentic-ng/greentic-messaging-providers/components/templates/templates.wasm
-Using version: 0.4.38
+staged /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/target/components/provision.wasm -> /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/components/provision/provision.wasm
+staged /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/target/components/templates.wasm -> /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/components/templates/templates.wasm
+Using version: 0.5.1
 Using templates image: ghcr.io/greenticai/components/templates:latest
-Syncing messaging-dummy...
+Skipping filtered-out pack messaging-dummy
 Skipping filtered-out pack messaging-email
+Skipping filtered-out pack messaging-microsoft-email
 Skipping filtered-out pack messaging-provider-bundle
 Skipping filtered-out pack messaging-slack
+Syncing messaging-sms...
 Skipping filtered-out pack messaging-teams
 Skipping filtered-out pack messaging-telegram
 Skipping filtered-out pack messaging-webchat
@@ -14,12 +15,17 @@ Skipping filtered-out pack messaging-webchat-gui
 Skipping filtered-out pack messaging-webex
 Skipping filtered-out pack messaging-whatsapp
 Pack sync complete.
-Using templates image: ghcr.io/greenticai/components/templates:latest
-Using greentic-pack: greentic-pack 0.4.111
+Using templates image: ghcr.io/greenticai/components/templates:stable
+Using greentic-pack: greentic-pack 1.1.1
+Skipping filtered-out pack messaging-dummy
+Skipping filtered-out pack messaging-email
+Skipping filtered-out pack messaging-microsoft-email
+Skipping deprecated pack messaging-provider-bundle
+Skipping filtered-out pack messaging-slack
 Configuration:
 - schema_version: 1
-- environment.env_id: EnvId("dev") (default)
-- paths.state_dir: /projects/ai/greentic-ng/greentic-messaging-providers/.tmp/quick-packs/messaging-dummy/.greentic (default)
+- environment.env_id: EnvId("local") (default)
+- paths.state_dir: /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/packs/messaging-sms/.greentic (default)
 - telemetry.exporter: None (default)
 - network.tls_mode: System (default)
 - deployer.base_domain: deploy.greentic.ai (default)
@@ -27,19 +33,15 @@ Configuration:
 - events.reconnect.enabled: Some(true) (default)
 Warnings:
   - telemetry.enabled=true but exporter=none; telemetry will be disabled
-wrote /projects/ai/greentic-ng/greentic-messaging-providers/.tmp/quick-packs/messaging-dummy/pack.lock.cbor
-wrote /projects/ai/greentic-ng/greentic-messaging-providers/.tmp/packs/messaging-dummy.gtpack
-warning: ignored legacy helper doctor diagnostics for /projects/ai/greentic-ng/greentic-messaging-providers/dist/packs/messaging-dummy.gtpack
-warning: greentic-pack produced pack-v1 manifest for messaging-dummy; proceed anyway (upgrade greentic-pack for newer schema) 
-[DRY RUN] Would push /projects/ai/greentic-ng/greentic-messaging-providers/dist/packs/messaging-dummy.gtpack to ghcr.io/greenticai/greentic-packs/messaging-dummy:0.4.38
-Skipping filtered-out pack messaging-email
-Skipping deprecated pack messaging-provider-bundle
-Skipping filtered-out pack messaging-slack
+wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/packs/messaging-sms/pack.lock.cbor
+wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/.tmp/packs/messaging-sms.gtpack
+warning: greentic-pack produced pack-v1 manifest for messaging-sms; proceed anyway (upgrade greentic-pack for newer schema) 
+[DRY RUN] Would push /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/dist/packs/messaging-sms.gtpack to ghcr.io/greenticai/packs/messaging/messaging-sms:0.5.1
 Skipping filtered-out pack messaging-teams
 Skipping filtered-out pack messaging-telegram
 Skipping filtered-out pack messaging-webchat
 Skipping filtered-out pack messaging-webchat-gui
 Skipping filtered-out pack messaging-webex
 Skipping filtered-out pack messaging-whatsapp
-warning: ignored legacy helper doctor diagnostics for /projects/ai/greentic-ng/greentic-messaging-providers/dist/packs/messaging-dummy.gtpack
+warning: validator fetch skipped; using validator ref/path if already available
 Wrote packs.lock.json
