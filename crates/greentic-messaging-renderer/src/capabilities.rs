@@ -11,7 +11,7 @@ use crate::planner::PlannerCapabilities;
 /// or `None` if the name is not registered.
 ///
 /// Known providers: `slack`, `teams`, `telegram`, `webex`,
-/// `whatsapp`, `webchat`, `email`.
+/// `whatsapp`, `webchat`, `email`, `sms`.
 pub fn capabilities_for(provider: &str) -> Option<PlannerCapabilities> {
     match provider {
         "slack" => Some(PlannerCapabilities {
@@ -77,6 +77,16 @@ pub fn capabilities_for(provider: &str) -> Option<PlannerCapabilities> {
             max_text_len: None,
             max_payload_bytes: None,
         }),
+        "sms" => Some(PlannerCapabilities {
+            supports_adaptive_cards: false,
+            supports_markdown: false,
+            supports_html: false,
+            supports_images: false,
+            supports_buttons: false,
+            // Long messages are left to Twilio's own segmentation, not truncated here.
+            max_text_len: None,
+            max_payload_bytes: None,
+        }),
         _ => None,
     }
 }
@@ -88,7 +98,7 @@ mod tests {
     #[test]
     fn known_providers_return_some() {
         for name in [
-            "slack", "teams", "telegram", "webex", "whatsapp", "webchat", "email",
+            "slack", "teams", "telegram", "webex", "whatsapp", "webchat", "email", "sms",
         ] {
             assert!(capabilities_for(name).is_some(), "missing: {name}");
         }
@@ -109,7 +119,7 @@ mod tests {
 
     #[test]
     fn non_ac_providers_disable_ac() {
-        for name in ["slack", "telegram", "whatsapp", "email"] {
+        for name in ["slack", "telegram", "whatsapp", "email", "sms"] {
             let caps = capabilities_for(name).unwrap();
             assert!(
                 !caps.supports_adaptive_cards,

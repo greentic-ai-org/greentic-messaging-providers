@@ -1,7 +1,15 @@
-use provider_common::helpers::render_plan_error;
+use provider_common::helpers::{RenderPlanConfig, render_plan_common};
 
-/// SMS render planning (text-only, single segment) lands in a later task;
-/// Task 1 only wires the op through as a stub.
-pub(crate) fn render_plan(_input_json: &[u8]) -> Vec<u8> {
-    render_plan_error("messaging-provider-sms render_plan not yet implemented")
+pub(crate) fn render_plan(input_json: &[u8]) -> Vec<u8> {
+    // Capability matrix is centralized in provider-common.
+    // See: provider_common::render::capabilities_for
+    let capabilities = provider_common::render::capabilities_for("sms")
+        .expect("sms capabilities must be registered");
+    render_plan_common(
+        input_json,
+        &RenderPlanConfig {
+            capabilities,
+            default_summary: "sms message",
+        },
+    )
 }

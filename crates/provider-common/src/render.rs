@@ -156,6 +156,16 @@ pub fn capabilities_for(provider: &str) -> Option<PlannerCapabilities> {
             max_text_len: None,
             max_payload_bytes: None,
         }),
+        "sms" => Some(PlannerCapabilities {
+            supports_adaptive_cards: false,
+            supports_markdown: false,
+            supports_html: false,
+            supports_images: false,
+            supports_buttons: false,
+            // Long messages are left to Twilio's own segmentation, not truncated here.
+            max_text_len: None,
+            max_payload_bytes: None,
+        }),
         _ => None,
     }
 }
