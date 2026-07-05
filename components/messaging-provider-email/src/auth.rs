@@ -11,9 +11,6 @@ const MS_GRAPH_CLIENT_ID_KEY: &str = "MS_GRAPH_CLIENT_ID";
 const MS_GRAPH_CLIENT_SECRET_KEY: &str = "MS_GRAPH_CLIENT_SECRET";
 const MS_GRAPH_REFRESH_TOKEN_KEY: &str = "MS_GRAPH_REFRESH_TOKEN";
 const GRAPH_TENANT_ID_KEY: &str = "GRAPH_TENANT_ID";
-// Gmail token acquisition (consumed by the Gmail ingress path added in a
-// later task): implemented and tested now, not yet wired into an op.
-#[allow(dead_code)]
 pub(crate) const DEFAULT_GMAIL_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 
 pub(crate) fn acquire_graph_token(
@@ -112,7 +109,6 @@ pub(crate) fn acquire_graph_token_from_store(cfg: &ProviderConfig) -> Result<Str
 /// Acquires a Google access token via the Gmail OAuth refresh-token grant.
 /// Mirrors `acquire_graph_token_from_store`: reads client_id/client_secret/
 /// refresh_token from config, mirrors the same POST-form + parse shape.
-#[allow(dead_code)]
 pub(crate) fn acquire_google_token(cfg: &ProviderConfig) -> Result<String, String> {
     require_gmail_field(&cfg.gmail_client_id, "gmail_client_id")?;
     require_gmail_field(&cfg.gmail_client_secret, "gmail_client_secret")?;
@@ -126,7 +122,6 @@ pub(crate) fn acquire_google_token(cfg: &ProviderConfig) -> Result<String, Strin
     request_token(endpoint, form.as_bytes())
 }
 
-#[allow(dead_code)]
 fn require_gmail_field(value: &Option<String>, name: &str) -> Result<(), String> {
     match value.as_deref() {
         Some(v) if !v.is_empty() => Ok(()),
@@ -136,14 +131,17 @@ fn require_gmail_field(value: &Option<String>, name: &str) -> Result<(), String>
 
 /// Pure builder for the Gmail refresh-token grant form body. Assumes the
 /// required fields have already been validated by the caller.
-#[allow(dead_code)]
 pub(crate) fn token_form_body(cfg: &ProviderConfig) -> String {
-    format!(
+    let mut body = format!(
         "grant_type=refresh_token&client_id={}&client_secret={}&refresh_token={}",
         url_encode(cfg.gmail_client_id.as_deref().unwrap_or_default()),
         url_encode(cfg.gmail_client_secret.as_deref().unwrap_or_default()),
         url_encode(cfg.gmail_refresh_token.as_deref().unwrap_or_default())
-    )
+    );
+    if let Some(scope) = cfg.gmail_scope.as_deref().filter(|s| !s.is_empty()) {
+        body.push_str(&format!("&scope={}", url_encode(scope)));
+    }
+    body
 }
 
 fn graph_token_endpoint(cfg: &ProviderConfig, user: &AuthUserRefV1) -> Result<String, String> {
@@ -298,6 +296,20 @@ mod tests {
         assert_eq!(
             body,
             "grant_type=refresh_token&client_id=client%20id%2Fwith%20special&client_secret=s3cret%26value&refresh_token=refresh%20token"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn token_form_body_appends_scope_when_configured() -> Result<(), String> {
+        let mut cfg = gmail_config().map_err(|err| err.to_string())?;
+        cfg.gmail_scope = Some("https://www.googleapis.com/auth/gmail.readonly".to_string());
+
+        let body = token_form_body(&cfg);
+
+        assert!(
+            body.ends_with("&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly"),
+            "{body}"
         );
         Ok(())
     }

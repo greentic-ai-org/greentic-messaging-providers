@@ -1,8 +1,6 @@
 //! Gmail Pub/Sub push notification parsing and inbound verification.
 //!
-//! Consumed by the Gmail ingress path added in a later task; only the pure
-//! parse/verify logic (and its tests) lives here for now.
-#![allow(dead_code)]
+//! Consumed by `gmail::envelope::handle_gmail_push`.
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use greentic_types::messaging::universal_dto::HttpInV1;

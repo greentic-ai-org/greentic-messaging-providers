@@ -30,10 +30,8 @@ pub(crate) struct ProviderConfig {
     pub(crate) tls_mode: String,
     #[serde(default)]
     pub(crate) default_to_address: Option<String>,
-    /// Selects the inbound/outbound backend; consumed by the Gmail ingress
-    /// path added in a later task.
+    /// Selects the inbound/outbound backend; branched on in `ingress::dispatch_post`.
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) kind: EmailKind,
     #[serde(default)]
     pub(crate) graph_tenant_id: Option<String>,
@@ -56,35 +54,28 @@ pub(crate) struct ProviderConfig {
     /// Graph API refresh token (optional; for refresh_token grant).
     #[serde(default)]
     pub(crate) graph_refresh_token: Option<String>,
-    // Gmail backend fields (consumed by the Gmail fetch/auth path added in a
-    // later task): deserialized and schema-declared now, not yet read.
+    // Gmail backend fields, read by `auth::acquire_google_token`,
+    // `gmail::fetch`, and `gmail::envelope`.
     /// Gmail OAuth client ID.
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) gmail_client_id: Option<String>,
     /// Gmail OAuth client secret.
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) gmail_client_secret: Option<String>,
     /// Gmail OAuth refresh token.
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) gmail_refresh_token: Option<String>,
     /// Gmail OAuth token endpoint (defaults to Google's if unset).
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) gmail_token_endpoint: Option<String>,
     /// Gmail OAuth scope.
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) gmail_scope: Option<String>,
     /// Gmail mailbox address (user) polled via the Gmail API.
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) gmail_user: Option<String>,
     /// Shared token verifying inbound Gmail Pub/Sub push requests.
     #[serde(default)]
-    #[allow(dead_code)]
     pub(crate) gmail_pubsub_verification_token: Option<String>,
 }
 

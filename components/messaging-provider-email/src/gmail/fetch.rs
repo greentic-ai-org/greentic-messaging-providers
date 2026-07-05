@@ -1,8 +1,6 @@
 //! Gmail API fetch layer: `users.history.list` + `users.messages.get`.
 //!
-//! Consumed by the Gmail ingress path added in a later task; only the
-//! request builders and the authenticated fetch calls live here.
-#![allow(dead_code)]
+//! Consumed by `gmail::envelope::handle_gmail_push`.
 
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::ProviderConfig;
@@ -170,9 +168,7 @@ mod tests {
     fn list_history_requires_gmail_user() {
         let cfg = config(None);
 
-        let err = list_history("token", &cfg, "1")
-            .err()
-            .expect("expected missing gmail_user error");
+        let err = list_history("token", &cfg, "1").expect_err("expected missing gmail_user error");
 
         assert_eq!(err, "missing gmail_user");
     }
@@ -181,9 +177,8 @@ mod tests {
     fn get_message_requires_gmail_user() {
         let cfg = config(None);
 
-        let err = get_message("token", &cfg, "18abc")
-            .err()
-            .expect("expected missing gmail_user error");
+        let err =
+            get_message("token", &cfg, "18abc").expect_err("expected missing gmail_user error");
 
         assert_eq!(err, "missing gmail_user");
     }
@@ -192,9 +187,8 @@ mod tests {
     fn get_message_requires_non_empty_gmail_user() {
         let cfg = config(Some(""));
 
-        let err = get_message("token", &cfg, "18abc")
-            .err()
-            .expect("expected missing gmail_user error");
+        let err =
+            get_message("token", &cfg, "18abc").expect_err("expected missing gmail_user error");
 
         assert_eq!(err, "missing gmail_user");
     }
