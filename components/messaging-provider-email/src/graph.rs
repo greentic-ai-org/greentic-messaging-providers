@@ -64,10 +64,10 @@ pub(crate) fn graph_request(
             .as_deref()
             .and_then(|b| std::str::from_utf8(b).ok())
             .unwrap_or("");
+        let (err_snippet, _) = provider_common::render::truncate_bytes(err_body, 500);
         return Err(format!(
             "graph request returned {} body={}",
-            resp.status,
-            &err_body[..err_body.len().min(500)]
+            resp.status, err_snippet
         ));
     }
     let body = match resp.body {
@@ -314,6 +314,25 @@ mod tests {
 
     fn parse_json(bytes: Vec<u8>) -> Value {
         serde_json::from_slice(&bytes).expect("json")
+    }
+
+    /// Same char-boundary hazard as the Gmail send path: a naive
+    /// `&err_body[..500]` panics whenever byte 500 lands mid-character.
+    #[test]
+    fn graph_error_body_truncation_is_char_boundary_safe_for_non_ascii_bodies() {
+        let err_body: String = "€".repeat(300); // 900 bytes, > 500
+        assert!(err_body.len() > 500);
+
+        let (snippet, truncated) = provider_common::render::truncate_bytes(&err_body, 500);
+
+        // The point of this test is the absence of a panic (no char-boundary
+        // slice). `truncate_bytes` rounds to the nearest char boundary at or
+        // before the limit plus a 3-byte ellipsis, so the result stays close
+        // to (not exactly under) 500 bytes.
+        assert!(truncated);
+        assert!(snippet.len() < err_body.len());
+        assert!(snippet.len() <= 504);
+        assert!(snippet.ends_with('\u{2026}'));
     }
 
     #[test]

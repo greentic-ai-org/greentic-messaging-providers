@@ -213,34 +213,66 @@ pub(crate) fn validate_provider_config(cfg: ProviderConfig) -> Result<ProviderCo
     Ok(cfg)
 }
 
-/// Build a minimal ProviderConfig from secrets for the Graph API send path.
-/// This is used when the operator doesn't pass config via payload metadata.
-/// Reads ALL Graph credentials in a single pass so send_payload doesn't need
-/// to call the secrets store again during token acquisition.
-pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
-    let from_address = auth::get_secret_any_case("from_address")
-        .or_else(|_| auth::get_secret_any_case("FROM_ADDRESS"))
+/// Parses the `kind` secret case-insensitively; unset/unrecognized values
+/// default to Graph, matching `EmailKind::default()`.
+fn parse_email_kind(raw: &str) -> EmailKind {
+    if raw.eq_ignore_ascii_case("gmail") {
+        EmailKind::Gmail
+    } else {
+        EmailKind::Graph
+    }
+}
+
+/// Raw secret values gathered by `config_from_secrets`. Kept separate from
+/// the store I/O so the assembly logic in `build_config_from_secret_lookups`
+/// is unit-testable without a live secrets-store host.
+#[derive(Default)]
+struct SecretLookups {
+    kind: Option<String>,
+    from_address: Option<String>,
+    graph_tenant_id: Option<String>,
+    graph_client_id: Option<String>,
+    graph_client_secret: Option<String>,
+    graph_refresh_token: Option<String>,
+    gmail_client_id: Option<String>,
+    gmail_client_secret: Option<String>,
+    gmail_refresh_token: Option<String>,
+    gmail_token_endpoint: Option<String>,
+    gmail_scope: Option<String>,
+    gmail_user: Option<String>,
+    gmail_pubsub_verification_token: Option<String>,
+}
+
+/// Assembles a `ProviderConfig` from already-fetched secret values. `Graph`
+/// requires `from_address`; `Gmail` falls back to `gmail_user` when
+/// `from_address` is absent (Gmail's mailbox address doubles as the sender).
+fn build_config_from_secret_lookups(lookups: SecretLookups) -> Result<ProviderConfig, String> {
+    let kind = lookups
+        .kind
+        .as_deref()
+        .map(parse_email_kind)
         .unwrap_or_default();
-    let graph_tenant_id = auth::get_secret_any_case("graph_tenant_id")
-        .or_else(|_| auth::get_secret_any_case("GRAPH_TENANT_ID"))
-        .or_else(|_| auth::get_secret_any_case("ms_graph_tenant_id"))
-        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_TENANT_ID"))
-        .ok();
-    let graph_client_id = auth::get_secret_any_case("ms_graph_client_id")
-        .or_else(|_| auth::get_secret_any_case("graph_client_id"))
-        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_CLIENT_ID"))
-        .or_else(|_| auth::get_secret_any_case("GRAPH_CLIENT_ID"))
-        .ok();
-    let graph_client_secret = auth::get_secret_any_case("ms_graph_client_secret")
-        .or_else(|_| auth::get_secret_any_case("graph_client_secret"))
-        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_CLIENT_SECRET"))
-        .or_else(|_| auth::get_secret_any_case("GRAPH_CLIENT_SECRET"))
-        .ok();
-    let graph_refresh_token = auth::get_secret_any_case("ms_graph_refresh_token")
-        .or_else(|_| auth::get_secret_any_case("graph_refresh_token"))
-        .or_else(|_| auth::get_secret_any_case("MS_GRAPH_REFRESH_TOKEN"))
-        .or_else(|_| auth::get_secret_any_case("GRAPH_REFRESH_TOKEN"))
-        .ok();
+    let SecretLookups {
+        kind: _,
+        from_address,
+        graph_tenant_id,
+        graph_client_id,
+        graph_client_secret,
+        graph_refresh_token,
+        gmail_client_id,
+        gmail_client_secret,
+        gmail_refresh_token,
+        gmail_token_endpoint,
+        gmail_scope,
+        gmail_user,
+        gmail_pubsub_verification_token,
+    } = lookups;
+
+    let from_address = match (from_address.filter(|s| !s.is_empty()), kind) {
+        (Some(addr), _) => addr,
+        (None, EmailKind::Gmail) => gmail_user.clone().unwrap_or_default(),
+        (None, EmailKind::Graph) => String::new(),
+    };
     if from_address.is_empty() {
         return Err("from_address not found in secrets (seed 'from_address' secret)".to_string());
     }
@@ -253,7 +285,7 @@ pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
         from_address,
         tls_mode: "starttls".to_string(),
         default_to_address: None,
-        kind: EmailKind::Graph,
+        kind,
         graph_tenant_id,
         graph_authority: None,
         graph_base_url: None,
@@ -263,14 +295,73 @@ pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
         graph_client_id,
         graph_client_secret,
         graph_refresh_token,
-        gmail_client_id: None,
-        gmail_client_secret: None,
-        gmail_refresh_token: None,
-        gmail_token_endpoint: None,
-        gmail_scope: None,
-        gmail_user: None,
-        gmail_pubsub_verification_token: None,
+        gmail_client_id,
+        gmail_client_secret,
+        gmail_refresh_token,
+        gmail_token_endpoint,
+        gmail_scope,
+        gmail_user,
+        gmail_pubsub_verification_token,
     })
+}
+
+/// Build a minimal ProviderConfig from secrets for the send path. Reads
+/// `kind` to pick Graph vs. Gmail, then ALL credentials for that shape in a
+/// single pass so send_payload doesn't need to call the secrets store again
+/// during token acquisition.
+pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
+    let lookups = SecretLookups {
+        kind: auth::get_secret_any_case("kind")
+            .or_else(|_| auth::get_secret_any_case("EMAIL_KIND"))
+            .ok(),
+        from_address: auth::get_secret_any_case("from_address")
+            .or_else(|_| auth::get_secret_any_case("FROM_ADDRESS"))
+            .ok(),
+        graph_tenant_id: auth::get_secret_any_case("graph_tenant_id")
+            .or_else(|_| auth::get_secret_any_case("GRAPH_TENANT_ID"))
+            .or_else(|_| auth::get_secret_any_case("ms_graph_tenant_id"))
+            .or_else(|_| auth::get_secret_any_case("MS_GRAPH_TENANT_ID"))
+            .ok(),
+        graph_client_id: auth::get_secret_any_case("ms_graph_client_id")
+            .or_else(|_| auth::get_secret_any_case("graph_client_id"))
+            .or_else(|_| auth::get_secret_any_case("MS_GRAPH_CLIENT_ID"))
+            .or_else(|_| auth::get_secret_any_case("GRAPH_CLIENT_ID"))
+            .ok(),
+        graph_client_secret: auth::get_secret_any_case("ms_graph_client_secret")
+            .or_else(|_| auth::get_secret_any_case("graph_client_secret"))
+            .or_else(|_| auth::get_secret_any_case("MS_GRAPH_CLIENT_SECRET"))
+            .or_else(|_| auth::get_secret_any_case("GRAPH_CLIENT_SECRET"))
+            .ok(),
+        graph_refresh_token: auth::get_secret_any_case("ms_graph_refresh_token")
+            .or_else(|_| auth::get_secret_any_case("graph_refresh_token"))
+            .or_else(|_| auth::get_secret_any_case("MS_GRAPH_REFRESH_TOKEN"))
+            .or_else(|_| auth::get_secret_any_case("GRAPH_REFRESH_TOKEN"))
+            .ok(),
+        gmail_client_id: auth::get_secret_any_case("gmail_client_id")
+            .or_else(|_| auth::get_secret_any_case("GMAIL_CLIENT_ID"))
+            .ok(),
+        gmail_client_secret: auth::get_secret_any_case("gmail_client_secret")
+            .or_else(|_| auth::get_secret_any_case("GMAIL_CLIENT_SECRET"))
+            .ok(),
+        gmail_refresh_token: auth::get_secret_any_case("gmail_refresh_token")
+            .or_else(|_| auth::get_secret_any_case("GMAIL_REFRESH_TOKEN"))
+            .ok(),
+        gmail_token_endpoint: auth::get_secret_any_case("gmail_token_endpoint")
+            .or_else(|_| auth::get_secret_any_case("GMAIL_TOKEN_ENDPOINT"))
+            .ok(),
+        gmail_scope: auth::get_secret_any_case("gmail_scope")
+            .or_else(|_| auth::get_secret_any_case("GMAIL_SCOPE"))
+            .ok(),
+        gmail_user: auth::get_secret_any_case("gmail_user")
+            .or_else(|_| auth::get_secret_any_case("GMAIL_USER"))
+            .ok(),
+        gmail_pubsub_verification_token: auth::get_secret_any_case(
+            "gmail_pubsub_verification_token",
+        )
+        .or_else(|_| auth::get_secret_any_case("GMAIL_PUBSUB_VERIFICATION_TOKEN"))
+        .ok(),
+    };
+    build_config_from_secret_lookups(lookups)
 }
 
 #[cfg(test)]
@@ -400,5 +491,100 @@ mod tests {
         let err = load_config(&value).expect_err("unknown fields should fail");
 
         assert!(err.contains("unknown field"), "{err}");
+    }
+
+    #[test]
+    fn build_config_from_secret_lookups_defaults_to_graph_when_kind_absent() {
+        let lookups = SecretLookups {
+            from_address: Some("bot@example.com".to_string()),
+            ..Default::default()
+        };
+
+        let cfg = build_config_from_secret_lookups(lookups).expect("config");
+
+        assert_eq!(cfg.kind, EmailKind::Graph);
+        assert_eq!(cfg.from_address, "bot@example.com");
+    }
+
+    /// The real entrypoint fix: `config_from_secrets` reads the `kind`
+    /// secret and the `gmail_*` secrets the same way it already reads
+    /// `graph_*`; this proves the assembled config is Gmail-shaped so
+    /// `dispatch_send`'s `match cfg.kind` takes the Gmail arm instead of
+    /// always falling into Graph.
+    #[test]
+    fn build_config_from_secret_lookups_produces_gmail_shaped_config_for_kind_gmail() {
+        let lookups = SecretLookups {
+            kind: Some("gmail".to_string()),
+            gmail_client_id: Some("client-id".to_string()),
+            gmail_client_secret: Some("client-secret".to_string()),
+            gmail_refresh_token: Some("refresh-token".to_string()),
+            gmail_user: Some("me@example.com".to_string()),
+            gmail_token_endpoint: Some("https://oauth2.googleapis.com/token".to_string()),
+            gmail_scope: Some("scope".to_string()),
+            gmail_pubsub_verification_token: Some("verify-token".to_string()),
+            ..Default::default()
+        };
+
+        let cfg = build_config_from_secret_lookups(lookups).expect("config");
+
+        match cfg.kind {
+            EmailKind::Gmail => {}
+            EmailKind::Graph => panic!("kind=gmail secret must dispatch to the Gmail arm"),
+        }
+        assert_eq!(cfg.from_address, "me@example.com");
+        assert_eq!(cfg.username, "me@example.com");
+        assert_eq!(cfg.gmail_client_id.as_deref(), Some("client-id"));
+        assert_eq!(cfg.gmail_client_secret.as_deref(), Some("client-secret"));
+        assert_eq!(cfg.gmail_refresh_token.as_deref(), Some("refresh-token"));
+        assert_eq!(cfg.gmail_user.as_deref(), Some("me@example.com"));
+        assert_eq!(
+            cfg.gmail_token_endpoint.as_deref(),
+            Some("https://oauth2.googleapis.com/token")
+        );
+        assert_eq!(cfg.gmail_scope.as_deref(), Some("scope"));
+        assert_eq!(
+            cfg.gmail_pubsub_verification_token.as_deref(),
+            Some("verify-token")
+        );
+        assert!(cfg.graph_client_id.is_none());
+    }
+
+    #[test]
+    fn build_config_from_secret_lookups_kind_is_case_insensitive() {
+        let lookups = SecretLookups {
+            kind: Some("GMAIL".to_string()),
+            gmail_user: Some("me@example.com".to_string()),
+            ..Default::default()
+        };
+
+        let cfg = build_config_from_secret_lookups(lookups).expect("config");
+
+        assert_eq!(cfg.kind, EmailKind::Gmail);
+    }
+
+    #[test]
+    fn build_config_from_secret_lookups_requires_from_address_or_gmail_user_for_gmail_kind() {
+        let lookups = SecretLookups {
+            kind: Some("gmail".to_string()),
+            ..Default::default()
+        };
+
+        let err = build_config_from_secret_lookups(lookups)
+            .expect_err("both from_address and gmail_user missing should fail");
+
+        assert!(err.contains("from_address"), "{err}");
+    }
+
+    #[test]
+    fn build_config_from_secret_lookups_graph_kind_does_not_fall_back_to_gmail_user() {
+        let lookups = SecretLookups {
+            gmail_user: Some("me@example.com".to_string()),
+            ..Default::default()
+        };
+
+        let err = build_config_from_secret_lookups(lookups)
+            .expect_err("graph kind must still require from_address");
+
+        assert!(err.contains("from_address"), "{err}");
     }
 }

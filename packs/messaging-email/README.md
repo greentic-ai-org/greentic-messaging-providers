@@ -1,8 +1,9 @@
 # Messaging Email Pack
 
 Legacy SMTP email messaging provider. Also carries the optional Gmail
-inbound backend (`kind: gmail`) for the shared `messaging-provider-email`
-component — off by default; Graph/SMTP tenants are unaffected.
+inbound + outbound backend (`kind: gmail`) for the shared
+`messaging-provider-email` component — off by default; Graph/SMTP tenants are
+unaffected.
 
 ## Pack ID
 - `messaging-email`
@@ -29,6 +30,10 @@ Inputs:
 - Secrets required: EMAIL_PASSWORD
 - Gmail backend (optional): set `kind: gmail` + `gmail_user`/`gmail_client_id` config,
   plus GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN/GMAIL_PUBSUB_VERIFICATION_TOKEN secrets
+- Gmail outbound send: the OAuth grant's `gmail_scope` must include
+  `https://www.googleapis.com/auth/gmail.send` or `.../gmail.modify` — the
+  default `gmail.readonly` scope used for inbound-only tenants cannot call
+  `messages.send` and outbound sends will fail with an authorization error
 
 ## Extensions
 - `greentic.ext.capabilities.v1` — capability offer `messaging-email-v1`
