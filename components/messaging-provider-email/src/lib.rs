@@ -9,6 +9,7 @@
 //! - `ops`: Core operations (send, reply, render_plan, encode, send_payload)
 //! - `graph`: Microsoft Graph API helpers and subscriptions
 //! - `ingress`: HTTP ingress handling
+//! - `gmail`: Gmail Pub/Sub push parsing + verification
 
 use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
@@ -28,6 +29,7 @@ mod ac_converter;
 pub(crate) mod auth;
 mod config;
 mod describe;
+mod gmail;
 mod graph;
 mod ingress;
 mod ops;
