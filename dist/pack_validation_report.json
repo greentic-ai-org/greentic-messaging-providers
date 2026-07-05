@@ -2,19 +2,27 @@
   "schema_version": 1,
   "status": "ok",
   "exit_code": 0,
-  "generated_at_utc": "2026-07-03T02:01:36.313587+00:00",
+  "generated_at_utc": "2026-07-05T11:36:09.238552+00:00",
   "log_path": "dist/pack_validation.log",
   "failed_pack": null,
   "failure": null,
   "detail": null,
   "packs": [
     {
-      "pack": "messaging-sms",
+      "pack": "messaging-email",
       "status": "validated",
       "stage": "build_packs_only",
       "failure": null,
       "detail": null,
-      "artifact": "dist/packs/messaging-sms.gtpack"
+      "artifact": "dist/packs/messaging-email.gtpack"
+    },
+    {
+      "pack": "messaging-microsoft-email",
+      "status": "validated",
+      "stage": "build_packs_only",
+      "failure": null,
+      "detail": null,
+      "artifact": "dist/packs/messaging-microsoft-email.gtpack"
     }
   ]
 }

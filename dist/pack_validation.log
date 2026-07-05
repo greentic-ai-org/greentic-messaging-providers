@@ -1,13 +1,13 @@
-staged /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/target/components/provision.wasm -> /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/components/provision/provision.wasm
-staged /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/target/components/templates.wasm -> /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/components/templates/templates.wasm
+staged /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/target/components/provision.wasm -> /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/components/provision/provision.wasm
+staged /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/target/components/templates.wasm -> /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/components/templates/templates.wasm
 Using version: 0.5.1
 Using templates image: ghcr.io/greenticai/components/templates:latest
 Skipping filtered-out pack messaging-dummy
-Skipping filtered-out pack messaging-email
-Skipping filtered-out pack messaging-microsoft-email
+Syncing messaging-email...
+Syncing messaging-microsoft-email...
 Skipping filtered-out pack messaging-provider-bundle
 Skipping filtered-out pack messaging-slack
-Syncing messaging-sms...
+Skipping filtered-out pack messaging-sms
 Skipping filtered-out pack messaging-teams
 Skipping filtered-out pack messaging-telegram
 Skipping filtered-out pack messaging-webchat
@@ -18,14 +18,10 @@ Pack sync complete.
 Using templates image: ghcr.io/greenticai/components/templates:stable
 Using greentic-pack: greentic-pack 1.1.1
 Skipping filtered-out pack messaging-dummy
-Skipping filtered-out pack messaging-email
-Skipping filtered-out pack messaging-microsoft-email
-Skipping deprecated pack messaging-provider-bundle
-Skipping filtered-out pack messaging-slack
 Configuration:
 - schema_version: 1
 - environment.env_id: EnvId("local") (default)
-- paths.state_dir: /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/packs/messaging-sms/.greentic (default)
+- paths.state_dir: /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/packs/messaging-email/.greentic (default)
 - telemetry.exporter: None (default)
 - network.tls_mode: System (default)
 - deployer.base_domain: deploy.greentic.ai (default)
@@ -33,10 +29,28 @@ Configuration:
 - events.reconnect.enabled: Some(true) (default)
 Warnings:
   - telemetry.enabled=true but exporter=none; telemetry will be disabled
-wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/packs/messaging-sms/pack.lock.cbor
-wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/.tmp/packs/messaging-sms.gtpack
-warning: greentic-pack produced pack-v1 manifest for messaging-sms; proceed anyway (upgrade greentic-pack for newer schema) 
-[DRY RUN] Would push /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/sms-channel/dist/packs/messaging-sms.gtpack to ghcr.io/greenticai/packs/messaging/messaging-sms:0.5.1
+wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/packs/messaging-email/pack.lock.cbor
+wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/.tmp/packs/messaging-email.gtpack
+warning: greentic-pack produced pack-v1 manifest for messaging-email; proceed anyway (upgrade greentic-pack for newer schema) 
+[DRY RUN] Would push /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/dist/packs/messaging-email.gtpack to ghcr.io/greenticai/packs/messaging/messaging-email:0.5.1
+Configuration:
+- schema_version: 1
+- environment.env_id: EnvId("local") (default)
+- paths.state_dir: /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/packs/messaging-microsoft-email/.greentic (default)
+- telemetry.exporter: None (default)
+- network.tls_mode: System (default)
+- deployer.base_domain: deploy.greentic.ai (default)
+- events.backoff.initial_ms: Some(250) (default)
+- events.reconnect.enabled: Some(true) (default)
+Warnings:
+  - telemetry.enabled=true but exporter=none; telemetry will be disabled
+wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/packs/messaging-microsoft-email/pack.lock.cbor
+wrote /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/.tmp/packs/messaging-microsoft-email.gtpack
+warning: greentic-pack produced pack-v1 manifest for messaging-microsoft-email; proceed anyway (upgrade greentic-pack for newer schema) 
+[DRY RUN] Would push /Users/bimapangestu/Desktop/Works/personal/greentic/greentic-messaging-providers/.worktrees/gmail-inbound/dist/packs/messaging-microsoft-email.gtpack to ghcr.io/greenticai/packs/messaging/messaging-microsoft-email:0.5.1
+Skipping deprecated pack messaging-provider-bundle
+Skipping filtered-out pack messaging-slack
+Skipping filtered-out pack messaging-sms
 Skipping filtered-out pack messaging-teams
 Skipping filtered-out pack messaging-telegram
 Skipping filtered-out pack messaging-webchat

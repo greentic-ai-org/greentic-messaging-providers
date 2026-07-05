@@ -53,3 +53,61 @@ questions:
     group: Connection
     validate:
       regex: "^https://"
+  - name: kind
+    title: Backend kind
+    kind: string
+    required: false
+    help: "Inbound backend: graph (Microsoft Graph, default) or gmail (Gmail API)"
+    placeholder: "graph"
+    group: Connection
+  - name: gmail_user
+    title: Gmail user
+    kind: string
+    required: false
+    help: "Gmail mailbox address polled via the Gmail API (kind: gmail only)"
+    placeholder: "bot@yourdomain.com"
+    group: Authentication
+  - name: gmail_client_id
+    title: Gmail client ID
+    kind: string
+    required: false
+    help: "Google Cloud OAuth client ID (kind: gmail only)"
+    placeholder: "xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+    group: Authentication
+    docs_url: "https://console.cloud.google.com/apis/credentials"
+  - name: gmail_client_secret
+    title: Gmail client secret
+    kind: string
+    required: false
+    secret: true
+    help: "Google Cloud OAuth client secret (kind: gmail only)"
+    group: Authentication
+    docs_url: "https://console.cloud.google.com/apis/credentials"
+  - name: gmail_refresh_token
+    title: Gmail refresh token
+    kind: string
+    required: false
+    secret: true
+    help: "OAuth refresh token for the Gmail API (kind: gmail only)"
+    group: Authentication
+  - name: gmail_pubsub_verification_token
+    title: Gmail Pub/Sub verification token
+    kind: string
+    required: false
+    secret: true
+    help: "Shared token used to verify inbound Gmail Pub/Sub push requests (kind: gmail only)"
+    group: Authentication
+  - name: gmail_token_endpoint
+    title: Gmail token endpoint
+    kind: string
+    required: false
+    help: "Gmail OAuth token endpoint (defaults to Google's if unset)"
+    placeholder: "https://oauth2.googleapis.com/token"
+    group: Authentication
+  - name: gmail_scope
+    title: Gmail scope
+    kind: string
+    required: false
+    help: "Gmail OAuth scope (kind: gmail only)"
+    placeholder: "https://www.googleapis.com/auth/gmail.readonly"
+    group: Authentication
