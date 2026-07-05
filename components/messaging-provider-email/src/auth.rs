@@ -108,37 +108,87 @@ pub(crate) fn acquire_graph_token_from_store(cfg: &ProviderConfig) -> Result<Str
 
 /// Acquires a Google access token via the Gmail OAuth refresh-token grant.
 /// Mirrors `acquire_graph_token_from_store`: reads client_id/client_secret/
-/// refresh_token from config, mirrors the same POST-form + parse shape.
+/// refresh_token from config first, falling back to the secrets store,
+/// then builds the same POST-form + parse shape.
 pub(crate) fn acquire_google_token(cfg: &ProviderConfig) -> Result<String, String> {
-    require_gmail_field(&cfg.gmail_client_id, "gmail_client_id")?;
-    require_gmail_field(&cfg.gmail_client_secret, "gmail_client_secret")?;
-    require_gmail_field(&cfg.gmail_refresh_token, "gmail_refresh_token")?;
+    let client_id = resolve_gmail_credential(
+        cfg.gmail_client_id.as_deref(),
+        "gmail_client_id",
+        "GMAIL_CLIENT_ID",
+    )?;
+    let client_secret = resolve_gmail_credential(
+        cfg.gmail_client_secret.as_deref(),
+        "gmail_client_secret",
+        "GMAIL_CLIENT_SECRET",
+    )?;
+    let refresh_token = resolve_gmail_credential(
+        cfg.gmail_refresh_token.as_deref(),
+        "gmail_refresh_token",
+        "GMAIL_REFRESH_TOKEN",
+    )?;
     let endpoint = cfg
         .gmail_token_endpoint
         .as_deref()
         .filter(|s| !s.is_empty())
         .unwrap_or(DEFAULT_GMAIL_TOKEN_ENDPOINT);
-    let form = token_form_body(cfg);
+    let form = token_form_body_from(
+        &client_id,
+        &client_secret,
+        &refresh_token,
+        cfg.gmail_scope.as_deref(),
+    );
     request_token(endpoint, form.as_bytes())
 }
 
-fn require_gmail_field(value: &Option<String>, name: &str) -> Result<(), String> {
-    match value.as_deref() {
-        Some(v) if !v.is_empty() => Ok(()),
-        _ => Err(format!("missing {name}")),
+/// Resolves a Gmail credential from config first, falling back to the
+/// secrets store (mirrors `acquire_graph_token_from_store`'s cfg-then-store
+/// pattern). The store branch only compiles for the real wasm32 host: the
+/// wit-bindgen import stub used by native `cargo test` panics
+/// unconditionally, so it's compiled out there to keep unit tests
+/// deterministic (same reason `acquire_graph_token_from_store`'s store
+/// fallback has no native test coverage either).
+fn resolve_gmail_credential(
+    cfg_value: Option<&str>,
+    lower_key: &str,
+    upper_key: &str,
+) -> Result<String, String> {
+    if let Some(value) = cfg_value.filter(|s| !s.is_empty()) {
+        return Ok(value.to_string());
     }
+    let _ = upper_key;
+    #[cfg(target_arch = "wasm32")]
+    if let Ok(value) = get_secret_any_case(lower_key).or_else(|_| get_secret_any_case(upper_key)) {
+        return Ok(value);
+    }
+    Err(format!("missing {lower_key}"))
 }
 
-/// Pure builder for the Gmail refresh-token grant form body. Assumes the
-/// required fields have already been validated by the caller.
+/// Pure builder for the Gmail refresh-token grant form body, used only by
+/// tests below (`acquire_google_token` calls `token_form_body_from` directly
+/// since its resolved credentials may come from the store, not just `cfg`).
+#[cfg(test)]
 pub(crate) fn token_form_body(cfg: &ProviderConfig) -> String {
+    token_form_body_from(
+        cfg.gmail_client_id.as_deref().unwrap_or_default(),
+        cfg.gmail_client_secret.as_deref().unwrap_or_default(),
+        cfg.gmail_refresh_token.as_deref().unwrap_or_default(),
+        cfg.gmail_scope.as_deref(),
+    )
+}
+
+fn token_form_body_from(
+    client_id: &str,
+    client_secret: &str,
+    refresh_token: &str,
+    scope: Option<&str>,
+) -> String {
     let mut body = format!(
         "grant_type=refresh_token&client_id={}&client_secret={}&refresh_token={}",
-        url_encode(cfg.gmail_client_id.as_deref().unwrap_or_default()),
-        url_encode(cfg.gmail_client_secret.as_deref().unwrap_or_default()),
-        url_encode(cfg.gmail_refresh_token.as_deref().unwrap_or_default())
+        url_encode(client_id),
+        url_encode(client_secret),
+        url_encode(refresh_token)
     );
-    if let Some(scope) = cfg.gmail_scope.as_deref().filter(|s| !s.is_empty()) {
+    if let Some(scope) = scope.filter(|s| !s.is_empty()) {
         body.push_str(&format!("&scope={}", url_encode(scope)));
     }
     body
