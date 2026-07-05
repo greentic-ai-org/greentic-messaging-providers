@@ -11,6 +11,10 @@ const MS_GRAPH_CLIENT_ID_KEY: &str = "MS_GRAPH_CLIENT_ID";
 const MS_GRAPH_CLIENT_SECRET_KEY: &str = "MS_GRAPH_CLIENT_SECRET";
 const MS_GRAPH_REFRESH_TOKEN_KEY: &str = "MS_GRAPH_REFRESH_TOKEN";
 const GRAPH_TENANT_ID_KEY: &str = "GRAPH_TENANT_ID";
+// Gmail token acquisition (consumed by the Gmail ingress path added in a
+// later task): implemented and tested now, not yet wired into an op.
+#[allow(dead_code)]
+pub(crate) const DEFAULT_GMAIL_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 
 pub(crate) fn acquire_graph_token(
     cfg: &ProviderConfig,
@@ -103,6 +107,43 @@ pub(crate) fn acquire_graph_token_from_store(cfg: &ProviderConfig) -> Result<Str
         url_encode(cc_scope)
     );
     request_token(&endpoint, form.as_bytes())
+}
+
+/// Acquires a Google access token via the Gmail OAuth refresh-token grant.
+/// Mirrors `acquire_graph_token_from_store`: reads client_id/client_secret/
+/// refresh_token from config, mirrors the same POST-form + parse shape.
+#[allow(dead_code)]
+pub(crate) fn acquire_google_token(cfg: &ProviderConfig) -> Result<String, String> {
+    require_gmail_field(&cfg.gmail_client_id, "gmail_client_id")?;
+    require_gmail_field(&cfg.gmail_client_secret, "gmail_client_secret")?;
+    require_gmail_field(&cfg.gmail_refresh_token, "gmail_refresh_token")?;
+    let endpoint = cfg
+        .gmail_token_endpoint
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_GMAIL_TOKEN_ENDPOINT);
+    let form = token_form_body(cfg);
+    request_token(endpoint, form.as_bytes())
+}
+
+#[allow(dead_code)]
+fn require_gmail_field(value: &Option<String>, name: &str) -> Result<(), String> {
+    match value.as_deref() {
+        Some(v) if !v.is_empty() => Ok(()),
+        _ => Err(format!("missing {name}")),
+    }
+}
+
+/// Pure builder for the Gmail refresh-token grant form body. Assumes the
+/// required fields have already been validated by the caller.
+#[allow(dead_code)]
+pub(crate) fn token_form_body(cfg: &ProviderConfig) -> String {
+    format!(
+        "grant_type=refresh_token&client_id={}&client_secret={}&refresh_token={}",
+        url_encode(cfg.gmail_client_id.as_deref().unwrap_or_default()),
+        url_encode(cfg.gmail_client_secret.as_deref().unwrap_or_default()),
+        url_encode(cfg.gmail_refresh_token.as_deref().unwrap_or_default())
+    )
 }
 
 fn graph_token_endpoint(cfg: &ProviderConfig, user: &AuthUserRefV1) -> Result<String, String> {
@@ -231,6 +272,101 @@ mod tests {
             .ok_or_else(|| "expected missing tenant error".to_string())?;
 
         assert_eq!(err, "missing Graph tenant id");
+        Ok(())
+    }
+
+    fn gmail_config() -> Result<ProviderConfig, serde_json::Error> {
+        serde_json::from_value(serde_json::json!({
+            "public_base_url": "https://mail.example.com",
+            "host": "smtp.example.com",
+            "username": "mailer",
+            "from_address": "bot@example.com",
+            "kind": "gmail",
+            "gmail_client_id": "client id/with special",
+            "gmail_client_secret": "s3cret&value",
+            "gmail_refresh_token": "refresh token",
+            "gmail_user": "me@example.com"
+        }))
+    }
+
+    #[test]
+    fn token_form_body_url_encodes_client_and_refresh_fields() -> Result<(), String> {
+        let cfg = gmail_config().map_err(|err| err.to_string())?;
+
+        let body = token_form_body(&cfg);
+
+        assert_eq!(
+            body,
+            "grant_type=refresh_token&client_id=client%20id%2Fwith%20special&client_secret=s3cret%26value&refresh_token=refresh%20token"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn token_form_body_defaults_missing_fields_to_empty() -> Result<(), String> {
+        let mut cfg = gmail_config().map_err(|err| err.to_string())?;
+        cfg.gmail_client_id = None;
+        cfg.gmail_client_secret = None;
+        cfg.gmail_refresh_token = None;
+
+        let body = token_form_body(&cfg);
+
+        assert_eq!(
+            body,
+            "grant_type=refresh_token&client_id=&client_secret=&refresh_token="
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn acquire_google_token_requires_client_id() -> Result<(), String> {
+        let mut cfg = gmail_config().map_err(|err| err.to_string())?;
+        cfg.gmail_client_id = None;
+
+        let err = acquire_google_token(&cfg)
+            .err()
+            .ok_or_else(|| "expected missing client id error".to_string())?;
+
+        assert_eq!(err, "missing gmail_client_id");
+        Ok(())
+    }
+
+    #[test]
+    fn acquire_google_token_requires_client_secret() -> Result<(), String> {
+        let mut cfg = gmail_config().map_err(|err| err.to_string())?;
+        cfg.gmail_client_secret = None;
+
+        let err = acquire_google_token(&cfg)
+            .err()
+            .ok_or_else(|| "expected missing client secret error".to_string())?;
+
+        assert_eq!(err, "missing gmail_client_secret");
+        Ok(())
+    }
+
+    #[test]
+    fn acquire_google_token_requires_refresh_token() -> Result<(), String> {
+        let mut cfg = gmail_config().map_err(|err| err.to_string())?;
+        cfg.gmail_refresh_token = None;
+
+        let err = acquire_google_token(&cfg)
+            .err()
+            .ok_or_else(|| "expected missing refresh token error".to_string())?;
+
+        assert_eq!(err, "missing gmail_refresh_token");
+        Ok(())
+    }
+
+    #[test]
+    fn acquire_google_token_rejects_blank_fields_same_as_missing() -> Result<(), String> {
+        let mut cfg = gmail_config().map_err(|err| err.to_string())?;
+        cfg.gmail_client_id = Some(String::new());
+
+        let err = acquire_google_token(&cfg)
+            .err()
+            .ok_or_else(|| "expected missing client id error".to_string())?;
+
+        assert_eq!(err, "missing gmail_client_id");
         Ok(())
     }
 }
