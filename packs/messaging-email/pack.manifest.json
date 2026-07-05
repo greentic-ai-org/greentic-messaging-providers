@@ -91,11 +91,36 @@
             "ops": [
               "send",
               "reply",
+              "ingest_http",
               "qa-spec",
               "apply-answers",
               "i18n-keys"
             ],
             "config_schema_ref": "schemas/messaging/email/public.config.schema.json",
+            "setup_contract": {
+              "version": 1,
+              "config_out": {
+                "kind": "kind",
+                "gmail_client_id": "gmail_client_id",
+                "gmail_token_endpoint": "gmail_token_endpoint",
+                "gmail_scope": "gmail_scope",
+                "gmail_user": "gmail_user"
+              },
+              "secrets_out": [
+                {
+                  "answer_key": "gmail_client_secret",
+                  "secret_key": "GMAIL_CLIENT_SECRET"
+                },
+                {
+                  "answer_key": "gmail_refresh_token",
+                  "secret_key": "GMAIL_REFRESH_TOKEN"
+                },
+                {
+                  "answer_key": "gmail_pubsub_verification_token",
+                  "secret_key": "GMAIL_PUBSUB_VERIFICATION_TOKEN"
+                }
+              ]
+            },
             "runtime": {
               "component_ref": "messaging-provider-email",
               "export": "schema-core-api",
@@ -116,6 +141,21 @@
     ]
   },
   "secret_requirements": [
+    {
+      "name": "GMAIL_CLIENT_SECRET",
+      "scope": "tenant",
+      "description": "Gmail OAuth client secret used to authenticate token refresh requests."
+    },
+    {
+      "name": "GMAIL_REFRESH_TOKEN",
+      "scope": "tenant",
+      "description": "Gmail OAuth refresh token used to mint access tokens for the Gmail API."
+    },
+    {
+      "name": "GMAIL_PUBSUB_VERIFICATION_TOKEN",
+      "scope": "tenant",
+      "description": "Shared token used to verify inbound Gmail Pub/Sub push notifications."
+    },
     {
       "name": "EMAIL_PASSWORD",
       "scope": "tenant",

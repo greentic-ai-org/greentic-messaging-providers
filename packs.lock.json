@@ -11,15 +11,15 @@
       "name": "messaging-email",
       "file": "dist/packs/messaging-email.gtpack",
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-email:0.5.1",
-      "digest": "sha256:631d42537a8554fe247e3dbbf038a1dc8201e5182a445532c51d54f07b9b884d",
-      "built_at": "2026-06-02T07:29:04Z"
+      "digest": "sha256:83240fcd411a593eaa71e85db94aa814603ef77f0eeb06b2bc79dfa6788d20f0",
+      "built_at": "2026-07-05T11:37:13Z"
     },
     {
       "name": "messaging-microsoft-email",
       "file": "dist/packs/messaging-microsoft-email.gtpack",
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-microsoft-email:0.5.1",
-      "digest": "sha256:15e082f719a4d8bb1eeca1b1862957a8a21b2abd24500399cc9e96a046a3f073",
-      "built_at": "2026-06-02T07:29:04Z"
+      "digest": "sha256:bffce621855c238bd631ed9e09cd6038c443e24d260906b963b985c8438bc612",
+      "built_at": "2026-07-05T11:37:13Z"
     },
     {
       "name": "messaging-slack",

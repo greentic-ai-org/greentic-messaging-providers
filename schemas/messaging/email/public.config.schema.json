@@ -74,6 +74,43 @@
     },
     "graph_scope": {
       "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["graph", "gmail"],
+      "description": "Email backend: graph (Microsoft Graph) or gmail (Gmail API)"
+    },
+    "gmail_client_id": {
+      "type": "string",
+      "description": "Gmail OAuth client ID"
+    },
+    "gmail_client_secret": {
+      "type": "string",
+      "description": "Gmail OAuth client secret",
+      "x-redact": true
+    },
+    "gmail_refresh_token": {
+      "type": "string",
+      "description": "Gmail OAuth refresh token",
+      "x-redact": true
+    },
+    "gmail_token_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "Gmail OAuth token endpoint URL"
+    },
+    "gmail_scope": {
+      "type": "string",
+      "description": "Gmail OAuth scope"
+    },
+    "gmail_user": {
+      "type": "string",
+      "description": "Gmail mailbox address polled via the Gmail API"
+    },
+    "gmail_pubsub_verification_token": {
+      "type": "string",
+      "description": "Shared token used to verify inbound Gmail Pub/Sub push requests",
+      "x-redact": true
     }
   }
 }

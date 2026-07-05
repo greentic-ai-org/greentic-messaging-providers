@@ -124,6 +124,21 @@
   },
   "secret_requirements": [
     {
+      "name": "GMAIL_CLIENT_SECRET",
+      "scope": "tenant",
+      "description": "Gmail OAuth client secret used to authenticate token refresh requests."
+    },
+    {
+      "name": "GMAIL_REFRESH_TOKEN",
+      "scope": "tenant",
+      "description": "Gmail OAuth refresh token used to mint access tokens for the Gmail API."
+    },
+    {
+      "name": "GMAIL_PUBSUB_VERIFICATION_TOKEN",
+      "scope": "tenant",
+      "description": "Shared token used to verify inbound Gmail Pub/Sub push notifications."
+    },
+    {
       "name": "FROM_ADDRESS",
       "scope": "tenant",
       "description": "Microsoft Graph sender mailbox"

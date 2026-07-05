@@ -7,7 +7,8 @@ use serde_json::Value;
 use urlencoding::decode as url_decode;
 
 use crate::auth;
-use crate::config::{ProviderConfig, parse_config_value};
+use crate::config::{EmailKind, ProviderConfig, parse_config_value};
+use crate::gmail;
 use crate::graph::{graph_base_url, graph_get};
 use greentic_types::{
     Actor, ChannelMessageEnvelope, Destination, EnvId, MessageMetadata, TenantCtx, TenantId,
@@ -24,8 +25,23 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
     };
     match http.method.to_uppercase().as_str() {
         "GET" => handle_validation(&http),
-        "POST" => handle_graph_notifications(&http),
+        "POST" => dispatch_post(&http),
         _ => http_out_error(405, "method not allowed"),
+    }
+}
+
+/// Branches inbound POSTs on `cfg.kind`. Missing/invalid config and the
+/// Graph case all fall through to `handle_graph_notifications`, which is
+/// unchanged and re-parses the config itself, so Graph tenants (including
+/// every config without `kind: gmail`) keep byte-identical behavior.
+fn dispatch_post(http: &HttpInV1) -> Vec<u8> {
+    let parsed_config = http
+        .config
+        .as_ref()
+        .and_then(|value| parse_config_value(value).ok());
+    match parsed_config {
+        Some(cfg) if cfg.kind == EmailKind::Gmail => gmail::envelope::handle_gmail_push(http, &cfg),
+        _ => handle_graph_notifications(http),
     }
 }
 
@@ -241,11 +257,11 @@ fn channel_message_envelope(
     }
 }
 
-fn default_env() -> EnvId {
+pub(crate) fn default_env() -> EnvId {
     EnvId::try_from("default").expect("default env id present")
 }
 
-fn default_tenant() -> TenantId {
+pub(crate) fn default_tenant() -> TenantId {
     TenantId::try_from("default").expect("default tenant id present")
 }
 
@@ -366,5 +382,60 @@ mod tests {
             env.metadata.get("resource").map(String::as_str),
             Some("me/messages/msg-1")
         );
+    }
+
+    fn http_with_config(config: Option<Value>) -> HttpInV1 {
+        HttpInV1 {
+            method: "POST".to_string(),
+            path: "/webhook".to_string(),
+            query: None,
+            headers: Vec::new(),
+            body_b64: String::new(),
+            config,
+            binding_id: None,
+            route_hint: None,
+        }
+    }
+
+    #[test]
+    fn dispatch_post_without_config_falls_through_to_graph_and_requires_config() {
+        let out = dispatch_post(&http_with_config(None));
+        let parsed: HttpOutV1 = serde_json::from_slice(&out).expect("http out");
+
+        assert_eq!(parsed.status, 400);
+    }
+
+    #[test]
+    fn dispatch_post_with_graph_kind_routes_to_graph_notifications() {
+        let config = json!({
+            "public_base_url": "https://mail.example.com",
+            "host": "smtp.example.com",
+            "username": "mailer",
+            "from_address": "bot@example.com",
+            "kind": "graph"
+        });
+        let out = dispatch_post(&http_with_config(Some(config)));
+        let parsed: HttpOutV1 = serde_json::from_slice(&out).expect("http out");
+
+        // No binding_id -> handle_graph_notifications' existing 400 path.
+        assert_eq!(parsed.status, 400);
+    }
+
+    #[test]
+    fn dispatch_post_with_gmail_kind_routes_to_gmail_push_handler() {
+        let config = json!({
+            "public_base_url": "https://mail.example.com",
+            "host": "smtp.example.com",
+            "username": "mailer",
+            "from_address": "bot@example.com",
+            "kind": "gmail",
+            "gmail_pubsub_verification_token": "expected-token"
+        });
+        let out = dispatch_post(&http_with_config(Some(config)));
+        let parsed: HttpOutV1 = serde_json::from_slice(&out).expect("http out");
+
+        // No token on the request -> gmail push verification's 403, proving
+        // the Gmail arm (not the Graph arm) handled this request.
+        assert_eq!(parsed.status, 403);
     }
 }

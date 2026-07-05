@@ -2,6 +2,15 @@ use crate::auth;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Selects which inbound/outbound backend the email provider uses.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum EmailKind {
+    #[default]
+    Graph,
+    Gmail,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ProviderConfig {
@@ -21,6 +30,9 @@ pub(crate) struct ProviderConfig {
     pub(crate) tls_mode: String,
     #[serde(default)]
     pub(crate) default_to_address: Option<String>,
+    /// Selects the inbound/outbound backend; branched on in `ingress::dispatch_post`.
+    #[serde(default)]
+    pub(crate) kind: EmailKind,
     #[serde(default)]
     pub(crate) graph_tenant_id: Option<String>,
     #[serde(default)]
@@ -42,6 +54,29 @@ pub(crate) struct ProviderConfig {
     /// Graph API refresh token (optional; for refresh_token grant).
     #[serde(default)]
     pub(crate) graph_refresh_token: Option<String>,
+    // Gmail backend fields, read by `auth::acquire_google_token`,
+    // `gmail::fetch`, and `gmail::envelope`.
+    /// Gmail OAuth client ID.
+    #[serde(default)]
+    pub(crate) gmail_client_id: Option<String>,
+    /// Gmail OAuth client secret.
+    #[serde(default)]
+    pub(crate) gmail_client_secret: Option<String>,
+    /// Gmail OAuth refresh token.
+    #[serde(default)]
+    pub(crate) gmail_refresh_token: Option<String>,
+    /// Gmail OAuth token endpoint (defaults to Google's if unset).
+    #[serde(default)]
+    pub(crate) gmail_token_endpoint: Option<String>,
+    /// Gmail OAuth scope.
+    #[serde(default)]
+    pub(crate) gmail_scope: Option<String>,
+    /// Gmail mailbox address (user) polled via the Gmail API.
+    #[serde(default)]
+    pub(crate) gmail_user: Option<String>,
+    /// Shared token verifying inbound Gmail Pub/Sub push requests.
+    #[serde(default)]
+    pub(crate) gmail_pubsub_verification_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +140,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "default_to_address",
         "tls_mode",
         "password",
+        "kind",
         "graph_tenant_id",
         "graph_authority",
         "graph_base_url",
@@ -113,6 +149,13 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "graph_client_id",
         "graph_client_secret",
         "graph_refresh_token",
+        "gmail_client_id",
+        "gmail_client_secret",
+        "gmail_refresh_token",
+        "gmail_token_endpoint",
+        "gmail_scope",
+        "gmail_user",
+        "gmail_pubsub_verification_token",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -210,6 +253,7 @@ pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
         from_address,
         tls_mode: "starttls".to_string(),
         default_to_address: None,
+        kind: EmailKind::Graph,
         graph_tenant_id,
         graph_authority: None,
         graph_base_url: None,
@@ -219,6 +263,13 @@ pub(crate) fn config_from_secrets() -> Result<ProviderConfig, String> {
         graph_client_id,
         graph_client_secret,
         graph_refresh_token,
+        gmail_client_id: None,
+        gmail_client_secret: None,
+        gmail_refresh_token: None,
+        gmail_token_endpoint: None,
+        gmail_scope: None,
+        gmail_user: None,
+        gmail_pubsub_verification_token: None,
     })
 }
 
@@ -284,5 +335,70 @@ mod tests {
         let err = load_config(&value).expect_err("blank sender should fail");
 
         assert!(err.contains("from_address"), "{err}");
+    }
+
+    #[test]
+    fn load_config_with_kind_gmail_and_gmail_fields_deserializes() {
+        let mut value = valid_config();
+        value["kind"] = json!("gmail");
+        value["gmail_client_id"] = json!("client-id");
+        value["gmail_client_secret"] = json!("client-secret");
+        value["gmail_refresh_token"] = json!("refresh-token");
+        value["gmail_token_endpoint"] = json!("https://oauth2.googleapis.com/token");
+        value["gmail_scope"] = json!("https://www.googleapis.com/auth/gmail.readonly");
+        value["gmail_user"] = json!("me@example.com");
+        value["gmail_pubsub_verification_token"] = json!("shared-token");
+
+        let cfg = load_config(&value).expect("config");
+
+        assert_eq!(cfg.kind, EmailKind::Gmail);
+        assert_eq!(cfg.gmail_client_id.as_deref(), Some("client-id"));
+        assert_eq!(cfg.gmail_client_secret.as_deref(), Some("client-secret"));
+        assert_eq!(cfg.gmail_refresh_token.as_deref(), Some("refresh-token"));
+        assert_eq!(
+            cfg.gmail_token_endpoint.as_deref(),
+            Some("https://oauth2.googleapis.com/token")
+        );
+        assert_eq!(
+            cfg.gmail_scope.as_deref(),
+            Some("https://www.googleapis.com/auth/gmail.readonly")
+        );
+        assert_eq!(cfg.gmail_user.as_deref(), Some("me@example.com"));
+        assert_eq!(
+            cfg.gmail_pubsub_verification_token.as_deref(),
+            Some("shared-token")
+        );
+    }
+
+    #[test]
+    fn load_config_with_only_graph_fields_defaults_kind_to_graph() {
+        let mut value = valid_config();
+        value["graph_tenant_id"] = json!("tenant-123");
+        value["graph_client_id"] = json!("graph-client-id");
+
+        let cfg = load_config(&value).expect("config");
+
+        assert_eq!(cfg.kind, EmailKind::Graph);
+        assert_eq!(cfg.gmail_client_id, None);
+        assert_eq!(cfg.gmail_pubsub_verification_token, None);
+    }
+
+    #[test]
+    fn nested_config_still_rejects_unknown_fields_with_gmail_fields_present() {
+        let value = json!({
+            "config": {
+                "public_base_url": "https://mail.example",
+                "host": "smtp.example",
+                "username": "mailer",
+                "from_address": "bot@example.com",
+                "kind": "gmail",
+                "gmail_client_id": "client-id",
+                "surprise": true
+            }
+        });
+
+        let err = load_config(&value).expect_err("unknown fields should fail");
+
+        assert!(err.contains("unknown field"), "{err}");
     }
 }

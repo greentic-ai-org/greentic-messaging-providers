@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-email",
   "name": "messaging-provider-email",
-  "version": "0.4.100",
+  "version": "0.5.1",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core SMTP email sender (simulated).",
   "profiles": {
@@ -16,7 +16,23 @@
       "path": "schemas/messaging/email/public.config.schema.json"
     }
   },
-  "secret_requirements": [],
+  "secret_requirements": [
+    {
+      "name": "GMAIL_CLIENT_SECRET",
+      "scope": "tenant",
+      "description": "Gmail OAuth client secret used to authenticate token refresh requests."
+    },
+    {
+      "name": "GMAIL_REFRESH_TOKEN",
+      "scope": "tenant",
+      "description": "Gmail OAuth refresh token used to mint access tokens for the Gmail API."
+    },
+    {
+      "name": "GMAIL_PUBSUB_VERIFICATION_TOKEN",
+      "scope": "tenant",
+      "description": "Shared token used to verify inbound Gmail Pub/Sub push notifications."
+    }
+  ],
   "operations": [
     {
       "name": "qa-spec",

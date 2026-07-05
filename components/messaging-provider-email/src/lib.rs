@@ -9,6 +9,7 @@
 //! - `ops`: Core operations (send, reply, render_plan, encode, send_payload)
 //! - `graph`: Microsoft Graph API helpers and subscriptions
 //! - `ingress`: HTTP ingress handling
+//! - `gmail`: Gmail Pub/Sub push parsing + verification
 
 use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
 use provider_common::helpers::json_bytes;
@@ -28,6 +29,7 @@ mod ac_converter;
 pub(crate) mod auth;
 mod config;
 mod describe;
+mod gmail;
 mod graph;
 mod ingress;
 mod ops;
@@ -498,7 +500,7 @@ mod tests {
         let describe = build_describe_payload();
         assert_eq!(
             describe.schema_hash,
-            "a022076adb33dab084ad655fb83b4857a9d4aa7fd81b1d4d694a509789a63890"
+            "e44bab712d233632a7f429f205bdafc3b28fee3dc6a097690877024ef08e5fc9"
         );
     }
 
