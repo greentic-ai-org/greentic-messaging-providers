@@ -1,12 +1,30 @@
 use provider_common::component_v0_6::{
-    DescribePayload, QaSpec, RedactionRule, SchemaIr, schema_hash,
+    OperationDescriptor, QaSpec, RedactionRule, SchemaIr, SecretRequirement, schema_hash,
 };
 use provider_common::helpers::{
     i18n_bundle_from_pairs, op, schema_bool_ir, schema_obj, schema_secret, schema_str,
     schema_str_fmt,
 };
+use serde::Serialize;
 
 use crate::{PROVIDER_ID, WORLD_ID};
+
+/// Local superset of `provider_common::component_v0_6::DescribePayload` that
+/// also carries `secret_requirements` — a field the shared struct does not
+/// yet expose (extending it there would break every other provider's
+/// struct-literal `describe()` builder).
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct EmailDescribePayload {
+    pub provider: String,
+    pub world: String,
+    pub operations: Vec<OperationDescriptor>,
+    pub input_schema: SchemaIr,
+    pub output_schema: SchemaIr,
+    pub config_schema: SchemaIr,
+    pub redactions: Vec<RedactionRule>,
+    pub secret_requirements: Vec<SecretRequirement>,
+    pub schema_hash: String,
+}
 
 pub(crate) const I18N_KEYS: &[&str] = &[
     "email.op.run.title",
@@ -59,6 +77,22 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "email.schema.config.default_to_address.description",
     "email.schema.config.password.title",
     "email.schema.config.password.description",
+    "email.schema.config.kind.title",
+    "email.schema.config.kind.description",
+    "email.schema.config.gmail_client_id.title",
+    "email.schema.config.gmail_client_id.description",
+    "email.schema.config.gmail_client_secret.title",
+    "email.schema.config.gmail_client_secret.description",
+    "email.schema.config.gmail_refresh_token.title",
+    "email.schema.config.gmail_refresh_token.description",
+    "email.schema.config.gmail_token_endpoint.title",
+    "email.schema.config.gmail_token_endpoint.description",
+    "email.schema.config.gmail_scope.title",
+    "email.schema.config.gmail_scope.description",
+    "email.schema.config.gmail_user.title",
+    "email.schema.config.gmail_user.description",
+    "email.schema.config.gmail_pubsub_verification_token.title",
+    "email.schema.config.gmail_pubsub_verification_token.description",
     "email.qa.default.title",
     "email.qa.setup.title",
     "email.qa.upgrade.title",
@@ -92,11 +126,11 @@ pub(crate) const SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &
 
 pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url", "host", "username", "from_address"];
 
-pub(crate) fn build_describe_payload() -> DescribePayload {
+pub(crate) fn build_describe_payload() -> EmailDescribePayload {
     let input_schema = input_schema();
     let output_schema = output_schema();
     let config_schema = config_schema();
-    DescribePayload {
+    EmailDescribePayload {
         provider: PROVIDER_ID.to_string(),
         world: WORLD_ID.to_string(),
         operations: vec![
@@ -146,10 +180,47 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
         input_schema: input_schema.clone(),
         output_schema: output_schema.clone(),
         config_schema: config_schema.clone(),
-        redactions: vec![RedactionRule {
-            path: "$.password".to_string(),
-            strategy: "replace".to_string(),
-        }],
+        redactions: vec![
+            RedactionRule {
+                path: "$.password".to_string(),
+                strategy: "replace".to_string(),
+            },
+            RedactionRule {
+                path: "$.gmail_client_secret".to_string(),
+                strategy: "replace".to_string(),
+            },
+            RedactionRule {
+                path: "$.gmail_refresh_token".to_string(),
+                strategy: "replace".to_string(),
+            },
+            RedactionRule {
+                path: "$.gmail_pubsub_verification_token".to_string(),
+                strategy: "replace".to_string(),
+            },
+        ],
+        secret_requirements: vec![
+            SecretRequirement {
+                name: "GMAIL_CLIENT_SECRET".to_string(),
+                scope: "tenant".to_string(),
+                description:
+                    "Gmail OAuth client secret used to authenticate token refresh requests."
+                        .to_string(),
+            },
+            SecretRequirement {
+                name: "GMAIL_REFRESH_TOKEN".to_string(),
+                scope: "tenant".to_string(),
+                description:
+                    "Gmail OAuth refresh token used to mint access tokens for the Gmail API."
+                        .to_string(),
+            },
+            SecretRequirement {
+                name: "GMAIL_PUBSUB_VERIFICATION_TOKEN".to_string(),
+                scope: "tenant".to_string(),
+                description:
+                    "Shared token used to verify inbound Gmail Pub/Sub push notifications."
+                        .to_string(),
+            },
+        ],
         schema_hash: schema_hash(&input_schema, &output_schema, &config_schema),
     }
 }
@@ -286,6 +357,61 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "email.schema.config.password.description",
         "SMTP authentication password",
+    ),
+    ("email.schema.config.kind.title", "Backend kind"),
+    (
+        "email.schema.config.kind.description",
+        "Email backend: graph (Microsoft Graph) or gmail (Gmail API)",
+    ),
+    (
+        "email.schema.config.gmail_client_id.title",
+        "Gmail client ID",
+    ),
+    (
+        "email.schema.config.gmail_client_id.description",
+        "Gmail OAuth client ID",
+    ),
+    (
+        "email.schema.config.gmail_client_secret.title",
+        "Gmail client secret",
+    ),
+    (
+        "email.schema.config.gmail_client_secret.description",
+        "Gmail OAuth client secret",
+    ),
+    (
+        "email.schema.config.gmail_refresh_token.title",
+        "Gmail refresh token",
+    ),
+    (
+        "email.schema.config.gmail_refresh_token.description",
+        "Gmail OAuth refresh token",
+    ),
+    (
+        "email.schema.config.gmail_token_endpoint.title",
+        "Gmail token endpoint",
+    ),
+    (
+        "email.schema.config.gmail_token_endpoint.description",
+        "Gmail OAuth token endpoint URL",
+    ),
+    ("email.schema.config.gmail_scope.title", "Gmail scope"),
+    (
+        "email.schema.config.gmail_scope.description",
+        "Gmail OAuth scope",
+    ),
+    ("email.schema.config.gmail_user.title", "Gmail user"),
+    (
+        "email.schema.config.gmail_user.description",
+        "Gmail mailbox address polled via the Gmail API",
+    ),
+    (
+        "email.schema.config.gmail_pubsub_verification_token.title",
+        "Gmail Pub/Sub verification token",
+    ),
+    (
+        "email.schema.config.gmail_pubsub_verification_token.description",
+        "Shared token used to verify inbound Gmail Pub/Sub push requests",
     ),
     ("email.qa.default.title", "Default"),
     ("email.qa.setup.title", "Setup"),
@@ -424,6 +550,71 @@ fn config_schema() -> SchemaIr {
                 schema_secret(
                     "email.schema.config.password.title",
                     "email.schema.config.password.description",
+                ),
+            ),
+            (
+                "kind",
+                false,
+                schema_str(
+                    "email.schema.config.kind.title",
+                    "email.schema.config.kind.description",
+                ),
+            ),
+            (
+                "gmail_client_id",
+                false,
+                schema_str(
+                    "email.schema.config.gmail_client_id.title",
+                    "email.schema.config.gmail_client_id.description",
+                ),
+            ),
+            (
+                "gmail_client_secret",
+                false,
+                schema_secret(
+                    "email.schema.config.gmail_client_secret.title",
+                    "email.schema.config.gmail_client_secret.description",
+                ),
+            ),
+            (
+                "gmail_refresh_token",
+                false,
+                schema_secret(
+                    "email.schema.config.gmail_refresh_token.title",
+                    "email.schema.config.gmail_refresh_token.description",
+                ),
+            ),
+            (
+                "gmail_token_endpoint",
+                false,
+                schema_str_fmt(
+                    "email.schema.config.gmail_token_endpoint.title",
+                    "email.schema.config.gmail_token_endpoint.description",
+                    "uri",
+                ),
+            ),
+            (
+                "gmail_scope",
+                false,
+                schema_str(
+                    "email.schema.config.gmail_scope.title",
+                    "email.schema.config.gmail_scope.description",
+                ),
+            ),
+            (
+                "gmail_user",
+                false,
+                schema_str(
+                    "email.schema.config.gmail_user.title",
+                    "email.schema.config.gmail_user.description",
+                ),
+            ),
+            (
+                "gmail_pubsub_verification_token",
+                false,
+                schema_secret(
+                    "email.schema.config.gmail_pubsub_verification_token.title",
+                    "email.schema.config.gmail_pubsub_verification_token.description",
                 ),
             ),
         ],
