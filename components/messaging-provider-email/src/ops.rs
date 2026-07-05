@@ -12,7 +12,8 @@ use std::collections::BTreeMap;
 use urlencoding::encode as url_encode;
 
 use crate::auth;
-use crate::config::{ProviderConfig, config_from_secrets, load_config};
+use crate::config::{EmailKind, ProviderConfig, config_from_secrets, load_config};
+use crate::gmail;
 use crate::graph::{graph_base_url, graph_post};
 use crate::{MICROSOFT_PROVIDER_TYPE, PROVIDER_TYPE};
 use greentic_types::{
@@ -383,81 +384,96 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
         Ok(cfg) => cfg,
         Err(err) => return send_payload_error(&err, false),
     };
-    let token = if let Some(user) = &send_in.auth_user {
-        auth::acquire_graph_token(&cfg, user)
-    } else {
-        auth::acquire_graph_token_from_store(&cfg)
-    };
-    let token = match token {
-        Ok(value) => value,
-        Err(err) => return send_payload_error(&err, true),
-    };
-    let content_type = payload
-        .get("body_type")
-        .and_then(Value::as_str)
-        .unwrap_or("Text");
-    let mut message_obj = serde_json::Map::new();
-    message_obj.insert("subject".to_string(), Value::String(subject.clone()));
-    message_obj.insert(
-        "body".to_string(),
-        json!({"contentType": content_type, "content": body}),
-    );
-    message_obj.insert(
-        "toRecipients".to_string(),
-        json!([{"emailAddress": {"address": to}}]),
-    );
-    // Convert envelope attachments to Graph referenceAttachment. URL-based
-    // because the generic greentic `Attachment` shape only carries a URL;
-    // fileAttachment (contentBytes) would need the provider to fetch and
-    // encode, which it doesn't do today.
-    if let Some(atts_array) = payload.get("attachments").and_then(Value::as_array)
-        && !atts_array.is_empty()
-    {
-        let graph_atts: Vec<Value> = atts_array
-            .iter()
-            .filter_map(|a| {
-                let url = a.get("url").and_then(Value::as_str)?;
-                let name = a
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or("attachment")
-                    .to_string();
-                Some(json!({
-                    "@odata.type": "#microsoft.graph.referenceAttachment",
-                    "name": name,
-                    "sourceUrl": url,
-                    "providerType": "other",
-                    "permission": "view"
-                }))
-            })
-            .collect();
-        if !graph_atts.is_empty() {
-            message_obj.insert("attachments".to_string(), Value::Array(graph_atts));
+    match dispatch_send(&cfg, &send_in, &to, &subject, &body, &payload) {
+        Ok(()) => send_payload_success(),
+        Err(err) => send_payload_error(&err, true),
+    }
+}
+
+/// Routes the prepared To/Subject/body to the backend selected by
+/// `cfg.kind`. The `Graph` arm is the pre-existing Graph `sendMail` request
+/// builder, unchanged; `Gmail` delegates to `gmail::send::gmail_send`.
+fn dispatch_send(
+    cfg: &ProviderConfig,
+    send_in: &SendPayloadInV1,
+    to: &str,
+    subject: &str,
+    body: &str,
+    payload: &Value,
+) -> Result<(), String> {
+    match cfg.kind {
+        EmailKind::Gmail => gmail::send::gmail_send(cfg, to, subject, body).map(|_| ()),
+        EmailKind::Graph => {
+            let token = if let Some(user) = &send_in.auth_user {
+                auth::acquire_graph_token(cfg, user)
+            } else {
+                auth::acquire_graph_token_from_store(cfg)
+            }?;
+            let content_type = payload
+                .get("body_type")
+                .and_then(Value::as_str)
+                .unwrap_or("Text");
+            let mut message_obj = serde_json::Map::new();
+            message_obj.insert("subject".to_string(), Value::String(subject.to_string()));
+            message_obj.insert(
+                "body".to_string(),
+                json!({"contentType": content_type, "content": body}),
+            );
+            message_obj.insert(
+                "toRecipients".to_string(),
+                json!([{"emailAddress": {"address": to}}]),
+            );
+            // Convert envelope attachments to Graph referenceAttachment. URL-based
+            // because the generic greentic `Attachment` shape only carries a URL;
+            // fileAttachment (contentBytes) would need the provider to fetch and
+            // encode, which it doesn't do today.
+            if let Some(atts_array) = payload.get("attachments").and_then(Value::as_array)
+                && !atts_array.is_empty()
+            {
+                let graph_atts: Vec<Value> = atts_array
+                    .iter()
+                    .filter_map(|a| {
+                        let url = a.get("url").and_then(Value::as_str)?;
+                        let name = a
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("attachment")
+                            .to_string();
+                        Some(json!({
+                            "@odata.type": "#microsoft.graph.referenceAttachment",
+                            "name": name,
+                            "sourceUrl": url,
+                            "providerType": "other",
+                            "permission": "view"
+                        }))
+                    })
+                    .collect();
+                if !graph_atts.is_empty() {
+                    message_obj.insert("attachments".to_string(), Value::Array(graph_atts));
+                }
+            }
+            let mail_body = json!({
+                "message": Value::Object(message_obj),
+                "saveToSentItems": false
+            });
+            // Use /me/sendMail for delegated tokens (refresh_token grant),
+            // /users/{from}/sendMail for app-only tokens (client_credentials grant).
+            let has_refresh_token = cfg
+                .graph_refresh_token
+                .as_ref()
+                .is_some_and(|s| !s.is_empty());
+            let url = if send_in.auth_user.is_some() || has_refresh_token {
+                format!("{}/me/sendMail", graph_base_url(cfg))
+            } else {
+                format!(
+                    "{}/users/{}/sendMail",
+                    graph_base_url(cfg),
+                    url_encode(&cfg.from_address)
+                )
+            };
+            graph_post(&token, &url, &mail_body).map(|_| ())
         }
     }
-    let mail_body = json!({
-        "message": Value::Object(message_obj),
-        "saveToSentItems": false
-    });
-    // Use /me/sendMail for delegated tokens (refresh_token grant),
-    // /users/{from}/sendMail for app-only tokens (client_credentials grant).
-    let has_refresh_token = cfg
-        .graph_refresh_token
-        .as_ref()
-        .is_some_and(|s| !s.is_empty());
-    let url = if send_in.auth_user.is_some() || has_refresh_token {
-        format!("{}/me/sendMail", graph_base_url(&cfg))
-    } else {
-        format!(
-            "{}/users/{}/sendMail",
-            graph_base_url(&cfg),
-            url_encode(&cfg.from_address)
-        )
-    };
-    if let Err(err) = graph_post(&token, &url, &mail_body) {
-        return send_payload_error(&err, true);
-    }
-    send_payload_success()
 }
 
 fn build_channel_envelope(parsed: &Value, cfg: &ProviderConfig) -> ChannelMessageEnvelope {
@@ -649,6 +665,77 @@ mod tests {
         ));
         assert_eq!(out["ok"], false);
         assert_eq!(out["message"], "missing email target");
+    }
+
+    fn gmail_config_missing_client_id() -> ProviderConfig {
+        serde_json::from_value(json!({
+            "public_base_url": "https://mail.example.com",
+            "host": "smtp.example.com",
+            "username": "mailer",
+            "from_address": "bot@example.com",
+            "kind": "gmail",
+            "gmail_user": "me@example.com",
+            "gmail_client_secret": "client-secret",
+            "gmail_refresh_token": "refresh-token"
+        }))
+        .expect("config")
+    }
+
+    fn send_in_stub() -> SendPayloadInV1 {
+        SendPayloadInV1 {
+            provider_type: PROVIDER_TYPE.to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: STANDARD.encode("{}"),
+                metadata: BTreeMap::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn dispatch_send_routes_gmail_kind_to_gmail_branch() {
+        let cfg = gmail_config_missing_client_id();
+        let send_in = send_in_stub();
+
+        let err = dispatch_send(
+            &cfg,
+            &send_in,
+            "to@example.com",
+            "Subject",
+            "Body",
+            &json!({}),
+        )
+        .expect_err("gmail branch should surface gmail_send's own validation error");
+
+        assert_eq!(err, "missing gmail_client_id");
+    }
+
+    #[test]
+    fn dispatch_send_gmail_kind_never_touches_graph_path() {
+        // A cfg with `kind: gmail` and none of the graph_* fields populated
+        // would panic inside the Graph arm's token acquisition if it were
+        // reached (native tests have no secrets-store/http-client host).
+        // Getting a clean gmail-shaped error back proves the Graph arm was
+        // never entered.
+        let mut cfg = gmail_config_missing_client_id();
+        cfg.gmail_client_id = None;
+        assert!(cfg.graph_client_id.is_none());
+        assert!(cfg.graph_tenant_id.is_none());
+
+        let send_in = send_in_stub();
+        let err = dispatch_send(
+            &cfg,
+            &send_in,
+            "to@example.com",
+            "Subject",
+            "Body",
+            &json!({}),
+        )
+        .expect_err("expected gmail validation error, not a graph one");
+
+        assert_eq!(err, "missing gmail_client_id");
     }
 
     #[test]

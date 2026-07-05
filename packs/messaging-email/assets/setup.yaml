@@ -108,6 +108,6 @@ questions:
     title: Gmail scope
     kind: string
     required: false
-    help: "Gmail OAuth scope (kind: gmail only)"
-    placeholder: "https://www.googleapis.com/auth/gmail.readonly"
+    help: "Gmail OAuth scope (kind: gmail only). To send outbound mail the scope must include gmail.send or gmail.modify — gmail.readonly alone cannot call messages.send."
+    placeholder: "https://www.googleapis.com/auth/gmail.send"
     group: Authentication

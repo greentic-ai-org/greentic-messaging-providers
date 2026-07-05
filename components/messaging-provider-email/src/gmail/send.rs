@@ -11,14 +11,24 @@ use crate::auth;
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::ProviderConfig;
 
-#[cfg_attr(not(test), allow(dead_code))]
 const GMAIL_API_BASE: &str = "https://gmail.googleapis.com/gmail/v1";
+
+/// Strips CR/LF from a header value to prevent email-header injection
+/// (e.g. an LLM-generated subject or an inbound sender address smuggling a
+/// `\r\nBcc: ...` line into the composed MIME message).
+fn sanitize_header(value: &str) -> String {
+    value.replace("\r\n", " ").replace(['\r', '\n'], " ")
+}
 
 /// Builds an RFC 2822 single-part `text/plain; charset=UTF-8` MIME message
 /// with CRLF line endings. `Date` uses the current UTC time; Gmail
-/// overwrites it with its own receipt time on send regardless.
-#[cfg_attr(not(test), allow(dead_code))]
+/// overwrites it with its own receipt time on send regardless. Header
+/// values (`to`/`from`/`subject`) are sanitized to strip embedded CR/LF
+/// before composing, so header injection cannot smuggle extra headers.
 pub(crate) fn build_mime(to: &str, from: &str, subject: &str, body: &str) -> String {
+    let to = sanitize_header(to);
+    let from = sanitize_header(from);
+    let subject = sanitize_header(subject);
     format!(
         "To: {to}\r\nFrom: {from}\r\nSubject: {subject}\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{body}",
         date = Utc::now().to_rfc2822(),
@@ -26,7 +36,6 @@ pub(crate) fn build_mime(to: &str, from: &str, subject: &str, body: &str) -> Str
 }
 
 /// Builds the `users.messages.send` URL for a given mailbox user.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn gmail_send_url(user: &str) -> String {
     format!(
         "{}/users/{}/messages/send",
@@ -38,7 +47,6 @@ pub(crate) fn gmail_send_url(user: &str) -> String {
 /// Builds the MIME message, base64url(no-pad) encodes it, acquires a Google
 /// OAuth token, and POSTs it to `users.messages.send`. Returns the sent
 /// message's `id` on success.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn gmail_send(
     cfg: &ProviderConfig,
     to: &str,
@@ -117,6 +125,76 @@ mod tests {
         );
         assert_eq!(lines.next(), Some(""));
         assert_eq!(lines.next(), Some("Body text"));
+    }
+
+    #[test]
+    fn build_mime_sanitizes_crlf_in_subject_to_prevent_header_injection() {
+        let malicious_subject = "Hi there\r\nBcc: attacker@evil.com";
+        let mime = build_mime(
+            "to@example.com",
+            "from@example.com",
+            malicious_subject,
+            "Body",
+        );
+
+        let mut lines = mime.split("\r\n");
+        assert_eq!(lines.next(), Some("To: to@example.com"));
+        assert_eq!(lines.next(), Some("From: from@example.com"));
+        let subject_line = lines.next().unwrap_or("");
+        assert_eq!(subject_line, "Subject: Hi there Bcc: attacker@evil.com");
+        assert_eq!(
+            sanitize_header(malicious_subject),
+            "Hi there Bcc: attacker@evil.com"
+        );
+        assert!(lines.next().unwrap_or("").starts_with("Date: "));
+        assert_eq!(lines.next(), Some("MIME-Version: 1.0"));
+        assert_eq!(
+            lines.next(),
+            Some("Content-Type: text/plain; charset=UTF-8")
+        );
+        assert_eq!(lines.next(), Some(""));
+        assert_eq!(lines.next(), Some("Body"));
+        assert_eq!(lines.next(), None);
+
+        // No standalone `Bcc:` header line was injected anywhere in the message.
+        assert!(
+            !mime
+                .lines()
+                .any(|line| line.trim_start().to_ascii_lowercase().starts_with("bcc:"))
+        );
+    }
+
+    #[test]
+    fn build_mime_sanitizes_crlf_in_to_and_from() {
+        let mime = build_mime(
+            "to@example.com\r\nBcc: attacker@evil.com",
+            "from@example.com\nX-Injected: yes",
+            "Subj",
+            "Body",
+        );
+
+        let mut lines = mime.split("\r\n");
+        assert_eq!(
+            lines.next(),
+            Some("To: to@example.com Bcc: attacker@evil.com")
+        );
+        assert_eq!(lines.next(), Some("From: from@example.com X-Injected: yes"));
+        assert!(
+            !mime
+                .lines()
+                .any(|line| line.trim_start().to_ascii_lowercase().starts_with("bcc:"))
+        );
+        assert!(!mime.lines().any(|line| {
+            line.trim_start()
+                .to_ascii_lowercase()
+                .starts_with("x-injected:")
+        }));
+    }
+
+    #[test]
+    fn sanitize_header_strips_cr_and_lf() {
+        assert_eq!(sanitize_header("a\r\nb\nc\rd"), "a b c d");
+        assert_eq!(sanitize_header("clean value"), "clean value");
     }
 
     #[test]
