@@ -68,6 +68,12 @@ pub(crate) const SETUP_QUESTIONS: &[QaQuestionDef] = &[
 
 pub(crate) const DEFAULT_KEYS: &[&str] = &["bot_token"];
 
+/// Where each Webex credential can be created, shown as a guided setup link.
+pub(crate) const SETUP_HELP_LINKS: &[(&str, &str)] = &[
+    ("bot_email", "https://developer.webex.com/my-apps/new/bot"),
+    ("bot_token", "https://developer.webex.com/my-apps/new/bot"),
+];
+
 pub(crate) fn build_describe_payload() -> DescribePayload {
     let input_schema = input_schema();
     let output_schema = output_schema();
@@ -130,7 +136,14 @@ pub(crate) fn build_qa_spec(
         Mode::Upgrade => "upgrade",
         Mode::Remove => "remove",
     };
-    provider_common::helpers::qa_spec_for_mode(mode_str, "webex", SETUP_QUESTIONS, DEFAULT_KEYS)
+    let mut spec = provider_common::helpers::qa_spec_for_mode(
+        mode_str,
+        "webex",
+        SETUP_QUESTIONS,
+        DEFAULT_KEYS,
+    );
+    provider_common::helpers::apply_help_urls(&mut spec, SETUP_HELP_LINKS);
+    spec
 }
 
 pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[

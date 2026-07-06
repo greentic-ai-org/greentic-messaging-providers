@@ -88,6 +88,13 @@ for component in answer.get("runtime_components", []):
         }
         dest_manifest.write_text(json.dumps(pack_manifest, indent=2) + "\n", encoding="utf-8")
 
+# Bundle the provider config schema referenced by greentic.provider-extension.v1.
+schema_src = source_dir.parent / "components/messaging-provider-teams-graph/schemas/messaging/teams/config.schema.json"
+if schema_src.exists():
+    schema_dest = generated_dir / "schemas/messaging/teams/public.config.schema.json"
+    schema_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(schema_src, schema_dest)
+
 for entry in (answer.get("pack_overlay") or {}).get("files", []):
     rel = entry.get("path")
     content = entry.get("content", "")
@@ -216,6 +223,25 @@ extensions:
         content_types:
         - application/json
         supports_webhook_validation: true
+  greentic.provider-extension.v1:
+    kind: greentic.provider-extension.v1
+    version: "{pack_version}"
+    inline:
+      providers:
+      - provider_type: messaging.teams
+        capabilities:
+        - messaging
+        ops:
+        - send
+        - reply
+        - qa-spec
+        - apply-answers
+        - i18n-keys
+        config_schema_ref: schemas/messaging/teams/public.config.schema.json
+        runtime:
+          component_ref: messaging-provider-teams-graph
+          export: schema-core-api
+          world: greentic:provider/schema-core@1.0.0
   greentic.http-routes.v1:
     kind: greentic.http-routes.v1
     version: "1"

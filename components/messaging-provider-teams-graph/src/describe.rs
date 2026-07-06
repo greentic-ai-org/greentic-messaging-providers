@@ -247,7 +247,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("teams.schema.config.setup_mode.title", "Setup mode"),
     (
         "teams.schema.config.setup_mode.description",
-        "Teams Graph setup mode: graph_channel for Graph channel sends and subscriptions",
+        "Teams setup mode: graph_channel for Graph channel sends/subscriptions, bot_framework for Bot Framework connector replies",
     ),
     (
         "teams.schema.config.public_base_url.title",

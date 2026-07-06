@@ -1,6 +1,6 @@
 {
   "name": "messaging-webex",
-  "version": "0.5.14",
+  "version": "0.5.15",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Webex messaging provider \u2014 Bot API with Adaptive Cards",

@@ -787,11 +787,13 @@ mod tests {
     }
 
     #[test]
-    fn apply_answers_rejects_bot_framework_config_shape() {
+    fn apply_answers_accepts_bot_framework_config_shape() {
         use bindings::exports::greentic::component::qa::Guest as QaGuest;
         use bindings::exports::greentic::component::qa::Mode;
         let answers = json!({
             "setup_mode": "bot_framework",
+            "tenant_id": "tenant",
+            "client_id": "bot-app-id",
             "ms_bot_app_id": "bot-app-id",
             "ms_bot_app_password": "bot-secret",
             "bot_display_name": "Greentic Bot",
@@ -801,12 +803,33 @@ mod tests {
         let out =
             <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers));
         let out_json: Value = decode_cbor(&out).expect("decode apply output");
+        assert_eq!(out_json.get("ok"), Some(&Value::Bool(true)));
+        assert_eq!(
+            out_json
+                .get("config")
+                .and_then(|c| c.get("setup_mode"))
+                .and_then(Value::as_str),
+            Some("bot_framework")
+        );
+    }
+
+    #[test]
+    fn apply_answers_rejects_bot_framework_without_app_id() {
+        use bindings::exports::greentic::component::qa::Guest as QaGuest;
+        use bindings::exports::greentic::component::qa::Mode;
+        let answers = json!({
+            "setup_mode": "bot_framework",
+            "tenant_id": "tenant",
+            "client_id": "client"
+        });
+
+        let out =
+            <Component as QaGuest>::apply_answers(Mode::Default, canonical_cbor_bytes(&answers));
+        let out_json: Value = decode_cbor(&out).expect("decode apply output");
         assert_eq!(out_json.get("ok"), Some(&Value::Bool(false)));
         assert_eq!(
             out_json.get("error").and_then(Value::as_str),
-            Some(
-                "config validation failed: bot_framework mode is not supported by messaging.teams.graph"
-            )
+            Some("config validation failed: ms_bot_app_id is required for bot_framework mode")
         );
     }
 
