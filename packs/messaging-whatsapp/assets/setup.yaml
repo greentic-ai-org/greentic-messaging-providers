@@ -8,7 +8,8 @@ questions:
     required: true
     help: "WhatsApp Business phone number ID from Meta Developer Portal"
     group: Connection
-    docs_url: "https://developers.facebook.com/apps"
+    docs_url: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+    create_url: "https://developers.facebook.com/apps/create/"
   - name: public_base_url
     title: Public base URL
     kind: string
@@ -23,7 +24,8 @@ questions:
     required: true
     help: "WhatsApp Business Account ID from Meta Developer Portal"
     group: Connection
-    docs_url: "https://developers.facebook.com/apps"
+    docs_url: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+    create_url: "https://developers.facebook.com/apps/create/"
   - name: api_base_url
     title: API base URL
     kind: string
@@ -49,7 +51,8 @@ questions:
     secret: true
     help: "Permanent access token from Meta Developer Portal"
     group: Authentication
-    docs_url: "https://developers.facebook.com/apps"
+    docs_url: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+    create_url: "https://developers.facebook.com/apps/create/"
   - name: whatsapp_verify_token
     title: WhatsApp verify token
     kind: string

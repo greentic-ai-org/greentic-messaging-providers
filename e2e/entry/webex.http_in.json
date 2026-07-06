@@ -1,0 +1,1 @@
+{"method":"POST","path":"/webex/webhook","query":"","headers":{"content-type":"application/json"},"body":"{\"resource\":\"memberships\",\"event\":\"created\",\"data\":{\"id\":\"mem1\",\"roomId\":\"room1\",\"personId\":\"person1\",\"personEmail\":\"e2e@test.com\",\"personDisplayName\":\"E2E\",\"created\":\"2024-01-01T00:00:00.000Z\"}}"}

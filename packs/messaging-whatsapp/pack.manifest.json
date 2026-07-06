@@ -1,6 +1,6 @@
 {
   "name": "messaging-whatsapp",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "kind": "application",
   "publisher": "Greentic",
   "description": "WhatsApp messaging provider \u2014 Cloud API with webhook ingress",

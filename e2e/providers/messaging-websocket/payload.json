@@ -1,0 +1,7 @@
+{
+  "session_id": "${E2E_WS_SESSION_ID}",
+  "payload": {
+    "text": "Greentic WebSocket provider e2e smoke",
+    "event": "smoke.test"
+  }
+}

@@ -49,4 +49,5 @@ questions:
     secret: true
     help: "Token from @BotFather"
     group: Authentication
-    docs_url: "https://t.me/BotFather"
+    docs_url: "https://core.telegram.org/bots#how-do-i-create-a-bot"
+    create_url: "https://t.me/BotFather"

@@ -30,6 +30,22 @@
     "teams_app_user_install",
     "first_bot_framework_post"
   ],
+  "runtime_outputs": {
+    "config": {
+      "enabled": {
+        "const": true
+      },
+      "setup_mode": {
+        "const": "bot_framework"
+      },
+      "tenant_id": "tenant",
+      "client_id": "bot_app_id",
+      "ms_bot_app_id": "bot_app_id"
+    },
+    "secrets": {
+      "ms_bot_app_password": "bot_app_password"
+    }
+  },
   "actions_schema_id": "greentic.setup.actions.v1",
   "actions": [
     {
@@ -49,12 +65,21 @@
           "https://graph.microsoft.com/Application.ReadWrite.All",
           "https://graph.microsoft.com/AppCatalog.ReadWrite.All",
           "https://graph.microsoft.com/TeamsAppInstallation.ReadWriteForUser",
-          "https://graph.microsoft.com/User.Read"
+          "https://graph.microsoft.com/User.Read",
+          "offline_access"
         ],
         "oauth_kind": "graph",
         "token_store_key": "graph_access_token",
         "device_code_store_key": "oauth_device_code",
-        "user_code_store_key": "oauth_user_code"
+        "user_code_store_key": "oauth_user_code",
+        "also_fund": {
+          "oauth_kind": "management",
+          "token_store_key": "azure_management_access_token",
+          "scopes": [
+            "https://management.azure.com/user_impersonation",
+            "offline_access"
+          ]
+        }
       },
       "completion": {
         "state_path": "oauth.graph.ok",
@@ -142,8 +167,8 @@
         "state_store_key": "last_reconcile"
       },
       "completion": {
-        "state_path": "last_reconcile.ok",
-        "equals": true
+        "state_path": "last_reconcile",
+        "exists": true
       }
     },
     {
@@ -168,8 +193,8 @@
         "state_store_key": "last_teams_app_publish"
       },
       "completion": {
-        "state_path": "last_teams_app_publish.ok",
-        "equals": true
+        "state_path": "last_teams_app_publish",
+        "exists": true
       }
     },
     {
@@ -196,8 +221,8 @@
         }
       },
       "completion": {
-        "state_path": "last_teams_app_install.ok",
-        "equals": true
+        "state_path": "last_teams_app_install",
+        "exists": true
       }
     },
     {

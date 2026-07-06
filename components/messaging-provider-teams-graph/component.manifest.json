@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-teams-graph",
   "name": "messaging-provider-teams-graph",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "world": "greentic:component/component-v0-v6-v0@0.6.1",
   "description": "Provider-core Microsoft Teams messaging provider (Graph send).",
   "profiles": {
