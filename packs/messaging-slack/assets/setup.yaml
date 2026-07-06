@@ -53,3 +53,23 @@ questions:
     group: Authentication
     docs_url: "https://api.slack.com/authentication/config-tokens"
     create_url: "https://api.slack.com/apps"
+  - name: bot_token
+    title: Slack Bot User OAuth Token
+    kind: string
+    required: true
+    secret: true
+    help: "After 'Setup Slack App' creates the app, use the 'Install to Workspace' button below (or the app's OAuth & Permissions page) → Allow, then copy the 'Bot User OAuth Token' (starts with xoxb-). This is the token the bot uses to send and read messages."
+    placeholder: "xoxb-..."
+    group: Authentication
+    docs_url: "https://api.slack.com/authentication/oauth-v2"
+    create_url: "https://api.slack.com/apps"
+  - name: slack_signing_secret
+    title: Slack Signing Secret
+    kind: string
+    required: false
+    secret: true
+    help: "From the app's Basic Information page → App Credentials → Signing Secret → Show, then copy it. Used to verify inbound Slack requests (Events & Interactivity). Auto-filled when the app is freshly created; provide it manually when reusing an existing app."
+    placeholder: "e.g. 8f2c...b31"
+    group: Authentication
+    docs_url: "https://api.slack.com/authentication/verifying-requests-from-slack"
+    create_url: "https://api.slack.com/apps"

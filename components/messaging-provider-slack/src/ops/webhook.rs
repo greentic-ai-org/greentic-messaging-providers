@@ -176,7 +176,7 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
                 .unwrap_or("default");
             format!(
                 "{}/v1/messaging/ingress/{}/{}/{}",
-                public_base_url.trim_end_matches('/'),
+                base_origin(public_base_url),
                 provider_id,
                 tenant,
                 team,
@@ -383,14 +383,14 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
             "slack_response": body,
         }));
     }
-    if signing_secret.is_none() {
-        return json_bytes(&json!({
-            "ok": false,
-            "error": "Slack registration did not return slack_signing_secret; provide a prior Slack signing secret or create a new app registration",
-            "app_id": app_id,
-            "slack_response": body,
-        }));
-    }
+    // The signing secret is only returned by `apps.manifest.create`; the reuse
+    // (`apps.manifest.update`) path never returns credentials, and Slack offers
+    // no API to re-fetch it afterward. So treat it as optional: complete the
+    // registration and flag it as missing rather than hard-failing. Inbound
+    // signature verification stays unavailable until the operator supplies the
+    // secret (from the app's Basic Information page) — a clearer, deferred state
+    // than blocking setup on an app that was otherwise created/reused fine.
+    let signing_secret_missing = signing_secret.is_none();
     if let Some(app_id) = app_id.as_deref() {
         put_secret_string(DEFAULT_APP_ID_KEY, app_id);
     }
@@ -413,6 +413,17 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         "slack_client_id": client_id,
         "client_secret": client_secret,
         "slack_signing_secret": signing_secret,
+        "signing_secret_missing": signing_secret_missing,
+        "warning": if signing_secret_missing {
+            Value::String(
+                "Slack did not return a signing secret (existing app reused). Provide \
+                 slack_signing_secret from the app's Basic Information page to enable \
+                 inbound request signature verification."
+                    .to_string(),
+            )
+        } else {
+            Value::Null
+        },
         "oauth_authorize_url": body.get("oauth_authorize_url").cloned().unwrap_or(Value::Null),
         "manifest": registration.manifest,
         "registration_action": if registration.reused { "reused" } else { "created" },
@@ -620,6 +631,23 @@ fn existing_app_id(parsed: &Value) -> Option<String> {
         .or_else(|| secret_string(DEFAULT_APP_ID_KEY))
 }
 
+/// Reduce a public base URL to its origin (`scheme://host[:port]`), dropping any
+/// path/query. Prevents a base that carries a path — e.g. a webchat UI URL
+/// (`https://x.ngrok-free.app/v1/web/webchat/demo`) mistakenly used as the base —
+/// from producing a malformed, doubled ingress URL like
+/// `…/v1/web/webchat/demo/v1/messaging/ingress/messaging-slack/…`, which makes
+/// Slack's Request-URL verification fail with `challenge_failed`.
+fn base_origin(public_base_url: &str) -> String {
+    let trimmed = public_base_url.trim().trim_end_matches('/');
+    if let Some(scheme_end) = trimmed.find("://") {
+        let host_start = scheme_end + 3;
+        if let Some(slash) = trimmed[host_start..].find('/') {
+            return trimmed[..host_start + slash].to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
 fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
     let provider_id = parsed
         .get("provider_id")
@@ -640,9 +668,21 @@ fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("Greentic Slack");
-    let base = public_base_url.trim_end_matches('/');
+    let base = base_origin(public_base_url);
+    let base = base.as_str();
     let ingress_url = format!("{base}/v1/messaging/ingress/{provider_id}/{tenant}/{team}");
-    let callback_url = format!("{base}/oauth/callback/slack");
+    // The OAuth *callback* (developer app-install) is served by the greentic-setup
+    // server, which is a different host than the messaging `public_base_url` (the
+    // runtime, which serves webhook ingress). Register the setup callback when
+    // provided; otherwise fall back to the runtime base for back-compat.
+    let callback_base = parsed
+        .get("oauth_callback_base_url")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| value.starts_with("https://"))
+        .map(|value| value.trim_end_matches('/'))
+        .unwrap_or(base);
+    let callback_url = format!("{callback_base}/oauth/callback/slack");
 
     json!({
         "display_information": {
