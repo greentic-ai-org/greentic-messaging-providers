@@ -99,12 +99,12 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
         .iter()
         .find_map(|action| action.get("registration"))
         .ok_or_else(|| anyhow!("slack setup.yaml missing registration action"))?;
-    let oauth_action = setup_actions
+    let install_action = setup_actions
         .iter()
         .find(|action| action.get("id").and_then(Value::as_str) == Some("add_to_slack"))
         .ok_or_else(|| anyhow!("slack setup.yaml missing add_to_slack action"))?;
     assert_eq!(
-        oauth_action.get("label").and_then(Value::as_str),
+        install_action.get("label").and_then(Value::as_str),
         Some("Setup Slack App"),
         "Slack setup-flow action must be labelled Setup Slack App; Add to Slack is reserved for the generic final action"
     );
@@ -116,8 +116,8 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
     );
     assert_eq!(
         registration.get("client_id_output").and_then(Value::as_str),
-        Some("slack_client_id"),
-        "Slack registration must persist the OAuth client id under the key Slack setup reads"
+        None,
+        "Slack manifest.update never returns client_id on reuse; registration must not depend on it"
     );
     assert_eq!(
         registration
@@ -127,9 +127,14 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
         "Slack registration must expose Slack's signing secret for secret persistence"
     );
     assert_eq!(
-        oauth_action.get("client_id_field").and_then(Value::as_str),
-        registration.get("client_id_output").and_then(Value::as_str),
-        "Slack setup button must use the registered OAuth client id output"
+        install_action.get("kind").and_then(Value::as_str),
+        Some("open_url"),
+        "Slack setup button must be a plain open_url link keyed on slack_app_id, not an OAuth-authorize button needing client_id"
+    );
+    assert_eq!(
+        install_action.get("url_template").and_then(Value::as_str),
+        Some("https://api.slack.com/apps/{slack_app_id}/install-on-team?"),
+        "Slack setup button must link to the app's install-on-team console action using its app id"
     );
 
     Ok(())

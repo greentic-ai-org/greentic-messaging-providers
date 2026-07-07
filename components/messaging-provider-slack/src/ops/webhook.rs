@@ -11,8 +11,8 @@ use serde_json::{Value, json};
 use crate::bindings::greentic::http::http_client as client;
 use crate::config::put_secret_string;
 use crate::{
-    DEFAULT_APP_ID_KEY, DEFAULT_CLIENT_ID_KEY, DEFAULT_CLIENT_SECRET_KEY,
-    DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY, DEFAULT_SIGNING_SECRET_KEY,
+    DEFAULT_APP_ID_KEY, DEFAULT_CONFIG_ACCESS_TOKEN_KEY, DEFAULT_CONFIG_REFRESH_TOKEN_KEY,
+    DEFAULT_SIGNING_SECRET_KEY,
 };
 
 /// Rotate an expired Slack configuration token using the refresh token.
@@ -340,30 +340,6 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
             ],
         )
     });
-    let client_id = first_string(
-        &body,
-        &[
-            &["credentials", "client_id"],
-            &["app", "credentials", "client_id"],
-            &["app", "oauth_config", "client_id"],
-            &["oauth_config", "client_id"],
-            &["client_id"],
-        ],
-    )
-    .or_else(|| first_string(&parsed, &[&["slack_client_id"], &["client_id"]]))
-    .or_else(|| secret_string(DEFAULT_CLIENT_ID_KEY));
-    let client_secret = first_string(
-        &body,
-        &[
-            &["credentials", "client_secret"],
-            &["app", "credentials", "client_secret"],
-            &["app", "oauth_config", "client_secret"],
-            &["oauth_config", "client_secret"],
-            &["client_secret"],
-        ],
-    )
-    .or_else(|| first_string(&parsed, &[&["client_secret"], &["slack_client_secret"]]))
-    .or_else(|| secret_string(DEFAULT_CLIENT_SECRET_KEY));
     let signing_secret = first_string(
         &body,
         &[
@@ -375,14 +351,6 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
     )
     .or_else(|| first_string(&parsed, &[&["signing_secret"], &["slack_signing_secret"]]))
     .or_else(|| secret_string(DEFAULT_SIGNING_SECRET_KEY));
-    if registration.reused && client_id.is_none() {
-        return json_bytes(&json!({
-            "ok": false,
-            "error": "existing Slack app was reused but slack_client_id is not available; rerun with prior setup answers or create a new app",
-            "app_id": app_id,
-            "slack_response": body,
-        }));
-    }
     // The signing secret is only returned by `apps.manifest.create`; the reuse
     // (`apps.manifest.update`) path never returns credentials, and Slack offers
     // no API to re-fetch it afterward. So treat it as optional: complete the
@@ -394,24 +362,13 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
     if let Some(app_id) = app_id.as_deref() {
         put_secret_string(DEFAULT_APP_ID_KEY, app_id);
     }
-    if let Some(client_id) = client_id.as_deref() {
-        put_secret_string(DEFAULT_CLIENT_ID_KEY, client_id);
-    }
-    if let Some(client_secret) = client_secret.as_deref() {
-        put_secret_string(DEFAULT_CLIENT_SECRET_KEY, client_secret);
-    }
     if let Some(signing_secret) = signing_secret.as_deref() {
         put_secret_string(DEFAULT_SIGNING_SECRET_KEY, signing_secret);
     }
-    let slack_app_url = app_id.as_deref().map(slack_app_redirect_url);
     json_bytes(&json!({
         "ok": true,
         "app_id": app_id,
         "slack_app_id": app_id,
-        "slack_app_url": slack_app_url,
-        "client_id": client_id,
-        "slack_client_id": client_id,
-        "client_secret": client_secret,
         "slack_signing_secret": signing_secret,
         "signing_secret_missing": signing_secret_missing,
         "warning": if signing_secret_missing {
@@ -424,16 +381,11 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         } else {
             Value::Null
         },
-        "oauth_authorize_url": body.get("oauth_authorize_url").cloned().unwrap_or(Value::Null),
         "manifest": registration.manifest,
         "registration_action": if registration.reused { "reused" } else { "created" },
         "reused_existing_app": registration.reused,
         "slack_response": body,
     }))
-}
-
-fn slack_app_redirect_url(app_id: &str) -> String {
-    format!("https://slack.com/app_redirect?app={}", app_id.trim())
 }
 
 struct RegistrationResult {
@@ -1229,14 +1181,6 @@ mod tests {
         assert_eq!(
             config_access_token_from_input(&parsed).as_deref(),
             Some("xoxe-legacy")
-        );
-    }
-
-    #[test]
-    fn slack_app_redirect_url_targets_existing_app() {
-        assert_eq!(
-            slack_app_redirect_url("A123"),
-            "https://slack.com/app_redirect?app=A123"
         );
     }
 }
