@@ -48,20 +48,38 @@ pub(crate) fn ensure_channel(input_json: &[u8]) -> Vec<u8> {
         }
     };
 
+    crate::wlog(&format!(
+        "ensure_channel: ensuring channel \"{desired_name}\" exists in team {team_id}"
+    ));
     let token = match acquire_graph_token(&cfg) {
         Ok(token) => token,
         Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
     };
 
     match ensure_channel_with_token(&cfg, &token, &team_id, &desired_name) {
-        Ok(result) => json_bytes(&json!({
-            "ok": true,
-            "created": result.created,
-            "team_id": team_id,
-            "channel_id": result.channel_id,
-            "channel_name": result.channel_name,
-        })),
-        Err(err) => json_bytes(&json!({"ok": false, "error": err})),
+        Ok(result) => {
+            crate::wlog(&format!(
+                "ensure_channel: done — channel {} ({}) {}",
+                result.channel_name,
+                result.channel_id,
+                if result.created {
+                    "created"
+                } else {
+                    "already existed"
+                }
+            ));
+            json_bytes(&json!({
+                "ok": true,
+                "created": result.created,
+                "team_id": team_id,
+                "channel_id": result.channel_id,
+                "channel_name": result.channel_name,
+            }))
+        }
+        Err(err) => {
+            crate::wlog(&format!("ensure_channel: FAILED: {err}"));
+            json_bytes(&json!({"ok": false, "error": err}))
+        }
     }
 }
 
@@ -251,7 +269,15 @@ fn graph_post_json(url: &str, token: &str, body: &Value) -> Result<Value, String
 }
 
 fn graph_json_request(request: client::Request) -> Result<Value, String> {
-    let resp = http_send(&request).map_err(|err| format!("transport error: {}", err.message))?;
+    let method = request.method.clone();
+    let url = request.url.clone();
+    let resp = http_send(&request).map_err(|err| {
+        crate::wlog(&format!(
+            "Graph {method} {url} transport error: {}",
+            err.message
+        ));
+        format!("transport error: {}", err.message)
+    })?;
     let body = resp.body.unwrap_or_default();
     let body_json = serde_json::from_slice::<Value>(&body).unwrap_or(Value::Null);
     if resp.status < 200 || resp.status >= 300 {
@@ -270,6 +296,10 @@ fn graph_json_request(request: client::Request) -> Result<Value, String> {
             429 => "Graph rate limit exceeded",
             _ => "Graph request failed",
         };
+        crate::wlog(&format!(
+            "Graph {method} {url} → status {}: {prefix}",
+            resp.status
+        ));
         if detail.is_empty() {
             return Err(format!("{prefix} (status {})", resp.status));
         }
