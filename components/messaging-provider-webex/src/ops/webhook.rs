@@ -15,6 +15,14 @@ use crate::{DEFAULT_TOKEN_KEY, DEFAULT_WEBHOOK_SECRET_KEY};
 
 type HttpSend<'a> = dyn FnMut(&client::Request) -> Result<client::Response, client::HostError> + 'a;
 
+/// Component-side operational log. The runner host forwards WASM stderr to
+/// the operator console, so these lines surface next to the host's own
+/// `[setup-action ...]` logs. Never log token/secret VALUES here —
+/// presence/absence only.
+fn wlog(msg: &str) {
+    eprintln!("[messaging-webex] {msg}");
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WebhookSpec {
     name: String,
@@ -46,7 +54,10 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
     let cfg = load_config(&parsed).ok();
     let token = match resolve_token(&parsed, cfg.as_ref()) {
         Ok(token) => token,
-        Err(err) => return json_bytes(&json!({"ok": false, "error": err})),
+        Err(err) => {
+            wlog(&format!("setup_webhook: bot token unavailable: {err}"));
+            return json_bytes(&json!({"ok": false, "error": err}));
+        }
     };
     let api_base = resolve_api_base_url(&parsed, cfg.as_ref());
     let tenant = input_string(&parsed, "tenant").unwrap_or_else(|| "default".to_string());
@@ -81,6 +92,20 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
     let secret = input_string(&parsed, "webhook_secret")
         .or_else(|| cfg.as_ref().and_then(|c| c.webhook_secret.clone()))
         .or_else(resolve_webhook_secret);
+    wlog(&format!(
+        "setup_webhook: reconciling webhooks for instance {instance} → {target_url} \
+         (room_id={}, webhook_secret={})",
+        if room_id.is_some() {
+            "present"
+        } else {
+            "absent"
+        },
+        if secret.is_some() {
+            "present"
+        } else {
+            "absent"
+        },
+    ));
     let mut send = |request: &client::Request| client::send(request, None, None);
     let result = setup_webhook_with_sender(
         WebhookSetup {
@@ -109,7 +134,12 @@ fn setup_webhook_with_sender(
             .unwrap_or_else(|| fetch_bot_person_id(setup.api_base, setup.token, send))
         {
             Ok(id) => Some(id),
-            Err(err) => return json!({"ok": false, "error": err}),
+            Err(err) => {
+                wlog(&format!(
+                    "setup_webhook: GET /people/me (bot identity) failed: {err}"
+                ));
+                return json!({"ok": false, "error": err});
+            }
         }
     } else {
         None
@@ -125,6 +155,7 @@ fn setup_webhook_with_sender(
     let existing = match list_webhooks(setup.api_base, setup.token, send) {
         Ok(list) => list,
         Err(err) => {
+            wlog(&format!("setup_webhook: GET /webhooks failed: {err}"));
             return json!({
                 "ok": false,
                 "error": format!("list webex webhooks failed: {err}")
@@ -135,6 +166,12 @@ fn setup_webhook_with_sender(
     let mut all_ok = true;
     let mut results = Vec::new();
     let stale = stale_webhooks_for_instance(&existing, &specs, setup.instance);
+    wlog(&format!(
+        "setup_webhook: {} existing webhook(s) listed, {} spec(s) desired, {} stale to delete",
+        existing.len(),
+        specs.len(),
+        stale.len()
+    ));
     for wh in &stale {
         let result = delete_webhook(setup.api_base, setup.token, wh, send);
         if result.get("ok").and_then(Value::as_bool) != Some(true) {
@@ -161,10 +198,30 @@ fn setup_webhook_with_sender(
         let result = reconcile_webhook(setup.api_base, setup.token, &active_existing, &spec, send);
         if result.get("ok").and_then(Value::as_bool) != Some(true) {
             all_ok = false;
+            wlog(&format!(
+                "setup_webhook: reconcile {}.{} failed: {}",
+                result
+                    .get("resource")
+                    .and_then(Value::as_str)
+                    .unwrap_or("?"),
+                result.get("event").and_then(Value::as_str).unwrap_or("?"),
+                result
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("see webex_response"),
+            ));
         }
         results.push(result);
     }
 
+    if all_ok {
+        wlog(&format!(
+            "setup_webhook: done — all webhooks reconciled to {}",
+            setup.target_url
+        ));
+    } else {
+        wlog("setup_webhook: done with FAILURES — see per-webhook results above");
+    }
     json!({
         "ok": all_ok,
         "target_url": setup.target_url,
@@ -403,25 +460,41 @@ fn reconcile_webhook(
 ) -> Value {
     let found = existing.iter().find(|wh| same_owned_webhook(wh, spec));
     match found {
-        Some(wh) if existing_matches(wh, spec) => json!({
-            "ok": true,
-            "action": "keep",
-            "webhook_id": wh.get("id").and_then(Value::as_str).unwrap_or_default(),
-            "name": spec.name,
-            "resource": spec.resource,
-            "event": spec.event,
-            "filter": spec.filter,
-            "targetUrl": spec.target_url,
-            "http_status": 200,
-        }),
+        Some(wh) if existing_matches(wh, spec) => {
+            wlog(&format!(
+                "reconcile: keeping {} ({}.{}) — already points at the target URL",
+                spec.name, spec.resource, spec.event
+            ));
+            json!({
+                "ok": true,
+                "action": "keep",
+                "webhook_id": wh.get("id").and_then(Value::as_str).unwrap_or_default(),
+                "name": spec.name,
+                "resource": spec.resource,
+                "event": spec.event,
+                "filter": spec.filter,
+                "targetUrl": spec.target_url,
+                "http_status": 200,
+            })
+        }
         Some(wh) => {
+            wlog(&format!(
+                "reconcile: {} ({}.{}) exists with a different target URL — recreating",
+                spec.name, spec.resource, spec.event
+            ));
             let delete = delete_webhook(api_base, token, wh, send);
             if delete.get("ok").and_then(Value::as_bool) != Some(true) {
                 return delete;
             }
             create_webhook(api_base, token, spec, "update", send)
         }
-        None => create_webhook(api_base, token, spec, "create", send),
+        None => {
+            wlog(&format!(
+                "reconcile: {} ({}.{}) missing — creating",
+                spec.name, spec.resource, spec.event
+            ));
+            create_webhook(api_base, token, spec, "create", send)
+        }
     }
 }
 
@@ -456,6 +529,10 @@ fn create_webhook(
     }) {
         Ok(r) => r,
         Err(e) => {
+            wlog(&format!(
+                "POST /webhooks for {}.{} transport error: {}",
+                spec.resource, spec.event, e.message
+            ));
             return json!({
                 "ok": false,
                 "resource": spec.resource,
@@ -499,6 +576,10 @@ fn delete_webhook(api_base: &str, token: &str, webhook: &Value, send: &mut HttpS
     }) {
         Ok(r) => r,
         Err(e) => {
+            wlog(&format!(
+                "DELETE /webhooks/{webhook_id} ({resource}.{event}) transport error: {}",
+                e.message
+            ));
             return json!({
                 "ok": false,
                 "action": "delete",
