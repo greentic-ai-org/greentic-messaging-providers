@@ -15,11 +15,20 @@ use crate::{
     DEFAULT_SIGNING_SECRET_KEY,
 };
 
+/// Component-side operational log. The runner host forwards WASM stderr to
+/// the operator console (see greentic-runner-host's telemetry stream), so
+/// these lines surface next to the host's own `[setup-action ...]` logs.
+/// Never log token/secret VALUES here — presence/absence only.
+fn wlog(msg: &str) {
+    eprintln!("[messaging-slack] {msg}");
+}
+
 /// Rotate an expired Slack configuration token using the refresh token.
 ///
 /// Calls `tooling.tokens.rotate` with form-urlencoded body. Returns
 /// `(new_config_token, new_refresh_token)` on success.
 fn rotate_config_token(refresh_token: &str) -> Result<(String, String), String> {
+    wlog("calling Slack tooling.tokens.rotate (configuration token expired)");
     let body = format!("refresh_token={}", urlencoding(refresh_token));
     let resp = client::send(
         &client::Request {
@@ -36,15 +45,23 @@ fn rotate_config_token(refresh_token: &str) -> Result<(String, String), String> 
     );
     let resp_body: Value = match resp {
         Ok(r) => serde_json::from_slice(&r.body.unwrap_or_default()).unwrap_or(Value::Null),
-        Err(e) => return Err(format!("token rotate request failed: {}", e.message)),
+        Err(e) => {
+            wlog(&format!(
+                "tooling.tokens.rotate transport error: {}",
+                e.message
+            ));
+            return Err(format!("token rotate request failed: {}", e.message));
+        }
     };
     if resp_body.get("ok").and_then(Value::as_bool) != Some(true) {
         let err = resp_body
             .get("error")
             .and_then(Value::as_str)
             .unwrap_or("unknown");
+        wlog(&format!("tooling.tokens.rotate rejected: {err}"));
         return Err(format!("token rotate failed: {err}"));
     }
+    wlog("tooling.tokens.rotate succeeded; persisting rotated token pair");
     let new_token = resp_body
         .get("token")
         .and_then(Value::as_str)
@@ -184,6 +201,10 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
         }
     };
 
+    wlog(&format!(
+        "setup_webhook: re-pointing app {app_id} Event Subscriptions/Interactivity to {webhook_url}"
+    ));
+
     // Step 1: Export current manifest (with token refresh on auth failure)
     let mut config_token = config_token_input;
     let export_body = match export_manifest(app_id, &config_token) {
@@ -196,6 +217,9 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
                     match export_manifest(app_id, &config_token) {
                         ExportResult::Ok(body) => body,
                         ExportResult::AuthError => {
+                            wlog(
+                                "setup_webhook: manifest export still unauthorized after token refresh",
+                            );
                             return json_bytes(&json!({
                                 "ok": false,
                                 "error": "manifest export auth error after token refresh"
@@ -214,6 +238,9 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
             }
         }
         ExportResult::NotFound => {
+            wlog(&format!(
+                "setup_webhook: app {app_id} not found/accessible via apps.manifest.export"
+            ));
             return json_bytes(&json!({
                 "ok": false,
                 "error": "slack_app_id not found; rerun Slack setup to register an app"
@@ -260,12 +287,26 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
             serde_json::from_slice(&body).unwrap_or(Value::Null)
         }
         Err(err) => {
+            wlog(&format!(
+                "setup_webhook: apps.manifest.update transport error: {}",
+                err.message
+            ));
             return json_bytes(
                 &json!({"ok": false, "error": format!("manifest update failed: {}", err.message)}),
             );
         }
     };
     let ok = update_body.get("ok").and_then(Value::as_bool) == Some(true);
+    if ok {
+        wlog(&format!(
+            "setup_webhook: app {app_id} URLs updated to {webhook_url}"
+        ));
+    } else {
+        wlog(&format!(
+            "setup_webhook: apps.manifest.update rejected: {}",
+            slack_error(&update_body).unwrap_or("unknown")
+        ));
+    }
     json_bytes(&json!({
         "ok": ok,
         "webhook_url": webhook_url,
@@ -306,10 +347,20 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
         .and_then(Value::as_str)
         .unwrap_or("");
     if public_base_url.is_empty() || !public_base_url.starts_with("https://") {
+        wlog("setup_app_registration: rejected — public_base_url missing or not https://");
         return json_bytes(
             &json!({"ok": false, "error": "public_base_url must be an https:// URL"}),
         );
     }
+
+    wlog(&format!(
+        "setup_app_registration: starting (public_base_url={public_base_url}, refresh_token={})",
+        if refresh_token.is_some() {
+            "present"
+        } else {
+            "absent"
+        }
+    ));
 
     let desired_manifest = registration_manifest(&parsed, public_base_url);
     let registration = match register_or_reuse_app(
@@ -324,6 +375,9 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
     let body = registration.response;
     if body.get("ok").and_then(Value::as_bool) != Some(true) {
         let err = slack_error(&body).unwrap_or("unknown");
+        wlog(&format!(
+            "setup_app_registration: manifest create/update rejected by Slack: {err}"
+        ));
         return json_bytes(
             &json!({"ok": false, "error": format!("manifest create error: {err}"), "slack_response": body}),
         );
@@ -365,6 +419,20 @@ pub(crate) fn setup_app_registration(input_json: &[u8]) -> Vec<u8> {
     if let Some(signing_secret) = signing_secret.as_deref() {
         put_secret_string(DEFAULT_SIGNING_SECRET_KEY, signing_secret);
     }
+    wlog(&format!(
+        "setup_app_registration: done — app {} {} (signing_secret {})",
+        app_id.as_deref().unwrap_or("<unknown>"),
+        if registration.reused {
+            "reused"
+        } else {
+            "created"
+        },
+        if signing_secret_missing {
+            "MISSING — operator must supply it from Basic Information"
+        } else {
+            "captured"
+        }
+    ));
     json_bytes(&json!({
         "ok": true,
         "app_id": app_id,
@@ -407,6 +475,9 @@ fn register_or_reuse_app(
         && let Some(mut existing_manifest) = export_body.get("manifest").cloned()
         && same_manifest_name(&existing_manifest, desired_manifest)
     {
+        wlog(&format!(
+            "register_or_reuse_app: reusing existing app {existing_app_id} via apps.manifest.update"
+        ));
         merge_registration_manifest(&mut existing_manifest, desired_manifest);
         let update_body = update_manifest(config_token, &existing_app_id, &existing_manifest);
         let update_body = if slack_error(&update_body).is_some_and(is_auth_error) {
@@ -417,6 +488,9 @@ fn register_or_reuse_app(
         };
         if update_body.get("ok").and_then(Value::as_bool) != Some(true) {
             let err = slack_error(&update_body).unwrap_or("unknown");
+            wlog(&format!(
+                "register_or_reuse_app: apps.manifest.update for {existing_app_id} rejected: {err}"
+            ));
             return Err(json_bytes(&json!({
                 "ok": false,
                 "error": format!("manifest update error: {err}"),
@@ -431,6 +505,9 @@ fn register_or_reuse_app(
         });
     }
 
+    wlog(
+        "register_or_reuse_app: no reusable app found; creating a new one via apps.manifest.create",
+    );
     let body = create_manifest_with_refresh(config_token, refresh_token, desired_manifest)?;
     Ok(RegistrationResult {
         response: body,
@@ -510,6 +587,10 @@ fn export_manifest(app_id: &str, config_token: &str) -> ExportResult {
     let body: Value = match resp {
         Ok(r) => serde_json::from_slice(&r.body.unwrap_or_default()).unwrap_or(Value::Null),
         Err(err) => {
+            wlog(&format!(
+                "apps.manifest.export for {app_id} transport error: {}",
+                err.message
+            ));
             return ExportResult::Err(json_bytes(
                 &json!({"ok": false, "error": format!("manifest export failed: {}", err.message)}),
             ));
@@ -522,6 +603,9 @@ fn export_manifest(app_id: &str, config_token: &str) -> ExportResult {
         .get("error")
         .and_then(Value::as_str)
         .unwrap_or("unknown");
+    wlog(&format!(
+        "apps.manifest.export for {app_id} rejected: {err}"
+    ));
     if err == "invalid_auth" || err == "token_expired" || err == "token_revoked" {
         return ExportResult::AuthError;
     }
@@ -673,6 +757,7 @@ fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
 }
 
 fn create_manifest(config_token: &str, manifest: &Value) -> Value {
+    wlog("calling Slack apps.manifest.create");
     let resp = client::send(
         &client::Request {
             method: "POST".to_string(),
@@ -694,12 +779,17 @@ fn create_manifest(config_token: &str, manifest: &Value) -> Value {
     match resp {
         Ok(resp) => serde_json::from_slice(&resp.body.unwrap_or_default()).unwrap_or(Value::Null),
         Err(err) => {
+            wlog(&format!(
+                "apps.manifest.create transport error: {}",
+                err.message
+            ));
             json!({"ok": false, "error": format!("manifest create failed: {}", err.message)})
         }
     }
 }
 
 fn update_manifest(config_token: &str, app_id: &str, manifest: &Value) -> Value {
+    wlog(&format!("calling Slack apps.manifest.update for {app_id}"));
     let resp = client::send(
         &client::Request {
             method: "POST".to_string(),
@@ -722,6 +812,10 @@ fn update_manifest(config_token: &str, app_id: &str, manifest: &Value) -> Value 
     match resp {
         Ok(resp) => serde_json::from_slice(&resp.body.unwrap_or_default()).unwrap_or(Value::Null),
         Err(err) => {
+            wlog(&format!(
+                "apps.manifest.update for {app_id} transport error: {}",
+                err.message
+            ));
             json!({"ok": false, "error": format!("manifest update failed: {}", err.message)})
         }
     }
