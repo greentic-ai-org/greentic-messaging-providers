@@ -1,6 +1,6 @@
 {
   "id": "messaging-provider-teams-graph",
-  "version": "0.5.18",
+  "version": "0.5.3",
   "supports": [
     "messaging"
   ],

@@ -31,9 +31,9 @@
     {
       "name": "messaging-teams-graph",
       "file": "dist/packs/messaging-teams-graph.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams-graph:0.5.1",
-      "digest": "sha256:1c9d65cf8528498b9ecccdecaaa997518e38b6ec4669525f10b02254636a3705",
-      "built_at": "2026-06-22T07:15:08Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-teams-graph:0.5.3",
+      "digest": "sha256:1c176f7d260cb65e4bdbe1daf474aae662b44e87c60002a83627d0d7d486aa54",
+      "built_at": "2026-07-08T06:32:14Z"
     },
     {
       "name": "messaging-telegram",

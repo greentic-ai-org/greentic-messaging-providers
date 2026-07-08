@@ -54,6 +54,7 @@ pub(crate) fn acquire_graph_token(cfg: &ProviderConfig) -> Result<String, String
         .map(ToOwned::to_owned)
         .or_else(|| get_secret_any_case(DEFAULT_GRAPH_ACCESS_TOKEN_KEY).ok())
     {
+        crate::wlog("graph auth: using stored access token (no refresh needed)");
         return Ok(token);
     }
 
@@ -68,6 +69,9 @@ pub(crate) fn acquire_graph_token_from_refresh(cfg: &ProviderConfig) -> Result<S
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
+            crate::wlog(
+                "graph auth: FAILED — no MS_GRAPH_REFRESH_TOKEN or MS_GRAPH_ACCESS_TOKEN available",
+            );
             "MS_GRAPH_REFRESH_TOKEN or MS_GRAPH_ACCESS_TOKEN is required for Graph auth".to_string()
         })?;
 
@@ -77,17 +81,26 @@ pub(crate) fn acquire_graph_token_from_refresh(cfg: &ProviderConfig) -> Result<S
         cfg.tenant_id
     );
     let mut form = graph_refresh_token_form(cfg, &refresh_token);
-    if let Some(secret) = cfg
+    let client_secret = cfg
         .client_secret
         .clone()
         .or_else(|| get_secret_any_case(DEFAULT_GRAPH_CLIENT_SECRET_KEY).ok())
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    {
+        .filter(|value| !value.is_empty());
+    let client_secret_present = client_secret.is_some();
+    if let Some(secret) = client_secret {
         form.push_str("&client_secret=");
         form.push_str(&url_encode(&secret));
     }
 
+    crate::wlog(&format!(
+        "graph auth: refreshing access token via {token_url} (client_secret={})",
+        if client_secret_present {
+            "present"
+        } else {
+            "absent"
+        }
+    ));
     send_token_request(&token_url, &form)
 }
 
@@ -106,13 +119,19 @@ pub(crate) fn acquire_bot_token(cfg: &ProviderConfig) -> Result<String, String> 
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| "ms_bot_app_id is required".to_string())?;
+        .ok_or_else(|| {
+            crate::wlog("bot auth: FAILED — ms_bot_app_id is not configured");
+            "ms_bot_app_id is required".to_string()
+        })?;
 
     let password = cfg
         .ms_bot_app_password
         .clone()
         .or_else(|| get_secret(DEFAULT_BOT_APP_PASSWORD_KEY).ok())
-        .ok_or_else(|| "ms_bot_app_password is required (config or secret store)".to_string())?;
+        .ok_or_else(|| {
+            crate::wlog("bot auth: FAILED — ms_bot_app_password not in config or secret store");
+            "ms_bot_app_password is required (config or secret store)".to_string()
+        })?;
 
     let form = format!(
         "grant_type=client_credentials&client_id={}&client_secret={}&scope={}",
@@ -121,6 +140,9 @@ pub(crate) fn acquire_bot_token(cfg: &ProviderConfig) -> Result<String, String> 
         url_encode(DEFAULT_BOT_TOKEN_SCOPE)
     );
 
+    crate::wlog(&format!(
+        "bot auth: acquiring Bot Framework token for app {app_id}"
+    ));
     send_token_request(DEFAULT_BOT_TOKEN_ENDPOINT, &form)
 }
 
@@ -136,8 +158,13 @@ fn send_token_request(url: &str, form: &str) -> Result<String, String> {
         body: Some(form.as_bytes().to_vec()),
     };
 
-    let resp = client::send(&request, None, None)
-        .map_err(|e| format!("transport error: {}", e.message))?;
+    let resp = client::send(&request, None, None).map_err(|e| {
+        crate::wlog(&format!(
+            "token endpoint {url} transport error: {}",
+            e.message
+        ));
+        format!("transport error: {}", e.message)
+    })?;
 
     if resp.status < 200 || resp.status >= 300 {
         let err_body = resp
@@ -145,6 +172,10 @@ fn send_token_request(url: &str, form: &str) -> Result<String, String> {
             .as_ref()
             .and_then(|b| String::from_utf8(b.clone()).ok())
             .unwrap_or_default();
+        crate::wlog(&format!(
+            "token endpoint {url} rejected with status {}: {}",
+            resp.status, err_body
+        ));
         return Err(format!(
             "token endpoint returned status {}: {}",
             resp.status, err_body
