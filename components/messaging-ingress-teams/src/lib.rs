@@ -186,6 +186,7 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
     }
 
     fn invoke(op: String, input_json: Vec<u8>) -> Vec<u8> {
+        wlog(&format!("wizard step '{op}' started"));
         let output = match op.as_str() {
             "bot-framework-registration" => handle_bot_framework_registration_request(&input_json),
             "teams-app-publish" => handle_teams_app_publish_request(&input_json),
@@ -196,11 +197,33 @@ impl bindings::exports::greentic::provider_schema_core::schema_core_api::Guest f
                 "error": format!("unsupported setup op: {other}")
             }),
         };
+        if output.get("ok").and_then(Value::as_bool) == Some(true) {
+            wlog(&format!(
+                "wizard step '{op}' ok (action={})",
+                output.get("action").and_then(Value::as_str).unwrap_or("-")
+            ));
+        } else {
+            wlog(&format!(
+                "wizard step '{op}' BLOCKED: {}",
+                output
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown")
+            ));
+        }
         json_bytes(&output)
     }
 }
 
 bindings::export!(Component with_types_in bindings);
+
+/// Component-side operational log. The runner host forwards WASM stderr to
+/// the operator console, so these lines surface next to the host's own
+/// `[setup-action ...]` logs. Never log token/secret VALUES here —
+/// presence/absence only.
+fn wlog(msg: &str) {
+    eprintln!("[messaging-teams-ingress] {msg}");
+}
 
 fn json_bytes(value: &Value) -> Vec<u8> {
     serde_json::to_vec(value).unwrap_or_default()
@@ -579,14 +602,26 @@ fn graph_setup_json_request(
         headers,
         body,
     };
-    let response = client::send(&request, None, None)
-        .map_err(|err| format!("Microsoft Graph setup request failed: {}", err.message))?;
+    wlog(&format!("graph {method} {url}"));
+    let response = client::send(&request, None, None).map_err(|err| {
+        wlog(&format!(
+            "graph {method} {url} transport error: {}",
+            err.message
+        ));
+        format!("Microsoft Graph setup request failed: {}", err.message)
+    })?;
     let status = response.status as u16;
     let body = response
         .body
         .as_deref()
         .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok())
         .unwrap_or(Value::Null);
+    if status >= 300 {
+        wlog(&format!(
+            "graph {method} {url} -> HTTP {status}: {}",
+            graph_setup_error_message(&body, "no error body")
+        ));
+    }
     Ok((status, body))
 }
 
@@ -606,14 +641,26 @@ fn graph_setup_zip_request(
         ],
         body: Some(body),
     };
-    let response = client::send(&request, None, None)
-        .map_err(|err| format!("Microsoft Graph setup request failed: {}", err.message))?;
+    wlog(&format!("graph {method} {url} (zip package upload)"));
+    let response = client::send(&request, None, None).map_err(|err| {
+        wlog(&format!(
+            "graph {method} {url} transport error: {}",
+            err.message
+        ));
+        format!("Microsoft Graph setup request failed: {}", err.message)
+    })?;
     let status = response.status as u16;
     let body = response
         .body
         .as_deref()
         .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok())
         .unwrap_or(Value::Null);
+    if status >= 300 {
+        wlog(&format!(
+            "graph {method} {url} -> HTTP {status}: {}",
+            graph_setup_error_message(&body, "no error body")
+        ));
+    }
     Ok((status, body))
 }
 
