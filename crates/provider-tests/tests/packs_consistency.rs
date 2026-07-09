@@ -378,7 +378,13 @@ fn required_setup_questions_do_not_use_placeholder_without_default() -> Result<(
                 .get("required")
                 .and_then(serde_yaml::Value::as_bool)
                 .unwrap_or(false);
-            if !required || question.get("placeholder").is_none() {
+            // A required secret cannot ship a default, so its placeholder is a
+            // format hint rather than a stand-in for a value we could prefill.
+            let secret = question
+                .get("secret")
+                .and_then(serde_yaml::Value::as_bool)
+                .unwrap_or(false);
+            if !required || secret || question.get("placeholder").is_none() {
                 continue;
             }
             let has_default = question.get("default").is_some()
