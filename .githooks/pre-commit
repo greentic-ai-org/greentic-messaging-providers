@@ -41,12 +41,17 @@ if [ "${fmt_failures}" -gt 0 ]; then
 fi
 echo "${GREEN}✓${RESET} fmt clean"
 
-# Clippy runs on the workspace. Cached builds make this fast for follow-up
-# commits. A cold cache is slow — acknowledged trade-off; skip with
-# `--no-verify` if iterating locally.
-if ! cargo clippy --workspace --all-targets --quiet -- -D warnings 2>&1; then
-  echo "${RED}✗${RESET} clippy failed."
-  echo "  Fix warnings, or run ${YELLOW}git commit --no-verify${RESET} if intentional."
+# Clippy runs on the workspace with --locked so it mirrors CI exactly. Without
+# --locked, clippy silently refreshes Cargo.lock and passes locally while CI
+# (which runs --locked) fails — the classic "bumped a provider version but
+# forgot Cargo.lock" trap. --locked makes that fail here instead.
+# Cached builds make this fast for follow-up commits. A cold cache is slow —
+# acknowledged trade-off; skip with `--no-verify` if iterating locally.
+if ! cargo clippy --workspace --all-targets --locked --quiet -- -D warnings 2>&1; then
+  echo "${RED}✗${RESET} clippy failed (or Cargo.lock is out of sync)."
+  echo "  If it complains the lock file needs updating, run ${YELLOW}cargo update --workspace${RESET}"
+  echo "  (or re-run the version bump) and re-stage Cargo.lock. Otherwise fix the"
+  echo "  warnings, or ${YELLOW}git commit --no-verify${RESET} if intentional."
   exit 1
 fi
-echo "${GREEN}✓${RESET} clippy clean"
+echo "${GREEN}✓${RESET} clippy clean (--locked)"

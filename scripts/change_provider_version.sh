@@ -65,6 +65,13 @@ python3 tools/provider_versions.py validate --provider "${resolved_provider}"
 
 echo "Changed provider version: ${resolved_provider} -> ${VERSION}"
 
+# Keep Cargo.lock in sync with the bumped Cargo.toml versions. set-provider
+# edits Cargo.toml only; without this the lock drifts and CI's `cargo --locked`
+# clippy/build fails — this bites even with --no-build. --workspace limits the
+# refresh to workspace members so registry deps aren't churned.
+echo "Syncing Cargo.lock to the new version(s)..."
+cargo update --workspace >/dev/null
+
 if [ "${BUILD}" -eq 1 ]; then
   scripts/build_providers.sh "${resolved_provider}"
 else
