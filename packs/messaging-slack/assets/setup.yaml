@@ -39,3 +39,13 @@ questions:
     group: Authentication
     docs_url: "https://api.slack.com/authentication/config-tokens"
     create_url: "https://api.slack.com/apps"
+  - name: slack_bot_token
+    title: Slack Bot User OAuth Token
+    kind: string
+    required: true
+    secret: true
+    help: "Bot User OAuth Token (starts with xoxb-) from your Slack app's OAuth & Permissions page. If you used the 'Setup Slack App' button above, install the app first, then paste the token it shows here."
+    placeholder: "xoxb-..."
+    group: Authentication
+    docs_url: "https://api.slack.com/authentication/token-types#bot"
+    create_url: "https://api.slack.com/apps"
