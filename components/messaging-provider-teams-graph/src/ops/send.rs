@@ -155,7 +155,13 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
             return send_payload_error(&format!("invalid send_payload input: {err}"), false);
         }
     };
-    if !matches!(send_in.provider_type.as_str(), "messaging.teams.graph") {
+    // The Bot Framework pack (`messaging.teams`) shares this component and routes
+    // through `connector.rs`; only the Graph type was whitelisted, so every bot
+    // send was rejected here as a non-retryable mismatch.
+    if !matches!(
+        send_in.provider_type.as_str(),
+        "messaging.teams.graph" | "messaging.teams"
+    ) {
         return send_payload_error("provider type mismatch", false);
     }
     let payload_bytes = match STANDARD.decode(&send_in.payload.body_b64) {
@@ -855,5 +861,38 @@ mod tests {
                 .unwrap_or_default()
                 .contains("mismatch")
         );
+    }
+
+    /// This component backs BOTH Teams packs: `messaging-teams-graph` declares
+    /// `messaging.teams.graph`, and the Bot Framework pack `messaging-teams`
+    /// declares `messaging.teams` and routes through `connector.rs`. Rejecting
+    /// either one here makes every outbound message fail as a non-retryable
+    /// "provider type mismatch" — silently, from the user's point of view.
+    #[test]
+    fn send_payload_accepts_both_declared_teams_provider_types() {
+        for provider_type in ["messaging.teams.graph", "messaging.teams"] {
+            let payload = ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: STANDARD.encode(br#"{}"#),
+                metadata: Default::default(),
+            };
+            let input = SendPayloadInV1 {
+                provider_type: provider_type.to_string(),
+                tenant_id: None,
+                auth_user: None,
+                payload,
+            };
+
+            let out: Value =
+                serde_json::from_slice(&send_payload(&serde_json::to_vec(&input).expect("input")))
+                    .expect("json");
+
+            let message = out["message"].as_str().unwrap_or_default();
+            assert!(
+                !message.contains("mismatch"),
+                "`{provider_type}` is declared by a shipped pack and must not be \
+                 rejected as a provider-type mismatch; got: {message}"
+            );
+        }
     }
 }
