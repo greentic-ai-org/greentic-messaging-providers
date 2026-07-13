@@ -2152,7 +2152,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-teams"
-version = "0.5.9"
+version = "0.5.19"
 dependencies = [
  "base64",
  "greentic-telemetry",
@@ -2165,7 +2165,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-telegram"
-version = "0.5.4"
+version = "0.5.7"
 dependencies = [
  "greentic-telemetry",
  "serde",
@@ -2199,7 +2199,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-email"
-version = "0.5.1"
+version = "0.5.3"
 dependencies = [
  "base64",
  "chrono",
@@ -2228,7 +2228,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-teams-graph"
-version = "0.5.9"
+version = "0.5.19"
 dependencies = [
  "base64",
  "chrono",
@@ -2243,7 +2243,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-telegram"
-version = "0.5.4"
+version = "0.5.7"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat-gui"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "base64",
  "chrono",
@@ -3356,7 +3356,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "teams"
-version = "0.5.9"
+version = "0.5.19"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -3370,7 +3370,7 @@ dependencies = [
 
 [[package]]
 name = "telegram"
-version = "0.5.4"
+version = "0.5.7"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -3383,7 +3383,7 @@ dependencies = [
 
 [[package]]
 name = "telegram-webhook"
-version = "0.5.4"
+version = "0.5.7"
 dependencies = [
  "greentic-telemetry",
  "serde",
