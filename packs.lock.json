@@ -24,9 +24,9 @@
     {
       "name": "messaging-slack",
       "file": "dist/packs/messaging-slack.gtpack",
-      "ref": "ghcr.io/greenticai/packs/messaging/messaging-slack:0.5.3",
-      "digest": "sha256:8b3e31534625dea1e61a4e74c9cb47b18c4542b29e34593b269e8517434a4c4f",
-      "built_at": "2026-07-08T04:58:22Z"
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-slack:0.5.17",
+      "digest": "sha256:b3d18789062d190578b7767394af55e723d31a6c838f3e90e884b5d47ea2d24a",
+      "built_at": "2026-07-13T12:24:23Z"
     },
     {
       "name": "messaging-teams-graph",
