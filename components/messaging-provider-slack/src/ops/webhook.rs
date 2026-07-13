@@ -749,7 +749,8 @@ fn registration_manifest(parsed: &Value, public_base_url: &str) -> Value {
                 "is_enabled": true,
                 "request_url": ingress_url,
             },
-            "org_deploy_enabled": false,
+            // Enterprise Grid workspaces cannot install non-org-deployable apps.
+            "org_deploy_enabled": true,
             "socket_mode_enabled": false,
             "token_rotation_enabled": false,
         },
