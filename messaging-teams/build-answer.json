@@ -74,7 +74,7 @@
     "src": "src",
     "generated_pack_dir": "target/generated/messaging-teams.pack"
   },
-  "pack_version": "0.5.22",
+  "pack_version": "0.5.23",
   "build_answer": {
     "schema_id": "greentic-messaging-teams.build-answer",
     "schema_version": "1.0.0"
@@ -95,7 +95,7 @@
   "runtime_components": [
     {
       "id": "messaging-ingress-teams",
-      "version": "0.5.22",
+      "version": "0.5.23",
       "build_script": "tools/build_components/messaging-ingress-teams.sh",
       "source": "target/components/messaging-ingress-teams.wasm",
       "target": "components/messaging-ingress-teams/component.wasm",
@@ -105,7 +105,7 @@
     },
     {
       "id": "messaging-provider-teams-graph",
-      "version": "0.5.22",
+      "version": "0.5.23",
       "build_script": "tools/build_components/messaging-provider-teams-graph.sh",
       "source": "target/components/messaging-provider-teams-graph.wasm",
       "target": "components/messaging-provider-teams-graph/component.wasm",
