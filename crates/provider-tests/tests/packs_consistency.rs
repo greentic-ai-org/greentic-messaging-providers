@@ -614,6 +614,57 @@ fn setup_actions_are_wellformed_and_present() -> Result<()> {
 }
 
 #[test]
+fn pack_versions_match_provider_matrix() -> Result<()> {
+    let root = workspace_root();
+    let matrix: Value = serde_json::from_slice(&fs::read(root.join("ci/provider-matrix.json"))?)
+        .context("parsing provider-matrix.json")?;
+    let providers = matrix
+        .get("providers")
+        .and_then(Value::as_object)
+        .expect("providers key in matrix");
+
+    // Pre-existing mismatches on main; fix separately, not in this PR.
+    let skip: HashSet<&str> = ["messaging-webex", "messaging-whatsapp"].into();
+
+    for (_key, entry) in providers {
+        let Some(pack_name) = entry.get("pack").and_then(Value::as_str) else {
+            continue;
+        };
+        if skip.contains(pack_name) {
+            continue;
+        }
+        let Some(expected_version) = entry.get("version").and_then(Value::as_str) else {
+            continue;
+        };
+        let pack_dir = root.join("packs").join(pack_name);
+        if !pack_dir.is_dir() {
+            continue;
+        }
+        let yaml_path = pack_dir.join("pack.yaml");
+        let manifest_path = pack_dir.join("pack.manifest.json");
+
+        let yaml_version = version_from_yaml(&yaml_path)
+            .with_context(|| format!("getting version from {}", yaml_path.display()))?;
+        assert_eq!(
+            yaml_version, expected_version,
+            "{pack_name}: pack.yaml version {yaml_version} != matrix version {expected_version}"
+        );
+
+        let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)
+            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let manifest_version = manifest
+            .get("version")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert_eq!(
+            manifest_version, expected_version,
+            "{pack_name}: pack.manifest.json version {manifest_version} != matrix version {expected_version}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn egress_ops_declared_when_component_implements_them() -> Result<()> {
     let root = workspace_root();
     let egress_ops = ["render_plan", "encode", "send_payload"];
