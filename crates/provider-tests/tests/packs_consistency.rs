@@ -643,11 +643,11 @@ fn egress_ops_declared_when_component_implements_them() -> Result<()> {
             continue;
         };
 
+        let yaml_path = pack_dir.join("pack.yaml");
+        let yaml_contents = fs::read_to_string(&yaml_path)
+            .with_context(|| format!("reading {}", yaml_path.display()))?;
+
         for provider in providers {
-            let provider_type = provider
-                .get("provider_type")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
             let declared_ops: HashSet<&str> = provider
                 .get("ops")
                 .and_then(Value::as_array)
@@ -682,15 +682,9 @@ fn egress_ops_declared_when_component_implements_them() -> Result<()> {
             for op in &egress_ops {
                 assert!(
                     declared_ops.contains(op),
-                    "{pack_name} ({provider_type}): component {component_ref} handles \"{op}\" \
+                    "{pack_name}: component {component_ref} handles \"{op}\" \
                      but the pack does not declare it — the runner host will reject this op at runtime",
                 );
-            }
-
-            let yaml_path = pack_dir.join("pack.yaml");
-            let yaml_contents = fs::read_to_string(&yaml_path)
-                .with_context(|| format!("reading {}", yaml_path.display()))?;
-            for op in &egress_ops {
                 assert!(
                     yaml_contents.contains(&format!("- {op}")),
                     "{pack_name}: pack.yaml missing \"{op}\" in ops list \
