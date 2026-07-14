@@ -26,7 +26,7 @@ Enables the pre-commit hook that runs `rustfmt` on staged Rust files and `cargo 
 # Individual CI steps (use to iterate on a single failure)
 ./ci/steps/01_fmt.sh
 ./ci/steps/02_clippy.sh
-# ... see ci/steps/ for all numbered scripts
+# ... full set runs 00_wit_policy.sh through 12_cargo_test.sh — see ci/steps/
 
 # Build all WASM components → target/components/*.wasm
 ./tools/build_components.sh
