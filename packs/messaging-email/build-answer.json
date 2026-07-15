@@ -4,7 +4,7 @@
   "provider": {
     "id": "messaging-email",
     "display_name": "Email",
-    "version": "0.5.2",
+    "version": "0.5.3",
     "kind": "application",
     "publisher": "Greentic",
     "description": "Legacy SMTP email messaging provider"
@@ -117,6 +117,9 @@
       "ops": [
         "send",
         "reply",
+        "render_plan",
+        "encode",
+        "send_payload",
         "qa-spec",
         "apply-answers",
         "i18n-keys"

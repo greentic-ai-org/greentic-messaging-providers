@@ -51,7 +51,7 @@
     {
       "id": "graph_admin_consent",
       "label": "Authorize Microsoft Graph setup access",
-      "description": "Use Microsoft device-code OAuth to grant the delegated Graph permissions needed to create the bot app registration and publish/install the Teams app.",
+      "description": "Sign-in 1 of 2: use Microsoft device-code OAuth to grant the delegated Microsoft Graph permissions needed to create the bot app registration and publish/install the Teams app. A second, separate sign-in follows later for Bot Framework channel registration \u2014 Microsoft issues tokens per resource, so one sign-in cannot cover both.",
       "executor": {
         "kind": "oauth_device_code",
         "provider": "microsoft_identity",
@@ -110,7 +110,7 @@
     {
       "id": "microsoft_bot_channel_registration_consent",
       "label": "Authorize Microsoft Teams bot channel registration",
-      "description": "Use Microsoft device-code OAuth to grant management access for registering the Greentic Bot Framework endpoint with the Microsoft Teams bot channel registry.",
+      "description": "Sign-in 2 of 2: a second device-code sign-in is expected here \u2014 this one authorizes Azure Bot Service management (registering the Greentic Bot Framework endpoint with the Microsoft Teams channel), which is a different Microsoft resource than Graph, so the token from the first sign-in cannot be reused.",
       "requires": [
         "bot_app_identity"
       ],

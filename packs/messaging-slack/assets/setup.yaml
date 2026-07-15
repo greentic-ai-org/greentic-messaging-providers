@@ -4,29 +4,15 @@ title: Slack provider setup
 setup_actions:
   - id: add_to_slack
     label: Setup Slack App
-    description: "Creates your Slack app and links its Event Subscriptions & Interactivity request URLs to this bundle's message endpoint, then installs it to your workspace. After it completes, DM the bot to test. If the bundle's public URL changes, re-run this step to re-point the URLs."
-    kind: oauth_install_button
+    description: "Creates your Slack app and links its Event Subscriptions & Interactivity request URLs to this bundle's message endpoint. Then click the button to install it to your workspace on api.slack.com → Allow, then seed the Bot User OAuth Token (starts with xoxb-) as a secret so the bot can send messages. If the bundle's public URL changes, re-run this step to re-point the URLs."
+    kind: open_url
     provider_id: slack
-    oauth_provider_id: slack
-    authorize_url: "https://slack.com/oauth/v2/authorize"
-    redirect_path: "/oauth/callback/slack"
-    scopes:
-      - chat:write
-      - channels:read
-      - channels:history
-      - channels:join
-      - im:history
-      - im:write
-      - app_mentions:read
-    client_id_source: registration
-    client_id_field: slack_client_id
+    url_template: "https://api.slack.com/apps/{slack_app_id}/install-on-team?"
     app_name_template: "{{ bundle_name }} Slack"
     default_app_name: "Greentic Slack"
     registration:
       component_ref: messaging-provider-slack
       op: setup_app_registration
-      client_id_output: slack_client_id
-      client_secret_output: client_secret
       signing_secret_output: slack_signing_secret
       app_id_output: slack_app_id
       app_name_field: slack_app_name
@@ -52,4 +38,14 @@ questions:
     placeholder: "xoxe-1-..."
     group: Authentication
     docs_url: "https://api.slack.com/authentication/config-tokens"
+    create_url: "https://api.slack.com/apps"
+  - name: slack_bot_token
+    title: Slack Bot User OAuth Token
+    kind: string
+    required: true
+    secret: true
+    help: "Bot User OAuth Token (starts with xoxb-) from your Slack app's OAuth & Permissions page. If you used the 'Setup Slack App' button above, install the app first, then paste the token it shows here."
+    placeholder: "xoxb-..."
+    group: Authentication
+    docs_url: "https://api.slack.com/authentication/token-types#bot"
     create_url: "https://api.slack.com/apps"
