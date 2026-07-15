@@ -146,9 +146,9 @@ fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()>
     for (pack, expected_id, expected_label, expected_requires) in [
         (
             "messaging-slack",
-            "add-to-slack",
-            "Add to Slack",
-            "slack_app_url",
+            "install-to-workspace",
+            "Install to Workspace",
+            "slack_app_id",
         ),
         (
             "messaging-webex",
@@ -220,9 +220,8 @@ fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()>
             assert!(
                 setup_actions
                     .iter()
-                    .any(|action| action.get("kind").and_then(Value::as_str)
-                        == Some("oauth_install_button")),
-                "messaging-slack setup.yaml must declare the generic registration/OAuth setup action"
+                    .any(|action| action.get("kind").and_then(Value::as_str) == Some("open_url")),
+                "messaging-slack setup.yaml must declare the generic registration/open_url setup action"
             );
         } else {
             let setup_action = setup_actions

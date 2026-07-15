@@ -497,7 +497,12 @@ fn template_tokens(s: &str) -> HashSet<String> {
 #[test]
 fn setup_actions_are_wellformed_and_present() -> Result<()> {
     let root = workspace_root();
-    let known_kinds = ["deep_link", "oauth_install_button", "oauth_device_code"];
+    let known_kinds = [
+        "deep_link",
+        "open_url",
+        "oauth_install_button",
+        "oauth_device_code",
+    ];
     let expected_with_actions = [
         "messaging-teams",
         "messaging-slack",
@@ -563,6 +568,16 @@ fn setup_actions_are_wellformed_and_present() -> Result<()> {
                             "{pack}: deep_link `{id}` url_template uses {{{tok}}} but does not declare it in `requires` {requires:?}"
                         );
                     }
+                }
+                "open_url" => {
+                    let tmpl = action
+                        .get("url_template")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or_default();
+                    assert!(
+                        !tmpl.is_empty(),
+                        "{pack}: open_url `{id}` is missing `url_template`"
+                    );
                 }
                 "oauth_install_button" => {
                     assert!(
