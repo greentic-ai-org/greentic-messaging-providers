@@ -618,3 +618,137 @@ fn setup_actions_are_wellformed_and_present() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn pack_versions_match_provider_matrix() -> Result<()> {
+    let root = workspace_root();
+    let matrix: Value = serde_json::from_slice(&fs::read(root.join("ci/provider-matrix.json"))?)
+        .context("parsing provider-matrix.json")?;
+    let providers = matrix
+        .get("providers")
+        .and_then(Value::as_object)
+        .expect("providers key in matrix");
+
+    // Pre-existing mismatches on main; fix separately, not in this PR.
+    let skip: HashSet<&str> = ["messaging-webex", "messaging-whatsapp"].into();
+
+    for (_key, entry) in providers {
+        let Some(pack_name) = entry.get("pack").and_then(Value::as_str) else {
+            continue;
+        };
+        if skip.contains(pack_name) {
+            continue;
+        }
+        let Some(expected_version) = entry.get("version").and_then(Value::as_str) else {
+            continue;
+        };
+        let pack_dir = root.join("packs").join(pack_name);
+        if !pack_dir.is_dir() {
+            continue;
+        }
+        let yaml_path = pack_dir.join("pack.yaml");
+        let manifest_path = pack_dir.join("pack.manifest.json");
+
+        let yaml_version = version_from_yaml(&yaml_path)
+            .with_context(|| format!("getting version from {}", yaml_path.display()))?;
+        assert_eq!(
+            yaml_version, expected_version,
+            "{pack_name}: pack.yaml version {yaml_version} != matrix version {expected_version}"
+        );
+
+        let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)
+            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let manifest_version = manifest
+            .get("version")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert_eq!(
+            manifest_version, expected_version,
+            "{pack_name}: pack.manifest.json version {manifest_version} != matrix version {expected_version}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn egress_ops_declared_when_component_implements_them() -> Result<()> {
+    let root = workspace_root();
+    let egress_ops = ["render_plan", "encode", "send_payload"];
+    let packs_dir = root.join("packs");
+
+    for entry in fs::read_dir(&packs_dir).context("reading packs dir")? {
+        let entry = entry?;
+        let pack_dir = entry.path();
+        if !pack_dir.is_dir() {
+            continue;
+        }
+        let pack_name = pack_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let manifest_path = pack_dir.join("pack.manifest.json");
+        if !manifest_path.exists() {
+            continue;
+        }
+        let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)
+            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+
+        let Some(providers) = manifest
+            .pointer("/extensions/greentic.provider-extension.v1/inline/providers")
+            .and_then(Value::as_array)
+        else {
+            continue;
+        };
+
+        let yaml_path = pack_dir.join("pack.yaml");
+        let yaml_contents = fs::read_to_string(&yaml_path)
+            .with_context(|| format!("reading {}", yaml_path.display()))?;
+
+        for provider in providers {
+            let declared_ops: HashSet<&str> = provider
+                .get("ops")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let Some(component_ref) = provider
+                .pointer("/runtime/component_ref")
+                .and_then(Value::as_str)
+            else {
+                continue;
+            };
+
+            let lib_path = root
+                .join("components")
+                .join(component_ref)
+                .join("src/lib.rs");
+            if !lib_path.exists() {
+                continue;
+            }
+            let lib_src = fs::read_to_string(&lib_path)
+                .with_context(|| format!("reading {}", lib_path.display()))?;
+
+            let component_has_egress = egress_ops
+                .iter()
+                .all(|op| lib_src.contains(&format!("\"{op}\"")));
+            if !component_has_egress {
+                continue;
+            }
+
+            for op in &egress_ops {
+                assert!(
+                    declared_ops.contains(op),
+                    "{pack_name}: component {component_ref} handles \"{op}\" \
+                     but the pack does not declare it — the runner host will reject this op at runtime",
+                );
+                assert!(
+                    yaml_contents.contains(&format!("- {op}")),
+                    "{pack_name}: pack.yaml missing \"{op}\" in ops list \
+                     (pack.manifest.json and pack.yaml must stay in sync)",
+                );
+            }
+        }
+    }
+    Ok(())
+}

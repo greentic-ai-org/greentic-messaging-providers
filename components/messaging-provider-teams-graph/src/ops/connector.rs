@@ -42,6 +42,10 @@ pub(crate) fn bot_connector_send(
     let resp = match client::send(&request, None, None) {
         Ok(resp) => resp,
         Err(err) => {
+            crate::wlog(&format!(
+                "bot connector POST to {service_url} transport error: {}",
+                err.message
+            ));
             return json_bytes(&json!({
                 "ok": false,
                 "error": format!("transport error: {}", err.message),
@@ -56,6 +60,10 @@ pub(crate) fn bot_connector_send(
             .and_then(|b| serde_json::from_slice(b).ok())
             .unwrap_or(Value::Null);
         let (error, retryable) = classify_connector_error(resp.status, &body_json);
+        crate::wlog(&format!(
+            "bot connector POST to {service_url} → status {}: {error}",
+            resp.status
+        ));
         return json_bytes(&json!({
             "ok": false,
             "error": error,

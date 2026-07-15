@@ -234,6 +234,9 @@ extensions:
         ops:
         - send
         - reply
+        - render_plan
+        - encode
+        - send_payload
         - qa-spec
         - apply-answers
         - i18n-keys

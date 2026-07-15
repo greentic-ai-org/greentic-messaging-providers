@@ -27,6 +27,14 @@ pub(crate) mod config;
 mod describe;
 mod ops;
 
+/// Component-side operational log. The runner host forwards WASM stderr to
+/// the operator console, so these lines surface next to the host's own
+/// `[setup-action ...]` logs. Never log token/secret VALUES here —
+/// presence/absence only.
+pub(crate) fn wlog(msg: &str) {
+    eprintln!("[messaging-teams] {msg}");
+}
+
 // Provider identification
 pub(crate) const PROVIDER_ID: &str = "messaging-provider-teams-graph";
 pub(crate) const PROVIDER_TYPE: &str = "messaging.teams.graph";
