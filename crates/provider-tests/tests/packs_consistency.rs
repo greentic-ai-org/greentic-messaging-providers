@@ -294,8 +294,8 @@ fn final_setup_action_requires_are_public_setup_outputs() -> Result<()> {
             if pack_name == "messaging-slack" && action_id == "add-to-slack" {
                 assert_eq!(
                     action.get("url_template").and_then(Value::as_str),
-                    Some("{slack_app_url}"),
-                    "messaging-slack final Add to Slack should open the installed app, not OAuth authorization"
+                    Some("https://slack.com/app_redirect?app={slack_app_id}"),
+                    "messaging-slack final Add to Slack should open the installed app's DM, not OAuth authorization"
                 );
                 assert!(
                     action
@@ -303,8 +303,8 @@ fn final_setup_action_requires_are_public_setup_outputs() -> Result<()> {
                         .and_then(Value::as_array)
                         .into_iter()
                         .flatten()
-                        .any(|value| value.as_str() == Some("slack_app_url")),
-                    "messaging-slack Add to Slack should require slack_app_url"
+                        .any(|value| value.as_str() == Some("slack_app_id")),
+                    "messaging-slack Add to Slack should require slack_app_id (manifest.update never returns client_id)"
                 );
             }
             for required in action
@@ -491,7 +491,15 @@ fn template_tokens(s: &str) -> HashSet<String> {
 #[test]
 fn setup_actions_are_wellformed_and_present() -> Result<()> {
     let root = workspace_root();
-    let known_kinds = ["deep_link", "oauth_install_button", "oauth_device_code"];
+    // `open_url` is a plain external link with no OAuth round-trip (Slack's
+    // install-on-team console action). greentic-setup resolves it via the
+    // action's url_template — see setup_action_install_url in its ui module.
+    let known_kinds = [
+        "deep_link",
+        "oauth_install_button",
+        "oauth_device_code",
+        "open_url",
+    ];
     let expected_with_actions = [
         "messaging-teams",
         "messaging-slack",
@@ -589,6 +597,18 @@ fn setup_actions_are_wellformed_and_present() -> Result<()> {
                             "{pack}: oauth_install_button `{id}` registration is missing `op`"
                         );
                     }
+                }
+                // A plain external link: no OAuth round-trip, so the only
+                // requirement is a url_template whose placeholders are declared.
+                "open_url" => {
+                    let tmpl = action
+                        .get("url_template")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or_default();
+                    assert!(
+                        !tmpl.is_empty(),
+                        "{pack}: open_url `{id}` is missing `url_template`"
+                    );
                 }
                 "oauth_device_code" => {
                     assert!(
