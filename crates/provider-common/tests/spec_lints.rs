@@ -144,15 +144,10 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
 fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()> {
     let root = workspace_root();
     for (pack, expected_id, expected_label, expected_requires) in [
-        // Keyed on slack_app_id, not slack_app_url: manifest.update (app reuse)
-        // never returns client_id, so the app_redirect helper that produced
-        // slack_app_url was dropped. app_redirect is built from the app id.
-        (
-            "messaging-slack",
-            "add-to-slack",
-            "Add to Slack",
-            "slack_app_id",
-        ),
+        // messaging-slack is deliberately absent: its final action is
+        // install-to-workspace (the install-on-team console link), not an
+        // add-to-X deep link. app_redirect only opens an *installed* app and
+        // 404s pre-install, so it is not usable as the post-setup action.
         (
             "messaging-webex",
             "add-to-webex",
