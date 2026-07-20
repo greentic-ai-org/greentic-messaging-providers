@@ -452,6 +452,22 @@ extensions:
         - slack_app_id
         visible_when:
           setup_status.ok: true
+      # Post-install: open a DM with the bot in Slack (App Home → Messages tab,
+      # which the generated app manifest enables). app_redirect 404s until the
+      # app is installed, so this sits ALONGSIDE install-to-workspace above
+      # rather than replacing it. Keyed on slack_app_id — the only id
+      # setup_app_registration returns on manifest.update (app reuse).
+      - id: add-to-slack
+        label: Add to Slack
+        kind: deep_link
+        url_template: "https://slack.com/app_redirect?app={slack_app_id}"
+        style: primary
+        opens_new_window: true
+        copyable: true
+        requires:
+        - slack_app_id
+        visible_when:
+          setup_status.ok: true
   greentic.provider-extension.v1:
     kind: greentic.provider-extension.v1
     version: 0.5.17
