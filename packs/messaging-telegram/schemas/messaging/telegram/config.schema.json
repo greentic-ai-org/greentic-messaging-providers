@@ -16,6 +16,10 @@
       "type": "string",
       "description": "Override for the Telegram API base URL.",
       "default": "https://api.telegram.org"
+    },
+    "bot_username": {
+      "type": "string",
+      "description": "Bot username from @BotFather without the leading @. Used for the Add to Telegram deep link; not used when sending."
     }
   },
   "required": ["public_base_url"],

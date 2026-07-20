@@ -63,6 +63,7 @@ pub(crate) fn setup_webhook(input_json: &[u8]) -> Vec<u8> {
                 default_chat_id: None,
                 api_base_url: None,
                 bot_token: None,
+                bot_username: None,
             }) {
                 Ok(t) => t,
                 Err(_) => {

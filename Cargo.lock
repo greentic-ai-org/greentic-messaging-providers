@@ -2165,7 +2165,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-telegram"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "greentic-telemetry",
  "serde",
@@ -2243,7 +2243,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-telegram"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -3370,7 +3370,7 @@ dependencies = [
 
 [[package]]
 name = "telegram"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
@@ -3383,7 +3383,7 @@ dependencies = [
 
 [[package]]
 name = "telegram-webhook"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "greentic-telemetry",
  "serde",
