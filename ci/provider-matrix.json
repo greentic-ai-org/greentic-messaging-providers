@@ -395,7 +395,7 @@
     },
     "webex": {
       "pack": "messaging-webex",
-      "version": "0.5.16",
+      "version": "0.5.17",
       "ghcr_target": "ghcr.io/greenticai/messaging-webex",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
       "e2e": {
