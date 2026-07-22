@@ -3,7 +3,7 @@ version: 1
 title: Webex provider setup
 setup_actions:
   - id: add-to-webex
-    label: Add to WebEx
+    label: Add to Webex
     kind: deep_link
     url_template: "webexteams://im?email={bot_email}"
     style: primary
