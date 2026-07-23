@@ -1,0 +1,30 @@
+{
+  "id": "events-ingress-github",
+  "name": "events-ingress-github",
+  "version": "0.5.1",
+  "world": "greentic:component/component-v0-v6-v0@0.6.1",
+  "description": "Events-domain ingress component that turns a GitHub push webhook into a github.push flow-triggering event.",
+  "profiles": {
+    "default": "default",
+    "supported": [
+      "default"
+    ]
+  },
+  "secret_requirements": [
+    {
+      "key": "GITHUB_WEBHOOK_SECRET",
+      "scope": "tenant",
+      "required": false,
+      "description": "GitHub webhook secret used to verify X-Hub-Signature-256 HMAC-SHA256 over the raw request body."
+    }
+  ],
+  "capabilities": {
+    "wasi": {},
+    "host": {
+      "state": {
+        "read": true,
+        "write": true
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+[package]
+name = "events-ingress-github"
+edition.workspace = true
+version = "0.5.1"
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+greentic-telemetry = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+wit-bindgen.workspace = true
+
+[package.metadata.component]
+package = "greentic:events-ingress-github"
+
+[package.metadata.component.target]
+path = "wit/events-ingress-github"
+world = "events-ingress-github"
+
+[package.metadata.component.target.dependencies]
+"greentic:http" = { path = "wit/events-ingress-github/deps/http" }
+"greentic:secrets-store" = { path = "wit/events-ingress-github/deps/secrets-store" }
+"greentic:state" = { path = "wit/events-ingress-github/deps/state" }
+"greentic:telemetry" = { path = "wit/events-ingress-github/deps/telemetry" }
+"greentic:interfaces-types" = { path = "wit/events-ingress-github/deps/interfaces-types" }
+"provider:common" = { path = "wit/events-ingress-github/deps/provider-common" }
