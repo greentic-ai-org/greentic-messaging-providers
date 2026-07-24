@@ -95,8 +95,43 @@ console.log('[runtime-bootstrap] loaded');
     return null;
   }
 
-  function resolveGuiBase(tenant) {
-    return '/v1/web/webchat/' + encodeURIComponent(tenant) + '/';
+  // Segments after {tenant} that are reserved API prefixes and must never be
+  // mistaken for a bundle_id or flow_id.
+  var RESERVED_WEBCHAT_SEGMENTS = {'token': 1, 'v3': 1, 'oauth': 1};
+
+  // Parse the optional bundle and flow segments from the page URL.
+  // The server is authoritative; the client uses a defensive heuristic:
+  //   /v1/web/webchat/{tenant}[/{bundle_id}[/{flow_id}]]
+  // A segment that is a reserved literal or contains a '.' (file extension)
+  // stops the parse — everything beyond is an asset path.
+  function resolveWebchatSegments(pathname) {
+    var m = pathname.match(
+      /\/v1\/web\/webchat\/([^\/?#]+)(?:\/([^\/?#]+))?(?:\/([^\/?#]+))?/i
+    );
+    if (!m || !m[1]) return {bundleId: null, flowId: null};
+    var bundleId = null;
+    var flowId = null;
+    if (m[2]) {
+      var seg2 = decodeURIComponent(m[2]);
+      if (!RESERVED_WEBCHAT_SEGMENTS[seg2.toLowerCase()] && seg2.indexOf('.') === -1) {
+        bundleId = seg2;
+        if (m[3]) {
+          var seg3 = decodeURIComponent(m[3]);
+          if (!RESERVED_WEBCHAT_SEGMENTS[seg3.toLowerCase()] && seg3.indexOf('.') === -1) {
+            flowId = seg3;
+          }
+        }
+      }
+    }
+    return {bundleId: bundleId, flowId: flowId};
+  }
+
+  function resolveGuiBase(tenant, bundleId) {
+    var base = '/v1/web/webchat/' + encodeURIComponent(tenant) + '/';
+    if (bundleId) {
+      base += encodeURIComponent(bundleId) + '/';
+    }
+    return base;
   }
 
   function backendBase(tenant) {
@@ -188,8 +223,13 @@ console.log('[runtime-bootstrap] loaded');
   var tenant = resolveTenant();
   var env = resolveEnv();
   var selectedLocale = resolveLocale();
-  var guiBase = resolveGuiBase(tenant);
-  console.log('[runtime-bootstrap] tenant:', tenant, 'env:', env, 'locale:', selectedLocale || '(default)');
+  var segments = resolveWebchatSegments(window.location.pathname);
+  var bundleId = segments.bundleId;
+  var flowId = segments.flowId;
+  var guiBase = resolveGuiBase(tenant, bundleId);
+  console.log('[runtime-bootstrap] tenant:', tenant, 'env:', env,
+    'locale:', selectedLocale || '(default)',
+    'bundle:', bundleId || '(default)', 'flow:', flowId || '(none)');
   document.documentElement.style.setProperty('--greentic-adaptive-card-width', resolveAdaptiveCardWidth());
   setTimeout(function () {
     ensureAdaptiveCardWidthStyle();
@@ -213,6 +253,8 @@ console.log('[runtime-bootstrap] loaded');
   window.APP_CONFIG_BASE = './config';
   window.__WEBCHAT_GUI_BASE__ = guiBase;
   window.__WEBCHAT_BACKEND_BASE__ = backendBase(tenant);
+  window.__BUNDLE_ID__ = bundleId;
+  window.__FLOW_ID__ = flowId;
   window.__SUPPORTED_LOCALES__ = SUPPORTED_LOCALES;
   window.__SELECTED_LOCALE__ = selectedLocale;
 
@@ -1039,11 +1081,15 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function directLineTokenUrl() {
-    return backendBase(tenant) + '/token?env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
+    var base = backendBase(tenant);
+    if (bundleId) base += '/' + encodeURIComponent(bundleId);
+    return base + '/token?env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
   }
 
   function directLineDomain() {
-    return backendBase(tenant) + '/v3/directline';
+    var base = backendBase(tenant);
+    if (bundleId) base += '/' + encodeURIComponent(bundleId);
+    return base + '/v3/directline';
   }
 
   function directLineCacheKey(kind) {
@@ -1183,11 +1229,16 @@ console.log('[runtime-bootstrap] loaded');
     XHRProto.send = function (body) {
       try {
         this.__gtcBody = body;
-        if (selectedLocale && this.__gtcMethod === 'POST') {
+        if ((selectedLocale || flowId) && this.__gtcMethod === 'POST') {
           var path = '';
           try { path = new URL(this.__gtcUrl, window.location.href).pathname; } catch (_) {}
           if (/\/v3\/directline\/conversations\/?$/i.test(path)) {
-            this.setRequestHeader('X-Greentic-Locale', selectedLocale);
+            if (selectedLocale) {
+              this.setRequestHeader('X-Greentic-Locale', selectedLocale);
+            }
+            if (flowId) {
+              this.setRequestHeader('X-Greentic-Flow', flowId);
+            }
           }
         }
         var xhr = this;
@@ -1264,6 +1315,16 @@ console.log('[runtime-bootstrap] loaded');
           init.headers['X-Greentic-Locale'] = selectedLocale;
         }
       }
+      if (flowId) {
+        init.headers = init.headers || {};
+        if (init.headers instanceof Headers) {
+          init.headers.set('X-Greentic-Flow', flowId);
+        } else if (Array.isArray(init.headers)) {
+          init.headers.push(['X-Greentic-Flow', flowId]);
+        } else {
+          init.headers['X-Greentic-Flow'] = flowId;
+        }
+      }
       var savedConv = readCachedConversation();
       if (savedConv) {
         console.log('[bootstrap] reusing saved conversation:', savedConv.conversationId);
@@ -1318,11 +1379,14 @@ console.log('[runtime-bootstrap] loaded');
         if (typeof payload.skin === 'string' && payload.skin.trim()) {
           payload.legacy_skin = payload.skin.trim();
         }
-        // Ensure directline config is set
+        // Ensure directline config is set — bundle-scoped when a bundle is
+        // present so the server routes to the correct deployment.
+        var dlPrefix = '/v1/messaging/webchat/' + encodeURIComponent(tenantId);
+        if (bundleId) dlPrefix += '/' + encodeURIComponent(bundleId);
         payload.webchat = payload.webchat || {};
         payload.webchat.directline = payload.webchat.directline || {};
-        payload.webchat.directline.token_url = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/token';
-        payload.webchat.directline.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenantId) + '/v3/directline';
+        payload.webchat.directline.token_url = window.location.origin + dlPrefix + '/token';
+        payload.webchat.directline.domain = window.location.origin + dlPrefix + '/v3/directline';
         payload.webchat.locale = locale;
         var textInput = (new URLSearchParams(window.location.search).get('textInput') || '').trim().toLowerCase();
         if (textInput === 'false' || textInput === '0' || textInput === 'off' || textInput === 'no' || textInput === 'disabled') {
@@ -1401,8 +1465,10 @@ console.log('[runtime-bootstrap] loaded');
         }
         skinData.directLine = skinData.directLine || {};
         var ctxParams = 'env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
-        skinData.directLine.tokenUrl = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant) + '/token?' + ctxParams;
-        skinData.directLine.domain = window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant) + '/v3/directline';
+        var skinDlPrefix = '/v1/messaging/webchat/' + encodeURIComponent(tenant);
+        if (bundleId) skinDlPrefix += '/' + encodeURIComponent(bundleId);
+        skinData.directLine.tokenUrl = window.location.origin + skinDlPrefix + '/token?' + ctxParams;
+        skinData.directLine.domain = window.location.origin + skinDlPrefix + '/v3/directline';
         if (selectedLocale) {
           skinData.webchat = skinData.webchat || {};
           skinData.webchat.locale = selectedLocale;
