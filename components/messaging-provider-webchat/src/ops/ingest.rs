@@ -157,6 +157,17 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
     let secrets_driver = ConfigAwareSecretStore::new(request.config.clone());
     let mut out = handle_directline_request(&dl_request, &mut state_driver, &secrets_driver);
 
+    stamp_ingest_envelopes(request, dl_path, &mut out);
+
+    http_out_v1_bytes(&out)
+}
+
+/// Post-process the Direct Line response to emit `ChannelMessageEnvelope`
+/// events for conversation creation and activity forwarding.
+///
+/// Separated from `handle_directline_path` so the envelope-stamping logic
+/// (flow_hint, locale, metadata) can be tested without WASM host bindings.
+fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1) {
     // Emit ChannelMessageEnvelope for POST /conversations so the operator can
     // auto-start the default flow when a new conversation is created.
     // The welcome experience is driven entirely by the flow — the JS-side
@@ -363,8 +374,6 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
         }
         out.events.push(envelope);
     }
-
-    http_out_v1_bytes(&out)
 }
 
 /// Extract env and tenant from X-Greentic-Env and X-Greentic-Tenant response headers.
@@ -429,7 +438,172 @@ fn collect_directline_extensions(body: &Value) -> BTreeMap<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::engine::general_purpose;
     use serde_json::json;
+
+    /// Build a minimal HttpInV1 for stamp_ingest_envelopes tests.
+    fn build_ingest_request(
+        method: &str,
+        path: &str,
+        headers: Vec<Header>,
+        body: Option<&Value>,
+    ) -> HttpInV1 {
+        let body_b64 = body
+            .map(|b| general_purpose::STANDARD.encode(serde_json::to_vec(b).unwrap()))
+            .unwrap_or_default();
+        HttpInV1 {
+            method: method.to_string(),
+            path: path.to_string(),
+            query: None,
+            headers,
+            body_b64,
+            route_hint: None,
+            binding_id: None,
+            config: None,
+        }
+    }
+
+    /// Build a minimal HttpOutV1 that mimics a 201 Direct Line response.
+    fn build_dl_response_201(headers: Vec<Header>) -> HttpOutV1 {
+        HttpOutV1 {
+            status: 201,
+            headers,
+            body_b64: String::new(),
+            events: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn conversation_envelope_carries_flow_hint_in_metadata() {
+        let request = build_ingest_request("POST", "/v3/directline/conversations", vec![], None);
+        let mut out = build_dl_response_201(vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+            Header {
+                name: "X-Greentic-User".into(),
+                value: "alice".into(),
+            },
+            Header {
+                name: "X-Greentic-ConversationId".into(),
+                value: "conv-1".into(),
+            },
+            Header {
+                name: "X-Greentic-Flow".into(),
+                value: "onboarding-flow".into(),
+            },
+        ]);
+        stamp_ingest_envelopes(&request, "/v3/directline/conversations", &mut out);
+
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(
+            out.events[0].metadata.get("flow_hint").map(String::as_str),
+            Some("onboarding-flow"),
+        );
+    }
+
+    #[test]
+    fn conversation_envelope_omits_flow_hint_when_header_absent() {
+        let request = build_ingest_request("POST", "/v3/directline/conversations", vec![], None);
+        let mut out = build_dl_response_201(vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+        ]);
+        stamp_ingest_envelopes(&request, "/v3/directline/conversations", &mut out);
+
+        assert_eq!(out.events.len(), 1);
+        assert!(
+            !out.events[0].metadata.contains_key("flow_hint"),
+            "flow_hint must not appear when X-Greentic-Flow header is absent"
+        );
+    }
+
+    #[test]
+    fn activity_envelope_carries_flow_hint_from_response_header() {
+        let body = json!({
+            "type": "message",
+            "text": "hello",
+            "from": {"id": "user-1"},
+        });
+        let request = build_ingest_request(
+            "POST",
+            "/v3/directline/conversations/conv-1/activities",
+            vec![],
+            Some(&body),
+        );
+        let mut out = build_dl_response_201(vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+            Header {
+                name: "X-Greentic-Flow".into(),
+                value: "onboarding-flow".into(),
+            },
+        ]);
+        stamp_ingest_envelopes(
+            &request,
+            "/v3/directline/conversations/conv-1/activities",
+            &mut out,
+        );
+
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(
+            out.events[0].metadata.get("flow_hint").map(String::as_str),
+            Some("onboarding-flow"),
+        );
+    }
+
+    #[test]
+    fn activity_envelope_omits_flow_hint_when_header_absent() {
+        let body = json!({
+            "type": "message",
+            "text": "hello",
+            "from": {"id": "user-1"},
+        });
+        let request = build_ingest_request(
+            "POST",
+            "/v3/directline/conversations/conv-1/activities",
+            vec![],
+            Some(&body),
+        );
+        let mut out = build_dl_response_201(vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+        ]);
+        stamp_ingest_envelopes(
+            &request,
+            "/v3/directline/conversations/conv-1/activities",
+            &mut out,
+        );
+
+        assert_eq!(out.events.len(), 1);
+        assert!(
+            !out.events[0].metadata.contains_key("flow_hint"),
+            "flow_hint must not appear when X-Greentic-Flow header is absent"
+        );
+    }
 
     #[test]
     fn collect_directline_extensions_preserves_all_known_fields() {

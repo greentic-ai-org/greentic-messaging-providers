@@ -97,7 +97,10 @@ console.log('[runtime-bootstrap] loaded');
 
   // Segments after {tenant} that are reserved API prefixes and must never be
   // mistaken for a bundle_id or flow_id.
-  var RESERVED_WEBCHAT_SEGMENTS = {'token': 1, 'v3': 1, 'oauth': 1};
+  var RESERVED_WEBCHAT_SEGMENTS = Object.create(null);
+  RESERVED_WEBCHAT_SEGMENTS['token'] = 1;
+  RESERVED_WEBCHAT_SEGMENTS['v3'] = 1;
+  RESERVED_WEBCHAT_SEGMENTS['oauth'] = 1;
 
   // Parse the optional bundle and flow segments from the page URL.
   // The server is authoritative; the client uses a defensive heuristic:
