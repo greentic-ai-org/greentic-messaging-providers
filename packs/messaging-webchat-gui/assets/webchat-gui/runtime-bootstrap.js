@@ -971,7 +971,7 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function loadAuthFromTenantConfig() {
-    var basePath = window.location.pathname.replace(/\/$/, '');
+    var basePath = guiBase.replace(/\/$/, '');
     // Try tenant-specific file first, then default.json
     var urls = [
       basePath + '/config/tenants/' + tenant + '.json',
@@ -1105,7 +1105,8 @@ console.log('[runtime-bootstrap] loaded');
       stableCachePart(tenant),
       stableCachePart(env),
       stableCachePart(directLineTokenUrl()),
-      stableCachePart(directLineDomain())
+      stableCachePart(directLineDomain()),
+      stableCachePart(flowId)
     ].join(':');
   }
 
@@ -1431,7 +1432,7 @@ console.log('[runtime-bootstrap] loaded');
         var urlTenantSlug = pathTenantMatch ? decodeURIComponent(pathTenantMatch[1]) : null;
         if (urlTenantSlug) {
           try {
-            var basePath = window.location.pathname.replace(/\/$/, '');
+            var basePath = guiBase.replace(/\/$/, '');
             var tenantCfgUrl = basePath + '/config/tenants/' + encodeURIComponent(urlTenantSlug) + '.json';
             var tenantCfgResp = await originalFetch(tenantCfgUrl);
             if (tenantCfgResp && tenantCfgResp.ok) {
@@ -1911,7 +1912,7 @@ console.log('[runtime-bootstrap] loaded');
     // `nav_links` field. `Promise.race` here was a bug — it returned
     // whichever endpoint responded first, so a fast (but empty)
     // `default.json` could mask a slower tenant config that had data.
-    var basePath = window.location.pathname.replace(/\/$/, '');
+    var basePath = guiBase.replace(/\/$/, '');
     var primary = basePath + '/config/tenants/' + encodeURIComponent(tenant) + '.json';
     var fallback = basePath + '/config/tenants/default.json';
     function load(url) {
