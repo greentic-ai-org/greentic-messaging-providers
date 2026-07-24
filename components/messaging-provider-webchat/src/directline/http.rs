@@ -18,6 +18,8 @@ const TOKEN_SECRET_KEY: &str = "jwt_signing_key";
 const RATE_LIMIT_WINDOW_SECONDS_DEFAULT: i64 = 60;
 const RATE_LIMIT_REQUESTS_DEFAULT: u32 = 60;
 const MAX_ATTACHMENT_BYTES: usize = 512 * 1024;
+const FLOW_HINT_HEADER: &str = "X-Greentic-Flow";
+const FLOW_HINT_MAX_LEN: usize = 256;
 const ALLOWED_ATTACHMENT_TYPES: &[&str] = &[
     "text/plain",
     "application/json",
@@ -150,7 +152,9 @@ where
     let ctx = claims.ctx.clone();
     let conversation_id = Uuid::new_v4().to_string();
     let key = conversation_key(&ctx, &conversation_id);
-    let conversation = ConversationState::new(ctx.clone());
+    let flow_hint = extract_flow_hint(&request.headers);
+    let mut conversation = ConversationState::new(ctx.clone());
+    conversation.flow_binding = flow_hint.clone();
 
     if let Err(resp) = write_conversation_state(state_store, &key, &conversation) {
         return resp;
@@ -190,6 +194,12 @@ where
         name: "X-Greentic-ConversationId".to_string(),
         value: conversation_id.clone(),
     });
+    if let Some(ref flow) = flow_hint {
+        headers.push(Header {
+            name: FLOW_HINT_HEADER.to_string(),
+            value: flow.clone(),
+        });
+    }
 
     let stream_url = build_stream_url(&ctx.tenant, &conversation_id, &token);
     respond_json_with_headers(
@@ -420,6 +430,12 @@ where
         name: "X-Greentic-Tenant".to_string(),
         value: claims.ctx.tenant.clone(),
     });
+    if let Some(ref flow) = conversation.flow_binding {
+        headers.push(Header {
+            name: FLOW_HINT_HEADER.to_string(),
+            value: flow.clone(),
+        });
+    }
 
     // Emit `_greentic` metadata so the host can fire WebSocket push notifications
     // for live activity streams. Underscore-prefixed keys are ignored by DirectLine
@@ -1023,6 +1039,25 @@ fn public_base_url_or_relative() -> String {
     String::new()
 }
 
+/// Extract and validate the `X-Greentic-Flow` header from the request.
+/// Returns `Some(flow_id)` only when the value is non-empty, within length
+/// bounds, and free of control characters.
+fn extract_flow_hint(headers: &[Header]) -> Option<String> {
+    let raw = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(FLOW_HINT_HEADER))?
+        .value
+        .trim()
+        .to_string();
+    if raw.is_empty() || raw.len() > FLOW_HINT_MAX_LEN {
+        return None;
+    }
+    if raw.chars().any(|c| c.is_control()) {
+        return None;
+    }
+    Some(raw)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1122,9 +1157,7 @@ mod tests {
         let token_response = handle_directline_request(&token_request, &mut state, &secrets);
         assert_eq!(token_response.status, 200);
         let token_body = decode_body(&token_response)?;
-        let user_token = token_body["token"]
-            .as_str()
-            .ok_or("token returned")?;
+        let user_token = token_body["token"].as_str().ok_or("token returned")?;
 
         let conversation_request = build_request(
             "POST",
@@ -1224,10 +1257,12 @@ mod tests {
         );
         assert_eq!(empty_response.status, 200);
         let empty_body = decode_body(&empty_response)?;
-        assert!(empty_body["activities"]
-            .as_array()
-            .ok_or("activities returned")?
-            .is_empty());
+        assert!(
+            empty_body["activities"]
+                .as_array()
+                .ok_or("activities returned")?
+                .is_empty()
+        );
         assert_eq!(empty_body["watermark"], Value::String("1".to_string()));
 
         let refresh_response = handle_directline_request(
@@ -1492,6 +1527,292 @@ mod tests {
             RateLimitSubject::Ip(_) => {}
             other => panic!("expected Ip bucket, got {other:?}"),
         }
+        Ok(())
+    }
+
+    #[test]
+    fn validate_flow_hint_accepts_valid_id() {
+        let headers = vec![Header {
+            name: "X-Greentic-Flow".into(),
+            value: "welcome-flow".into(),
+        }];
+        assert_eq!(
+            extract_flow_hint(&headers),
+            Some("welcome-flow".to_string())
+        );
+    }
+
+    #[test]
+    fn validate_flow_hint_trims_whitespace() {
+        let headers = vec![Header {
+            name: "X-Greentic-Flow".into(),
+            value: "  my-flow  ".into(),
+        }];
+        assert_eq!(extract_flow_hint(&headers), Some("my-flow".to_string()));
+    }
+
+    #[test]
+    fn validate_flow_hint_rejects_empty() {
+        let headers = vec![Header {
+            name: "X-Greentic-Flow".into(),
+            value: "   ".into(),
+        }];
+        assert_eq!(extract_flow_hint(&headers), None);
+    }
+
+    #[test]
+    fn validate_flow_hint_rejects_control_chars() {
+        let headers = vec![Header {
+            name: "X-Greentic-Flow".into(),
+            value: "flow\x00id".into(),
+        }];
+        assert_eq!(extract_flow_hint(&headers), None);
+    }
+
+    #[test]
+    fn validate_flow_hint_rejects_oversized() {
+        let long = "a".repeat(FLOW_HINT_MAX_LEN + 1);
+        let headers = vec![Header {
+            name: "X-Greentic-Flow".into(),
+            value: long,
+        }];
+        assert_eq!(extract_flow_hint(&headers), None);
+    }
+
+    #[test]
+    fn validate_flow_hint_absent_header() {
+        let headers = vec![Header {
+            name: "Authorization".into(),
+            value: "Bearer xyz".into(),
+        }];
+        assert_eq!(extract_flow_hint(&headers), None);
+    }
+
+    #[test]
+    fn flow_hint_header_present_on_conversation_create() -> Result<(), String> {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        let token_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/generate",
+                Some("env=default&tenant=default"),
+                Some(&json!({"user": {"id": "alice"}})),
+                vec![],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        let user_token = decode_body(&token_response)?["token"]
+            .as_str()
+            .ok_or("token")?
+            .to_string();
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![
+                    Header {
+                        name: "Authorization".into(),
+                        value: format!("Bearer {user_token}"),
+                    },
+                    Header {
+                        name: "X-Greentic-Flow".into(),
+                        value: "onboarding-flow".into(),
+                    },
+                ],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        assert_eq!(
+            header_value(&conv_response, "X-Greentic-Flow"),
+            Some("onboarding-flow"),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn flow_hint_absent_means_no_header_on_conversation() -> Result<(), String> {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        let token_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/generate",
+                Some("env=default&tenant=default"),
+                Some(&json!({"user": {"id": "bob"}})),
+                vec![],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        let user_token = decode_body(&token_response)?["token"]
+            .as_str()
+            .ok_or("token")?
+            .to_string();
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        assert_eq!(header_value(&conv_response, "X-Greentic-Flow"), None);
+        Ok(())
+    }
+
+    #[test]
+    fn flow_binding_survives_into_activity_response() -> Result<(), String> {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        // Generate token
+        let token_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/generate",
+                Some("env=default&tenant=default"),
+                Some(&json!({"user": {"id": "carol"}})),
+                vec![],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        let user_token = decode_body(&token_response)?["token"]
+            .as_str()
+            .ok_or("token")?
+            .to_string();
+
+        // Create conversation with flow hint
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![
+                    Header {
+                        name: "Authorization".into(),
+                        value: format!("Bearer {user_token}"),
+                    },
+                    Header {
+                        name: "X-Greentic-Flow".into(),
+                        value: "support-flow".into(),
+                    },
+                ],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        let conv_body = decode_body(&conv_response)?;
+        let conversation_id = conv_body["conversationId"]
+            .as_str()
+            .ok_or("conversationId")?;
+        let conv_token = conv_body["token"].as_str().ok_or("conv token")?.to_string();
+
+        // Post activity — flow binding must surface via response header
+        let activity_response = handle_directline_request(
+            &build_request(
+                "POST",
+                &format!("/v3/directline/conversations/{conversation_id}/activities"),
+                None,
+                Some(&json!({"type": "message", "text": "hi", "from": {"id": "carol"}})),
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {conv_token}"),
+                }],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(activity_response.status, 201);
+        assert_eq!(
+            header_value(&activity_response, "X-Greentic-Flow"),
+            Some("support-flow"),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn no_flow_binding_means_no_header_on_activity() -> Result<(), String> {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        let token_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/generate",
+                Some("env=default&tenant=default"),
+                Some(&json!({"user": {"id": "dave"}})),
+                vec![],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        let user_token = decode_body(&token_response)?["token"]
+            .as_str()
+            .ok_or("token")?
+            .to_string();
+
+        // Create conversation WITHOUT flow hint
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        let conv_body = decode_body(&conv_response)?;
+        let conversation_id = conv_body["conversationId"]
+            .as_str()
+            .ok_or("conversationId")?;
+        let conv_token = conv_body["token"].as_str().ok_or("conv token")?.to_string();
+
+        let activity_response = handle_directline_request(
+            &build_request(
+                "POST",
+                &format!("/v3/directline/conversations/{conversation_id}/activities"),
+                None,
+                Some(&json!({"type": "message", "text": "hello", "from": {"id": "dave"}})),
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {conv_token}"),
+                }],
+            )?,
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(activity_response.status, 201);
+        assert_eq!(header_value(&activity_response, "X-Greentic-Flow"), None);
         Ok(())
     }
 }

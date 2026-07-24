@@ -23,6 +23,8 @@ pub struct ConversationState {
     pub ctx: DirectLineContext,
     pub next_watermark: u64,
     pub activities: Vec<StoredActivity>,
+    #[serde(default)]
+    pub flow_binding: Option<String>,
 }
 
 impl ConversationState {
@@ -31,6 +33,7 @@ impl ConversationState {
             ctx,
             next_watermark: 0,
             activities: Vec::new(),
+            flow_binding: None,
         }
     }
 
@@ -88,8 +91,39 @@ mod tests {
         };
         let mut state = ConversationState::new(ctx);
         assert_eq!(state.next_watermark, 0);
+        assert_eq!(state.flow_binding, None);
         let first = state.bump_watermark();
         assert_eq!(first, 0);
         assert_eq!(state.next_watermark, 1);
+    }
+
+    #[test]
+    fn old_persisted_state_without_flow_binding_deserializes() {
+        // State persisted by the previous version lacks `flow_binding`.
+        // `#[serde(default)]` must make this deserialize without error.
+        let json = r#"{
+            "ctx": {"env": "prod", "tenant": "acme", "team": null},
+            "next_watermark": 5,
+            "activities": []
+        }"#;
+        let state: ConversationState =
+            serde_json::from_str(json).expect("old state must deserialize");
+        assert_eq!(state.flow_binding, None);
+        assert_eq!(state.next_watermark, 5);
+    }
+
+    #[test]
+    fn state_with_flow_binding_round_trips() {
+        let ctx = DirectLineContext {
+            env: "env".into(),
+            tenant: "tenant".into(),
+            team: None,
+        };
+        let mut state = ConversationState::new(ctx);
+        state.flow_binding = Some("welcome-flow".into());
+        let serialized = serde_json::to_string(&state).expect("serialize");
+        let deserialized: ConversationState =
+            serde_json::from_str(&serialized).expect("deserialize");
+        assert_eq!(deserialized.flow_binding, Some("welcome-flow".into()));
     }
 }
