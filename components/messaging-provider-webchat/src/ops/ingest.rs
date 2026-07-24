@@ -183,6 +183,11 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Locale"))
             .map(|h| h.value.trim().to_string())
             .filter(|v| !v.is_empty());
+        let flow_hint = out
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Flow"))
+            .map(|h| h.value.clone());
         // Surface the autoStart envelope shape so a missing welcome card on
         // the client can be diffed against the operator's flow execution.
         let conv_redacted = conv_id
@@ -194,6 +199,7 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             .map(redact::user_id)
             .unwrap_or_else(|| "<none>".to_string());
         let locale_str = locale.as_deref().unwrap_or("<none>");
+        let flow_str = flow_hint.as_deref().unwrap_or("<none>");
         telemetry::emit(
             Level::Debug,
             PROVIDER_TYPE,
@@ -218,6 +224,10 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
                 Field {
                     key: "locale",
                     value: locale_str,
+                },
+                Field {
+                    key: "flow_hint",
+                    value: flow_str,
                 },
             ],
         );
@@ -263,6 +273,9 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
         // BotFramework activity body.
         if let Some(locale) = locale {
             envelope.metadata.insert("locale".to_string(), locale);
+        }
+        if let Some(flow) = flow_hint {
+            envelope.metadata.insert("flow_hint".to_string(), flow);
         }
         out.events.push(envelope);
     }
@@ -336,6 +349,17 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
                 };
                 envelope.metadata.insert(k.clone(), s);
             }
+        }
+        // Forward the persisted flow binding so every activity in the
+        // conversation carries the same flow_hint the operator saw on
+        // the auto-start envelope.
+        if let Some(flow) = out
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Flow"))
+            .map(|h| h.value.clone())
+        {
+            envelope.metadata.insert("flow_hint".to_string(), flow);
         }
         out.events.push(envelope);
     }
