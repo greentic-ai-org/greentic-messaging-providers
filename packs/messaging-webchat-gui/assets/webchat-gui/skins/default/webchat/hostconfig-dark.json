@@ -1,0 +1,23 @@
+{
+  "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  "spacing": {
+    "small": 6,
+    "default": 12,
+    "medium": 16,
+    "large": 20
+  },
+  "actions": {
+    "maxActions": 10
+  },
+  "containerStyles": {
+    "default": {
+      "foregroundColors": {
+        "default": { "default": "#f3f4f6", "subtle": "#9ca3af" },
+        "accent": { "default": "#3b82f6", "subtle": "#60a5fa" },
+        "good": { "default": "#22c55e", "subtle": "#86efac" },
+        "warning": { "default": "#f59e0b", "subtle": "#fcd34d" },
+        "attention": { "default": "#ef4444", "subtle": "#fca5a5" }
+      }
+    }
+  }
+}
