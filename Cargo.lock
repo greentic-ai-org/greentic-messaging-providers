@@ -2175,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-whatsapp"
-version = "0.5.3"
+version = "0.5.5"
 dependencies = [
  "greentic-telemetry",
  "serde",
@@ -2310,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-whatsapp"
-version = "0.5.3"
+version = "0.5.5"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -4496,7 +4496,7 @@ dependencies = [
 
 [[package]]
 name = "whatsapp"
-version = "0.5.3"
+version = "0.5.5"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",

@@ -481,7 +481,7 @@
     },
     "whatsapp": {
       "pack": "messaging-whatsapp",
-      "version": "0.5.4",
+      "version": "0.5.5",
       "ghcr_target": "ghcr.io/greenticai/messaging-whatsapp",
       "shared_crate_dependency": "greentic-messaging-provider-common@0.4.100",
       "e2e": {
