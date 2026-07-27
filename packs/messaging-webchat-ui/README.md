@@ -35,7 +35,7 @@ SPA is served under the real bundle's URL and talks to that bundle's DirectLine 
 `assets/` is generated and git-ignored. `tools/prepare_pack_assets.sh` mirrors
 `packs/messaging-webchat-gui/assets/webchat-gui/` into this pack immediately after the upstream
 import, so there is exactly one committed copy of the SPA in this repo and the two packs cannot
-drift. Build this pack through the normal pack build (`scripts/build_providers.sh` /
+drift. Build this pack through the normal pack build (`tools/build_packs.sh --packs-only` /
 `ci/steps/11_build_packs.sh`), never by hand from a fresh clone with an empty `assets/`.
 
 A symlink would be simpler but does not work: `greentic-pack` does not walk a symlinked
