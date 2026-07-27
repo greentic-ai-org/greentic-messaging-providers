@@ -1,0 +1,4 @@
+# Mirrored from packs/messaging-webchat-gui by tools/prepare_pack_assets.sh so the
+# SPA has exactly one committed copy in this repo. See README.md.
+assets/
+dist/

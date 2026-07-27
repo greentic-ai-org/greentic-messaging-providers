@@ -24,6 +24,24 @@ if [ -x "${ROOT_DIR}/tools/import_webchat_gui_assets.sh" ] && pack_selected "mes
   "${ROOT_DIR}/tools/import_webchat_gui_assets.sh"
 fi
 
+# messaging-webchat-ui is the SPA with no provider, for bundles that already have
+# a webchat backend and no browser tier. It carries the SAME assets as
+# messaging-webchat-gui, mirrored here rather than committed twice so the two
+# cannot drift. Runs whenever the UI pack is selected — including when the GUI
+# pack is not, in which case the source is the committed copy rather than a
+# fresh upstream import.
+if pack_selected "messaging-webchat-ui"; then
+  gui_assets="${PACKS_DIR}/messaging-webchat-gui/assets/webchat-gui"
+  ui_assets="${PACKS_DIR}/messaging-webchat-ui/assets/webchat-gui"
+  if [ -d "${gui_assets}" ]; then
+    mkdir -p "${ui_assets}"
+    rsync -a --delete "${gui_assets}/" "${ui_assets}/"
+  else
+    echo "messaging-webchat-ui: no SPA assets at ${gui_assets} to mirror" >&2
+    exit 1
+  fi
+fi
+
 for dir in "${PACKS_DIR}"/messaging-*; do
   [ -d "${dir}" ] || continue
   secrets_out="${dir}/.secret_requirements.json"
