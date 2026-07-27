@@ -1,0 +1,33 @@
+{
+  "name": "messaging-webchat-ui",
+  "version": "0.5.10",
+  "kind": "application",
+  "publisher": "Greentic",
+  "description": "WebChat SPA only - no provider, no components, no flows. Adds a browser tier to a bundle that already has a webchat backend.",
+  "component_sources": [],
+  "components": [],
+  "assets": [],
+  "extensions": {
+    "greentic.static-routes.v1": {
+      "kind": "greentic.static-routes.v1",
+      "version": "0.5.10",
+      "inline": {
+        "routes": [
+          {
+            "id": "webchat-gui",
+            "index_file": "index.html",
+            "public_path": "/v1/web/webchat/{tenant}",
+            "scope": {
+              "team": false,
+              "tenant": true
+            },
+            "source_root": "assets/webchat-gui",
+            "spa_fallback": "index.html"
+          }
+        ],
+        "version": 1
+      }
+    }
+  },
+  "secret_requirements": []
+}

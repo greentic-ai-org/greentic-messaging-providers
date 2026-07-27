@@ -158,11 +158,13 @@ fn packs_have_consistent_manifests_and_artifacts() -> Result<()> {
             .and_then(|ext| ext.get(PROVIDER_EXTENSION_ID));
 
         if provider_ext.is_none() {
-            if pack_dir
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("messaging-"))
-            {
+            // Components are what a provider extension configures; a pack that
+            // ships none is asset-only and has no provider to declare.
+            let ships_components = manifest
+                .get("components")
+                .and_then(Value::as_array)
+                .is_some_and(|comps| !comps.is_empty());
+            if ships_components {
                 panic!(
                     "pack {} missing provider extension {}",
                     pack_dir.display(),
