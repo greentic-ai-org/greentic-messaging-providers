@@ -74,8 +74,10 @@ fn claim_str<'a>(claims: &'a Value, key: &'static str) -> Result<&'a str, OidcVe
 /// issuer allowlist and refuse to fetch (return `Err` from the closure)
 /// for any issuer not on that allowlist, before this function is even
 /// called or before the closure performs the network fetch. That
-/// enforcement is deliberately out of scope here and lands in the
-/// request-handling wiring task.
+/// enforcement is deliberately out of scope here: it must be performed by
+/// the caller (for example, the mint's `fetch_jwks` closure), which
+/// validates the derived JWKS URL against the tenant-pinned issuer before
+/// any fetch.
 pub fn verify_oidc_bearer<F>(
     token: &str,
     expected_tenant: &str,

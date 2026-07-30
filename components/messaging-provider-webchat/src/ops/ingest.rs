@@ -382,11 +382,11 @@ fn collect_directline_extensions(body: &Value) -> BTreeMap<String, Value> {
     ext
 }
 
-/// Stamp verified-identity metadata onto the auto-start envelope from the
-/// `X-Greentic-Email` / `X-Greentic-Verified` response headers emitted when
-/// the DirectLine token was minted from a verified bearer (Task 4). Defaults
-/// to unverified when the headers are absent so downstream flows never
-/// mistake an unauthenticated session for a verified one.
+/// Copy verified-identity signals (X-Greentic-Verified / X-Greentic-Email),
+/// emitted when the DirectLine token was minted from a verified OIDC
+/// bearer, into the envelope metadata as auth.verified / auth.email.
+/// Defaults to unverified when the headers are absent so downstream flows
+/// never mistake an unauthenticated session for a verified one.
 fn stamp_auth_metadata(metadata: &mut MessageMetadata, headers: &[Header]) {
     let verified = headers
         .iter()
