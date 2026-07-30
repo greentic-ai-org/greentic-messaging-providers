@@ -555,23 +555,46 @@ git commit -m "feat(webchat): thread verified identity through DirectLine token 
 
 ---
 
-## Task 3: Wire bearer verification into the mint (`handle_tokens`)
+## Task 3: Wire bearer verification into the mint (`handle_tokens`) — with tenant-pinned issuer
 
 Refactor the mint body into a testable inner function that takes an already-resolved identity, then have `handle_tokens` resolve identity from the bearer (verifying via Task 1) or fall back to anonymous. On any bearer-verification failure → `401`. On no bearer → today's behavior.
 
+**SECURITY — tenant-pinned issuer (required, from the Task 1 review):** `verify_oidc_bearer` fetches JWKS from a URL derived from the token's OWN unverified `iss`. Without pinning, an attacker can host their own JWKS and sign `iss=attacker, tenant_id=<victim>` → forged identity. This task MUST pin the issuer: the mint loads the tenant's expected OIDC issuer from config/secrets (`oidc_issuer`, mirroring how `load_signing_key` reads `jwt_signing_key`), and rejects any token whose issuer-derived JWKS URL does not exactly match the expected issuer's JWKS URL — before any network fetch. If a bearer is presented but no `oidc_issuer` is configured, reject `401` (cannot establish trust). Anonymous (no bearer) is unaffected.
+
+The expected issuer is per-tenant and dynamic (custom-domain tenants break any slug pattern), stored by Tenant Manager as the `oidc_issuer` value; the webchat provider config for a tenant carries it. This is a single-tenant-per-route deployment (one provider config per tenant), so the config's `oidc_issuer` is the trust anchor. (Pre-existing, out of scope: `ctx.tenant` comes from the client-supplied `?tenant=` query param and is not independently host-authenticated — documented in the ledger, not fixed here.)
+
+**Follow-up (NOT this task):** formally declaring `oidc_issuer` as a validated provider config field (`config_schema()`, `I18N_KEYS`/`PAIRS`, setup question, schema-hash + fixture regen) is deferred. This task reads it via the config/secret lookup, which works without the schema plumbing.
+
 **Files:**
 - Modify: `components/messaging-provider-webchat/src/directline/http.rs`
+- Modify: `components/messaging-provider-webchat/src/directline/oidc_verify.rs` (remove the module-level `#![allow(dead_code)]` — the verifier is now wired in; deferred minor #4 from Task 1)
 - Test: inline tests in `http.rs`
 
 **Interfaces:**
-- Consumes: `oidc_verify::{verify_oidc_bearer, VerifiedIdentity, OidcVerifyError}`, `jwt::{issue_token, TokenIdentity}`, existing `extract_bearer`, `parse_context`, `load_signing_key`, `respond_json`, `respond_error`, `TTL_SECONDS`.
-- Produces: `fn resolve_identity(bearer: Option<&str>, tenant: &str, now: i64, verify: impl FnOnce(&str,&str,i64) -> Result<VerifiedIdentity, OidcVerifyError>, anon_sub: &str) -> Result<TokenIdentity, HttpOutV1>` and `fn mint_response(signing_key: &[u8], ctx: DirectLineContext, identity: &TokenIdentity) -> HttpOutV1`.
+- Consumes: `oidc_verify::{verify_oidc_bearer, jwks_url_for_issuer, VerifiedIdentity, OidcVerifyError}`, `jwt::{issue_token, TokenIdentity}`, existing `extract_bearer`, `parse_context`, `load_signing_key`, `SecretStore`, `respond_json`, `respond_error`, `TTL_SECONDS`, `base64::engine::general_purpose::STANDARD` (already imported in `http.rs` for `load_signing_key`).
+- Produces:
+  - `const OIDC_ISSUER_KEY: &str = "oidc_issuer";`
+  - `fn load_expected_issuer<SE: SecretStore>(request: &HttpInV1, secrets: &SE) -> Option<String>` — config `oidc_issuer_b64` (base64 STANDARD) first, then `secrets.get("oidc_issuer")`; trims; empty → `None`.
+  - `fn verify_bearer_pinned<F>(token: &str, tenant: &str, now: i64, expected_issuer: &str, fetch: F) -> Result<VerifiedIdentity, OidcVerifyError> where F: FnOnce(&str) -> Result<String, String>` — rejects any JWKS URL not equal to `jwks_url_for_issuer(expected_issuer)` before calling `fetch`.
+  - `fn resolve_identity<V>(bearer: Option<&str>, tenant: &str, now: i64, verify: V, anon_sub: &str) -> Result<TokenIdentity, HttpOutV1>` where `V: FnOnce(&str,&str,i64) -> Result<VerifiedIdentity, OidcVerifyError>`.
+  - `fn mint_response(signing_key: &[u8], ctx: DirectLineContext, identity: &TokenIdentity) -> HttpOutV1`.
+  - `fn fetch_jwks_http(url: &str) -> Result<String, String>`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `http.rs` tests:
+Add to `http.rs` tests. First a helper that builds an unsigned token with a chosen `iss` (the pin check runs before signature verification, so a dummy signature is fine for pin tests):
 
 ```rust
+fn fake_bearer(iss: &str, tenant: &str) -> String {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let h = URL_SAFE_NO_PAD.encode(br#"{"alg":"ES256","typ":"JWT","kid":"k"}"#);
+    let payload = format!(
+        r#"{{"iss":"{iss}","sub":"u","tenant_id":"{tenant}","exp":9999999999}}"#
+    );
+    let p = URL_SAFE_NO_PAD.encode(payload.as_bytes());
+    format!("{h}.{p}.AAAA")
+}
+
 #[test]
 fn resolve_identity_no_bearer_is_anonymous() {
     let id = resolve_identity(None, "acme", 1000, |_, _, _| unreachable!(), "anon-sub").expect("ok");
@@ -620,6 +643,74 @@ fn resolve_identity_wrong_tenant_is_401() {
     .unwrap_err();
     assert_eq!(out.status, 401);
 }
+
+#[test]
+fn pin_rejects_issuer_not_matching_config() {
+    // Token's iss differs from the configured expected issuer → the fetch stub
+    // must never be called; the pin rejects before any network access.
+    let token = fake_bearer("https://evil.example", "acme");
+    let err = verify_bearer_pinned(
+        &token,
+        "acme",
+        1000,
+        "https://id.acme.example",
+        |_url| panic!("fetch must not run when issuer is pinned out"),
+    )
+    .unwrap_err();
+    assert_eq!(err, crate::directline::oidc_verify::OidcVerifyError::JwksFetch("issuer not allowed".to_string()));
+}
+
+#[test]
+fn pin_allows_matching_issuer_reaches_fetch() {
+    // Matching issuer → pin passes → fetch runs. Stub returns non-JSON so we
+    // land on JwksParse, proving execution got past the pin gate.
+    let token = fake_bearer("https://id.acme.example", "acme");
+    let err = verify_bearer_pinned(
+        &token,
+        "acme",
+        1000,
+        "https://id.acme.example",
+        |_url| Ok("not json".to_string()),
+    )
+    .unwrap_err();
+    assert_eq!(err, crate::directline::oidc_verify::OidcVerifyError::JwksParse);
+}
+
+#[test]
+fn load_expected_issuer_reads_secret() {
+    let mut secrets = TestSecretStore::new();
+    secrets.insert(OIDC_ISSUER_KEY, b"https://id.acme.example");
+    let req = build_request("POST", "/x", None, None, vec![]).expect("req");
+    assert_eq!(
+        load_expected_issuer(&req, &secrets).as_deref(),
+        Some("https://id.acme.example")
+    );
+}
+
+#[test]
+fn load_expected_issuer_none_when_absent() {
+    let secrets = TestSecretStore::new();
+    let req = build_request("POST", "/x", None, None, vec![]).expect("req");
+    assert!(load_expected_issuer(&req, &secrets).is_none());
+}
+
+#[test]
+fn mint_with_bearer_but_no_issuer_config_is_401() {
+    let mut state = InMemoryStateStore::new();
+    let mut secrets = TestSecretStore::new();
+    secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+    // No oidc_issuer configured, but a bearer is presented → cannot establish trust → 401.
+    let req = build_request(
+        "POST",
+        "/v3/directline/tokens/generate",
+        Some("env=default&tenant=acme"),
+        Some(&json!({"user": {"id": "alice"}})),
+        vec![Header { name: "Authorization".into(), value: "Bearer some.jwt.token".into() }],
+    )
+    .expect("req");
+    let resp = handle_directline_request(&req, &mut state, &secrets);
+    assert_eq!(resp.status, 401);
+}
 ```
 
 Note the existing `directline_polling_flow` test (no `Authorization` header) must remain green — it exercises the anonymous path end-to-end.
@@ -627,13 +718,60 @@ Note the existing `directline_polling_flow` test (no `Authorization` header) mus
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd <R1> && cargo test -p messaging-provider-webchat --lib http`
-Expected: FAIL to compile (`resolve_identity` not found).
+Expected: FAIL to compile (`resolve_identity`, `verify_bearer_pinned`, `load_expected_issuer`, `OIDC_ISSUER_KEY` not found).
 
 - [ ] **Step 3: Write the implementation**
 
-In `http.rs`, add the two helpers and rewrite `handle_tokens` to use them:
+First, in `oidc_verify.rs`, remove the module-level `#![allow(dead_code)]` line added in Task 1 (the verifier is now used).
 
+In `http.rs`, add the const near `TOKEN_SECRET_KEY` (line 17):
 ```rust
+const OIDC_ISSUER_KEY: &str = "oidc_issuer";
+```
+
+Add the helpers:
+```rust
+fn load_expected_issuer<SE: SecretStore>(request: &HttpInV1, secrets: &SE) -> Option<String> {
+    if let Some(config) = &request.config {
+        let config_key = format!("{OIDC_ISSUER_KEY}_b64");
+        if let Some(b64) = config.get(&config_key).and_then(|v| v.as_str()) {
+            if let Ok(bytes) = general_purpose::STANDARD.decode(b64) {
+                let s = String::from_utf8(bytes).ok()?.trim().to_string();
+                if !s.is_empty() {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    match secrets.get(OIDC_ISSUER_KEY) {
+        Ok(Some(bytes)) if !bytes.is_empty() => {
+            let s = String::from_utf8(bytes).ok()?.trim().to_string();
+            if s.is_empty() { None } else { Some(s) }
+        }
+        _ => None,
+    }
+}
+
+fn verify_bearer_pinned<F>(
+    token: &str,
+    tenant: &str,
+    now: i64,
+    expected_issuer: &str,
+    fetch: F,
+) -> Result<VerifiedIdentity, OidcVerifyError>
+where
+    F: FnOnce(&str) -> Result<String, String>,
+{
+    let expected_jwks = oidc_verify::jwks_url_for_issuer(expected_issuer)
+        .map_err(|_| OidcVerifyError::JwksFetch("invalid configured issuer".to_string()))?;
+    oidc_verify::verify_oidc_bearer(token, tenant, now, |url| {
+        if url != expected_jwks {
+            return Err("issuer not allowed".to_string());
+        }
+        fetch(url)
+    })
+}
+
 fn resolve_identity<V>(
     bearer: Option<&str>,
     tenant: &str,
@@ -671,7 +809,7 @@ fn mint_response(signing_key: &[u8], ctx: DirectLineContext, identity: &TokenIde
 }
 ```
 
-Rewrite `handle_tokens` (keep rate-limit + signing-key loading exactly as-is; swap the mint tail):
+Rewrite `handle_tokens` (keep rate-limit + signing-key loading exactly as-is; swap the mint tail). The verify closure loads the expected issuer lazily — so when there is no bearer it is never consulted, and when a bearer is present but no issuer is configured, the `None → JwksFetch` maps to `401` via `resolve_identity`:
 ```rust
 fn handle_tokens<S, SE>(request: &HttpInV1, state_store: &mut S, secrets: &SE) -> HttpOutV1
 where
@@ -704,7 +842,9 @@ where
         &tenant,
         now,
         |token, tenant, now| {
-            oidc_verify::verify_oidc_bearer(token, tenant, now, |url| fetch_jwks_http(url))
+            let expected_issuer = load_expected_issuer(request, secrets)
+                .ok_or_else(|| OidcVerifyError::JwksFetch("oidc issuer not configured".to_string()))?;
+            verify_bearer_pinned(token, tenant, now, &expected_issuer, fetch_jwks_http)
         },
         &anon_sub,
     ) {
@@ -742,26 +882,27 @@ Add imports at the top of `http.rs`:
 use crate::directline::jwt::TokenIdentity;
 use crate::directline::oidc_verify::{self, OidcVerifyError, VerifiedIdentity};
 ```
-(and remove the temporary shim added in Task 2, Step 4 — it is now replaced.)
+(and remove the temporary shim added in Task 2, Step 4 for `handle_tokens` — it is now replaced. Leave the claims-forwarding in `handle_conversations`/`handle_refresh_token`/`handle_reconnect_conversation` intact; those correctly preserve verified identity across re-mint and are not part of this rewrite.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd <R1> && cargo test -p messaging-provider-webchat --lib http`
-Expected: PASS (new `resolve_identity_*` tests + existing `directline_polling_flow` and all others).
+Run: `cd <R1> && cargo test -p messaging-provider-webchat --lib http` and `cargo test -p webchat-directline-core --lib`
+Expected: PASS — the new `resolve_identity_*`, `pin_*`, `load_expected_issuer_*`, and `mint_with_bearer_but_no_issuer_config_is_401` tests, plus existing `directline_polling_flow` and all others.
 
 - [ ] **Step 5: Build for wasm**
 
-Run: `cd <R1> && cargo component build -p messaging-provider-webchat`
-Expected: clean (confirms the `client::send` JWKS path compiles for wasip2).
+Run: `cd <R1> && cargo build -p messaging-provider-webchat --target wasm32-wasip2`
+Expected: clean (confirms the `client::send` JWKS path compiles for wasip2). Note: `cargo component build` currently fails on a pre-existing, unrelated WIT gap (`greentic:provider-instance-identity@0.1.0`); the plain `--target wasm32-wasip2` build is the working gate until Task 6 rechecks it.
 
 - [ ] **Step 6: fmt + clippy + commit**
 
+`jwt.rs`/`http.rs` are shared into `webchat-directline-core` via `include!`, so `cargo fmt` does not reach them; format the physical files directly the way the pre-commit hook does:
 ```bash
 cd <R1>
-cargo fmt -p messaging-provider-webchat
+rustfmt --edition 2024 components/messaging-provider-webchat/src/directline/http.rs components/messaging-provider-webchat/src/directline/oidc_verify.rs
 cargo clippy -p messaging-provider-webchat --all-targets -- -D warnings
-git add components/messaging-provider-webchat/src/directline/http.rs
-git commit -m "feat(webchat): verify OIDC bearer at DirectLine mint, 401 on failure"
+git add components/messaging-provider-webchat/src/directline/http.rs components/messaging-provider-webchat/src/directline/oidc_verify.rs
+git commit -m "feat(webchat): verify OIDC bearer at DirectLine mint with tenant-pinned issuer"
 ```
 
 ---
