@@ -8,6 +8,7 @@
 //!   emitted back to the operator so flows can auto-start.
 
 use base64::{Engine as _, engine::general_purpose};
+use greentic_types::MessageMetadata;
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 use provider_common::helpers::json_bytes;
 use provider_common::http_compat::{http_out_error, http_out_v1_bytes, parse_operator_http_in};
@@ -229,6 +230,7 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
             &tenant_id,
             BTreeMap::new(),
         );
+        stamp_auth_metadata(&mut envelope.metadata, &out.headers);
         envelope
             .metadata
             .insert("autoStart".to_string(), "true".to_string());
@@ -380,6 +382,28 @@ fn collect_directline_extensions(body: &Value) -> BTreeMap<String, Value> {
     ext
 }
 
+/// Stamp verified-identity metadata onto the auto-start envelope from the
+/// `X-Greentic-Email` / `X-Greentic-Verified` response headers emitted when
+/// the DirectLine token was minted from a verified bearer (Task 4). Defaults
+/// to unverified when the headers are absent so downstream flows never
+/// mistake an unauthenticated session for a verified one.
+fn stamp_auth_metadata(metadata: &mut MessageMetadata, headers: &[Header]) {
+    let verified = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Verified"))
+        .map(|h| h.value.trim() == "true")
+        .unwrap_or(false);
+    metadata.insert("auth.verified".to_string(), verified.to_string());
+    if let Some(email) = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Email"))
+        .map(|h| h.value.trim())
+        .filter(|v| !v.is_empty())
+    {
+        metadata.insert("auth.email".to_string(), email.to_string());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -514,5 +538,41 @@ mod tests {
             .expect("citations preserved inside channel_data");
         assert_eq!(citations.len(), 2);
         assert_eq!(citations[0]["id"], "c1");
+    }
+}
+
+#[cfg(test)]
+mod verified_identity_tests {
+    use super::*;
+    use greentic_types::MessageMetadata;
+
+    fn h(name: &str, value: &str) -> Header {
+        Header {
+            name: name.into(),
+            value: value.into(),
+        }
+    }
+
+    #[test]
+    fn stamps_auth_metadata_from_headers() {
+        let headers = vec![
+            h("X-Greentic-Email", "u@acme.example"),
+            h("X-Greentic-Verified", "true"),
+        ];
+        let mut meta = MessageMetadata::new();
+        stamp_auth_metadata(&mut meta, &headers);
+        assert_eq!(meta.get("auth.verified").map(String::as_str), Some("true"));
+        assert_eq!(
+            meta.get("auth.email").map(String::as_str),
+            Some("u@acme.example")
+        );
+    }
+
+    #[test]
+    fn omits_email_when_absent_defaults_unverified() {
+        let mut meta = MessageMetadata::new();
+        stamp_auth_metadata(&mut meta, &[]);
+        assert_eq!(meta.get("auth.verified").map(String::as_str), Some("false"));
+        assert!(!meta.contains_key("auth.email"));
     }
 }
