@@ -14,19 +14,60 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+// setup.yaml collects a provider's secrets and config; an asset-only pack has none.
+fn declares_provider(pack_dir: &std::path::Path) -> Result<bool> {
+    let pack_yaml = pack_dir.join("pack.yaml");
+    if !pack_yaml.exists() {
+        return Ok(false);
+    }
+    let value: Value = serde_yaml_bw::from_str(&fs::read_to_string(&pack_yaml)?)?;
+    Ok(value
+        .get("extensions")
+        .and_then(|exts| exts.get("greentic.provider-extension.v1"))
+        .is_some())
+}
+
 #[test]
-fn all_packs_have_setup_spec() -> Result<()> {
+fn all_provider_packs_have_setup_spec() -> Result<()> {
     let root = workspace_root();
     let packs_dir = root.join("packs");
+    let mut checked = 0usize;
     for entry in fs::read_dir(&packs_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if !path.is_dir() {
+        if !path.is_dir() || !declares_provider(&path)? {
             continue;
         }
+        checked += 1;
         let spec = path.join("assets").join("setup.yaml");
         if !spec.exists() {
             return Err(anyhow!("missing setup spec at {}", spec.display()));
+        }
+    }
+    // Every pack skipped is indistinguishable from every pack passing.
+    if checked == 0 {
+        return Err(anyhow!("no provider packs found under packs/ to check"));
+    }
+    Ok(())
+}
+
+// Keeps the exemption above narrow: a pack that grows a spec must declare its provider.
+#[test]
+fn non_provider_packs_ship_no_setup_spec() -> Result<()> {
+    let root = workspace_root();
+    for entry in fs::read_dir(root.join("packs"))? {
+        let path = entry?.path();
+        if !path.is_dir() || declares_provider(&path)? {
+            continue;
+        }
+        let spec = path.join("assets").join("setup.yaml");
+        if spec.exists() {
+            return Err(anyhow!(
+                "{} declares no provider but ships a setup spec at {} — either \
+                 declare the provider or drop the spec",
+                path.display(),
+                spec.display()
+            ));
         }
     }
     Ok(())
@@ -156,7 +197,7 @@ fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()>
         (
             "messaging-webex",
             "add-to-webex",
-            "Add to WebEx",
+            "Add to Webex",
             "bot_email",
         ),
         (

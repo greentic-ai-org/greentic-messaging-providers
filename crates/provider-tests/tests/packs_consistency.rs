@@ -158,11 +158,13 @@ fn packs_have_consistent_manifests_and_artifacts() -> Result<()> {
             .and_then(|ext| ext.get(PROVIDER_EXTENSION_ID));
 
         if provider_ext.is_none() {
-            if pack_dir
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("messaging-"))
-            {
+            // Components are what a provider extension configures; a pack that
+            // ships none is asset-only and has no provider to declare.
+            let ships_components = manifest
+                .get("components")
+                .and_then(Value::as_array)
+                .is_some_and(|comps| !comps.is_empty());
+            if ships_components {
                 panic!(
                     "pack {} missing provider extension {}",
                     pack_dir.display(),
@@ -378,7 +380,13 @@ fn required_setup_questions_do_not_use_placeholder_without_default() -> Result<(
                 .get("required")
                 .and_then(serde_yaml::Value::as_bool)
                 .unwrap_or(false);
-            if !required || question.get("placeholder").is_none() {
+            // A required secret cannot ship a default, so its placeholder is a
+            // format hint rather than a stand-in for a value we could prefill.
+            let secret = question
+                .get("secret")
+                .and_then(serde_yaml::Value::as_bool)
+                .unwrap_or(false);
+            if !required || secret || question.get("placeholder").is_none() {
                 continue;
             }
             let has_default = question.get("default").is_some()
@@ -496,9 +504,9 @@ fn setup_actions_are_wellformed_and_present() -> Result<()> {
     // action's url_template — see setup_action_install_url in its ui module.
     let known_kinds = [
         "deep_link",
+        "open_url",
         "oauth_install_button",
         "oauth_device_code",
-        "open_url",
     ];
     let expected_with_actions = [
         "messaging-teams",
@@ -566,6 +574,16 @@ fn setup_actions_are_wellformed_and_present() -> Result<()> {
                         );
                     }
                 }
+                "open_url" => {
+                    let tmpl = action
+                        .get("url_template")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or_default();
+                    assert!(
+                        !tmpl.is_empty(),
+                        "{pack}: open_url `{id}` is missing `url_template`"
+                    );
+                }
                 "oauth_install_button" => {
                     assert!(
                         action
@@ -597,18 +615,6 @@ fn setup_actions_are_wellformed_and_present() -> Result<()> {
                             "{pack}: oauth_install_button `{id}` registration is missing `op`"
                         );
                     }
-                }
-                // A plain external link: no OAuth round-trip, so the only
-                // requirement is a url_template whose placeholders are declared.
-                "open_url" => {
-                    let tmpl = action
-                        .get("url_template")
-                        .and_then(serde_yaml::Value::as_str)
-                        .unwrap_or_default();
-                    assert!(
-                        !tmpl.is_empty(),
-                        "{pack}: open_url `{id}` is missing `url_template`"
-                    );
                 }
                 "oauth_device_code" => {
                     assert!(

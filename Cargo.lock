@@ -1310,7 +1310,7 @@ checksum = "5d4fc902124d374030b0b4845d3dcb9aa0db65271c39b28f58eb43db783bfef2"
 dependencies = [
  "anyhow",
  "constant_time_eq",
- "greentic-types 0.5.3",
+ "greentic-types 0.5.4",
  "semver",
  "thiserror 2.0.18",
  "time",
@@ -1326,7 +1326,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae851adc13682dbb8e246f3c9a556121525c9e0205a423f4860fb24afbf34eb8"
 dependencies = [
- "greentic-types 0.5.3",
+ "greentic-types 0.5.4",
  "wit-bindgen 0.57.1",
  "wit-bindgen-core 0.57.1",
  "wit-bindgen-rust 0.57.1",
@@ -1367,7 +1367,7 @@ dependencies = [
  "clap",
  "greentic-interfaces",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "serde_yaml_gtc",
@@ -1383,7 +1383,7 @@ dependencies = [
  "greentic-messaging-provider-common",
  "greentic-messaging-renderer",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "insta",
  "serde",
  "serde_json",
@@ -1398,7 +1398,7 @@ dependencies = [
  "ciborium",
  "glob",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "once_cell",
  "schemars",
  "serde",
@@ -1415,7 +1415,7 @@ name = "greentic-messaging-renderer"
 version = "0.5.3"
 dependencies = [
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1433,7 +1433,7 @@ dependencies = [
  "greentic-interfaces-wasmtime",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "hmac",
  "http",
  "once_cell",
@@ -1469,9 +1469,9 @@ dependencies = [
 
 [[package]]
 name = "greentic-types"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20d524811eebe7fc0c12078b960771be4aed9a1b10f55f80cd6b3e79549c0260"
+checksum = "b3f5c283151a144a7c047bf9c802361edb17aac9958693a389ff2c64999b7868"
 dependencies = [
  "anyhow",
  "blake3",
@@ -1493,9 +1493,9 @@ dependencies = [
 
 [[package]]
 name = "greentic-types"
-version = "1.1.1"
+version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88acd5ecbc830d153563c36c0c3b467ef6b10c24562564765d4c1a095f8e12f2"
+checksum = "9553e9c3e1a357f14da4a44581d506b2771325da9a71ee7a499679e6d695ff83"
 dependencies = [
  "anyhow",
  "blake3",
@@ -2110,7 +2110,7 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
 ]
@@ -2142,7 +2142,7 @@ name = "messaging-ingress-slack"
 version = "0.5.18"
 dependencies = [
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "hmac",
  "serde",
  "serde_json",
@@ -2156,7 +2156,7 @@ version = "0.5.24"
 dependencies = [
  "base64",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "urlencoding",
@@ -2175,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-whatsapp"
-version = "0.5.3"
+version = "0.5.5"
 dependencies = [
  "greentic-telemetry",
  "serde",
@@ -2190,7 +2190,7 @@ dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -2205,7 +2205,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -2220,7 +2220,7 @@ dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "wit-bindgen 0.57.1",
@@ -2234,7 +2234,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "urlencoding",
@@ -2248,7 +2248,7 @@ dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "wit-bindgen 0.57.1",
@@ -2262,7 +2262,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "hmac",
  "serde",
  "serde_json",
@@ -2281,7 +2281,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "hmac",
  "serde",
  "serde_json",
@@ -2299,7 +2299,7 @@ dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "hmac",
  "serde",
  "serde_json",
@@ -2310,12 +2310,12 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-whatsapp"
-version = "0.5.3"
+version = "0.5.5"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "serde",
  "serde_json",
  "wit-bindgen 0.57.1",
@@ -2645,7 +2645,7 @@ dependencies = [
  "greentic-interfaces-wasmtime",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "hmac",
  "insta",
  "serde",
@@ -3178,9 +3178,9 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml_gtc"
-version = "2.5.3"
+version = "2.6.29816201036"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8622b658226bcf6beb3b81db219b769bf35da3aa3975b07fa5294da14599a72a"
+checksum = "67a4077b293ac175452fd85f0d61668002ca3466dd678ae857ec125c92db216e"
 dependencies = [
  "base64",
  "indexmap",
@@ -4454,7 +4454,7 @@ dependencies = [
  "chrono",
  "greentic-messaging-provider-common",
  "greentic-telemetry",
- "greentic-types 1.1.1",
+ "greentic-types 1.1.4",
  "hmac",
  "serde",
  "serde_json",
@@ -4496,7 +4496,7 @@ dependencies = [
 
 [[package]]
 name = "whatsapp"
-version = "0.5.3"
+version = "0.5.5"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",

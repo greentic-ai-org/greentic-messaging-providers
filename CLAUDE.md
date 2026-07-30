@@ -15,7 +15,7 @@ git config core.hooksPath .githooks
 Enables the pre-commit hook that runs `rustfmt` on staged Rust files and `cargo clippy --workspace -- -D warnings`. See `.githooks/README.md`.
 
 - **Edition:** Rust 2024 | **Target:** `wasm32-wasip2` (components) + native (crates)
-- **Workspace version** is defined once in root `Cargo.toml` `[workspace.package]`
+- **Workspace version**: `0.5.x` (WASM provider components; no crates.io publishing — packs are published as OCI artifacts via `publish-provider.yml`)
 
 ## Build, Test, and Lint Commands
 
@@ -26,7 +26,7 @@ Enables the pre-commit hook that runs `rustfmt` on staged Rust files and `cargo 
 # Individual CI steps (use to iterate on a single failure)
 ./ci/steps/01_fmt.sh
 ./ci/steps/02_clippy.sh
-# ... see ci/steps/ for all numbered scripts
+# ... full set runs 00_wit_policy.sh through 12_cargo_test.sh — see ci/steps/
 
 # Build all WASM components → target/components/*.wasm
 ./tools/build_components.sh
@@ -95,6 +95,8 @@ All providers export worlds from `greentic:component@0.6.0` (`component`, `compo
 
 ### Provider Component Structure
 
+Egress components: `messaging-provider-{slack,teams,telegram,webex,whatsapp,webchat,email,dummy}`.
+
 Each `components/messaging-provider-*` follows this pattern:
 - `src/lib.rs` — Component struct, trait impls, config types (`ProviderConfig`, `ProviderConfigOut`)
 - `src/describe.rs` — Metadata, QA specs, i18n keys/pairs, config schema (`I18N_KEYS`, `I18N_PAIRS`, `SETUP_QUESTIONS`, `config_schema()`)
@@ -132,6 +134,10 @@ Four ingress components (`messaging-ingress-{slack,teams,telegram,whatsapp}`) ha
 - **provider-runtime-config** — Runtime config resolution for provider components
 - **webchat-directline-core** — Direct Line protocol types for WebChat provider
 - **greentic-messaging-packgen** — Pack generation tooling for messaging providers
+- **greentic-messaging-planned** — Pre-built render plan and payload types for egress steps
+- **questions** (`crates/component_questions`) — WASM component for QA setup question specs and validation
+- **questions-cli** — CLI for running QA question specs interactively
+- **messaging-cardkit-bin** — CardKit render demo CLI + HTTP server
 
 ## Version Management
 

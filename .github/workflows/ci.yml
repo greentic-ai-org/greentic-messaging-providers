@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Prefixed so a `workflow_call` from Dev Publish never lands in the group its
+  # own caller already holds, which would make the called workflow wait forever.
+  group: msgprov-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.0"
+          components: rustfmt, clippy
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy (default members only — excludes cdylib WASM components)
+        run: cargo clippy --all-targets -- -D warnings
+      - name: build
+        run: cargo build
+      - name: prebuild WASM components (required by wasm_harness tests)
+        run: ./tools/build_components.sh
+      - name: test
+        run: cargo test

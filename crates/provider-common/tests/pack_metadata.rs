@@ -1217,7 +1217,7 @@ fn messaging_teams_source_is_answer_owned_with_setup_assets() -> Result<()> {
             .and_then(|action| action.get("completion"))
             .and_then(|completion| completion.get("state_path"))
             .and_then(Value::as_str),
-        Some("last_reconcile.ok"),
+        Some("last_reconcile"),
         "Bot endpoint completion path must be relative to backend values, not prefixed with values."
     );
     assert_eq!(
@@ -1369,8 +1369,8 @@ fn messaging_teams_source_is_answer_owned_with_setup_assets() -> Result<()> {
         "messaging-teams build must advertise the provider setup backend contract"
     );
     assert!(
-        !build_pack.contains("greentic.provider-extension.v1"),
-        "messaging-teams must not fake a schema-core provider extension for its ingress-only runtime"
+        build_pack.contains("greentic.provider-extension.v1"),
+        "messaging-teams ships a Bot Framework egress connector, so its pack must declare the schema-core provider extension"
     );
 
     Ok(())
