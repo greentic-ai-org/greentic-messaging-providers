@@ -1,68 +1,102 @@
 {
   "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  "fontSizes": {
+    "small": 12,
+    "default": 14,
+    "medium": 16,
+    "large": 20,
+    "extraLarge": 24
+  },
+  "fontWeights": {
+    "lighter": 300,
+    "default": 400,
+    "bolder": 600
+  },
   "spacing": {
+    "none": 0,
     "small": 6,
     "default": 12,
     "medium": 16,
-    "large": 20
+    "large": 20,
+    "extraLarge": 28,
+    "padding": 16
   },
-  "actions": {
-    "maxActions": 10
+  "separator": {
+    "lineThickness": 1,
+    "lineColor": "#374151"
   },
   "containerStyles": {
     "default": {
+      "backgroundColor": "#1f2937",
       "foregroundColors": {
         "default": { "default": "#f3f4f6", "subtle": "#9ca3af" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" },
-        "good": { "default": "#028a02", "subtle": "#3fae3f" },
-        "warning": { "default": "#e69500", "subtle": "#f0b64d" },
-        "attention": { "default": "#cc3300", "subtle": "#e06a47" }
+        "accent": { "default": "#3b82f6", "subtle": "#60a5fa" },
+        "attention": { "default": "#ef4444", "subtle": "#fca5a5" },
+        "good": { "default": "#22c55e", "subtle": "#86efac" },
+        "warning": { "default": "#f59e0b", "subtle": "#fcd34d" }
       }
     },
     "emphasis": {
+      "backgroundColor": "#111827",
       "foregroundColors": {
         "default": { "default": "#f3f4f6", "subtle": "#9ca3af" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" },
-        "good": { "default": "#028a02", "subtle": "#3fae3f" },
-        "warning": { "default": "#e69500", "subtle": "#f0b64d" },
-        "attention": { "default": "#cc3300", "subtle": "#e06a47" }
-      }
-    },
-    "accent": {
-      "foregroundColors": {
-        "default": { "default": "#f3f4f6", "subtle": "#9ca3af" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" },
-        "good": { "default": "#028a02", "subtle": "#3fae3f" },
-        "warning": { "default": "#e69500", "subtle": "#f0b64d" },
-        "attention": { "default": "#cc3300", "subtle": "#e06a47" }
+        "accent": { "default": "#3b82f6", "subtle": "#60a5fa" },
+        "attention": { "default": "#ef4444", "subtle": "#fca5a5" },
+        "good": { "default": "#22c55e", "subtle": "#86efac" },
+        "warning": { "default": "#f59e0b", "subtle": "#fcd34d" }
       }
     },
     "good": {
+      "backgroundColor": "#0b2018",
       "foregroundColors": {
-        "default": { "default": "#f3f4f6", "subtle": "#9ca3af" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" },
-        "good": { "default": "#028a02", "subtle": "#3fae3f" },
-        "warning": { "default": "#e69500", "subtle": "#f0b64d" },
-        "attention": { "default": "#cc3300", "subtle": "#e06a47" }
-      }
-    },
-    "warning": {
-      "foregroundColors": {
-        "default": { "default": "#f3f4f6", "subtle": "#9ca3af" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" },
-        "good": { "default": "#028a02", "subtle": "#3fae3f" },
-        "warning": { "default": "#e69500", "subtle": "#f0b64d" },
-        "attention": { "default": "#cc3300", "subtle": "#e06a47" }
+        "default": { "default": "#86efac", "subtle": "#22c55e" },
+        "accent": { "default": "#3b82f6", "subtle": "#60a5fa" }
       }
     },
     "attention": {
+      "backgroundColor": "#2a0f0f",
       "foregroundColors": {
-        "default": { "default": "#f3f4f6", "subtle": "#9ca3af" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" },
-        "good": { "default": "#028a02", "subtle": "#3fae3f" },
-        "warning": { "default": "#e69500", "subtle": "#f0b64d" },
-        "attention": { "default": "#cc3300", "subtle": "#e06a47" }
+        "default": { "default": "#fca5a5", "subtle": "#ef4444" },
+        "accent": { "default": "#3b82f6", "subtle": "#60a5fa" }
+      }
+    },
+    "warning": {
+      "backgroundColor": "#2a2113",
+      "foregroundColors": {
+        "default": { "default": "#fcd34d", "subtle": "#f59e0b" },
+        "accent": { "default": "#3b82f6", "subtle": "#60a5fa" }
       }
     }
+  },
+  "actions": {
+    "actionsOrientation": "horizontal",
+    "actionAlignment": "left",
+    "buttonSpacing": 8,
+    "maxActions": 10,
+    "showCard": { "actionMode": "inline" }
+  },
+  "adaptiveCard": {
+    "allowCustomStyle": true,
+    "padding": 16
+  },
+  "textBlock": {
+    "headingLevel": 2
+  },
+  "factSet": {
+    "title": {
+      "color": "default",
+      "size": "default",
+      "isSubtle": false,
+      "weight": "bolder",
+      "wrap": true
+    },
+    "value": {
+      "color": "default",
+      "size": "default",
+      "isSubtle": true,
+      "weight": "default",
+      "wrap": true
+    },
+    "spacing": 8
   }
 }
