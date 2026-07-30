@@ -9,12 +9,14 @@ use uuid::Uuid;
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 
 use super::jwt::{DirectLineContext, TTL_SECONDS, TokenIdentity, issue_token, verify_token};
+use super::oidc_verify::{self, OidcVerifyError, VerifiedIdentity};
 use super::state::{ConversationState, StoredActivity, conversation_key, sanitize_team};
 use super::store::{RateLimitState, SecretStore, StateStore};
 
 const DIRECTLINE_PREFIX: &str = "/v3/directline";
 const JSON_CONTENT_TYPE: &str = "application/json";
 const TOKEN_SECRET_KEY: &str = "jwt_signing_key";
+const OIDC_ISSUER_KEY: &str = "oidc_issuer";
 const RATE_LIMIT_WINDOW_SECONDS_DEFAULT: i64 = 60;
 const RATE_LIMIT_REQUESTS_DEFAULT: u32 = 60;
 const MAX_ATTACHMENT_BYTES: usize = 512 * 1024;
@@ -109,26 +111,142 @@ where
         Err(resp) => return resp,
     };
 
-    let identity = TokenIdentity {
-        sub: subject.token_subject().to_string(),
-        email: None,
-        idp: None,
-        verified: false,
+    let bearer = extract_bearer(&request.headers);
+    let tenant = ctx.tenant.clone();
+    let anon_sub = subject.token_subject().to_string();
+    let identity = match resolve_identity(
+        bearer.as_deref(),
+        &tenant,
+        now,
+        |token, tenant, now| {
+            let expected_issuer = load_expected_issuer(request, secrets).ok_or_else(|| {
+                OidcVerifyError::JwksFetch("oidc issuer not configured".to_string())
+            })?;
+            verify_bearer_pinned(token, tenant, now, &expected_issuer, |url| {
+                fetch_jwks_http(secrets, url)
+            })
+        },
+        &anon_sub,
+    ) {
+        Ok(id) => id,
+        Err(resp) => return resp,
     };
-    match issue_token(&signing_key, ctx.clone(), &identity, None) {
-        Ok((token, _exp)) => respond_json(
-            200,
-            json!({
-                "token": token,
-                "expires_in": TTL_SECONDS,
+
+    mint_response(&signing_key, ctx, &identity)
+}
+
+/// Load the tenant's expected OIDC issuer — the trust anchor a bearer's JWKS
+/// URL is pinned against — from either injected config or the secrets store.
+/// Mirrors `load_signing_key`'s config-first, secrets-fallback lookup.
+fn load_expected_issuer<SE: SecretStore>(request: &HttpInV1, secrets: &SE) -> Option<String> {
+    if let Some(config) = &request.config {
+        let config_key = format!("{OIDC_ISSUER_KEY}_b64");
+        if let Some(b64) = config.get(&config_key).and_then(|v| v.as_str())
+            && let Ok(bytes) = general_purpose::STANDARD.decode(b64)
+        {
+            let s = String::from_utf8(bytes).ok()?.trim().to_string();
+            if !s.is_empty() {
+                return Some(s);
+            }
+        }
+    }
+    match secrets.get(OIDC_ISSUER_KEY) {
+        Ok(Some(bytes)) if !bytes.is_empty() => {
+            let s = String::from_utf8(bytes).ok()?.trim().to_string();
+            if s.is_empty() { None } else { Some(s) }
+        }
+        _ => None,
+    }
+}
+
+/// Verify a bearer against a tenant-pinned issuer: refuses to fetch JWKS
+/// from anywhere but the exact URL derived from `expected_issuer`. The
+/// token's own (unverified) `iss` claim is never trusted for the fetch —
+/// see `oidc_verify::verify_oidc_bearer`'s issuer-trust doc comment.
+fn verify_bearer_pinned<F>(
+    token: &str,
+    tenant: &str,
+    now: i64,
+    expected_issuer: &str,
+    fetch: F,
+) -> Result<VerifiedIdentity, OidcVerifyError>
+where
+    F: FnOnce(&str) -> Result<String, String>,
+{
+    let expected_jwks = oidc_verify::jwks_url_for_issuer(expected_issuer)
+        .map_err(|_| OidcVerifyError::JwksFetch("invalid configured issuer".to_string()))?;
+    oidc_verify::verify_oidc_bearer(token, tenant, now, |url| {
+        if url != expected_jwks {
+            return Err("issuer not allowed".to_string());
+        }
+        fetch(url)
+    })
+}
+
+/// Resolve the mint identity: anonymous when no bearer is presented, or the
+/// verified identity from `verify` when one is. Any verification failure
+/// (bad signature, tenant mismatch, unconfigured issuer, ...) becomes a 401 —
+/// there is no fallback to anonymous once a bearer has been presented.
+fn resolve_identity<V>(
+    bearer: Option<&str>,
+    tenant: &str,
+    now: i64,
+    verify: V,
+    anon_sub: &str,
+) -> Result<TokenIdentity, HttpOutV1>
+where
+    V: FnOnce(&str, &str, i64) -> Result<VerifiedIdentity, OidcVerifyError>,
+{
+    match bearer {
+        None => Ok(TokenIdentity {
+            sub: anon_sub.to_string(),
+            email: None,
+            idp: None,
+            verified: false,
+        }),
+        Some(token) => match verify(token, tenant, now) {
+            Ok(vi) => Ok(TokenIdentity {
+                sub: vi.sub,
+                email: vi.email,
+                idp: Some(vi.idp),
+                verified: true,
             }),
-        ),
+            Err(_) => Err(respond_error(
+                401,
+                "unauthorized",
+                "invalid or unverifiable bearer token",
+            )),
+        },
+    }
+}
+
+fn mint_response(
+    signing_key: &[u8],
+    ctx: DirectLineContext,
+    identity: &TokenIdentity,
+) -> HttpOutV1 {
+    match issue_token(signing_key, ctx, identity, None) {
+        Ok((token, _exp)) => {
+            respond_json(200, json!({ "token": token, "expires_in": TTL_SECONDS }))
+        }
         Err(err) => respond_error(
             500,
             "token_issue_failed",
             format!("failed to mint token: {err:?}"),
         ),
     }
+}
+
+/// Fetch a JWKS document via the secrets store's host-backed network
+/// capability. `webchat-directline-core` (where this generic function is
+/// compiled) has no WIT/wasm bindings of its own — the real fetch happens
+/// inside whichever `SE: SecretStore` implementation the caller supplies
+/// (see `ConfigAwareSecretStore::fetch_jwks` in the wasm component crate,
+/// which does hold the `greentic:http` binding). This mirrors how
+/// `StateStore`/`SecretStore` already inject host capabilities into this
+/// otherwise host-agnostic module.
+fn fetch_jwks_http<SE: SecretStore>(secrets: &SE, url: &str) -> Result<String, String> {
+    secrets.fetch_jwks(url)
 }
 
 fn handle_conversations<S, SE>(request: &HttpInV1, state_store: &mut S, secrets: &SE) -> HttpOutV1
@@ -1494,6 +1612,143 @@ mod tests {
         // True-Client-IP wins (highest priority — Cloudflare/Akamai trust
         // boundary).
         assert_eq!(extract_client_ip(&headers).as_deref(), Some("3.3.3.3"));
+    }
+
+    fn fake_bearer(iss: &str, tenant: &str) -> String {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let h = URL_SAFE_NO_PAD.encode(br#"{"alg":"ES256","typ":"JWT","kid":"k"}"#);
+        let payload =
+            format!(r#"{{"iss":"{iss}","sub":"u","tenant_id":"{tenant}","exp":9999999999}}"#);
+        let p = URL_SAFE_NO_PAD.encode(payload.as_bytes());
+        format!("{h}.{p}.AAAA")
+    }
+
+    #[test]
+    fn resolve_identity_no_bearer_is_anonymous() {
+        let id =
+            resolve_identity(None, "acme", 1000, |_, _, _| unreachable!(), "anon-sub").expect("ok");
+        assert_eq!(id.sub, "anon-sub");
+        assert!(!id.verified);
+        assert!(id.email.is_none());
+    }
+
+    #[test]
+    fn resolve_identity_valid_bearer_is_verified() {
+        let vi = crate::directline::oidc_verify::VerifiedIdentity {
+            sub: "user-1".into(),
+            email: Some("u@acme.example".into()),
+            idp: "https://id.acme.example".into(),
+            tenant_id: "acme".into(),
+        };
+        let id = resolve_identity(
+            Some("tok"),
+            "acme",
+            1000,
+            move |_, _, _| Ok(vi.clone()),
+            "anon-sub",
+        )
+        .expect("ok");
+        assert_eq!(id.sub, "user-1");
+        assert!(id.verified);
+        assert_eq!(id.email.as_deref(), Some("u@acme.example"));
+        assert_eq!(id.idp.as_deref(), Some("https://id.acme.example"));
+    }
+
+    #[test]
+    fn resolve_identity_bad_bearer_is_401() {
+        let out = resolve_identity(
+            Some("tok"),
+            "acme",
+            1000,
+            |_, _, _| Err(crate::directline::oidc_verify::OidcVerifyError::InvalidSignature),
+            "anon-sub",
+        )
+        .unwrap_err();
+        assert_eq!(out.status, 401);
+    }
+
+    #[test]
+    fn resolve_identity_wrong_tenant_is_401() {
+        let out = resolve_identity(
+            Some("tok"),
+            "acme",
+            1000,
+            |_, _, _| Err(crate::directline::oidc_verify::OidcVerifyError::TenantMismatch),
+            "anon-sub",
+        )
+        .unwrap_err();
+        assert_eq!(out.status, 401);
+    }
+
+    #[test]
+    fn pin_rejects_issuer_not_matching_config() {
+        // Token's iss differs from the configured expected issuer → the fetch stub
+        // must never be called; the pin rejects before any network access.
+        let token = fake_bearer("https://evil.example", "acme");
+        let err = verify_bearer_pinned(&token, "acme", 1000, "https://id.acme.example", |_url| {
+            panic!("fetch must not run when issuer is pinned out")
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            crate::directline::oidc_verify::OidcVerifyError::JwksFetch(
+                "issuer not allowed".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn pin_allows_matching_issuer_reaches_fetch() {
+        // Matching issuer → pin passes → fetch runs. Stub returns non-JSON so we
+        // land on JwksParse, proving execution got past the pin gate.
+        let token = fake_bearer("https://id.acme.example", "acme");
+        let err = verify_bearer_pinned(&token, "acme", 1000, "https://id.acme.example", |_url| {
+            Ok("not json".to_string())
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            crate::directline::oidc_verify::OidcVerifyError::JwksParse
+        );
+    }
+
+    #[test]
+    fn load_expected_issuer_reads_secret() {
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(OIDC_ISSUER_KEY, b"https://id.acme.example");
+        let req = build_request("POST", "/x", None, None, vec![]).expect("req");
+        assert_eq!(
+            load_expected_issuer(&req, &secrets).as_deref(),
+            Some("https://id.acme.example")
+        );
+    }
+
+    #[test]
+    fn load_expected_issuer_none_when_absent() {
+        let secrets = TestSecretStore::new();
+        let req = build_request("POST", "/x", None, None, vec![]).expect("req");
+        assert!(load_expected_issuer(&req, &secrets).is_none());
+    }
+
+    #[test]
+    fn mint_with_bearer_but_no_issuer_config_is_401() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+        // No oidc_issuer configured, but a bearer is presented → cannot establish trust → 401.
+        let req = build_request(
+            "POST",
+            "/v3/directline/tokens/generate",
+            Some("env=default&tenant=acme"),
+            Some(&json!({"user": {"id": "alice"}})),
+            vec![Header {
+                name: "Authorization".into(),
+                value: "Bearer some.jwt.token".into(),
+            }],
+        )
+        .expect("req");
+        let resp = handle_directline_request(&req, &mut state, &secrets);
+        assert_eq!(resp.status, 401);
     }
 
     #[test]

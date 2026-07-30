@@ -1,8 +1,3 @@
-// This is the ES256/JWKS verification primitive for Webchat SSO; the
-// request-handling wiring that calls it lands in a follow-up task, so
-// its public API is unused (outside tests) until then.
-#![allow(dead_code)]
-
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde_json::Value;
