@@ -316,6 +316,16 @@ where
         name: "X-Greentic-User".to_string(),
         value: claims.sub.clone(),
     });
+    if let Some(email) = &claims.email {
+        headers.push(Header {
+            name: "X-Greentic-Email".to_string(),
+            value: email.clone(),
+        });
+    }
+    headers.push(Header {
+        name: "X-Greentic-Verified".to_string(),
+        value: if claims.verified { "true" } else { "false" }.to_string(),
+    });
     headers.push(Header {
         name: "X-Greentic-ConversationId".to_string(),
         value: conversation_id.clone(),
@@ -1749,6 +1759,53 @@ mod tests {
         .expect("req");
         let resp = handle_directline_request(&req, &mut state, &secrets);
         assert_eq!(resp.status, 401);
+    }
+
+    #[test]
+    fn conversation_start_emits_verified_identity_headers() -> Result<(), String> {
+        use crate::directline::jwt::{DirectLineContext, TokenIdentity, issue_token};
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        // Mint a verified bootstrap token directly, then POST /conversations with it.
+        let ctx = DirectLineContext {
+            env: "default".into(),
+            tenant: "acme".into(),
+            team: None,
+        };
+        let id = TokenIdentity {
+            sub: "user-1".into(),
+            email: Some("u@acme.example".into()),
+            idp: Some("https://id.acme.example".into()),
+            verified: true,
+        };
+        let (token, _) =
+            issue_token(b"test-secret", ctx, &id, None).map_err(|e| format!("{e:?}"))?;
+
+        let req = build_request(
+            "POST",
+            "/v3/directline/conversations",
+            Some("env=default&tenant=acme"),
+            None,
+            vec![Header {
+                name: "Authorization".into(),
+                value: format!("Bearer {token}"),
+            }],
+        )?;
+        let resp = handle_directline_request(&req, &mut state, &secrets);
+        assert_eq!(resp.status, 201);
+        let email = resp
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Email"));
+        assert_eq!(email.map(|h| h.value.as_str()), Some("u@acme.example"));
+        let verified = resp
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Verified"));
+        assert_eq!(verified.map(|h| h.value.as_str()), Some("true"));
+        Ok(())
     }
 
     #[test]
