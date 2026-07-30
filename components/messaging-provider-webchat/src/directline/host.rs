@@ -74,4 +74,26 @@ impl SecretStore for ConfigAwareSecretStore {
             Err(err) => Err(format!("secret error: {} - {}", err.name(), err.message())),
         }
     }
+
+    /// Real network-backed JWKS fetch via the host's `greentic:http` import.
+    /// `webchat-directline-core` (where the caller of this trait lives) has
+    /// no WIT bindings of its own, so the actual fetch must happen here, in
+    /// the wasm component crate that owns `crate::bindings`.
+    fn fetch_jwks(&self, url: &str) -> Result<String, String> {
+        use crate::bindings::greentic::http::http_client as client;
+        let req = client::Request {
+            method: "GET".into(),
+            url: url.to_string(),
+            headers: vec![],
+            body: None,
+        };
+        match client::send(&req, None, None) {
+            Ok(resp) if (200..300).contains(&resp.status) => {
+                let bytes = resp.body.unwrap_or_default();
+                String::from_utf8(bytes).map_err(|_| "jwks body not utf-8".to_string())
+            }
+            Ok(resp) => Err(format!("jwks endpoint status {}", resp.status)),
+            Err(err) => Err(format!("jwks request failed: {}", err.message)),
+        }
+    }
 }

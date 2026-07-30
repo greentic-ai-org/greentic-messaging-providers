@@ -9,6 +9,18 @@ pub trait StateStore {
 /// Driver for reading secrets required by the Direct Line contract.
 pub trait SecretStore {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, String>;
+
+    /// Fetch a JWKS document from `url` (used to verify OIDC bearer tokens
+    /// presented at the DirectLine mint). `url` is already pinned by the
+    /// caller to the tenant's configured issuer before this is invoked.
+    ///
+    /// This crate (`webchat-directline-core`) has no host/network bindings,
+    /// so the default fails closed. Host-backed secret stores that DO have
+    /// network capability (e.g. `ConfigAwareSecretStore` in the
+    /// `messaging-provider-webchat` wasm component) must override this.
+    fn fetch_jwks(&self, _url: &str) -> Result<String, String> {
+        Err("jwks fetch not supported by this secret store".to_string())
+    }
 }
 
 /// Simple rate-limit record persisted per (env,tenant,team,user) to enforce token generation limits.
