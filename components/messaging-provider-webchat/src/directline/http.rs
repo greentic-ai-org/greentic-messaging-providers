@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 
-use super::jwt::{DirectLineContext, TTL_SECONDS, issue_token, verify_token};
+use super::jwt::{DirectLineContext, TTL_SECONDS, TokenIdentity, issue_token, verify_token};
 use super::state::{ConversationState, StoredActivity, conversation_key, sanitize_team};
 use super::store::{RateLimitState, SecretStore, StateStore};
 
@@ -109,7 +109,13 @@ where
         Err(resp) => return resp,
     };
 
-    match issue_token(&signing_key, ctx.clone(), subject.token_subject(), None) {
+    let identity = TokenIdentity {
+        sub: subject.token_subject().to_string(),
+        email: None,
+        idp: None,
+        verified: false,
+    };
+    match issue_token(&signing_key, ctx.clone(), &identity, None) {
         Ok((token, _exp)) => respond_json(
             200,
             json!({
@@ -156,10 +162,16 @@ where
         return resp;
     }
 
+    let identity = TokenIdentity {
+        sub: claims.sub.clone(),
+        email: claims.email.clone(),
+        idp: claims.idp.clone(),
+        verified: claims.verified,
+    };
     let (token, _exp) = match issue_token(
         &signing_key,
         ctx.clone(),
-        &claims.sub,
+        &identity,
         Some(conversation_id.clone()),
     ) {
         Ok(pair) => pair,
@@ -234,10 +246,16 @@ where
         }
     }
 
+    let identity = TokenIdentity {
+        sub: claims.sub.clone(),
+        email: claims.email.clone(),
+        idp: claims.idp.clone(),
+        verified: claims.verified,
+    };
     let (token, _exp) = match issue_token(
         &signing_key,
         claims.ctx.clone(),
-        &claims.sub,
+        &identity,
         claims.conv.clone(),
     ) {
         Ok(pair) => pair,
@@ -308,10 +326,16 @@ where
     // Issue a new token bound to this conversation. Clone ctx because we still
     // need its tenant after the move into `issue_token` to build the streamUrl.
     let tenant_for_stream = ctx.tenant.clone();
+    let identity = TokenIdentity {
+        sub: claims.sub.clone(),
+        email: claims.email.clone(),
+        idp: claims.idp.clone(),
+        verified: claims.verified,
+    };
     let (token, _exp) = match issue_token(
         &signing_key,
         ctx,
-        &claims.sub,
+        &identity,
         Some(conversation_id.to_string()),
     ) {
         Ok(pair) => pair,
@@ -1122,9 +1146,7 @@ mod tests {
         let token_response = handle_directline_request(&token_request, &mut state, &secrets);
         assert_eq!(token_response.status, 200);
         let token_body = decode_body(&token_response)?;
-        let user_token = token_body["token"]
-            .as_str()
-            .ok_or("token returned")?;
+        let user_token = token_body["token"].as_str().ok_or("token returned")?;
 
         let conversation_request = build_request(
             "POST",
@@ -1224,10 +1246,12 @@ mod tests {
         );
         assert_eq!(empty_response.status, 200);
         let empty_body = decode_body(&empty_response)?;
-        assert!(empty_body["activities"]
-            .as_array()
-            .ok_or("activities returned")?
-            .is_empty());
+        assert!(
+            empty_body["activities"]
+                .as_array()
+                .ok_or("activities returned")?
+                .is_empty()
+        );
         assert_eq!(empty_body["watermark"], Value::String("1".to_string()));
 
         let refresh_response = handle_directline_request(

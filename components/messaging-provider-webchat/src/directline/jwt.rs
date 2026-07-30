@@ -31,6 +31,25 @@ pub struct TokenClaims {
     pub ctx: DirectLineContext,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conv: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idp: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub verified: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// Verified (or unverified) identity to embed in a minted DirectLine token.
+#[derive(Debug, Clone)]
+pub struct TokenIdentity {
+    pub sub: String,
+    pub email: Option<String>,
+    pub idp: Option<String>,
+    pub verified: bool,
 }
 
 #[allow(dead_code)]
@@ -71,7 +90,7 @@ fn decode_segment<T: for<'de> Deserialize<'de>>(value: &str) -> Result<T, JwtErr
 pub fn issue_token(
     secret: &[u8],
     ctx: DirectLineContext,
-    sub: &str,
+    identity: &TokenIdentity,
     conv: Option<String>,
 ) -> Result<(String, i64), JwtError> {
     let now = Utc::now();
@@ -80,12 +99,15 @@ pub fn issue_token(
     let claims = TokenClaims {
         iss: ISS.to_string(),
         aud: AUD.to_string(),
-        sub: sub.to_string(),
+        sub: identity.sub.clone(),
         iat,
         nbf: iat,
         exp,
         ctx,
         conv,
+        email: identity.email.clone(),
+        idp: identity.idp.clone(),
+        verified: identity.verified,
     };
     let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
     let header_enc = encode_segment(&header)?;
@@ -160,7 +182,17 @@ mod tests {
     fn token_round_trip() -> Result<(), JwtError> {
         let signing_key = b"test-hmac-key";
         let ctx = sample_ctx();
-        let (token, exp) = issue_token(signing_key, ctx.clone(), "user-123", None)?;
+        let (token, exp) = issue_token(
+            signing_key,
+            ctx.clone(),
+            &TokenIdentity {
+                sub: "user-123".into(),
+                email: None,
+                idp: None,
+                verified: false,
+            },
+            None,
+        )?;
         assert!(token.split('.').count() == 3);
         assert!(exp > Utc::now().timestamp());
         let claims = verify_token(signing_key, &token)?;
@@ -191,7 +223,17 @@ mod tests {
     #[test]
     fn verify_rejects_wrong_signature() -> Result<(), JwtError> {
         let signing_key = b"test-hmac-key";
-        let (token, _) = issue_token(signing_key, sample_ctx(), "user-123", None)?;
+        let (token, _) = issue_token(
+            signing_key,
+            sample_ctx(),
+            &TokenIdentity {
+                sub: "user-123".into(),
+                email: None,
+                idp: None,
+                verified: false,
+            },
+            None,
+        )?;
 
         assert!(matches!(
             verify_token(b"wrong-hmac-key", &token),
@@ -213,6 +255,9 @@ mod tests {
             exp: now + TTL_SECONDS,
             ctx: sample_ctx(),
             conv: None,
+            email: None,
+            idp: None,
+            verified: false,
         };
 
         let expired = TokenClaims {
@@ -234,6 +279,9 @@ mod tests {
             iss: ISS.to_string(),
             aud: AUD.to_string(),
             sub: "user-123".to_string(),
+            email: None,
+            idp: None,
+            verified: false,
         };
         let future_token = signed_token(signing_key, future)?;
         assert!(matches!(
@@ -251,11 +299,65 @@ mod tests {
             tenant: "tenant-a".into(),
             team: None,
         };
-        let (token, _) =
-            issue_token(signing_key, ctx.clone(), "user-x", Some("conv-99".into()))?;
+        let (token, _) = issue_token(
+            signing_key,
+            ctx.clone(),
+            &TokenIdentity {
+                sub: "user-x".into(),
+                email: None,
+                idp: None,
+                verified: false,
+            },
+            Some("conv-99".into()),
+        )?;
         let claims = verify_token(signing_key, &token)?;
         assert_eq!(claims.conv.as_deref(), Some("conv-99"));
         assert_eq!(claims.ctx, ctx);
+        Ok(())
+    }
+
+    #[test]
+    fn issue_token_carries_verified_identity() -> Result<(), JwtError> {
+        let key = b"test-hmac-key";
+        let id = TokenIdentity {
+            sub: "user-9".into(),
+            email: Some("u@acme.example".into()),
+            idp: Some("https://id.acme.example".into()),
+            verified: true,
+        };
+        let (token, _exp) = issue_token(key, sample_ctx(), &id, None)?;
+        let claims = verify_token(key, &token)?;
+        assert_eq!(claims.sub, "user-9");
+        assert_eq!(claims.email.as_deref(), Some("u@acme.example"));
+        assert_eq!(claims.idp.as_deref(), Some("https://id.acme.example"));
+        assert!(claims.verified);
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_token_without_new_fields_deserializes_unverified() -> Result<(), JwtError> {
+        // A token minted before this change (no email/idp/verified in payload) must
+        // still verify, with verified defaulting to false.
+        let key = b"test-hmac-key";
+        let legacy_claims = serde_json::json!({
+            "iss": "greentic.webchat", "aud": "directline", "sub": "old",
+            "iat": Utc::now().timestamp(), "nbf": Utc::now().timestamp(),
+            "exp": Utc::now().timestamp() + 60,
+            "ctx": {"env":"default","tenant":"default","team":null}
+        });
+        let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
+        let header_enc = encode_segment(&header)?;
+        let payload_enc = encode_segment(&legacy_claims)?;
+        let mut mac = HmacSha256::new_from_slice(key).map_err(|_| JwtError::InvalidKey)?;
+        mac.update(header_enc.as_bytes());
+        mac.update(b".");
+        mac.update(payload_enc.as_bytes());
+        let sig = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+        let token = format!("{header_enc}.{payload_enc}.{sig}");
+        let claims = verify_token(key, &token)?;
+        assert_eq!(claims.sub, "old");
+        assert!(!claims.verified);
+        assert!(claims.email.is_none());
         Ok(())
     }
 }
