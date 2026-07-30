@@ -221,7 +221,10 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("webex.schema.config.bot_email.title", "Bot email"),
     (
         "webex.schema.config.bot_email.description",
-        "Webex bot email address used to build the Add to WebEx setup link",
+        "The bot's own address, always ending in @webex.bot (shown when you \
+         create the bot at developer.webex.com). Not your personal Webex \
+         login — the Add to WebEx link opens a DM with this address, so a \
+         human address makes it open a chat with yourself",
     ),
     ("webex.schema.config.default_room_id.title", "Room ID"),
     (
@@ -257,7 +260,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("webex.qa.remove.title", "Remove"),
     ("webex.qa.setup.enabled", "Enable provider"),
     ("webex.qa.setup.public_base_url", "Public base URL"),
-    ("webex.qa.setup.bot_email", "Bot email"),
+    ("webex.qa.setup.bot_email", "Bot email (…@webex.bot)"),
     ("webex.qa.setup.default_room_id", "Room ID"),
     ("webex.qa.setup.default_to_person_email", "Person email"),
     ("webex.qa.setup.api_base_url", "API base URL"),

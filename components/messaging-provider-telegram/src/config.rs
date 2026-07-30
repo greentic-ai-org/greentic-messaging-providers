@@ -17,6 +17,13 @@ pub(crate) struct ProviderConfig {
     pub(crate) api_base_url: Option<String>,
     #[serde(default, alias = "telegram_bot_token")]
     pub(crate) bot_token: Option<String>,
+    // Setup captures this for the "Add to Telegram" deep link (https://t.me/{bot_username}).
+    // Egress never reads it, but `deny_unknown_fields` means it must be declared here or every
+    // send fails with "unknown field `bot_username`".
+    #[serde(default)]
+    // Read only by tests; egress ignores it, so the lib build sees it as dead.
+    #[allow(dead_code)]
+    pub(crate) bot_username: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +97,9 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
     if let Some(v) = input.get("api_base_url") {
         partial.insert("api_base_url".into(), v.clone());
     }
+    if let Some(v) = input.get("bot_username") {
+        partial.insert("bot_username".into(), v.clone());
+    }
     if let Some(v) = input.get("bot_token") {
         partial.insert("bot_token".into(), v.clone());
     }
@@ -106,6 +116,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         default_chat_id: None,
         api_base_url: Some(DEFAULT_API_BASE.to_string()),
         bot_token: None,
+        bot_username: None,
     })
 }
 
@@ -188,6 +199,43 @@ mod tests {
         let defaulted = load_config(&json!({})).expect("default config");
         assert_eq!(defaulted.public_base_url, "https://invalid.local");
         assert_eq!(defaulted.api_base_url.as_deref(), Some(DEFAULT_API_BASE));
+    }
+
+    #[test]
+    fn config_accepts_bot_username_written_by_setup() {
+        // Regression: setup writes `bot_username` into provider config for the "Add to Telegram"
+        // deep link. With `deny_unknown_fields` and no such field declared, EVERY outbound send
+        // failed with `unknown field \`bot_username\`` and the provider never reached an ok
+        // state — which also left the setup action stuck at "pending" so the button never
+        // rendered. One unknown field, both symptoms.
+        let nested = load_config(&json!({
+            "config": {
+                "public_base_url": "https://example.com",
+                "bot_username": "Greentic_ai_test",
+                "telegram_bot_token": "token"
+            }
+        }))
+        .expect("config carrying bot_username must deserialize");
+        assert_eq!(nested.bot_username.as_deref(), Some("Greentic_ai_test"));
+        assert_eq!(nested.bot_token.as_deref(), Some("token"));
+
+        let top_level = load_config(&json!({
+            "public_base_url": "https://example.com",
+            "bot_username": "Greentic_ai_test"
+        }))
+        .expect("top-level bot_username must deserialize");
+        assert_eq!(top_level.bot_username.as_deref(), Some("Greentic_ai_test"));
+    }
+
+    #[test]
+    fn config_rejects_genuinely_unknown_fields() {
+        // The fix must not degrade into accepting anything: deny_unknown_fields still applies.
+        let err = parse_config_value(&json!({
+            "public_base_url": "https://example.com",
+            "definitely_not_a_field": "x"
+        }))
+        .expect_err("unknown fields must still be rejected");
+        assert!(err.contains("definitely_not_a_field"), "{err}");
     }
 
     #[test]

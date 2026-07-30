@@ -185,16 +185,19 @@ fn slack_registration_outputs_runtime_app_id_key() -> Result<()> {
 fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()> {
     let root = workspace_root();
     for (pack, expected_id, expected_label, expected_requires) in [
+        // Keyed on slack_app_id, not slack_app_url: manifest.update (app reuse)
+        // never returns client_id, so the app_redirect helper that produced
+        // slack_app_url was dropped. app_redirect is built from the app id.
         (
             "messaging-slack",
-            "install-to-workspace",
-            "Install to Workspace",
+            "add-to-slack",
+            "Add to Slack",
             "slack_app_id",
         ),
         (
             "messaging-webex",
             "add-to-webex",
-            "Add to WebEx",
+            "Add to Webex",
             "bot_email",
         ),
         (
@@ -258,11 +261,15 @@ fn provider_final_setup_actions_are_generic_add_to_x_descriptors() -> Result<()>
             .and_then(Value::as_sequence)
             .ok_or_else(|| anyhow!("{pack} setup.yaml missing setup_actions"))?;
         if pack == "messaging-slack" {
+            // Slack's setup action is a plain open_url install-on-team link, not
+            // an oauth_install_button: manifest.update (app reuse) never returns
+            // client_id, which the OAuth-authorize flow depended on. The shape is
+            // asserted in detail by slack_setup_action_* above.
             assert!(
                 setup_actions
                     .iter()
                     .any(|action| action.get("kind").and_then(Value::as_str) == Some("open_url")),
-                "messaging-slack setup.yaml must declare the generic registration/open_url setup action"
+                "messaging-slack setup.yaml must declare the install-on-team setup action"
             );
         } else {
             let setup_action = setup_actions
