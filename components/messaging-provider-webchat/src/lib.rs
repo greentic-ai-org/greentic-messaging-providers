@@ -249,6 +249,8 @@ fn apply_answers_impl(
         merged.tenant_channel_id = optional_string_from(&answers, "tenant_channel_id")
             .or(merged.tenant_channel_id.clone());
         merged.base_url = optional_string_from(&answers, "base_url").or(merged.base_url.clone());
+        merged.oidc_issuer =
+            optional_string_from(&answers, "oidc_issuer").or(merged.oidc_issuer.clone());
         let jwt_key = optional_string_from(&answers, "jwt_signing_key")
             .or_else(|| take_existing_jwt_key(&mut merged))
             .unwrap_or_else(generate_secret_20);
@@ -278,6 +280,9 @@ fn apply_answers_impl(
         }
         if has("base_url") {
             merged.base_url = optional_string_from(&answers, "base_url");
+        }
+        if has("oidc_issuer") {
+            merged.oidc_issuer = optional_string_from(&answers, "oidc_issuer");
         }
         if has("jwt_signing_key") {
             if let Some(jwt_key) = optional_string_from(&answers, "jwt_signing_key") {

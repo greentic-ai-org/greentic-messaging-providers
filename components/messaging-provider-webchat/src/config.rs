@@ -17,6 +17,8 @@ pub(crate) struct ProviderConfig {
     #[serde(default)]
     pub(crate) base_url: Option<String>,
     #[serde(default)]
+    pub(crate) oidc_issuer: Option<String>,
+    #[serde(default)]
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default)]
     pub(crate) oauth_providers: Option<String>,
@@ -30,6 +32,7 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) route: Option<String>,
     pub(crate) tenant_channel_id: Option<String>,
     pub(crate) base_url: Option<String>,
+    pub(crate) oidc_issuer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) jwt_signing_key_b64: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -54,6 +57,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         route: None,
         tenant_channel_id: None,
         base_url: None,
+        oidc_issuer: None,
         jwt_signing_key_b64: None,
         oauth_enabled: None,
         oauth_providers: None,
@@ -131,6 +135,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "route",
         "tenant_channel_id",
         "base_url",
+        "oidc_issuer",
         "oauth_enabled",
         "oauth_providers",
     ] {
@@ -145,6 +150,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "route",
         "tenant_channel_id",
         "base_url",
+        "oidc_issuer",
         "oauth_enabled",
         "oauth_providers",
     ] {
@@ -183,6 +189,7 @@ mod tests {
             route: Some("route-a".to_string()),
             tenant_channel_id: None,
             base_url: Some("https://base.example.com".to_string()),
+            oidc_issuer: None,
             jwt_signing_key_b64: None,
             oauth_enabled: None,
             oauth_providers: None,
@@ -222,6 +229,7 @@ mod tests {
             route: Some("route-a".to_string()),
             tenant_channel_id: None,
             base_url: None,
+            oidc_issuer: None,
             oauth_enabled: None,
             oauth_providers: None,
         })
@@ -238,6 +246,7 @@ mod tests {
             route: None,
             tenant_channel_id: None,
             base_url: None,
+            oidc_issuer: None,
             oauth_enabled: None,
             oauth_providers: None,
         })
