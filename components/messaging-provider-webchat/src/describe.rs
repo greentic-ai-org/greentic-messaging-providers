@@ -115,6 +115,7 @@ pub(crate) const BASE_SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef
         false,
     ),
     ("base_url", "webchat.qa.setup.base_url", false),
+    ("oidc_issuer", "webchat.qa.setup.oidc_issuer", false),
 ];
 
 pub(crate) const DEFAULT_KEYS: &[&str] = &["public_base_url"];
@@ -170,6 +171,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.schema.config.tenant_channel_id.description",
     "webchat.schema.config.base_url.title",
     "webchat.schema.config.base_url.description",
+    "webchat.schema.config.oidc_issuer.title",
+    "webchat.schema.config.oidc_issuer.description",
     "webchat.schema.config.jwt_signing_key.title",
     "webchat.schema.config.jwt_signing_key.description",
     "webchat.schema.config.oauth_google_client_id.title",
@@ -194,6 +197,7 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.qa.setup.route",
     "webchat.qa.setup.tenant_channel_id",
     "webchat.qa.setup.base_url",
+    "webchat.qa.setup.oidc_issuer",
     // OAuth QA keys
     "webchat.qa.oauth.enabled",
     "webchat.qa.oauth.enabled.help",
@@ -440,6 +444,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "webchat.schema.config.base_url.description",
         "WebChat service base URL",
     ),
+    ("webchat.schema.config.oidc_issuer.title", "OIDC issuer"),
+    (
+        "webchat.schema.config.oidc_issuer.description",
+        "Tenant's OIDC issuer URL used to verify SSO bearer tokens",
+    ),
     ("webchat.qa.default.title", "Default"),
     ("webchat.qa.setup.title", "Setup"),
     ("webchat.qa.upgrade.title", "Upgrade"),
@@ -450,6 +459,10 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ("webchat.qa.setup.route", "Endpoint route"),
     ("webchat.qa.setup.tenant_channel_id", "Tenant channel ID"),
     ("webchat.qa.setup.base_url", "Base URL"),
+    (
+        "webchat.qa.setup.oidc_issuer",
+        "OIDC issuer URL used to verify SSO bearer tokens",
+    ),
     // OAuth gate
     ("webchat.qa.oauth.enabled", "Enable OAuth login"),
     (
@@ -793,6 +806,15 @@ fn config_schema() -> SchemaIr {
                 schema_str_fmt(
                     "webchat.schema.config.base_url.title",
                     "webchat.schema.config.base_url.description",
+                    "uri",
+                ),
+            ),
+            (
+                "oidc_issuer",
+                false,
+                schema_str_fmt(
+                    "webchat.schema.config.oidc_issuer.title",
+                    "webchat.schema.config.oidc_issuer.description",
                     "uri",
                 ),
             ),
