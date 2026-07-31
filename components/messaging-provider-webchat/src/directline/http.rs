@@ -1809,6 +1809,53 @@ mod tests {
     }
 
     #[test]
+    fn conversation_start_unverified_omits_email_and_flags_false() -> Result<(), String> {
+        use crate::directline::jwt::{DirectLineContext, TokenIdentity, issue_token};
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-secret");
+
+        // Mint an unverified bootstrap token directly, then POST /conversations with it.
+        let ctx = DirectLineContext {
+            env: "default".into(),
+            tenant: "acme".into(),
+            team: None,
+        };
+        let id = TokenIdentity {
+            sub: "anon-1".into(),
+            email: None,
+            idp: None,
+            verified: false,
+        };
+        let (token, _) =
+            issue_token(b"test-secret", ctx, &id, None).map_err(|e| format!("{e:?}"))?;
+
+        let req = build_request(
+            "POST",
+            "/v3/directline/conversations",
+            Some("env=default&tenant=acme"),
+            None,
+            vec![Header {
+                name: "Authorization".into(),
+                value: format!("Bearer {token}"),
+            }],
+        )?;
+        let resp = handle_directline_request(&req, &mut state, &secrets);
+        assert_eq!(resp.status, 201);
+        let email = resp
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Email"));
+        assert_eq!(email, None);
+        let verified = resp
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-Verified"));
+        assert_eq!(verified.map(|h| h.value.as_str()), Some("false"));
+        Ok(())
+    }
+
+    #[test]
     fn empty_user_id_falls_through_to_ip_bucket() -> Result<(), String> {
         // Pre-fix bug: a body with `"user":{"id":""}` would be accepted as
         // the literal user id "" → `webchat:rate:tokens:..::` shared
