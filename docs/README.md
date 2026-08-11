@@ -20,6 +20,7 @@ This folder documents the Greentic messaging provider packs for two audiences:
 | Release one provider | [Provider release operations](provider-release-operations.md) |
 | Release shared provider code | [Shared crate release](shared-crate-release.md) |
 | Understand the Rust/WASM architecture | [Architecture guide](guides/architecture/02-architecture.md) |
+| Deliver a human approval to a channel | [Approval rail delivery](approval-rail.md) |
 
 ## Plain-Language Concepts
 

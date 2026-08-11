@@ -90,7 +90,9 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
     }
 
     if let Some(interactive) = interactive_payload {
-        return handle_block_actions(&interactive);
+        // The provider config rides on the ingest input, not on Slack's payload.
+        let host_input: Value = serde_json::from_slice(input_json).unwrap_or(Value::Null);
+        return handle_block_actions(&interactive, &host_input);
     }
 
     // Drop Slack retries — only process the first delivery.
@@ -246,7 +248,14 @@ fn slack_team_id(body: &Value) -> Option<String> {
 /// If the button is flagged as a modal trigger we open a Slack modal via
 /// `views.open`; otherwise we produce a channel envelope carrying the
 /// action's metadata for downstream routing.
-fn handle_block_actions(interactive: &Value) -> Vec<u8> {
+fn handle_block_actions(interactive: &Value, host_input: &Value) -> Vec<u8> {
+    // Approval decisions are routed first: the generic path below forwards every
+    // action-value key into envelope metadata, which would splat the decision
+    // token across telemetry.
+    if super::approval::is_approval_interaction(interactive) {
+        return super::approval::handle_approval_interaction(interactive, host_input);
+    }
+
     let actions = interactive
         .get("actions")
         .and_then(Value::as_array)
@@ -608,6 +617,43 @@ mod tests {
         assert_eq!(out.events[0].metadata["decision"], "approve");
         assert_eq!(out.events[0].metadata["count"], "2");
         assert_eq!(out.events[0].metadata["slack.action_id"], "approve");
+    }
+
+    #[test]
+    fn approval_clicks_take_the_approval_path_not_the_generic_one() {
+        let token = "EXAMPLE-TOKEN-NOT-A-REAL-SECRET";
+        let payload = json!({
+            "type": "block_actions",
+            "channel": {"id": "C1"},
+            "user": {"id": "U1"},
+            "actions": [{
+                "action_id": "greentic_approval_approve",
+                "value": json!({"v": 1, "cid": "default::run=RUN-1::node=gate", "tok": token})
+                    .to_string()
+            }]
+        });
+
+        let out = parse_out(ingest_http(&request(
+            payload.to_string().as_bytes(),
+            json!([]),
+        )));
+
+        assert_eq!(out.status, 200);
+        assert_eq!(out.events.len(), 1);
+        let event = &out.events[0];
+        assert_eq!(
+            event.correlation_id.as_deref(),
+            Some("default::run=RUN-1::node=gate")
+        );
+        assert!(event.extensions.contains_key("greentic.approval.response"));
+        for (key, value) in &event.metadata {
+            assert!(!value.contains(token), "token leaked into metadata[{key}]");
+        }
+
+        let body = STANDARD.decode(&out.body_b64).expect("body");
+        let body = String::from_utf8(body).expect("utf8");
+        assert!(body.contains("replace_original"));
+        assert!(!body.contains(token));
     }
 
     #[test]

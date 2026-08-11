@@ -468,6 +468,7 @@ extensions:
         - render_plan
         - encode
         - send_payload
+        - approval_request
         - setup_app_registration
         - setup_webhook
         - qa-spec

@@ -17,6 +17,7 @@
 //! documented with a stable contract.
 
 pub mod ac_converter;
+pub mod approval;
 pub mod component_v0_6;
 pub mod helpers;
 pub mod http_compat;
