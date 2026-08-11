@@ -38,8 +38,8 @@ use describe::{
     DEFAULT_KEYS, I18N_KEYS, I18N_PAIRS, SETUP_QUESTIONS, build_describe_payload, build_qa_spec,
 };
 use ops::{
-    encode_op, handle_send, ingest_http, render_plan, send_payload, setup_app_registration,
-    setup_webhook,
+    approval_request_op, encode_op, handle_send, ingest_http, render_plan, send_payload,
+    setup_app_registration, setup_webhook,
 };
 
 // ============================================================================
@@ -166,6 +166,7 @@ fn dispatch_json_invoke(op: &str, input_json: &[u8]) -> Vec<u8> {
         "render_plan" => render_plan(input_json),
         "encode" => encode_op(input_json),
         "send_payload" => send_payload(input_json),
+        "approval_request" => approval_request_op(input_json),
         "setup_app_registration" => setup_app_registration(input_json),
         "setup_webhook" => setup_webhook(input_json),
         other => json_bytes(&json!({"ok": false, "error": format!("unsupported op: {other}")})),

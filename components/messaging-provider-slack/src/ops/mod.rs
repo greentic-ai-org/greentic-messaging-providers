@@ -3,6 +3,7 @@
 //! The egress pipeline and supporting logic is split into focused submodules
 //! so each file stays under the project's 500-line cap:
 //!
+//! - `approval` — approval rail delivery (`approval_request` + the click back)
 //! - `render`   — `render_plan` (step 1 of the 3-step egress pipeline)
 //! - `encode`   — `encode_op`   (step 2)
 //! - `send`     — `send_payload` + legacy `handle_send` HTTP calls
@@ -14,6 +15,7 @@
 //! Shared low-level helpers (envelope construction) live directly in this file
 //! because they are used by both ingest and modal submission paths.
 
+mod approval;
 mod blockkit;
 mod encode;
 mod identify;
@@ -23,6 +25,7 @@ mod render;
 mod send;
 mod webhook;
 
+pub(crate) use approval::approval_request_op;
 pub(crate) use encode::encode_op;
 pub(crate) use identify::{IDENTIFY_HINT_JSON, extract_api_app_id};
 pub(crate) use ingest::ingest_http;

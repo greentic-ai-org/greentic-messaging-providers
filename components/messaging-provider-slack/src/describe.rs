@@ -22,6 +22,8 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "slack.op.encode.description",
     "slack.op.send_payload.title",
     "slack.op.send_payload.description",
+    "slack.op.approval_request.title",
+    "slack.op.approval_request.description",
     "slack.schema.input.title",
     "slack.schema.input.description",
     "slack.schema.input.message.title",
@@ -107,6 +109,11 @@ pub(crate) fn build_describe_payload() -> DescribePayload {
                 "slack.op.send_payload.title",
                 "slack.op.send_payload.description",
             ),
+            op(
+                "approval_request",
+                "slack.op.approval_request.title",
+                "slack.op.approval_request.description",
+            ),
         ],
         input_schema: input_schema.clone(),
         output_schema: output_schema.clone(),
@@ -168,6 +175,11 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "slack.op.send_payload.description",
         "Send encoded payload to Slack API",
+    ),
+    ("slack.op.approval_request.title", "Approval Request"),
+    (
+        "slack.op.approval_request.description",
+        "Deliver an approval request to Slack with approve and reject buttons",
     ),
     ("slack.schema.input.title", "Slack input"),
     (
