@@ -131,7 +131,7 @@ jobs:
         if: ${{ !inputs.use_published_gtpack }}
         run: |
           set -euo pipefail
-          cargo install cargo-binstall --locked || true
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash || true
           cargo binstall cargo-component --version 0.21.1 --force --no-confirm --locked
           cargo binstall greentic-pack --force --no-confirm --locked || cargo install greentic-pack --force --locked
 
