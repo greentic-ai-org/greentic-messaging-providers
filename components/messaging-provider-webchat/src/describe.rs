@@ -906,9 +906,10 @@ fn config_schema() -> SchemaIr {
             (
                 "oauth_greentic_issuer",
                 false,
-                schema_str(
+                schema_str_fmt(
                     "webchat.schema.config.oauth_greentic_issuer.title",
                     "webchat.schema.config.oauth_greentic_issuer.description",
+                    "uri",
                 ),
             ),
             (
