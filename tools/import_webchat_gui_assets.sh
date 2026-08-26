@@ -98,6 +98,7 @@ cat > "${DEST_DIR}/index.html" <<EOF
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Greentic WebChat</title>
+    <script src="./greentic-sso.js"></script>
     <script src="./runtime-bootstrap.js"></script>
     <script type="module" crossorigin src="./assets/${js_bundle}"></script>
     <link rel="stylesheet" crossorigin href="./assets/${css_bundle}">

@@ -277,4 +277,12 @@ test.describe('full-screen WebChat', () => {
     await expect(webchat.chatInput()).toBeInViewport();
     await webchat.expectNoHorizontalOverflow();
   });
+
+  test('sso callback page loads the SDK and exposes the completer', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-anon/sso-callback.html');
+    const hasCompleter = await page.evaluate(
+      () => typeof (window as any).GreenticSso?.completeCallbackFromPopup === 'function',
+    );
+    expect(hasCompleter).toBe(true);
+  });
 });
