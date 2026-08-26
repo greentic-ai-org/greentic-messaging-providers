@@ -12,6 +12,7 @@ pub struct VerifiedIdentity {
 pub enum OidcError {
     InvalidFormat,
     UnsupportedAlg,
+    InvalidTokenType,
     UnknownKey,
     InvalidSignature,
     Expired,
@@ -19,11 +20,14 @@ pub enum OidcError {
     IssuerMismatch,
     AudienceMismatch,
     MissingScope,
+    NoRequiredScope,
 }
 
 #[derive(Deserialize)]
 struct JwtHeader {
     alg: String,
+    #[serde(default)]
+    typ: Option<String>,
     #[serde(default)]
     kid: Option<String>,
 }
@@ -57,6 +61,9 @@ struct Jwk {
 struct Jwks {
     keys: Vec<Jwk>,
 }
+
+/// Bounds candidate-key iteration if the JWKS source ever becomes tenant-configurable.
+const MAX_JWKS_KEYS: usize = 16;
 
 fn decode_part<T: for<'de> Deserialize<'de>>(part: &str) -> Result<T, OidcError> {
     let bytes = URL_SAFE_NO_PAD
@@ -96,6 +103,10 @@ pub fn verify_access_token(
     required_scope: &str,
     now: i64,
 ) -> Result<VerifiedIdentity, OidcError> {
+    if required_scope.is_empty() {
+        return Err(OidcError::NoRequiredScope);
+    }
+
     let mut parts = token.split('.');
     let header_enc = parts.next().ok_or(OidcError::InvalidFormat)?;
     let claims_enc = parts.next().ok_or(OidcError::InvalidFormat)?;
@@ -108,26 +119,58 @@ pub fn verify_access_token(
     if header.alg != "ES256" {
         return Err(OidcError::UnsupportedAlg);
     }
+    if header.typ.as_deref() != Some("JWT") {
+        return Err(OidcError::InvalidTokenType);
+    }
 
     let jwks: Jwks = serde_json::from_str(jwks_json).map_err(|_| OidcError::UnknownKey)?;
-    let jwk = jwks
+    if jwks.keys.len() > MAX_JWKS_KEYS {
+        return Err(OidcError::UnknownKey);
+    }
+    let candidates: Vec<&Jwk> = jwks
         .keys
         .iter()
-        .find(|k| match (&header.kid, &k.kid) {
+        .filter(|k| match (&header.kid, &k.kid) {
             (Some(want), Some(have)) => want == have,
+            (Some(_), None) => false,
             (None, _) => true,
-            _ => false,
         })
-        .ok_or(OidcError::UnknownKey)?;
-    let key = verifying_key(jwk)?;
+        .collect();
+    if candidates.is_empty() {
+        return Err(OidcError::UnknownKey);
+    }
 
     let sig_bytes = URL_SAFE_NO_PAD
         .decode(sig_enc)
         .map_err(|_| OidcError::InvalidFormat)?;
     let signature = Signature::from_slice(&sig_bytes).map_err(|_| OidcError::InvalidSignature)?;
     let signing_input = format!("{header_enc}.{claims_enc}");
-    key.verify(signing_input.as_bytes(), &signature)
-        .map_err(|_| OidcError::InvalidSignature)?;
+
+    // Every key in the JWKS is a key the issuer asserts as its own, so
+    // accepting a signature from any candidate is the correct trust model —
+    // this only widens which of the issuer's own keys can verify, never
+    // what counts as a valid signature.
+    let mut saw_valid_key = false;
+    let mut verified = false;
+    for candidate in &candidates {
+        match verifying_key(candidate) {
+            Ok(key) => {
+                saw_valid_key = true;
+                if key.verify(signing_input.as_bytes(), &signature).is_ok() {
+                    verified = true;
+                    break;
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    if !verified {
+        return Err(if saw_valid_key {
+            OidcError::InvalidSignature
+        } else {
+            OidcError::UnknownKey
+        });
+    }
 
     let claims: AccessClaims = decode_part(claims_enc)?;
     if claims.iss != expected_iss {
@@ -144,7 +187,7 @@ pub fn verify_access_token(
     {
         return Err(OidcError::NotYetValid);
     }
-    if !required_scope.is_empty() && !claims.scope.split_whitespace().any(|s| s == required_scope) {
+    if !claims.scope.split_whitespace().any(|s| s == required_scope) {
         return Err(OidcError::MissingScope);
     }
 
@@ -243,6 +286,130 @@ mod tests {
         );
         let err =
             verify_access_token(&token, &other_jwks, ISS, AUD, SCOPE, 1_900_000_000).unwrap_err();
+        assert!(matches!(err, OidcError::UnknownKey));
+    }
+
+    #[test]
+    fn rejects_an_empty_required_scope_argument() {
+        let (token, jwks) = fixture();
+        let err = verify_access_token(&token, &jwks, ISS, AUD, "", 1_900_000_000).unwrap_err();
+        assert!(matches!(err, OidcError::NoRequiredScope));
+    }
+
+    #[test]
+    fn rejects_a_token_with_a_non_jwt_typ() {
+        use crate::directline::oidc_test_support::{
+            claims_json, generate_key, jwk_json, jwks_json, kid_for, sign_raw,
+        };
+        let key = generate_key();
+        let kid = kid_for(&key);
+        let header = serde_json::json!({"alg": "ES256", "typ": "at+jwt", "kid": kid});
+        let claims = claims_json(ISS, AUD, "acme:users:1", SCOPE, 2_000_000_000);
+        let token = sign_raw(&key, &header, &claims);
+        let jwks = jwks_json(&[jwk_json(&key, &kid)]);
+        let err = verify_access_token(&token, &jwks, ISS, AUD, SCOPE, 1_900_000_000).unwrap_err();
+        assert!(matches!(err, OidcError::InvalidTokenType));
+    }
+
+    #[test]
+    fn rejects_a_signature_from_a_different_key_under_a_matching_kid() {
+        use crate::directline::oidc_test_support::{
+            claims_json, generate_key, jwk_json, jwks_json, kid_for, sign_raw,
+        };
+        let real_key = generate_key();
+        let attacker_key = generate_key();
+        let kid = kid_for(&real_key);
+        let header = serde_json::json!({"alg": "ES256", "typ": "JWT", "kid": kid});
+        let claims = claims_json(ISS, AUD, "acme:users:1", SCOPE, 2_000_000_000);
+        // Signed by the attacker's key, but the `kid` claims to be the real one.
+        let token = sign_raw(&attacker_key, &header, &claims);
+        let jwks = jwks_json(&[jwk_json(&real_key, &kid)]);
+        let err = verify_access_token(&token, &jwks, ISS, AUD, SCOPE, 1_900_000_000).unwrap_err();
+        assert!(matches!(err, OidcError::InvalidSignature));
+    }
+
+    #[test]
+    fn rejects_alg_none() {
+        use crate::directline::oidc_test_support::{
+            claims_json, generate_key, jwk_json, jwks_json, kid_for, sign_raw,
+        };
+        let key = generate_key();
+        let kid = kid_for(&key);
+        let header = serde_json::json!({"alg": "none", "typ": "JWT", "kid": kid});
+        let claims = claims_json(ISS, AUD, "acme:users:1", SCOPE, 2_000_000_000);
+        let token = sign_raw(&key, &header, &claims);
+        let jwks = jwks_json(&[jwk_json(&key, &kid)]);
+        let err = verify_access_token(&token, &jwks, ISS, AUD, SCOPE, 1_900_000_000).unwrap_err();
+        assert!(matches!(err, OidcError::UnsupportedAlg));
+    }
+
+    #[test]
+    fn rejects_alg_hs256() {
+        use crate::directline::oidc_test_support::{
+            claims_json, generate_key, jwk_json, jwks_json, kid_for, sign_raw,
+        };
+        let key = generate_key();
+        let kid = kid_for(&key);
+        let header = serde_json::json!({"alg": "HS256", "typ": "JWT", "kid": kid});
+        let claims = claims_json(ISS, AUD, "acme:users:1", SCOPE, 2_000_000_000);
+        let token = sign_raw(&key, &header, &claims);
+        let jwks = jwks_json(&[jwk_json(&key, &kid)]);
+        let err = verify_access_token(&token, &jwks, ISS, AUD, SCOPE, 1_900_000_000).unwrap_err();
+        assert!(matches!(err, OidcError::UnsupportedAlg));
+    }
+
+    #[test]
+    fn accepts_a_token_whose_key_is_second_in_the_jwks_with_a_matching_kid() {
+        use crate::directline::oidc_test_support::{
+            claims_json, generate_key, jwk_json, jwks_json, kid_for, sign_raw,
+        };
+        let key1 = generate_key();
+        let kid1 = kid_for(&key1);
+        let key2 = generate_key();
+        let kid2 = kid_for(&key2);
+        let header = serde_json::json!({"alg": "ES256", "typ": "JWT", "kid": kid2});
+        let claims = claims_json(ISS, AUD, "acme:users:2", SCOPE, 2_000_000_000);
+        let token = sign_raw(&key2, &header, &claims);
+        let jwks = jwks_json(&[jwk_json(&key1, &kid1), jwk_json(&key2, &kid2)]);
+        let id = verify_access_token(&token, &jwks, ISS, AUD, SCOPE, 1_900_000_000)
+            .expect("second key in jwks accepted");
+        assert_eq!(id.sub, "acme:users:2");
+    }
+
+    #[test]
+    fn accepts_a_kid_less_token_signed_by_the_second_jwks_key() {
+        use crate::directline::oidc_test_support::{
+            claims_json, generate_key, jwk_json, jwks_json, kid_for, sign_raw,
+        };
+        let key1 = generate_key();
+        let kid1 = kid_for(&key1);
+        let key2 = generate_key();
+        let kid2 = kid_for(&key2);
+        let header = serde_json::json!({"alg": "ES256", "typ": "JWT"});
+        let claims = claims_json(ISS, AUD, "acme:users:2", SCOPE, 2_000_000_000);
+        let token = sign_raw(&key2, &header, &claims);
+        let jwks = jwks_json(&[jwk_json(&key1, &kid1), jwk_json(&key2, &kid2)]);
+        let id = verify_access_token(&token, &jwks, ISS, AUD, SCOPE, 1_900_000_000)
+            .expect("no-kid token verified against every jwks candidate");
+        assert_eq!(id.sub, "acme:users:2");
+    }
+
+    #[test]
+    fn rejects_a_jwks_with_too_many_keys() {
+        use crate::directline::oidc_test_support::{
+            claims_json, generate_key, jwk_json, jwks_json, kid_for, sign_raw,
+        };
+        let key = generate_key();
+        let kid = kid_for(&key);
+        let header = serde_json::json!({"alg": "ES256", "typ": "JWT", "kid": kid});
+        let claims = claims_json(ISS, AUD, "acme:users:1", SCOPE, 2_000_000_000);
+        let token = sign_raw(&key, &header, &claims);
+        let mut entries: Vec<serde_json::Value> = (0..16)
+            .map(|_| jwk_json(&generate_key(), "padding"))
+            .collect();
+        entries.push(jwk_json(&key, &kid));
+        let jwks = jwks_json(&entries);
+        let err = verify_access_token(&token, &jwks, ISS, AUD, SCOPE, 1_900_000_000).unwrap_err();
         assert!(matches!(err, OidcError::UnknownKey));
     }
 }
