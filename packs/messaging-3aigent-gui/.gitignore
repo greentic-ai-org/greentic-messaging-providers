@@ -7,4 +7,3 @@ assets/webchat-gui/config/*
 !assets/webchat-gui/config/tenants/
 assets/webchat-gui/config/tenants/*
 !assets/webchat-gui/config/tenants/default.json
-dist/

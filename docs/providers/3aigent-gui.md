@@ -38,7 +38,7 @@ setup wizard ends up with no client secret, and its token exchange fails.
 
 There is a working route that does not depend on the wizard:
 `ConfigAwareSecretStore::get` (in
-`components/messaging-provider-webchat/src/directline/host.rs`) reads
+`components/messaging-provider-webchat-gui/src/directline/host.rs`) reads
 `{key}_b64` (base64) from the injected config first, then falls back to the
 host secrets store by plain key name. Supplying `oauth_custom_client_secret` as
 a deployment secret or an environment-injected value reaches
