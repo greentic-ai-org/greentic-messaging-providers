@@ -1466,6 +1466,7 @@ console.log('[runtime-bootstrap] loaded');
           var fbResp = await originalFetch(fbUrl);
           if (!fbResp.ok) return fbResp;
           skinData = await fbResp.json();
+          effectiveUrlPath = fbUrl;
         }
         // Skin manifests carry paths relative to their own folder so a skin can be
         // served from any mount point. Absolutize against the URL it was fetched from.
