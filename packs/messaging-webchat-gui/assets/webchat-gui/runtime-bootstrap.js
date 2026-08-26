@@ -807,7 +807,11 @@ console.log('[runtime-bootstrap] loaded');
       btnContainer.appendChild(btn);
     });
     if (providers.length === 0) {
-      card.innerHTML += '<p style="color:#ef4444;font-size:13px;">No OAuth providers configured.</p>';
+      console.error('[oauth] sign-in is enabled but no provider is configured; ' +
+        'set a client ID and secret for at least one provider in the setup wizard');
+      card.innerHTML += '<p style="color:#ef4444;font-size:13px;line-height:1.5;">' +
+        'No sign-in provider configured.<br>' +
+        'Add credentials for at least one provider in the setup wizard.</p>';
     }
     card.appendChild(btnContainer);
     overlay.appendChild(card);

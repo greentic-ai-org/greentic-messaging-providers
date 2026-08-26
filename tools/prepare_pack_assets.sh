@@ -42,6 +42,25 @@ if pack_selected "messaging-webchat-ui"; then
   fi
 fi
 
+# messaging-3aigent-gui is the WebChat GUI shipped as the 3AIgent product. It
+# carries the SAME SPA as messaging-webchat-gui, mirrored here rather than
+# committed twice so the two cannot drift. config/tenants/default.json is
+# excluded: that file is owned by the 3aigent pack and carries its skin and
+# OAuth provider declarations.
+if pack_selected "messaging-3aigent-gui"; then
+  gui_assets="${PACKS_DIR}/messaging-webchat-gui/assets/webchat-gui"
+  aigent_assets="${PACKS_DIR}/messaging-3aigent-gui/assets/webchat-gui"
+  if [ -d "${gui_assets}" ]; then
+    mkdir -p "${aigent_assets}"
+    rsync -a --delete \
+      --exclude 'config/tenants/default.json' \
+      "${gui_assets}/" "${aigent_assets}/"
+  else
+    echo "messaging-3aigent-gui: no SPA assets at ${gui_assets} to mirror" >&2
+    exit 1
+  fi
+fi
+
 for dir in "${PACKS_DIR}"/messaging-*; do
   [ -d "${dir}" ] || continue
   secrets_out="${dir}/.secret_requirements.json"

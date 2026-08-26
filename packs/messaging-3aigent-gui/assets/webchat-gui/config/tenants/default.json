@@ -1,0 +1,55 @@
+{
+  "tenant_id": "default",
+  "skin": "3aigent",
+  "legacy_skin": "3aigent",
+  "branding": {
+    "company_name": "3AIgent",
+    "tagline": "3Point Training Assistant",
+    "logo": "/skins/3aigent/assets/3point-jewel-round.png"
+  },
+  "webchat": {
+    "directline": {
+      "token_url": "/v1/messaging/webchat/default/token"
+    },
+    "locale": "en-US"
+  },
+  "auth": {
+    "providers": [
+      {
+        "id": "google",
+        "label": "Google",
+        "type": "oidc",
+        "enabled": false,
+        "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+        "scope": "openid profile email",
+        "responseType": "code"
+      },
+      {
+        "id": "microsoft",
+        "label": "Microsoft",
+        "type": "oidc",
+        "enabled": false,
+        "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "scope": "openid profile email",
+        "responseType": "code"
+      },
+      {
+        "id": "github",
+        "label": "GitHub",
+        "type": "oidc",
+        "enabled": false,
+        "authorizationUrl": "https://github.com/login/oauth/authorize",
+        "scope": "read:user user:email",
+        "responseType": "code"
+      },
+      {
+        "id": "custom",
+        "label": "Company SSO",
+        "type": "oidc",
+        "enabled": false,
+        "scope": "openid profile email",
+        "responseType": "code"
+      }
+    ]
+  }
+}
