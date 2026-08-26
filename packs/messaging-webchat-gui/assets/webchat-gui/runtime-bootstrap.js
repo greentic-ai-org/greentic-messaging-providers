@@ -739,10 +739,6 @@ console.log('[runtime-bootstrap] loaded');
       greenticSsoRedirectFallback(provider);
       return;
     }
-    if (window.__FORCE_POPUP_BLOCKED__) {
-      greenticSsoRedirectFallback(provider);
-      return;
-    }
     var client = buildGreenticSsoClient(provider);
     window.__GREENTIC_SSO_CLIENT__ = client;
     client.login().then(function (identity) {

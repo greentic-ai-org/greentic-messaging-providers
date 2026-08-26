@@ -286,7 +286,49 @@ test.describe('full-screen WebChat', () => {
     expect(hasCompleter).toBe(true);
   });
 
+  // Stubs GreenticSso.createGreenticWebchatSso before runtime-bootstrap.js reads
+  // it. The bundle exports it as a non-configurable getter, so it can't be
+  // reassigned in place — instead a property-descriptor trap on window.GreenticSso
+  // swaps in a Proxy the instant the bundle assigns the real module object,
+  // forwarding everything except the one factory method.
+  function installGreenticSsoStub(stubMode: 'pending' | 'popup_blocked') {
+    const wrap = (sdk: any) =>
+      new Proxy(sdk, {
+        get(target, prop, receiver) {
+          if (prop === 'createGreenticWebchatSso') {
+            return () => ({
+              login: () => {
+                (window as any).__SSO_LOGIN_CALLED__ = true;
+                if (stubMode === 'popup_blocked') {
+                  return Promise.reject(Object.assign(new Error('popup blocked'), { code: 'popup_blocked' }));
+                }
+                return new Promise(() => {});
+              },
+              isAuthenticated: () => false,
+            });
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+    const existing = (window as any).GreenticSso;
+    if (existing) {
+      (window as any).GreenticSso = wrap(existing);
+      return;
+    }
+    Object.defineProperty(window, 'GreenticSso', {
+      configurable: true,
+      set(value) {
+        delete (window as any).GreenticSso;
+        (window as any).GreenticSso = wrap(value);
+      },
+      get() {
+        return undefined;
+      },
+    });
+  }
+
   test('greentic sso provider renders first and drives the SDK', async ({ page }) => {
+    await page.addInitScript(installGreenticSsoStub, 'pending');
     await page.goto('/v1/web/webchat/default-plain-sso/');
     const overlay = page.locator('#greentic-oauth-overlay');
     await expect(overlay).toBeVisible();
@@ -298,12 +340,17 @@ test.describe('full-screen WebChat', () => {
       return cfg && cfg.providers && cfg.providers[0] && cfg.providers[0].type;
     });
     expect(built).toBe('greentic');
+
+    await firstButton.click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__SSO_LOGIN_CALLED__ === true))
+      .toBe(true);
+    const clientLive = await page.evaluate(() => !!(window as any).__GREENTIC_SSO_CLIENT__);
+    expect(clientLive).toBe(true);
   });
 
   test('popup_blocked falls back to the redirect flow', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as any).__FORCE_POPUP_BLOCKED__ = true;
-    });
+    await page.addInitScript(installGreenticSsoStub, 'popup_blocked');
     const navigations: string[] = [];
     page.on('framenavigated', (f) => navigations.push(f.url()));
     await page.goto('/v1/web/webchat/default-plain-sso/');
