@@ -63,7 +63,7 @@ test.describe('full-screen WebChat', () => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: true });
 
-    await expect(page.getByText('Sign in to start chatting')).toBeVisible();
+    await expect(page.locator('[data-i18n-key="login.title"]')).toBeVisible();
     const loginButton = page.getByRole('button', { name: /test login/i });
     await expect(loginButton).toBeVisible();
     await loginButton.click();
@@ -88,7 +88,7 @@ test.describe('full-screen WebChat', () => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
 
-    await expect(page.getByText('Sign in to start chatting')).toHaveCount(0);
+    await expect(page.locator('[data-i18n-key="login.title"]')).toHaveCount(0);
     await webchat.expectChatReady();
   });
 
@@ -252,7 +252,7 @@ test.describe('full-screen WebChat', () => {
     });
     await page.goto('/v1/web/webchat/missing-config-anon/?tenant=missing-config-anon');
 
-    await expect(page.getByText('Sign in to start chatting')).toHaveCount(0);
+    await expect(page.locator('[data-i18n-key="login.title"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /sign in/i })).toHaveCount(0);
     await webchat.expectChatReady();
     expect(tokenRequests.some(url => url.includes('/v1/messaging/webchat/missing-config-anon/token'))).toBe(true);
@@ -276,5 +276,212 @@ test.describe('full-screen WebChat', () => {
     await webchat.expectChatReady();
     await expect(webchat.chatInput()).toBeInViewport();
     await webchat.expectNoHorizontalOverflow();
+  });
+
+  test('sso callback page loads the SDK and exposes the completer', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-anon/sso-callback.html');
+    const hasCompleter = await page.evaluate(
+      () => typeof (window as any).GreenticSso?.completeCallbackFromPopup === 'function',
+    );
+    expect(hasCompleter).toBe(true);
+  });
+
+  // Stubs GreenticSso.createGreenticWebchatSso before runtime-bootstrap.js reads
+  // it. The bundle exports it as a non-configurable getter, so it can't be
+  // reassigned in place — instead a property-descriptor trap on window.GreenticSso
+  // swaps in a Proxy the instant the bundle assigns the real module object,
+  // forwarding everything except the one factory method.
+  function installGreenticSsoStub(stubMode: 'pending' | 'popup_blocked' | 'sub-only') {
+    const wrap = (sdk: any) =>
+      new Proxy(sdk, {
+        get(target, prop, receiver) {
+          if (prop === 'createGreenticWebchatSso') {
+            return () => ({
+              login: () => {
+                (window as any).__SSO_LOGIN_CALLED__ = true;
+                if (stubMode === 'popup_blocked') {
+                  return Promise.reject(Object.assign(new Error('popup blocked'), { code: 'popup_blocked' }));
+                }
+                if (stubMode === 'sub-only') {
+                  // Identity carrying only the SDK-guaranteed `sub` field —
+                  // an IdP that omits name/email must still get a distinct cache key.
+                  return Promise.resolve({ sub: 'sso-user-42' });
+                }
+                return new Promise(() => {});
+              },
+              isAuthenticated: () => false,
+            });
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+    const existing = (window as any).GreenticSso;
+    if (existing) {
+      (window as any).GreenticSso = wrap(existing);
+      return;
+    }
+    Object.defineProperty(window, 'GreenticSso', {
+      configurable: true,
+      set(value) {
+        delete (window as any).GreenticSso;
+        (window as any).GreenticSso = wrap(value);
+      },
+      get() {
+        return undefined;
+      },
+    });
+  }
+
+  test('greentic sso provider renders first and drives the SDK', async ({ page }) => {
+    await page.addInitScript(installGreenticSsoStub, 'pending');
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+    const overlay = page.locator('#greentic-oauth-overlay');
+    await expect(overlay).toBeVisible();
+    const firstButton = overlay.locator('button').first();
+    await expect(firstButton).toHaveText(/greentic sso/i);
+
+    const built = await page.evaluate(() => {
+      const cfg = (window as any).__OAUTH_CONFIG__;
+      return cfg && cfg.providers && cfg.providers[0] && cfg.providers[0].type;
+    });
+    expect(built).toBe('greentic');
+
+    await firstButton.click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__SSO_LOGIN_CALLED__ === true))
+      .toBe(true);
+    const clientLive = await page.evaluate(() => !!(window as any).__GREENTIC_SSO_CLIENT__);
+    expect(clientLive).toBe(true);
+  });
+
+  test('popup_blocked falls back to the redirect flow', async ({ page }) => {
+    await page.addInitScript(installGreenticSsoStub, 'popup_blocked');
+    const navigations: string[] = [];
+    page.on('framenavigated', (f) => navigations.push(f.url()));
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+    await page.locator('#greentic-oauth-overlay button').first().click();
+    await expect
+      .poll(() => navigations.some((u) => u.includes('/mock-idp/oauth/authorize')))
+      .toBe(true);
+  });
+
+  test('SSO identity with only a sub scopes the Direct Line cache to that sub, not the shared token_handle', async ({ page }) => {
+    await page.addInitScript(installGreenticSsoStub, 'sub-only');
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+    await page.locator('#greentic-oauth-overlay button').first().click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__SSO_LOGIN_CALLED__ === true))
+      .toBe(true);
+
+    // Every SSO identity here shares the same token_handle ('greentic-sso');
+    // only `sub` distinguishes users. Poll for the sub-scoped key specifically
+    // rather than "any" dl:token key, since an anonymous prefetch key can
+    // also be present.
+    await expect.poll(async () =>
+      page.evaluate(() => Object.keys(localStorage).some((k) => k.includes(':dl:token:') && k.endsWith(':sso-user-42'))),
+    ).toBe(true);
+
+    const hasSharedTokenHandleKey = await page.evaluate(() =>
+      Object.keys(localStorage).some((k) => k.includes(':dl:token:') && k.endsWith(':greentic-sso')),
+    );
+    expect(hasSharedTokenHandleKey).toBe(false);
+  });
+
+  test('logout clears the cached Direct Line token', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-login/');
+    await page.getByRole('button', { name: /test login/i }).click();
+
+    // The widget prefetches a Direct Line token on every page load regardless
+    // of auth state, so an anonymous-scoped token key can appear (and later
+    // reappear post-logout) independent of login. Poll for the identity-scoped
+    // key specifically — the dummy 'test login' provider always sets user_name
+    // to 'Guest', so the key's trailing segment is ':guest' — rather than "any"
+    // dl:token key, so this doesn't race the anonymous prefetch's own key.
+    await expect.poll(async () =>
+      page.evaluate(() => Object.keys(localStorage).some((k) => k.includes(':dl:token:') && k.endsWith(':guest'))),
+    ).toBe(true);
+
+    const loggedInTokenKey = await page.evaluate(
+      () => Object.keys(localStorage).find((k) => k.includes(':dl:token:') && k.endsWith(':guest')) as string,
+    );
+    expect(loggedInTokenKey).toBeTruthy();
+
+    await page.evaluate(() => {
+      const btn = document.getElementById('greentic-logout-btn') as HTMLButtonElement | null;
+      btn?.click();
+    });
+
+    // Logout triggers window.location.reload(); page.evaluate() can hit an
+    // in-flight navigation and reject, so treat that as "not settled yet"
+    // instead of failing the poll outright.
+    await expect.poll(async () => {
+      try {
+        return await page.evaluate((key) => localStorage.getItem(key), loggedInTokenKey);
+      } catch (_) {
+        return 'pending';
+      }
+    }).toBeNull();
+  });
+
+  test('login overlay uses i18n keys rather than hardcoded English', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-login/');
+    const usesKeys = await page.evaluate(() => {
+      const card = document.querySelector('#greentic-oauth-overlay h2');
+      return card ? card.getAttribute('data-i18n-key') : null;
+    });
+    expect(usesKeys).toBe('login.title');
+  });
+
+  test('login overlay interpolates i18n placeholders instead of leaking literal braces', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-login/');
+    const titleText = await page.locator('[data-i18n-key="login.title"]').textContent();
+    expect(titleText).not.toContain('{{');
+    const buttonText = await page.getByRole('button', { name: /test login/i }).textContent();
+    expect(buttonText).not.toContain('{{');
+    expect(buttonText).toContain('Test Login');
+  });
+
+  test('an SSO session attaches a bearer to the token mint', async ({ page, request }) => {
+    await page.addInitScript(() => {
+      (window as any).__GREENTIC_SSO_CLIENT__ = {
+        getAccessToken: () => Promise.resolve('fake-access-token'),
+      };
+    });
+    await page.goto('/v1/web/webchat/default-plain-anon/');
+    await expect
+      .poll(async () => {
+        const res = await request.get('/mock-api/last-token-authorization?tenant=default-plain-anon');
+        return (await res.json()).authorization;
+      })
+      .toBe('Bearer fake-access-token');
+  });
+
+  test('a dead SSO session shows the login screen instead of silently going anonymous', async ({ page }) => {
+    const tokenAuthHeaders: string[] = [];
+    page.on('request', (req) => {
+      let pathname = '';
+      try { pathname = new URL(req.url()).pathname; } catch (_) { /* ignore */ }
+      if (/\/token$/.test(pathname)) tokenAuthHeaders.push(req.headers()['authorization'] || '');
+    });
+    // Seed once, not on every reload — the fix reloads the page, and
+    // addInitScript re-runs on that reload too. Re-seeding an "existing
+    // session" on the reloaded page would loop forever instead of settling
+    // on the login screen, which is not how a real cleared session behaves.
+    await page.addInitScript(() => {
+      if (localStorage.getItem('__test_seeded_dead_sso_session__')) return;
+      localStorage.setItem('__test_seeded_dead_sso_session__', '1');
+      sessionStorage.setItem('greentic_oauth_token_handle', 'expired-access-token');
+      sessionStorage.setItem('greentic_oauth_flow_id', 'greentic');
+      sessionStorage.setItem('greentic_oauth_provider', JSON.stringify({ id: 'greentic', type: 'greentic' }));
+      (window as any).__GREENTIC_SSO_CLIENT__ = {
+        getAccessToken: () => Promise.reject(new Error('refresh failed')),
+      };
+    });
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+
+    await expect(page.locator('[data-i18n-key="login.title"]')).toBeVisible();
+    // The dead session's bearer must never reach the network — not even as
+    // part of a request that otherwise succeeds anonymously.
+    expect(tokenAuthHeaders.some((h) => h.includes('expired-access-token'))).toBe(false);
   });
 });

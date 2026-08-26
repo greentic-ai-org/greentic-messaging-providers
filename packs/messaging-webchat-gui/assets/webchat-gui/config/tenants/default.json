@@ -18,6 +18,15 @@
     "locale": "en-US"
   },
   "auth": {
-    "providers": []
+    "providers": [
+      {
+        "id": "greentic",
+        "label": "Greentic SSO",
+        "type": "greentic",
+        "enabled": true,
+        "clientId": "webchat-gui",
+        "scope": "openid profile email greentic.webchat"
+      }
+    ]
   }
 }

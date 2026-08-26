@@ -291,6 +291,9 @@ fn apply_answers_impl(
         }
     }
 
+    // oauth_greentic_* answers are intentionally not mapped here: this
+    // pack's schema is additionalProperties: false and has no oidc_* fields.
+
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
             ok: false,

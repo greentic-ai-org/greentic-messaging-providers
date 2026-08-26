@@ -11,6 +11,20 @@ pub trait SecretStore {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>, String>;
 }
 
+/// Driver for fetching an OIDC issuer's JWKS document.
+pub trait JwksFetcher {
+    fn fetch(&self, jwks_url: &str) -> Result<String, String>;
+}
+
+/// Fetcher for contexts with no outbound HTTP. Verification fails closed.
+pub struct NoJwksFetcher;
+
+impl JwksFetcher for NoJwksFetcher {
+    fn fetch(&self, _jwks_url: &str) -> Result<String, String> {
+        Err("jwks fetching unavailable".to_string())
+    }
+}
+
 /// Simple rate-limit record persisted per (env,tenant,team,user) to enforce token generation limits.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RateLimitState {

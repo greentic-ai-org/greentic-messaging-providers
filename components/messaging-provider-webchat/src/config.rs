@@ -20,6 +20,12 @@ pub(crate) struct ProviderConfig {
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default)]
     pub(crate) oauth_providers: Option<String>,
+    #[serde(default)]
+    pub(crate) oidc_issuer: Option<String>,
+    #[serde(default)]
+    pub(crate) oidc_audience: Option<String>,
+    #[serde(default)]
+    pub(crate) oidc_required_scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +42,12 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) oauth_providers: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oidc_issuer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oidc_audience: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oidc_required_scope: Option<String>,
 }
 
 pub(crate) fn default_enabled() -> bool {
@@ -57,6 +69,9 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         jwt_signing_key_b64: None,
         oauth_enabled: None,
         oauth_providers: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+        oidc_required_scope: None,
     }
 }
 
@@ -133,6 +148,12 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "base_url",
         "oauth_enabled",
         "oauth_providers",
+        // Surfaced via ConfigAwareSecretStore, not parsed into ProviderConfig.
+        "oauth_greentic_issuer",
+        "oauth_greentic_client_id",
+        "oidc_issuer",
+        "oidc_audience",
+        "oidc_required_scope",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -147,6 +168,12 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "base_url",
         "oauth_enabled",
         "oauth_providers",
+        // Surfaced via ConfigAwareSecretStore, not parsed into ProviderConfig.
+        "oauth_greentic_issuer",
+        "oauth_greentic_client_id",
+        "oidc_issuer",
+        "oidc_audience",
+        "oidc_required_scope",
     ] {
         if partial.contains_key(key) {
             continue;
@@ -186,6 +213,9 @@ mod tests {
             jwt_signing_key_b64: None,
             oauth_enabled: None,
             oauth_providers: None,
+            oidc_issuer: None,
+            oidc_audience: None,
+            oidc_required_scope: None,
         }
     }
 
@@ -224,6 +254,9 @@ mod tests {
             base_url: None,
             oauth_enabled: None,
             oauth_providers: None,
+            oidc_issuer: None,
+            oidc_audience: None,
+            oidc_required_scope: None,
         })
         .unwrap_err();
         assert_eq!(
@@ -240,6 +273,9 @@ mod tests {
             base_url: None,
             oauth_enabled: None,
             oauth_providers: None,
+            oidc_issuer: None,
+            oidc_audience: None,
+            oidc_required_scope: None,
         })
         .unwrap_err();
         assert_eq!(

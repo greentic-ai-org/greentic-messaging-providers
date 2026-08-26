@@ -1,7 +1,10 @@
 {
-  "mode": "websocket",
+  "mode": "setup",
   "config": {
-    "public_base_url": "<value>"
+    "public_base_url": "<value>",
+    "oauth_enabled": true,
+    "oauth_enable_greentic": true,
+    "oauth_greentic_issuer": "https://acme.greentic-id.com"
   },
   "secrets": {}
 }

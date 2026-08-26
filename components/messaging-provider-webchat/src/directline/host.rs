@@ -1,9 +1,10 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
 
+use crate::bindings::greentic::http::http_client as client;
 use crate::bindings::greentic::secrets_store::secrets_store;
 use crate::bindings::greentic::state::state_store;
-use webchat_directline_core::directline::store::{SecretStore, StateStore};
+use webchat_directline_core::directline::store::{JwksFetcher, SecretStore, StateStore};
 
 /// Host-backed state store implementation using the WIT state-store interface.
 pub struct HostStateStore;
@@ -32,6 +33,27 @@ impl StateStore for HostStateStore {
         state_store::write(key, value, None)
             .map(|_ack| ())
             .map_err(|err| format!("state write error: {} - {}", err.code, err.message))
+    }
+}
+
+/// Host-backed fetcher for an OIDC issuer's JWKS document over the WIT HTTP client.
+pub struct HostJwksFetcher;
+
+impl JwksFetcher for HostJwksFetcher {
+    fn fetch(&self, jwks_url: &str) -> Result<String, String> {
+        let request = client::Request {
+            method: "GET".into(),
+            url: jwks_url.to_string(),
+            headers: vec![("Accept".into(), "application/json".into())],
+            body: None,
+        };
+        let response = client::send(&request, None, None)
+            .map_err(|err| format!("jwks request failed: {}", err.message))?;
+        if response.status != 200 {
+            return Err(format!("jwks endpoint returned {}", response.status));
+        }
+        String::from_utf8(response.body.unwrap_or_default())
+            .map_err(|_| "jwks response not utf-8".to_string())
     }
 }
 

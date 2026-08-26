@@ -1515,6 +1515,8 @@ fn webchat_gui_pack_contains_runtime_bootstrap_and_bundled_assets() -> Result<()
         "runtime-bootstrap.js",
         "embed.js",
         "config/product.json",
+        "greentic-sso.js",
+        "sso-callback.html",
     ] {
         let path = asset_root.join(rel);
         assert!(path.exists(), "missing asset {}", path.display());
@@ -1552,6 +1554,10 @@ fn webchat_gui_pack_contains_runtime_bootstrap_and_bundled_assets() -> Result<()
     assert!(
         pack_yaml.contains("assets/webchat-gui/embed.js"),
         "pack.yaml should include embed.js as a static asset"
+    );
+    assert!(
+        pack_yaml.contains("assets/webchat-gui/greentic-sso.js"),
+        "pack.yaml must declare the bundled SSO SDK asset"
     );
 
     let mut has_js_bundle = false;

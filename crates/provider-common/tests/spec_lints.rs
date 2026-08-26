@@ -966,6 +966,26 @@ fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
         "webchat-gui Direct Line cache key must include origin, tenant, env, token URL, and domain"
     );
     assert!(
+        runtime.contains("stableCachePart(directLineIdentityPart())"),
+        "webchat-gui Direct Line cache key must include the authenticated identity"
+    );
+    let logout_body = runtime
+        .split_once("function performLogout()")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map(|(body, _)| body)
+        .expect("webchat-gui runtime must define performLogout");
+    let clears_cache_at = logout_body.find("clearDirectLineCache()");
+    let clears_oauth_at = logout_body.find("clearOAuthSession()");
+    assert!(
+        matches!(
+            (clears_cache_at, clears_oauth_at),
+            (Some(cache_idx), Some(oauth_idx)) if cache_idx < oauth_idx
+        ),
+        "webchat-gui logout must clear the Direct Line cache before clearing the OAuth \
+         session — clearing after would compute the cache key against the already-cleared \
+         (anonymous) identity and leave the real user's token behind"
+    );
+    assert!(
         runtime.contains("LEGACY_TOKEN_CACHE_KEY = 'greentic_dl_token'")
             && runtime.contains("LEGACY_CONVERSATION_CACHE_KEY = 'greentic_dl_conversation'")
             && runtime.contains("clearLegacyDirectLineCache"),
@@ -982,7 +1002,7 @@ fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
         runtime.contains("reloadOnceAfterDirectLineAuthFailure")
             && runtime.contains("response.status === 401")
             && runtime.contains("xhr.status === 401")
-            && runtime.contains("sessionStorage.setItem(DIRECT_LINE_AUTH_RETRY_KEY, '1')"),
+            && runtime.contains("sessionStorage.setItem(directLineAuthRetryKey(), '1')"),
         "webchat-gui runtime must clear Direct Line cache and retry once after 401"
     );
 

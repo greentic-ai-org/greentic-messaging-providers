@@ -18,6 +18,11 @@ for (let index = 2; index < process.argv.length; index += 1) {
 }
 const port = Number(args.get('port') || process.env.WEBCHAT_GUI_TEST_PORT || 8799);
 
+// Keyed per tenant (every test uses a distinct tenant name) so concurrent
+// /token calls from unrelated tests running in parallel can't clobber each
+// other's recorded header.
+const lastTokenAuthorizationByTenant = new Map();
+
 const demoLinks = [
   { id: 'docs', label: 'Docs', url: 'https://docs.greentic.ai' },
   { id: 'playground', label: 'Playground', url: 'https://example.test/playground' },
@@ -56,6 +61,7 @@ function tenantScenario(tenant) {
     nav: normalized.includes('nav'),
     login: normalized.includes('login'),
     tenantConfigLogin: normalized.includes('tenant-config-login'),
+    ssoLogin: normalized.includes('sso'),
   };
 }
 
@@ -155,13 +161,34 @@ const server = http.createServer((req, res) => {
       sendJson(res, 404, { error: 'auth config unavailable for tenant-config fallback scenario' });
       return;
     }
+    if (scenario.ssoLogin) {
+      sendJson(res, 200, {
+        enabled: true,
+        providers: [{
+          id: 'greentic',
+          label: 'Greentic SSO',
+          type: 'greentic',
+          enabled: true,
+          issuer: `http://127.0.0.1:${port}/mock-idp`,
+          client_id: 'webchat-gui',
+        }],
+      });
+      return;
+    }
     sendJson(res, 200, scenario.login
       ? { enabled: true, providers: [{ id: 'test-login', label: 'Test Login', type: 'dummy', enabled: true }] }
       : { enabled: false });
     return;
   }
+  if (urlPath === '/mock-api/last-token-authorization') {
+    const tenant = url.searchParams.get('tenant') || 'default';
+    sendJson(res, 200, { authorization: lastTokenAuthorizationByTenant.get(tenant) || null });
+    return;
+  }
   if (urlPath.endsWith('/token') || urlPath.endsWith('/v3/directline/tokens/generate')) {
     req.resume();
+    const tenant = urlPath.split('/v1/messaging/webchat/')[1]?.split('/')[0] || 'default';
+    lastTokenAuthorizationByTenant.set(tenant, req.headers['authorization'] || null);
     sendJson(res, 200, {
       conversationId: 'webchat-gui-test',
       token: 'webchat-gui-test-token',

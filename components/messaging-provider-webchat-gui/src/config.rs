@@ -52,6 +52,12 @@ pub(crate) struct ProviderConfig {
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default)]
     pub(crate) oauth_providers: Option<String>,
+    #[serde(default)]
+    pub(crate) oidc_issuer: Option<String>,
+    #[serde(default)]
+    pub(crate) oidc_audience: Option<String>,
+    #[serde(default)]
+    pub(crate) oidc_required_scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +85,12 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) oauth_providers: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oidc_issuer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oidc_audience: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) oidc_required_scope: Option<String>,
 }
 
 pub(crate) fn default_enabled() -> bool {
@@ -104,6 +116,9 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         jwt_signing_key_b64: None,
         oauth_enabled: default_oauth_enabled(),
         oauth_providers: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+        oidc_required_scope: None,
     }
 }
 
@@ -111,6 +126,21 @@ pub(crate) fn normalize_nav_links(config: &mut ProviderConfigOut) {
     if config.presentation_mode == PresentationMode::EmbedWebcomponent {
         config.nav_links.clear();
     }
+}
+
+/// True when `oauth_providers` (the composed JSON array) lists a `greentic`
+/// entry. Used to cross-check the toggle against `oidc_issuer` — a greentic
+/// provider with no issuer renders no login button but still shouldn't ship.
+fn has_greentic_provider(config: &ProviderConfigOut) -> bool {
+    let Some(raw) = config.oauth_providers.as_deref() else {
+        return false;
+    };
+    let Ok(Value::Array(providers)) = serde_json::from_str::<Value>(raw) else {
+        return false;
+    };
+    providers
+        .iter()
+        .any(|p| p.get("type").and_then(Value::as_str) == Some("greentic"))
 }
 
 pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), String> {
@@ -129,6 +159,18 @@ pub(crate) fn validate_config_out(config: &ProviderConfigOut) -> Result<(), Stri
     }
     if config.skin.trim().is_empty() {
         return Err("config validation failed: skin is required".to_string());
+    }
+    if has_greentic_provider(config)
+        && !config
+            .oidc_issuer
+            .as_deref()
+            .is_some_and(|issuer| issuer.starts_with("https://"))
+    {
+        return Err(
+            "config validation failed: Greentic SSO is enabled (oauth_enable_greentic) but \
+             oidc_issuer is missing or is not an https:// URL — set oauth_greentic_issuer"
+                .to_string(),
+        );
     }
     Ok(())
 }
@@ -202,6 +244,12 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "nav_links",
         "oauth_enabled",
         "oauth_providers",
+        // Surfaced via ConfigAwareSecretStore, not parsed into ProviderConfig.
+        "oauth_greentic_issuer",
+        "oauth_greentic_client_id",
+        "oidc_issuer",
+        "oidc_audience",
+        "oidc_required_scope",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -220,6 +268,12 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "nav_links",
         "oauth_enabled",
         "oauth_providers",
+        // Surfaced via ConfigAwareSecretStore, not parsed into ProviderConfig.
+        "oauth_greentic_issuer",
+        "oauth_greentic_client_id",
+        "oidc_issuer",
+        "oidc_audience",
+        "oidc_required_scope",
     ] {
         if partial.contains_key(key) {
             continue;
@@ -335,5 +389,43 @@ mod tests {
         cfg.skin.clear();
         let err = validate_config_out(&cfg).unwrap_err();
         assert!(err.contains("skin is required"), "{err}");
+    }
+
+    fn valid_base_config() -> ProviderConfigOut {
+        let mut cfg = default_config_out();
+        cfg.public_base_url = "https://chat.example.com".to_string();
+        cfg
+    }
+
+    #[test]
+    fn validate_config_out_rejects_greentic_provider_without_https_issuer() {
+        let mut cfg = valid_base_config();
+        cfg.oauth_providers = Some(
+            json!([{"id": "greentic", "type": "greentic", "client_id": "webchat-gui"}]).to_string(),
+        );
+        cfg.oidc_issuer = None;
+        let err = validate_config_out(&cfg).unwrap_err();
+        assert!(err.contains("oidc_issuer"), "{err}");
+
+        cfg.oidc_issuer = Some("acme.greentic-id.com".to_string());
+        let err = validate_config_out(&cfg).unwrap_err();
+        assert!(err.contains("oidc_issuer"), "{err}");
+    }
+
+    #[test]
+    fn validate_config_out_accepts_greentic_provider_with_https_issuer() {
+        let mut cfg = valid_base_config();
+        cfg.oauth_providers = Some(
+            json!([{"id": "greentic", "type": "greentic", "client_id": "webchat-gui"}]).to_string(),
+        );
+        cfg.oidc_issuer = Some("https://acme.greentic-id.com".to_string());
+        assert!(validate_config_out(&cfg).is_ok());
+    }
+
+    #[test]
+    fn validate_config_out_ignores_missing_issuer_without_greentic_provider() {
+        let cfg = valid_base_config();
+        assert!(cfg.oauth_providers.is_none());
+        assert!(validate_config_out(&cfg).is_ok());
     }
 }

@@ -279,22 +279,19 @@ config["tenant_id"] = config.get("tenant_id") or skin
 config["skin"] = skin
 config["legacy_skin"] = skin
 if login_required:
-    auth = config.setdefault("auth", {})
-    providers = auth.get("providers")
-    if not isinstance(providers, list) or not providers:
-        auth["providers"] = [{"id": "guest", "label": "Continue as Guest", "type": "dummy", "enabled": True}]
-    else:
-        guest = None
-        for provider in providers:
-            if isinstance(provider, dict) and provider.get("id") == "guest":
-                guest = provider
-                break
-        if guest is None:
-            providers.insert(0, {"id": "guest", "label": "Continue as Guest", "type": "dummy", "enabled": True})
-        else:
-            guest["type"] = "dummy"
-            guest["enabled"] = True
-            guest.setdefault("label", "Continue as Guest")
+    existing_providers = config.get("auth", {}).get("providers")
+    if not isinstance(existing_providers, list):
+        existing_providers = []
+    other_providers = [
+        p for p in existing_providers
+        if not (isinstance(p, dict) and p.get("id") in ("greentic", "guest"))
+    ]
+    config["auth"] = {"providers": [
+        {"id": "greentic", "label": "Greentic SSO", "type": "greentic",
+         "enabled": True, "clientId": "webchat-gui",
+         "scope": "openid profile email greentic.webchat"},
+        {"id": "guest", "label": "Continue as Guest", "type": "dummy", "enabled": True},
+    ] + other_providers}
 else:
     config.pop("auth", None)
 webchat = config.setdefault("webchat", {})

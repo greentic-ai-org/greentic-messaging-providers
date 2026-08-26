@@ -106,6 +106,25 @@ fn oauth_bool_question(
     }
 }
 
+fn oauth_bool_question_default_on(
+    id: &str,
+    label_key: &str,
+    help_key: &str,
+    skip_if: Option<SkipExpression>,
+) -> QaQuestionSpec {
+    QaQuestionSpec {
+        id: id.to_string(),
+        label: i18n(label_key),
+        help: Some(i18n(help_key)),
+        help_url: None,
+        error: None,
+        kind: provider_common::component_v0_6::QuestionKind::Bool,
+        required: false,
+        default: Some(json!(true)),
+        skip_if,
+    }
+}
+
 // Base setup questions (non-OAuth)
 pub(crate) const BASE_SETUP_QUESTIONS: &[provider_common::helpers::QaQuestionDef] = &[
     ("enabled", "webchat.qa.setup.enabled", true),
@@ -175,6 +194,16 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.schema.config.base_url.description",
     "webchat.schema.config.jwt_signing_key.title",
     "webchat.schema.config.jwt_signing_key.description",
+    "webchat.schema.config.oauth_greentic_issuer.title",
+    "webchat.schema.config.oauth_greentic_issuer.description",
+    "webchat.schema.config.oauth_greentic_client_id.title",
+    "webchat.schema.config.oauth_greentic_client_id.description",
+    "webchat.schema.config.oidc_issuer.title",
+    "webchat.schema.config.oidc_issuer.description",
+    "webchat.schema.config.oidc_audience.title",
+    "webchat.schema.config.oidc_audience.description",
+    "webchat.schema.config.oidc_required_scope.title",
+    "webchat.schema.config.oidc_required_scope.description",
     "webchat.schema.config.oauth_google_client_id.title",
     "webchat.schema.config.oauth_google_client_id.description",
     "webchat.schema.config.oauth_google_client_secret.title",
@@ -200,6 +229,12 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     // OAuth QA keys
     "webchat.qa.oauth.enabled",
     "webchat.qa.oauth.enabled.help",
+    "webchat.qa.oauth.greentic.enable",
+    "webchat.qa.oauth.greentic.enable.help",
+    "webchat.qa.oauth.greentic.issuer",
+    "webchat.qa.oauth.greentic.issuer.help",
+    "webchat.qa.oauth.greentic.client_id",
+    "webchat.qa.oauth.greentic.client_id.help",
     "webchat.qa.oauth.google.enable",
     "webchat.qa.oauth.google.enable.help",
     "webchat.qa.oauth.google.client_id",
@@ -241,6 +276,27 @@ fn oauth_questions() -> Vec<QaQuestionSpec> {
             "webchat.qa.oauth.enabled",
             "webchat.qa.oauth.enabled.help",
             None,
+        ),
+        // ── Greentic SSO (default) ──
+        oauth_bool_question_default_on(
+            "oauth_enable_greentic",
+            "webchat.qa.oauth.greentic.enable",
+            "webchat.qa.oauth.greentic.enable.help",
+            skip_unless_oauth(),
+        ),
+        oauth_question(
+            "oauth_greentic_issuer",
+            "webchat.qa.oauth.greentic.issuer",
+            "webchat.qa.oauth.greentic.issuer.help",
+            true,
+            skip_unless_provider("oauth_enable_greentic"),
+        ),
+        oauth_question(
+            "oauth_greentic_client_id",
+            "webchat.qa.oauth.greentic.client_id",
+            "webchat.qa.oauth.greentic.client_id.help",
+            false,
+            skip_unless_provider("oauth_enable_greentic"),
         ),
         // ── Google ──
         oauth_bool_question(
@@ -459,6 +515,28 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
         "webchat.qa.oauth.enabled.help",
         "Require users to sign in before accessing the chat",
     ),
+    // Greentic SSO (default)
+    ("webchat.qa.oauth.greentic.enable", "Enable Greentic SSO"),
+    (
+        "webchat.qa.oauth.greentic.enable.help",
+        "Sign in with the Greentic identity provider. Enabled by default.",
+    ),
+    (
+        "webchat.qa.oauth.greentic.issuer",
+        "Greentic SSO issuer URL",
+    ),
+    (
+        "webchat.qa.oauth.greentic.issuer.help",
+        "Issuer base URL. Must be an https:// URL — required when Greentic SSO is enabled, since a missing issuer means every chat-token mint is rejected.",
+    ),
+    (
+        "webchat.qa.oauth.greentic.client_id",
+        "Greentic SSO client ID",
+    ),
+    (
+        "webchat.qa.oauth.greentic.client_id.help",
+        "Registered public OIDC client for this tenant. Defaults to webchat-gui.",
+    ),
     // Google
     ("webchat.qa.oauth.google.enable", "Enable Google login"),
     (
@@ -569,6 +647,43 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "webchat.schema.config.oauth_providers.description",
         "JSON array of configured OAuth providers",
+    ),
+    (
+        "webchat.schema.config.oauth_greentic_issuer.title",
+        "Greentic SSO issuer",
+    ),
+    (
+        "webchat.schema.config.oauth_greentic_issuer.description",
+        "Issuer base URL for the Greentic identity provider",
+    ),
+    (
+        "webchat.schema.config.oauth_greentic_client_id.title",
+        "Greentic SSO client ID",
+    ),
+    (
+        "webchat.schema.config.oauth_greentic_client_id.description",
+        "Registered public OIDC client ID for the Greentic identity provider",
+    ),
+    (
+        "webchat.schema.config.oidc_issuer.title",
+        "OIDC issuer for chat-token verification",
+    ),
+    (
+        "webchat.schema.config.oidc_issuer.description",
+        "Pinned issuer whose access tokens may mint an identity-bound Direct Line token",
+    ),
+    ("webchat.schema.config.oidc_audience.title", "OIDC audience"),
+    (
+        "webchat.schema.config.oidc_audience.description",
+        "Expected aud claim on the access token. Defaults to webchat-gui",
+    ),
+    (
+        "webchat.schema.config.oidc_required_scope.title",
+        "OIDC required scope",
+    ),
+    (
+        "webchat.schema.config.oidc_required_scope.description",
+        "Scope the access token must carry. Defaults to greentic.webchat",
     ),
     (
         "webchat.schema.config.jwt_signing_key.title",
@@ -813,6 +928,47 @@ fn config_schema() -> SchemaIr {
                 schema_str(
                     "webchat.schema.config.oauth_providers.title",
                     "webchat.schema.config.oauth_providers.description",
+                ),
+            ),
+            (
+                "oauth_greentic_issuer",
+                false,
+                schema_str_fmt(
+                    "webchat.schema.config.oauth_greentic_issuer.title",
+                    "webchat.schema.config.oauth_greentic_issuer.description",
+                    "uri",
+                ),
+            ),
+            (
+                "oauth_greentic_client_id",
+                false,
+                schema_str(
+                    "webchat.schema.config.oauth_greentic_client_id.title",
+                    "webchat.schema.config.oauth_greentic_client_id.description",
+                ),
+            ),
+            (
+                "oidc_issuer",
+                false,
+                schema_str(
+                    "webchat.schema.config.oidc_issuer.title",
+                    "webchat.schema.config.oidc_issuer.description",
+                ),
+            ),
+            (
+                "oidc_audience",
+                false,
+                schema_str(
+                    "webchat.schema.config.oidc_audience.title",
+                    "webchat.schema.config.oidc_audience.description",
+                ),
+            ),
+            (
+                "oidc_required_scope",
+                false,
+                schema_str(
+                    "webchat.schema.config.oidc_required_scope.title",
+                    "webchat.schema.config.oidc_required_scope.description",
                 ),
             ),
             (

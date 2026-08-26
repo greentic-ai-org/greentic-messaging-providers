@@ -63,6 +63,11 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Verify SSO bundle is up to date
+        run: |
+          npm run build:sso-bundle
+          git diff --exit-code packs/messaging-webchat-gui/assets/webchat-gui/greentic-sso.js
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

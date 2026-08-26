@@ -345,6 +345,14 @@ console.log('[runtime-bootstrap] loaded');
     return UI_STRINGS[key] || fallback || key;
   }
 
+  function uiTv(key, fallback, vars) {
+    var text = uiT(key, fallback);
+    if (!vars) return text;
+    return text.replace(/\{\{(\w+)\}\}/g, function (match, name) {
+      return Object.prototype.hasOwnProperty.call(vars, name) ? vars[name] : match;
+    });
+  }
+
   function isRtlLocale(locale) {
     var base = (locale || '').split('-')[0];
     return ['ar', 'he', 'fa', 'ur'].indexOf(base) >= 0;
@@ -467,10 +475,13 @@ console.log('[runtime-bootstrap] loaded');
     try {
       sessionStorage.removeItem(oauthStorageKey('token_handle'));
       sessionStorage.removeItem(oauthStorageKey('flow_id'));
+      sessionStorage.removeItem(oauthStorageKey('user_sub'));
       sessionStorage.removeItem(oauthStorageKey('user_name'));
       sessionStorage.removeItem(oauthStorageKey('user_email'));
       sessionStorage.removeItem(oauthStorageKey('user_picture'));
       sessionStorage.removeItem(oauthStorageKey('provider'));
+      sessionStorage.removeItem(oauthStorageKey('greentic_bearer'));
+      sessionStorage.removeItem(oauthStorageKey('greentic_fallback'));
     } catch (_) { /* sessionStorage unavailable */ }
   }
 
@@ -566,7 +577,7 @@ console.log('[runtime-bootstrap] loaded');
         } catch (_) {}
       }
       console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
-      saveOAuthSession(tokens.id_token || tokens.access_token || 'authenticated', 'oauth-code');
+      saveOAuthSession(tokens.access_token || tokens.id_token || 'authenticated', 'oauth-code');
       try {
         if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
         if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
@@ -574,6 +585,10 @@ console.log('[runtime-bootstrap] loaded');
         sessionStorage.removeItem(oauthStorageKey('code_verifier'));
         sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
         sessionStorage.removeItem(oauthStorageKey('state'));
+        if (sessionStorage.getItem(oauthStorageKey('greentic_fallback')) === '1') {
+          sessionStorage.removeItem(oauthStorageKey('greentic_fallback'));
+          sessionStorage.setItem(oauthStorageKey('greentic_bearer'), '1');
+        }
       } catch (_) {}
       removeOAuthOverlay();
       injectLogoutButton();
@@ -681,7 +696,99 @@ console.log('[runtime-bootstrap] loaded');
    * Initiate OAuth for a specific provider.
    * Provider object: { id, label, auth_url, token_url, client_id, scopes }
    */
+  window.__GREENTIC_SSO_CLIENT__ = window.__GREENTIC_SSO_CLIENT__ || null;
+
+  function greenticSsoRedirectUri() {
+    return window.location.origin + guiBase + 'sso-callback.html';
+  }
+
+  // No derived default: a greentic provider with no configured `issuer` is
+  // treated as misconfigured and filtered out before this is ever reached
+  // (see applyAuthConfig) — deriving one from the query-string tenant was
+  // the exact spoofable shortcut this branch deliberately removed.
+  function greenticSsoIssuer(provider) {
+    return provider.issuer;
+  }
+
+  function buildGreenticSsoClient(provider) {
+    return window.GreenticSso.createGreenticWebchatSso({
+      tenant: tenant,
+      issuer: greenticSsoIssuer(provider),
+      clientId: provider.client_id || 'webchat-gui',
+      redirectUri: greenticSsoRedirectUri(),
+      chatApiBase: provider.chat_api_base || backendBase(tenant),
+      // Memory-only sessions die on reload, forcing a fresh popup per page load.
+      persist: true
+    });
+  }
+
+  function restoreGreenticSsoClient() {
+    var provider = null;
+    try {
+      var raw = sessionStorage.getItem(oauthStorageKey('provider'));
+      provider = raw ? JSON.parse(raw) : null;
+    } catch (_) {}
+    if (!provider || provider.type !== 'greentic') return null;
+    if (!window.GreenticSso || !window.GreenticSso.createGreenticWebchatSso) return null;
+    var config = (window.__OAUTH_CONFIG__ && window.__OAUTH_CONFIG__.providers || [])
+      .filter(function (p) { return p.type === 'greentic'; })[0];
+    if (!config) return null;
+    var client = buildGreenticSsoClient(config);
+    return client.isAuthenticated && client.isAuthenticated() ? client : null;
+  }
+
+  // The SDK awaits the PKCE challenge before window.open, which breaks the
+  // user-gesture chain on Safari and Firefox; the legacy redirect flow is the
+  // only way those browsers can complete a login.
+  function greenticSsoRedirectFallback(provider) {
+    var issuer = greenticSsoIssuer(provider);
+    try {
+      sessionStorage.setItem(oauthStorageKey('greentic_fallback'), '1');
+    } catch (_) {}
+    initiateOAuthFlow({
+      id: provider.id,
+      label: provider.label,
+      type: 'oidc',
+      auth_url: issuer + '/oauth/authorize',
+      token_url: issuer + '/oauth/token',
+      client_id: provider.client_id || 'webchat-gui',
+      scopes: provider.scope || 'openid profile email greentic.webchat'
+    });
+  }
+
+  function initiateGreenticSso(provider) {
+    if (!window.GreenticSso || !window.GreenticSso.createGreenticWebchatSso) {
+      greenticSsoRedirectFallback(provider);
+      return;
+    }
+    var client = buildGreenticSsoClient(provider);
+    window.__GREENTIC_SSO_CLIENT__ = client;
+    client.login().then(function (identity) {
+      saveOAuthSession('greentic-sso', 'greentic');
+      try {
+        // sub is the only identity field the SDK guarantees; name/email are optional.
+        sessionStorage.setItem(oauthStorageKey('user_sub'), identity.sub);
+        if (identity.name) sessionStorage.setItem(oauthStorageKey('user_name'), identity.name);
+        if (identity.email) sessionStorage.setItem(oauthStorageKey('user_email'), identity.email);
+        sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'greentic' }));
+      } catch (_) {}
+      removeOAuthOverlay();
+      injectLogoutButton();
+    }).catch(function (err) {
+      window.__GREENTIC_SSO_CLIENT__ = null;
+      if (err && err.code === 'popup_blocked') {
+        greenticSsoRedirectFallback(provider);
+        return;
+      }
+      showAuthError(uiT('login.failed', 'Authentication failed') + ': ' + ((err && err.message) || 'unknown'));
+    });
+  }
+
   function initiateOAuthFlow(provider) {
+    if (provider.type === 'greentic') {
+      initiateGreenticSso(provider);
+      return;
+    }
     // Dummy/guest providers skip OAuth — just save session and proceed
     if (provider.type === 'dummy') {
       saveOAuthSession('guest', 'dummy');
@@ -757,8 +864,22 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function performLogout() {
+    // Must run before clearOAuthSession — clearing the cache reads the
+    // identity-scoped key, which needs the session still in place.
+    clearDirectLineCache();
     clearOAuthSession();
     clearAppAuthSession();
+    // The SDK persists its own access/refresh/id tokens to sessionStorage
+    // under 'greentic-sso-session' (persist: true), independently of the
+    // greentic_oauth_* keys clearOAuthSession removes above. Call the SDK's
+    // own logout() and remove that key directly so a refresh token cannot
+    // outlive an explicit logout for the tab's lifetime.
+    var ssoClient = window.__GREENTIC_SSO_CLIENT__;
+    if (ssoClient && typeof ssoClient.logout === 'function') {
+      try { ssoClient.logout().catch(function () {}); } catch (_) {}
+    }
+    try { sessionStorage.removeItem('greentic-sso-session'); } catch (_) {}
+    window.__GREENTIC_SSO_CLIENT__ = null;
     window.location.reload();
   }
 
@@ -786,22 +907,33 @@ console.log('[runtime-bootstrap] loaded');
     logoWrap.style.cssText = 'width:56px;height:56px;border-radius:50%;background:#ecfdf5;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;';
     logoWrap.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
     card.appendChild(logoWrap);
-    card.innerHTML += '<h2 style="margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;">Welcome</h2>' +
-      '<p style="margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;">Sign in to start chatting</p>';
+    var titleEl = document.createElement('h2');
+    titleEl.setAttribute('data-i18n-key', 'login.title');
+    titleEl.textContent = uiTv('login.title', 'Sign in to {{product}}', { product: uiT('product.greentic.short', 'Greentic') });
+    titleEl.style.cssText = 'margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;';
+    card.appendChild(titleEl);
+    var descEl = document.createElement('p');
+    descEl.setAttribute('data-i18n-key', 'login.subtitle');
+    descEl.textContent = uiT('login.subtitle', 'Choose your identity provider');
+    descEl.style.cssText = 'margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;';
+    card.appendChild(descEl);
     var btnContainer = document.createElement('div');
     btnContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
     providers.forEach(function (provider) {
       var label = provider.label || providerLabel(provider.id) || 'SSO';
       var btn = document.createElement('button');
       // Avoid double prefix like "Sign in with Sign in with Google"
-      btn.textContent = /^(sign in|log in|continue)/i.test(label) ? label : 'Sign in with ' + label;
+      btn.textContent = /^(sign in|log in|continue)/i.test(label) ? label : uiTv('login.loginWith', 'Login with {{provider}}', { provider: label });
       btn.style.cssText = 'padding:12px 28px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s;min-width:200px;';
       btn.onmouseover = function () { btn.style.background = '#047857'; };
       btn.onmouseout = function () { btn.style.background = '#059669'; };
       btn.onclick = function () {
         btn.disabled = true;
-        btn.textContent = 'Redirecting...';
+        btn.textContent = uiT('login.redirecting', 'Redirecting...');
         btn.style.opacity = '0.7';
+        // A new flow starting means any earlier, abandoned Greentic redirect
+        // fallback can no longer legitimately claim the next callback's tokens.
+        try { sessionStorage.removeItem(oauthStorageKey('greentic_fallback')); } catch (_) {}
         initiateOAuthFlow(provider);
       };
       btnContainer.appendChild(btn);
@@ -809,9 +941,12 @@ console.log('[runtime-bootstrap] loaded');
     if (providers.length === 0) {
       console.error('[oauth] sign-in is enabled but no provider is configured; ' +
         'set a client ID and secret for at least one provider in the setup wizard');
-      card.innerHTML += '<p style="color:#ef4444;font-size:13px;line-height:1.5;">' +
-        'No sign-in provider configured.<br>' +
-        'Add credentials for at least one provider in the setup wizard.</p>';
+      var noP = document.createElement('p');
+      noP.setAttribute('data-i18n-key', 'login.noProviders');
+      noP.textContent = uiT('login.noProviders',
+        'No sign-in provider configured.\nAdd credentials for at least one provider in the setup wizard.');
+      noP.style.cssText = 'color:#ef4444;font-size:13px;line-height:1.5;white-space:pre-line;';
+      card.appendChild(noP);
     }
     card.appendChild(btnContainer);
     overlay.appendChild(card);
@@ -1001,6 +1136,19 @@ console.log('[runtime-bootstrap] loaded');
         if (authConfig.providers) {
           authConfig.providers = authConfig.providers
             .filter(function (p) { return p.enabled !== false; })
+            .filter(function (p) {
+              // A greentic provider with no issuer is misconfigured, not a
+              // provider we can safely offer a login button for — deriving
+              // one from the (attacker-controlled) tenant is exactly what
+              // this branch removed. Drop it and tell the operator why.
+              if (p.type === 'greentic' && !p.issuer) {
+                console.error('[oauth] greentic provider "' + (p.id || 'greentic') +
+                  '" has no issuer configured — set oauth_greentic_issuer (or the ' +
+                  'provider\'s "issuer" field) for this tenant. Its login button will not be shown.');
+                return false;
+              }
+              return true;
+            })
             .map(function (p) {
               return {
                 id: p.id,
@@ -1012,7 +1160,9 @@ console.log('[runtime-bootstrap] loaded');
                 client_id: p.client_id || p.clientId,
                 redirect_uri: p.redirect_uri || p.redirectUri,
                 scope: p.scope || p.scopes,
-                response_type: p.response_type || p.responseType || 'code'
+                response_type: p.response_type || p.responseType || 'code',
+                issuer: p.issuer,
+                chat_api_base: p.chat_api_base || p.chatApiBase
               };
             });
         }
@@ -1042,6 +1192,7 @@ console.log('[runtime-bootstrap] loaded');
         var session = getOAuthSession();
         if (session) {
           console.log('[oauth] existing session found');
+          window.__GREENTIC_SSO_CLIENT__ = window.__GREENTIC_SSO_CLIENT__ || restoreGreenticSsoClient();
           injectLogoutButton();
           return;
         }
@@ -1073,8 +1224,10 @@ console.log('[runtime-bootstrap] loaded');
   // server ever reduces TTL below the buffer, we just always refetch (which
   // is the same behaviour as having no cache).
   // Local storage cache key, not credential material. Include origin, tenant,
-  // env, token URL, and Direct Line domain so bundles sharing 127.0.0.1:8080
-  // cannot reuse credentials signed by another bundle's jwt_signing_key.
+  // env, token URL, Direct Line domain, and authenticated identity so bundles
+  // sharing 127.0.0.1:8080 cannot reuse credentials signed by another
+  // bundle's jwt_signing_key, and one browser user can't inherit another's
+  // cached token.
   // foxguard: ignore[js/no-hardcoded-secret]
   var DIRECT_LINE_CACHE_VERSION = 'v2';
   // foxguard: ignore[js/no-hardcoded-secret]
@@ -1099,6 +1252,18 @@ console.log('[runtime-bootstrap] loaded');
     return base + '/v3/directline';
   }
 
+  function directLineIdentityPart() {
+    try {
+      var sub = sessionStorage.getItem(oauthStorageKey('user_sub'))
+        || sessionStorage.getItem(oauthStorageKey('user_email'))
+        || sessionStorage.getItem(oauthStorageKey('user_name'));
+      if (sub) return sub;
+      var session = getOAuthSession();
+      if (session && session.token_handle) return session.token_handle;
+    } catch (_) {}
+    return 'anonymous';
+  }
+
   function directLineCacheKey(kind) {
     return [
       'greentic',
@@ -1110,13 +1275,14 @@ console.log('[runtime-bootstrap] loaded');
       stableCachePart(env),
       stableCachePart(directLineTokenUrl()),
       stableCachePart(directLineDomain()),
-      stableCachePart(flowId)
+      stableCachePart(flowId),
+      stableCachePart(directLineIdentityPart())
     ].join(':');
   }
 
-  var TOKEN_CACHE_KEY = directLineCacheKey('token');
-  var CONVERSATION_CACHE_KEY = directLineCacheKey('conversation');
-  var DIRECT_LINE_AUTH_RETRY_KEY = directLineCacheKey('auth-retry');
+  function tokenCacheKey() { return directLineCacheKey('token'); }
+  function conversationCacheKey() { return directLineCacheKey('conversation'); }
+  function directLineAuthRetryKey() { return directLineCacheKey('auth-retry'); }
 
   function clearLegacyDirectLineCache() {
     try { localStorage.removeItem(LEGACY_TOKEN_CACHE_KEY); } catch (_) {}
@@ -1127,7 +1293,7 @@ console.log('[runtime-bootstrap] loaded');
 
   function readCachedToken() {
     try {
-      var raw = localStorage.getItem(TOKEN_CACHE_KEY);
+      var raw = localStorage.getItem(tokenCacheKey());
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       if (!parsed || !parsed.token || !parsed.expires_at) return null;
@@ -1147,13 +1313,13 @@ console.log('[runtime-bootstrap] loaded');
         expires_in: payload.expires_in,
         expires_at: Date.now() + ttlMs,
       };
-      localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(record));
+      localStorage.setItem(tokenCacheKey(), JSON.stringify(record));
     } catch (_) {}
   }
 
   function readCachedConversation() {
     try {
-      var raw = localStorage.getItem(CONVERSATION_CACHE_KEY);
+      var raw = localStorage.getItem(conversationCacheKey());
       if (!raw) return null;
       var conv = JSON.parse(raw);
       if (!conv || !conv.conversationId || !conv.streamUrl || !conv.timestamp) return null;
@@ -1168,25 +1334,25 @@ console.log('[runtime-bootstrap] loaded');
     try {
       if (!payload || !payload.conversationId) return;
       payload.timestamp = Date.now();
-      localStorage.setItem(CONVERSATION_CACHE_KEY, JSON.stringify(payload));
+      localStorage.setItem(conversationCacheKey(), JSON.stringify(payload));
     } catch (_) {}
   }
 
   function clearDirectLineCache() {
-    try { localStorage.removeItem(TOKEN_CACHE_KEY); } catch (_) {}
-    try { localStorage.removeItem(CONVERSATION_CACHE_KEY); } catch (_) {}
+    try { localStorage.removeItem(tokenCacheKey()); } catch (_) {}
+    try { localStorage.removeItem(conversationCacheKey()); } catch (_) {}
     clearLegacyDirectLineCache();
   }
 
   function resetDirectLineAuthRetry() {
-    try { sessionStorage.removeItem(DIRECT_LINE_AUTH_RETRY_KEY); } catch (_) {}
+    try { sessionStorage.removeItem(directLineAuthRetryKey()); } catch (_) {}
   }
 
   function reloadOnceAfterDirectLineAuthFailure() {
     clearDirectLineCache();
     try {
-      if (sessionStorage.getItem(DIRECT_LINE_AUTH_RETRY_KEY) === '1') return false;
-      sessionStorage.setItem(DIRECT_LINE_AUTH_RETRY_KEY, '1');
+      if (sessionStorage.getItem(directLineAuthRetryKey()) === '1') return false;
+      sessionStorage.setItem(directLineAuthRetryKey(), '1');
     } catch (_) {
       if (window.__GREENTIC_DIRECT_LINE_AUTH_RETRY__) return false;
       window.__GREENTIC_DIRECT_LINE_AUTH_RETRY__ = true;
@@ -1264,6 +1430,35 @@ console.log('[runtime-bootstrap] loaded');
     };
   }
 
+  // Distinguishes "no bearer available, mint anonymously" from "a session
+  // existed and died" — only the latter must not reach the network anonymously.
+  var GREENTIC_SESSION_DEAD = {};
+
+  function greenticAccessToken() {
+    var client = window.__GREENTIC_SSO_CLIENT__;
+    if (client && client.getAccessToken) {
+      return client.getAccessToken().catch(function () {
+        // A live SSO session existed but its token could not be refreshed.
+        // Silently minting anonymous here is the exact hole Task 11 closed
+        // server-side — fail visibly instead: clear the session and reload
+        // to the login screen.
+        performLogout();
+        return GREENTIC_SESSION_DEAD;
+      });
+    }
+    try {
+      // Only the redirect fallback puts a real bearer in the session store; the
+      // SDK path stores a sentinel handle and serves tokens from the client.
+      if (sessionStorage.getItem(oauthStorageKey('greentic_bearer')) === '1') {
+        var session = getOAuthSession();
+        if (session && session.token_handle) {
+          return Promise.resolve(session.token_handle);
+        }
+      }
+    } catch (_) {}
+    return Promise.resolve(null);
+  }
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     var requestUrl = typeof input === 'string' ? input : input.url;
@@ -1288,22 +1483,33 @@ console.log('[runtime-bootstrap] loaded');
         }));
       }
       var nextInit = injectGuestIdIntoBody(init);
-      return originalFetch(input, nextInit).then(function (response) {
-        if (response.status === 429) {
-          var retryAfter = response.headers.get('Retry-After');
-          console.warn('[bootstrap] /token rate-limited; Retry-After=', retryAfter);
-          return response;
+      return greenticAccessToken().then(function (accessToken) {
+        if (accessToken === GREENTIC_SESSION_DEAD) {
+          // performLogout() already triggered a reload to the login screen;
+          // never mint an anonymous token on the strength of a dead session.
+          return new Promise(function () {});
         }
-        if (!response.ok) return response;
-        var cloned = response.clone();
-        cloned.json().then(function (data) {
-          if (data && data.token && data.expires_in) {
-            writeCachedToken(data);
-            resetDirectLineAuthRetry();
-            console.log('[bootstrap] cached new token, ttl=', data.expires_in, 's');
+        if (accessToken) {
+          nextInit.headers = nextInit.headers || {};
+          nextInit.headers['Authorization'] = 'Bearer ' + accessToken;
+        }
+        return originalFetch(input, nextInit).then(function (response) {
+          if (response.status === 429) {
+            var retryAfter = response.headers.get('Retry-After');
+            console.warn('[bootstrap] /token rate-limited; Retry-After=', retryAfter);
+            return response;
           }
-        }).catch(function () {});
-        return response;
+          if (!response.ok) return response;
+          var cloned = response.clone();
+          cloned.json().then(function (data) {
+            if (data && data.token && data.expires_in) {
+              writeCachedToken(data);
+              resetDirectLineAuthRetry();
+              console.log('[bootstrap] cached new token, ttl=', data.expires_in, 's');
+            }
+          }).catch(function () {});
+          return response;
+        });
       });
     }
 

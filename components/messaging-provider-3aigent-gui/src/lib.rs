@@ -56,17 +56,22 @@ mod variant_tests {
         assert_eq!(cfg["skin"], "3aigent");
 
         let providers = cfg["auth"]["providers"].as_array().unwrap();
-        assert_eq!(providers.len(), 4);
+        assert_eq!(providers.len(), 5);
+        assert_eq!(
+            providers[0]["id"], "greentic",
+            "greentic must be listed first"
+        );
 
         let ids: Vec<&str> = providers
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect();
-        for expected in ["google", "microsoft", "github", "custom"] {
+        for expected in ["greentic", "google", "microsoft", "github", "custom"] {
             assert!(ids.contains(&expected), "missing provider id {expected}");
         }
-        for provider in cfg["auth"]["providers"].as_array().unwrap() {
-            assert_eq!(provider["enabled"], false);
+        for provider in providers {
+            let expected_enabled = provider["id"] == "greentic";
+            assert_eq!(provider["enabled"], expected_enabled);
         }
     }
 }

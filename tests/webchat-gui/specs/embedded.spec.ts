@@ -98,7 +98,7 @@ test.describe('embedded WebChat modes', () => {
     await webchat.openHost({ skin: 'default', render: 'iframe', mode: 'inline', nav: false, login: true });
 
     const frame = webchat.iframeChat();
-    await expect(frame.getByText('Sign in to start chatting')).toBeVisible();
+    await expect(frame.locator('[data-i18n-key="login.title"]')).toBeVisible();
     await frame.getByRole('button', { name: /test login/i }).click();
     await webchat.expectChatReady(frame);
   });
