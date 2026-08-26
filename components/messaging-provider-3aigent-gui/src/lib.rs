@@ -55,9 +55,10 @@ mod variant_tests {
 
         assert_eq!(cfg["skin"], "3aigent");
 
-        let ids: Vec<&str> = cfg["auth"]["providers"]
-            .as_array()
-            .unwrap()
+        let providers = cfg["auth"]["providers"].as_array().unwrap();
+        assert_eq!(providers.len(), 4);
+
+        let ids: Vec<&str> = providers
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect();

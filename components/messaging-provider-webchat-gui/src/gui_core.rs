@@ -71,7 +71,7 @@ impl crate::bindings::exports::greentic::component::runtime::Guest for Component
 
 impl crate::bindings::exports::greentic::component::qa::Guest for Component {
     fn qa_spec(mode: crate::bindings::exports::greentic::component::qa::Mode) -> Vec<u8> {
-        canonical_cbor_bytes(&build_qa_spec(mode))
+        canonical_cbor_bytes(&build_gui_qa_spec(mode))
     }
 
     fn apply_answers(
@@ -192,6 +192,18 @@ impl crate::bindings::exports::greentic::provider_instance_identity::instance_id
     fn describe_identify_instance() -> Option<Vec<u8>> {
         Some(ops::IDENTIFY_HINT_JSON.to_vec())
     }
+}
+
+fn build_gui_qa_spec(
+    mode: crate::bindings::exports::greentic::component::qa::Mode,
+) -> provider_common::component_v0_6::QaSpec {
+    let mut spec = build_qa_spec(mode);
+    for question in spec.questions.iter_mut() {
+        if question.id == "oauth_enabled" {
+            question.default = Some(json!(crate::DEFAULT_OAUTH_ENABLED));
+        }
+    }
+    spec
 }
 
 fn build_gui_describe_payload() -> DescribePayload {
@@ -699,6 +711,8 @@ fn compose_oauth_providers(answers: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    // These tests run in every variant crate that source-includes this file — assert
+    // against `crate::` constants (e.g. `crate::DEFAULT_SKIN`), never literals.
     use super::*;
     use provider_common::component_v0_6::{canonical_cbor_bytes, decode_cbor};
     use serde_json::json;
@@ -730,6 +744,10 @@ mod tests {
         assert_eq!(value["config"]["mode"], "websocket");
         assert_eq!(value["config"]["presentation_mode"], "standalone");
         assert_eq!(value["config"]["skin"], crate::DEFAULT_SKIN);
+        assert_eq!(
+            value["config"]["oauth_enabled"],
+            crate::DEFAULT_OAUTH_ENABLED
+        );
         assert_eq!(value["config"]["text_input_enabled"], true);
         assert!(value["config"].get("jwt_signing_key_b64").is_none());
         let generated = value["secrets_patch"]["set"]["jwt_signing_key"]
@@ -825,6 +843,18 @@ mod tests {
         }));
         assert_eq!(value["ok"], false);
         assert!(error_text(&value).contains("presentation_mode"));
+    }
+
+    #[test]
+    fn qa_spec_oauth_enabled_defaults_to_crate_constant() {
+        let spec =
+            build_gui_qa_spec(crate::bindings::exports::greentic::component::qa::Mode::Setup);
+        let question = spec
+            .questions
+            .iter()
+            .find(|q| q.id == "oauth_enabled")
+            .expect("oauth_enabled question present");
+        assert_eq!(question.default, Some(json!(crate::DEFAULT_OAUTH_ENABLED)));
     }
 
     #[test]
