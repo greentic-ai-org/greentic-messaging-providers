@@ -25,6 +25,7 @@ rsync -a "${SRC_DIR}/skins/" "${DEST_DIR}/skins/"
 # carries template/demo skins for development; drop anything the import brought
 # in that git does not track, so a new pack-local skin survives future imports.
 python3 - "${ROOT_DIR}" "${DEST_DIR}/skins" <<'PY'
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -38,7 +39,8 @@ tracked = subprocess.run(
 ).stdout.split()
 allowed = {Path(line).parts[len(skins_dir.relative_to(root).parts)] for line in tracked if line}
 
-import shutil
+if not allowed:
+    raise SystemExit(f"no tracked skins found under {skins_dir}; refusing to prune")
 
 for entry in sorted(skins_dir.iterdir()):
     if entry.is_dir() and entry.name not in allowed:
