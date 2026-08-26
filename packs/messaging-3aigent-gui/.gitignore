@@ -1,0 +1,10 @@
+# The SPA is mirrored from packs/messaging-webchat-gui by tools/prepare_pack_assets.sh
+# so this repo keeps exactly one committed copy. config/tenants/default.json is
+# owned by this pack, not mirrored, and stays tracked.
+assets/webchat-gui/*
+!assets/webchat-gui/config/
+assets/webchat-gui/config/*
+!assets/webchat-gui/config/tenants/
+assets/webchat-gui/config/tenants/*
+!assets/webchat-gui/config/tenants/default.json
+dist/
