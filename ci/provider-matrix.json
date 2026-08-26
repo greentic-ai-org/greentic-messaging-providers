@@ -417,7 +417,9 @@
         "components/messaging-provider-3aigent-gui/",
         "components/messaging-provider-webchat-gui/",
         "packs/messaging-3aigent-gui/",
-        "tools/import_webchat_gui_assets.sh"
+        "packs/messaging-webchat-gui/",
+        "tools/import_webchat_gui_assets.sh",
+        "tools/prepare_pack_assets.sh"
       ]
     },
     "webex": {

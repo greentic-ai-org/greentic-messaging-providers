@@ -22,9 +22,14 @@ Validate before committing:
 python3 tools/validate_skins.py
 ```
 
-The validator runs in CI as `ci/steps/05a_validate_skins.sh`. It checks the
-manifest against `schemas/webchat/skin.schema.json`, that `tenant` matches the
+The validator runs as `ci/steps/05a_validate_skins.sh`, one of the steps
+`./ci/local_check.sh` runs locally before a PR — no GitHub Actions workflow
+invokes it, so it is not enforced on the PR itself. It checks the manifest
+against `schemas/webchat/skin.schema.json`, that `tenant` matches the
 directory name, and that every referenced file exists.
+
+`tools/validate_skins.py` requires the `jsonschema` Python package, which no
+requirements file or workflow installs: `pip install jsonschema`.
 
 ## Paths must be relative
 
@@ -75,3 +80,13 @@ instead of silently deleting every skin, `default` included.
 
 Anything under `i18n/`, `config/`, `js/` and `assets/` is rsynced with
 `--delete` and will be overwritten — never add translation keys there.
+
+`skins/` IS rsynced too, unlike root-level files such as `runtime-bootstrap.js`
+which the import never touches. It runs without `--delete`, so an import
+cannot remove a repo-owned skin, but it still overwrites every file upstream
+ships for a skin of the same name. If upstream's `greentic-webchat` still
+ships `default/skin.json` or `3aigent/skin.json` with root-absolute paths,
+the next import silently reverts this repo's relativization of those
+manifests, and `tools/publish_packs_oci.sh` runs the import without running
+the validator, so nothing catches it automatically. Run
+`python3 tools/validate_skins.py` after any import.
