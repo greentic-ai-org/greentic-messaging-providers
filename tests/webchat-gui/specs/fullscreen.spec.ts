@@ -63,7 +63,7 @@ test.describe('full-screen WebChat', () => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: true });
 
-    await expect(page.getByText('Sign in to start chatting')).toBeVisible();
+    await expect(page.locator('[data-i18n-key="login.title"]')).toBeVisible();
     const loginButton = page.getByRole('button', { name: /test login/i });
     await expect(loginButton).toBeVisible();
     await loginButton.click();
@@ -88,7 +88,7 @@ test.describe('full-screen WebChat', () => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: false });
 
-    await expect(page.getByText('Sign in to start chatting')).toHaveCount(0);
+    await expect(page.locator('[data-i18n-key="login.title"]')).toHaveCount(0);
     await webchat.expectChatReady();
   });
 
@@ -252,7 +252,7 @@ test.describe('full-screen WebChat', () => {
     });
     await page.goto('/v1/web/webchat/missing-config-anon/?tenant=missing-config-anon');
 
-    await expect(page.getByText('Sign in to start chatting')).toHaveCount(0);
+    await expect(page.locator('[data-i18n-key="login.title"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /sign in/i })).toHaveCount(0);
     await webchat.expectChatReady();
     expect(tokenRequests.some(url => url.includes('/v1/messaging/webchat/missing-config-anon/token'))).toBe(true);
@@ -421,5 +421,23 @@ test.describe('full-screen WebChat', () => {
         return 'pending';
       }
     }).toBeNull();
+  });
+
+  test('login overlay uses i18n keys rather than hardcoded English', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-login/');
+    const usesKeys = await page.evaluate(() => {
+      const card = document.querySelector('#greentic-oauth-overlay h2');
+      return card ? card.getAttribute('data-i18n-key') : null;
+    });
+    expect(usesKeys).toBe('login.title');
+  });
+
+  test('login overlay interpolates i18n placeholders instead of leaking literal braces', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-login/');
+    const titleText = await page.locator('[data-i18n-key="login.title"]').textContent();
+    expect(titleText).not.toContain('{{');
+    const buttonText = await page.getByRole('button', { name: /test login/i }).textContent();
+    expect(buttonText).not.toContain('{{');
+    expect(buttonText).toContain('Test Login');
   });
 });

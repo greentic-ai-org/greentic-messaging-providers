@@ -345,6 +345,14 @@ console.log('[runtime-bootstrap] loaded');
     return UI_STRINGS[key] || fallback || key;
   }
 
+  function uiTv(key, fallback, vars) {
+    var text = uiT(key, fallback);
+    if (!vars) return text;
+    return text.replace(/\{\{(\w+)\}\}/g, function (match, name) {
+      return Object.prototype.hasOwnProperty.call(vars, name) ? vars[name] : match;
+    });
+  }
+
   function isRtlLocale(locale) {
     var base = (locale || '').split('-')[0];
     return ['ar', 'he', 'fa', 'ur'].indexOf(base) >= 0;
@@ -875,28 +883,40 @@ console.log('[runtime-bootstrap] loaded');
     logoWrap.style.cssText = 'width:56px;height:56px;border-radius:50%;background:#ecfdf5;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;';
     logoWrap.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
     card.appendChild(logoWrap);
-    card.innerHTML += '<h2 style="margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;">Welcome</h2>' +
-      '<p style="margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;">Sign in to start chatting</p>';
+    var titleEl = document.createElement('h2');
+    titleEl.setAttribute('data-i18n-key', 'login.title');
+    titleEl.textContent = uiTv('login.title', 'Sign in to {{product}}', { product: uiT('product.greentic.short', 'Greentic') });
+    titleEl.style.cssText = 'margin:0 0 6px;font-size:1.375rem;font-weight:600;color:#1f2937;';
+    card.appendChild(titleEl);
+    var descEl = document.createElement('p');
+    descEl.setAttribute('data-i18n-key', 'login.subtitle');
+    descEl.textContent = uiT('login.subtitle', 'Choose your identity provider');
+    descEl.style.cssText = 'margin:0 0 32px;color:#6b7280;font-size:0.875rem;line-height:1.5;';
+    card.appendChild(descEl);
     var btnContainer = document.createElement('div');
     btnContainer.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
     providers.forEach(function (provider) {
       var label = provider.label || providerLabel(provider.id) || 'SSO';
       var btn = document.createElement('button');
       // Avoid double prefix like "Sign in with Sign in with Google"
-      btn.textContent = /^(sign in|log in|continue)/i.test(label) ? label : 'Sign in with ' + label;
+      btn.textContent = /^(sign in|log in|continue)/i.test(label) ? label : uiTv('login.loginWith', 'Login with {{provider}}', { provider: label });
       btn.style.cssText = 'padding:12px 28px;border:none;border-radius:12px;background:#059669;color:#fff;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s;min-width:200px;';
       btn.onmouseover = function () { btn.style.background = '#047857'; };
       btn.onmouseout = function () { btn.style.background = '#059669'; };
       btn.onclick = function () {
         btn.disabled = true;
-        btn.textContent = 'Redirecting...';
+        btn.textContent = uiT('login.redirecting', 'Redirecting...');
         btn.style.opacity = '0.7';
         initiateOAuthFlow(provider);
       };
       btnContainer.appendChild(btn);
     });
     if (providers.length === 0) {
-      card.innerHTML += '<p style="color:#ef4444;font-size:13px;">No OAuth providers configured.</p>';
+      var noP = document.createElement('p');
+      noP.setAttribute('data-i18n-key', 'login.noProviders');
+      noP.textContent = uiT('login.noProviders', 'No login providers are configured for this tenant.');
+      noP.style.cssText = 'color:#ef4444;font-size:13px;';
+      card.appendChild(noP);
     }
     card.appendChild(btnContainer);
     overlay.appendChild(card);

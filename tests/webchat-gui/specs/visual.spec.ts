@@ -38,7 +38,7 @@ test.describe('visual regression snapshots @visual', () => {
     await expect(page).toHaveScreenshot('iframe-inline.png', { fullPage: true });
 
     await webchat.openFullscreen({ skin: 'default', nav: false, login: true });
-    await page.getByText('Sign in to start chatting').waitFor();
+    await page.locator('[data-i18n-key="login.title"]').waitFor();
     await expect(page).toHaveScreenshot('login-page.png', { fullPage: true });
   });
 });
