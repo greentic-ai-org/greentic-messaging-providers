@@ -20,9 +20,7 @@ mod ops;
 pub(crate) const PROVIDER_ID: &str = "messaging-provider-webchat-gui";
 pub(crate) const PROVIDER_TYPE: &str = "messaging.webchat-gui";
 pub(crate) const WORLD_ID: &str = "component-v0-v6-v0";
-#[allow(dead_code)]
 pub(crate) const DEFAULT_SKIN: &str = "default";
-#[allow(dead_code)]
 pub(crate) const DEFAULT_OAUTH_ENABLED: bool = false;
 
 use gui_core::Component;

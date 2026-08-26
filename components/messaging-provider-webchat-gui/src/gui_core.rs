@@ -730,7 +730,7 @@ mod tests {
         assert_eq!(value["ok"], true);
         assert_eq!(value["config"]["mode"], "websocket");
         assert_eq!(value["config"]["presentation_mode"], "standalone");
-        assert_eq!(value["config"]["skin"], "default");
+        assert_eq!(value["config"]["skin"], crate::DEFAULT_SKIN);
         assert_eq!(value["config"]["text_input_enabled"], true);
         assert!(value["config"].get("jwt_signing_key_b64").is_none());
         let generated = value["secrets_patch"]["set"]["jwt_signing_key"]
@@ -768,7 +768,7 @@ mod tests {
                 "public_base_url": "https://chat.example.com",
                 "mode": "local_queue",
                 "route": "webchat",
-                "skin": "default",
+                "skin": crate::DEFAULT_SKIN,
                 "jwt_signing_key_b64": general_purpose::STANDARD.encode("existing-secret")
             },
             "public_base_url": "https://chat.example.com",
@@ -791,7 +791,7 @@ mod tests {
             "mode": "local_queue",
             "route": "webchat",
             "presentation_mode": "embed_webcomponent",
-            "skin": "default",
+            "skin": crate::DEFAULT_SKIN,
             "text_input_enabled": false
         }));
         assert_eq!(value["ok"], true);
@@ -826,5 +826,15 @@ mod tests {
         }));
         assert_eq!(value["ok"], false);
         assert!(error_text(&value).contains("presentation_mode"));
+    }
+
+    #[test]
+    fn config_defaults_follow_crate_constants() {
+        let cfg: ProviderConfig = serde_json::from_value(json!({
+            "public_base_url": "https://chat.example.com"
+        }))
+        .unwrap();
+        assert_eq!(cfg.skin, crate::DEFAULT_SKIN);
+        assert_eq!(cfg.oauth_enabled, Some(crate::DEFAULT_OAUTH_ENABLED));
     }
 }

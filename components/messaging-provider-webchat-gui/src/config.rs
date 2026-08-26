@@ -15,7 +15,11 @@ pub(crate) fn default_presentation_mode() -> PresentationMode {
 }
 
 pub(crate) fn default_skin() -> String {
-    "default".to_string()
+    crate::DEFAULT_SKIN.to_string()
+}
+
+pub(crate) fn default_oauth_enabled() -> Option<bool> {
+    Some(crate::DEFAULT_OAUTH_ENABLED)
 }
 
 pub(crate) fn default_text_input_enabled() -> bool {
@@ -44,7 +48,7 @@ pub(crate) struct ProviderConfig {
     pub(crate) text_input_enabled: bool,
     #[serde(default)]
     pub(crate) nav_links: Vec<Value>,
-    #[serde(default)]
+    #[serde(default = "default_oauth_enabled")]
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default)]
     pub(crate) oauth_providers: Option<String>,
@@ -68,7 +72,10 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) nav_links: Vec<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) jwt_signing_key_b64: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default = "default_oauth_enabled",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub(crate) oauth_enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) oauth_providers: Option<String>,
@@ -95,7 +102,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         text_input_enabled: default_text_input_enabled(),
         nav_links: Vec::new(),
         jwt_signing_key_b64: None,
-        oauth_enabled: None,
+        oauth_enabled: default_oauth_enabled(),
         oauth_providers: None,
     }
 }
@@ -241,7 +248,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(cfg.presentation_mode, PresentationMode::Standalone);
-        assert_eq!(cfg.skin, "default");
+        assert_eq!(cfg.skin, crate::DEFAULT_SKIN);
         assert!(cfg.text_input_enabled);
         assert_eq!(cfg.mode, "websocket");
     }
