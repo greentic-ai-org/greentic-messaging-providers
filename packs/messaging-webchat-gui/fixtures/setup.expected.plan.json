@@ -3,7 +3,8 @@
     "public_base_url": "<value>",
     "ingress_path": "<value>",
     "oauth_enabled": true,
-    "oauth_providers": "[{\"client_id\":\"webchat-gui\",\"id\":\"greentic\",\"label\":\"Greentic SSO\",\"scopes\":\"openid profile email greentic.webchat\",\"type\":\"greentic\"}]"
+    "oauth_providers": "[{\"client_id\":\"webchat-gui\",\"id\":\"greentic\",\"issuer\":\"https://acme.greentic-id.com\",\"label\":\"Greentic SSO\",\"scopes\":\"openid profile email greentic.webchat\",\"type\":\"greentic\"}]",
+    "oidc_issuer": "https://acme.greentic-id.com"
   },
   "secrets_patch": {
     "set": {},
