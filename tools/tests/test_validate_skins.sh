@@ -13,8 +13,20 @@ trap cleanup EXIT
 mkdir -p "${BROKEN}"
 printf '%s\n' '{"tenant":"_validator_probe","mode":"fullpage"}' > "${BROKEN}/skin.json"
 
-if python3 tools/validate_skins.py >/dev/null 2>&1; then
+set +e
+output="$(python3 tools/validate_skins.py 2>&1)"
+status=$?
+set -e
+
+if [ "${status}" -eq 0 ]; then
   echo "FAIL: validator accepted a skin missing brand/webchat/fullpage" >&2
   exit 1
 fi
-echo "PASS: validator rejects an incomplete skin"
+
+if ! printf '%s' "${output}" | grep -q "is a required property"; then
+  echo "FAIL: validator exited non-zero but not for the expected reason:" >&2
+  printf '%s\n' "${output}" >&2
+  exit 1
+fi
+
+echo "PASS: validator rejects an incomplete skin for the right reason"
