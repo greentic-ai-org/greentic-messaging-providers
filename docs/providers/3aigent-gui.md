@@ -31,7 +31,7 @@ supplies a client ID and secret in the setup wizard. Until then the SPA renders
 
 **Custom OIDC has a wizard gap.** `assets/setup.yaml` has no
 `oauth_custom_client_secret` question, and `compose_oauth_providers` in
-`components/messaging-provider-webchat-gui/src/lib.rs` never attaches a
+`components/messaging-provider-webchat-gui/src/gui_core.rs` never attaches a
 `client_secret` for the `custom` provider — while the `google`, `microsoft` and
 `github` branches all do. A custom OIDC provider configured purely through the
 setup wizard ends up with no client secret, and its token exchange fails.
