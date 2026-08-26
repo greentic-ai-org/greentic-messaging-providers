@@ -916,6 +916,9 @@ console.log('[runtime-bootstrap] loaded');
         btn.disabled = true;
         btn.textContent = uiT('login.redirecting', 'Redirecting...');
         btn.style.opacity = '0.7';
+        // A new flow starting means any earlier, abandoned Greentic redirect
+        // fallback can no longer legitimately claim the next callback's tokens.
+        try { sessionStorage.removeItem(oauthStorageKey('greentic_fallback')); } catch (_) {}
         initiateOAuthFlow(provider);
       };
       btnContainer.appendChild(btn);
@@ -1396,10 +1399,21 @@ console.log('[runtime-bootstrap] loaded');
     };
   }
 
+  // Distinguishes "no bearer available, mint anonymously" from "a session
+  // existed and died" — only the latter must not reach the network anonymously.
+  var GREENTIC_SESSION_DEAD = {};
+
   function greenticAccessToken() {
     var client = window.__GREENTIC_SSO_CLIENT__;
     if (client && client.getAccessToken) {
-      return client.getAccessToken().catch(function () { return null; });
+      return client.getAccessToken().catch(function () {
+        // A live SSO session existed but its token could not be refreshed.
+        // Silently minting anonymous here is the exact hole Task 11 closed
+        // server-side — fail visibly instead: clear the session and reload
+        // to the login screen.
+        performLogout();
+        return GREENTIC_SESSION_DEAD;
+      });
     }
     try {
       // Only the redirect fallback puts a real bearer in the session store; the
@@ -1439,6 +1453,11 @@ console.log('[runtime-bootstrap] loaded');
       }
       var nextInit = injectGuestIdIntoBody(init);
       return greenticAccessToken().then(function (accessToken) {
+        if (accessToken === GREENTIC_SESSION_DEAD) {
+          // performLogout() already triggered a reload to the login screen;
+          // never mint an anonymous token on the strength of a dead session.
+          return new Promise(function () {});
+        }
         if (accessToken) {
           nextInit.headers = nextInit.headers || {};
           nextInit.headers['Authorization'] = 'Bearer ' + accessToken;

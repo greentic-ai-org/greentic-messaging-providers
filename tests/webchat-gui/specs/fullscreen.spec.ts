@@ -450,9 +450,38 @@ test.describe('full-screen WebChat', () => {
     await page.goto('/v1/web/webchat/default-plain-anon/');
     await expect
       .poll(async () => {
-        const res = await request.get('/mock-api/last-token-authorization');
+        const res = await request.get('/mock-api/last-token-authorization?tenant=default-plain-anon');
         return (await res.json()).authorization;
       })
       .toBe('Bearer fake-access-token');
+  });
+
+  test('a dead SSO session shows the login screen instead of silently going anonymous', async ({ page }) => {
+    const tokenAuthHeaders: string[] = [];
+    page.on('request', (req) => {
+      let pathname = '';
+      try { pathname = new URL(req.url()).pathname; } catch (_) { /* ignore */ }
+      if (/\/token$/.test(pathname)) tokenAuthHeaders.push(req.headers()['authorization'] || '');
+    });
+    // Seed once, not on every reload — the fix reloads the page, and
+    // addInitScript re-runs on that reload too. Re-seeding an "existing
+    // session" on the reloaded page would loop forever instead of settling
+    // on the login screen, which is not how a real cleared session behaves.
+    await page.addInitScript(() => {
+      if (localStorage.getItem('__test_seeded_dead_sso_session__')) return;
+      localStorage.setItem('__test_seeded_dead_sso_session__', '1');
+      sessionStorage.setItem('greentic_oauth_token_handle', 'expired-access-token');
+      sessionStorage.setItem('greentic_oauth_flow_id', 'greentic');
+      sessionStorage.setItem('greentic_oauth_provider', JSON.stringify({ id: 'greentic', type: 'greentic' }));
+      (window as any).__GREENTIC_SSO_CLIENT__ = {
+        getAccessToken: () => Promise.reject(new Error('refresh failed')),
+      };
+    });
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+
+    await expect(page.locator('[data-i18n-key="login.title"]')).toBeVisible();
+    // The dead session's bearer must never reach the network — not even as
+    // part of a request that otherwise succeeds anonymously.
+    expect(tokenAuthHeaders.some((h) => h.includes('expired-access-token'))).toBe(false);
   });
 });

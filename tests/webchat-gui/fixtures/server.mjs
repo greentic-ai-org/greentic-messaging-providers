@@ -18,7 +18,10 @@ for (let index = 2; index < process.argv.length; index += 1) {
 }
 const port = Number(args.get('port') || process.env.WEBCHAT_GUI_TEST_PORT || 8799);
 
-let lastTokenAuthorization = null;
+// Keyed per tenant (every test uses a distinct tenant name) so concurrent
+// /token calls from unrelated tests running in parallel can't clobber each
+// other's recorded header.
+const lastTokenAuthorizationByTenant = new Map();
 
 const demoLinks = [
   { id: 'docs', label: 'Docs', url: 'https://docs.greentic.ai' },
@@ -178,12 +181,14 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (urlPath === '/mock-api/last-token-authorization') {
-    sendJson(res, 200, { authorization: lastTokenAuthorization });
+    const tenant = url.searchParams.get('tenant') || 'default';
+    sendJson(res, 200, { authorization: lastTokenAuthorizationByTenant.get(tenant) || null });
     return;
   }
   if (urlPath.endsWith('/token') || urlPath.endsWith('/v3/directline/tokens/generate')) {
     req.resume();
-    lastTokenAuthorization = req.headers['authorization'] || null;
+    const tenant = urlPath.split('/v1/messaging/webchat/')[1]?.split('/')[0] || 'default';
+    lastTokenAuthorizationByTenant.set(tenant, req.headers['authorization'] || null);
     sendJson(res, 200, {
       conversationId: 'webchat-gui-test',
       token: 'webchat-gui-test-token',
