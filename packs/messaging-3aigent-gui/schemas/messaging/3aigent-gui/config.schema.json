@@ -65,6 +65,10 @@
       "type": "boolean",
       "default": true,
       "description": "Whether OAuth login is offered on the hosted GUI."
+    },
+    "oauth_providers": {
+      "type": "string",
+      "description": "JSON array of OAuth provider configurations, composed from the per-provider setup answers."
     }
   }
 }
