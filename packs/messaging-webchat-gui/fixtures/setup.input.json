@@ -1,7 +1,9 @@
 {
   "mode": "websocket",
   "config": {
-    "public_base_url": "<value>"
+    "public_base_url": "<value>",
+    "oauth_enabled": true,
+    "oauth_enable_greentic": true
   },
   "secrets": {}
 }

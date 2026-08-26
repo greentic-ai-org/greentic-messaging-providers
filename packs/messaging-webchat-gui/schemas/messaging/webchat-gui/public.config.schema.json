@@ -56,6 +56,23 @@
       "items": {
         "type": "object"
       }
+    },
+    "oauth_enabled": {
+      "type": "boolean",
+      "description": "Require OAuth authentication before the chat loads."
+    },
+    "oauth_providers": {
+      "type": "string",
+      "description": "JSON array of configured OAuth providers."
+    },
+    "oauth_greentic_issuer": {
+      "type": "string",
+      "format": "uri",
+      "description": "Issuer base URL for the Greentic identity provider."
+    },
+    "oauth_greentic_client_id": {
+      "type": "string",
+      "description": "Registered public OIDC client ID for the Greentic identity provider."
     }
   }
 }

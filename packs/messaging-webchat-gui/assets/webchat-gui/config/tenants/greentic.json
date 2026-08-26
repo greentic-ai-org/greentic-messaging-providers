@@ -64,6 +64,14 @@
   "auth": {
     "providers": [
       {
+        "id": "greentic",
+        "label": "Greentic SSO",
+        "type": "greentic",
+        "enabled": true,
+        "clientId": "webchat-gui",
+        "scope": "openid profile email greentic.webchat"
+      },
+      {
         "id": "greentic-demo",
         "label": "Greentic Demo",
         "type": "dummy",

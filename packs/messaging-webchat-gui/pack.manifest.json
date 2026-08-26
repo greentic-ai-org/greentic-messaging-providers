@@ -147,6 +147,12 @@
     },
     {
       "path": "assets/webchat-gui/config/product.json"
+    },
+    {
+      "path": "assets/webchat-gui/greentic-sso.js"
+    },
+    {
+      "path": "assets/webchat-gui/sso-callback.html"
     }
   ],
   "extensions": {

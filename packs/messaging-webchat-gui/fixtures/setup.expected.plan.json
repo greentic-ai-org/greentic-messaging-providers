@@ -1,7 +1,9 @@
 {
   "config_patch": {
     "public_base_url": "<value>",
-    "ingress_path": "<value>"
+    "ingress_path": "<value>",
+    "oauth_enabled": true,
+    "oauth_enable_greentic": true
   },
   "secrets_patch": {
     "set": {},

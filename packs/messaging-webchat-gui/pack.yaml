@@ -89,6 +89,8 @@ assets:
 - path: assets/webchat-gui/runtime-bootstrap.js
 - path: assets/webchat-gui/embed.js
 - path: assets/webchat-gui/config/product.json
+- path: assets/webchat-gui/greentic-sso.js
+- path: assets/webchat-gui/sso-callback.html
 extensions:
   greentic.generated-secrets.v1:
     kind: greentic.generated-secrets.v1

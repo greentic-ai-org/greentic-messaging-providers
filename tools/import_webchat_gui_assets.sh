@@ -75,7 +75,18 @@ data = {
         "directline": {"token_url": "/v1/messaging/webchat/default/token"},
         "locale": "en-US",
     },
-    "auth": {"providers": []},
+    "auth": {
+        "providers": [
+            {
+                "id": "greentic",
+                "label": "Greentic SSO",
+                "type": "greentic",
+                "enabled": True,
+                "clientId": "webchat-gui",
+                "scope": "openid profile email greentic.webchat",
+            }
+        ]
+    },
 }
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
