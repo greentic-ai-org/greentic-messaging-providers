@@ -724,8 +724,7 @@ mod tests {
     fn apply_answers_defaults_to_standalone() {
         let value = apply_setup(json!({
             "public_base_url": "https://chat.example.com",
-            "route": "webchat",
-            "skin": "default"
+            "route": "webchat"
         }));
         assert_eq!(value["ok"], true);
         assert_eq!(value["config"]["mode"], "websocket");
