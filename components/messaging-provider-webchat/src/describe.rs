@@ -198,6 +198,12 @@ pub(crate) const I18N_KEYS: &[&str] = &[
     "webchat.schema.config.oauth_greentic_issuer.description",
     "webchat.schema.config.oauth_greentic_client_id.title",
     "webchat.schema.config.oauth_greentic_client_id.description",
+    "webchat.schema.config.oidc_issuer.title",
+    "webchat.schema.config.oidc_issuer.description",
+    "webchat.schema.config.oidc_audience.title",
+    "webchat.schema.config.oidc_audience.description",
+    "webchat.schema.config.oidc_required_scope.title",
+    "webchat.schema.config.oidc_required_scope.description",
     "webchat.schema.config.oauth_google_client_id.title",
     "webchat.schema.config.oauth_google_client_id.description",
     "webchat.schema.config.oauth_google_client_secret.title",
@@ -282,7 +288,7 @@ fn oauth_questions() -> Vec<QaQuestionSpec> {
             "oauth_greentic_issuer",
             "webchat.qa.oauth.greentic.issuer",
             "webchat.qa.oauth.greentic.issuer.help",
-            false,
+            true,
             skip_unless_provider("oauth_enable_greentic"),
         ),
         oauth_question(
@@ -521,7 +527,7 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     ),
     (
         "webchat.qa.oauth.greentic.issuer.help",
-        "Issuer base URL. Defaults to https://<tenant>.greentic-id.com when left empty.",
+        "Issuer base URL. Must be an https:// URL — required when Greentic SSO is enabled, since a missing issuer means every chat-token mint is rejected.",
     ),
     (
         "webchat.qa.oauth.greentic.client_id",
@@ -657,6 +663,27 @@ pub(crate) const I18N_PAIRS: &[(&str, &str)] = &[
     (
         "webchat.schema.config.oauth_greentic_client_id.description",
         "Registered public OIDC client ID for the Greentic identity provider",
+    ),
+    (
+        "webchat.schema.config.oidc_issuer.title",
+        "OIDC issuer for chat-token verification",
+    ),
+    (
+        "webchat.schema.config.oidc_issuer.description",
+        "Pinned issuer whose access tokens may mint an identity-bound Direct Line token",
+    ),
+    ("webchat.schema.config.oidc_audience.title", "OIDC audience"),
+    (
+        "webchat.schema.config.oidc_audience.description",
+        "Expected aud claim on the access token. Defaults to webchat-gui",
+    ),
+    (
+        "webchat.schema.config.oidc_required_scope.title",
+        "OIDC required scope",
+    ),
+    (
+        "webchat.schema.config.oidc_required_scope.description",
+        "Scope the access token must carry. Defaults to greentic.webchat",
     ),
     (
         "webchat.schema.config.jwt_signing_key.title",
@@ -918,6 +945,30 @@ fn config_schema() -> SchemaIr {
                 schema_str(
                     "webchat.schema.config.oauth_greentic_client_id.title",
                     "webchat.schema.config.oauth_greentic_client_id.description",
+                ),
+            ),
+            (
+                "oidc_issuer",
+                false,
+                schema_str(
+                    "webchat.schema.config.oidc_issuer.title",
+                    "webchat.schema.config.oidc_issuer.description",
+                ),
+            ),
+            (
+                "oidc_audience",
+                false,
+                schema_str(
+                    "webchat.schema.config.oidc_audience.title",
+                    "webchat.schema.config.oidc_audience.description",
+                ),
+            ),
+            (
+                "oidc_required_scope",
+                false,
+                schema_str(
+                    "webchat.schema.config.oidc_required_scope.title",
+                    "webchat.schema.config.oidc_required_scope.description",
                 ),
             ),
             (

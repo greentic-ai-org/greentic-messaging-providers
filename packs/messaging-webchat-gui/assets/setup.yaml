@@ -51,6 +51,39 @@ questions:
     help: "Require users to sign in before accessing the chat"
     group: OAuth
 
+  # ── Greentic SSO (default) ──────────────────────────────
+  - name: oauth_enable_greentic
+    title: Enable Greentic SSO
+    kind: boolean
+    required: false
+    default: "true"
+    help: "Sign in with the Greentic identity provider. Enabled by default."
+    group: OAuth - Greentic SSO
+    visible_if:
+      field: oauth_enabled
+      eq: "true"
+  - name: oauth_greentic_issuer
+    title: Greentic SSO issuer URL
+    kind: string
+    required: true
+    help: "Issuer base URL, e.g. https://acme.greentic-id.com. Must be an https:// URL — required when Greentic SSO is enabled, since a missing issuer means every chat-token mint is rejected."
+    group: OAuth - Greentic SSO
+    visible_if:
+      field: oauth_enable_greentic
+      eq: "true"
+    validate:
+      regex: "^https://"
+  - name: oauth_greentic_client_id
+    title: Greentic SSO client ID
+    kind: string
+    required: false
+    help: "Registered public OIDC client for this tenant. Defaults to webchat-gui."
+    placeholder: "webchat-gui"
+    group: OAuth - Greentic SSO
+    visible_if:
+      field: oauth_enable_greentic
+      eq: "true"
+
   # ── Google ───────────────────────────────────────────────
   - name: oauth_enable_google
     title: Enable Google login
