@@ -195,6 +195,8 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "nav_links",
         "oauth_enabled",
         "oauth_providers",
+        "oauth_greentic_issuer",
+        "oauth_greentic_client_id",
     ] {
         if let Some(v) = input.get(key) {
             partial.insert(key.to_string(), v.clone());
@@ -213,6 +215,8 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "nav_links",
         "oauth_enabled",
         "oauth_providers",
+        "oauth_greentic_issuer",
+        "oauth_greentic_client_id",
     ] {
         if partial.contains_key(key) {
             continue;

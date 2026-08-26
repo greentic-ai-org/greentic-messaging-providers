@@ -491,7 +491,8 @@ fn apply_answers_impl(
                 .get("oauth_enabled")
                 .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")));
         }
-        if has("oauth_enable_google")
+        if has("oauth_enable_greentic")
+            || has("oauth_enable_google")
             || has("oauth_enable_microsoft")
             || has("oauth_enable_github")
             || has("oauth_enable_custom")
@@ -629,6 +630,22 @@ fn is_truthy(answers: &Value, key: &str) -> bool {
 /// Falls back to raw `oauth_providers` field if present (for direct JSON input).
 fn compose_oauth_providers(answers: &Value) -> Option<String> {
     let mut providers: Vec<Value> = Vec::new();
+
+    // Greentic SSO (pushed first so it renders as the first login button)
+    if is_truthy(answers, "oauth_enable_greentic") {
+        let mut p = json!({
+            "id": "greentic",
+            "label": "Greentic SSO",
+            "type": "greentic",
+            "client_id": optional_string_from(answers, "oauth_greentic_client_id")
+                .unwrap_or_else(|| "webchat-gui".to_string()),
+            "scopes": "openid profile email greentic.webchat"
+        });
+        if let Some(issuer) = optional_string_from(answers, "oauth_greentic_issuer") {
+            p["issuer"] = Value::String(issuer);
+        }
+        providers.push(p);
+    }
 
     // Google (well-known URLs)
     if is_truthy(answers, "oauth_enable_google")
@@ -840,5 +857,24 @@ mod tests {
         }));
         assert_eq!(value["ok"], false);
         assert!(error_text(&value).contains("presentation_mode"));
+    }
+
+    #[test]
+    fn greentic_sso_is_the_first_composed_provider() {
+        let answers = json!({
+            "oauth_enabled": true,
+            "oauth_enable_greentic": true,
+            "oauth_greentic_issuer": "https://acme.greentic-id.com",
+            "oauth_enable_google": true,
+            "oauth_google_client_id": "google-client",
+        });
+        let composed = compose_oauth_providers(&answers).expect("providers composed");
+        let parsed: Value = serde_json::from_str(&composed).expect("valid json");
+        let list = parsed.as_array().expect("array");
+        assert_eq!(list[0]["id"], json!("greentic"));
+        assert_eq!(list[0]["type"], json!("greentic"));
+        assert_eq!(list[0]["client_id"], json!("webchat-gui"));
+        assert_eq!(list[0]["issuer"], json!("https://acme.greentic-id.com"));
+        assert_eq!(list[1]["id"], json!("google"));
     }
 }

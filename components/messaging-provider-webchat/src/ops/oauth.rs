@@ -52,6 +52,19 @@ pub(super) fn handle_auth_config(request: &HttpInV1) -> Vec<u8> {
             parsed
         } else {
             let mut list = Vec::new();
+            if read_secret("oauth_enable_greentic").as_deref() == Some("true") {
+                let client_id = read_secret("oauth_greentic_client_id")
+                    .unwrap_or_else(|| "webchat-gui".to_string());
+                let mut entry = json!({
+                    "id": "greentic", "label": "Greentic SSO", "type": "greentic",
+                    "client_id": client_id,
+                    "scopes": "openid profile email greentic.webchat"
+                });
+                if let Some(issuer) = read_secret("oauth_greentic_issuer") {
+                    entry["issuer"] = Value::String(issuer);
+                }
+                list.push(entry);
+            }
             if read_secret("oauth_enable_google").as_deref() == Some("true")
                 && let Some(client_id) = read_secret("oauth_google_client_id")
             {
