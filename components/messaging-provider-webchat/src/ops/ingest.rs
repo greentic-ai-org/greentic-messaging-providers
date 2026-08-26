@@ -195,6 +195,15 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
             .iter()
             .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-User"))
             .map(|h| h.value.clone());
+        // Absent means the header wasn't set at all (shouldn't happen for a
+        // 201 from handle_conversations) — treat that the same as "false" so
+        // a missing flag can never be mistaken for a verified identity.
+        let user_verified = out
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-User-Verified"))
+            .map(|h| h.value == "true")
+            .unwrap_or(false);
         let conv_id = out
             .headers
             .iter()
@@ -286,6 +295,9 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
             envelope
                 .metadata
                 .insert("user_id".to_string(), actor.id.clone());
+            envelope
+                .metadata
+                .insert("user_verified".to_string(), user_verified.to_string());
         }
         // Carry the picker locale through to the runner so the auto-start
         // welcome card is rendered in the user's language. Without this the

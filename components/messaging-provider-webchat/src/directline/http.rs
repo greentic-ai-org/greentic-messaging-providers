@@ -9,7 +9,7 @@ use uuid::Uuid;
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 
 use super::jwt::{DirectLineContext, TTL_SECONDS, issue_token, verify_token};
-use super::oidc::verify_access_token;
+use super::oidc::{OidcError, verify_access_token};
 use super::state::{ConversationState, StoredActivity, conversation_key, sanitize_team};
 use super::store::{JwksFetcher, NoJwksFetcher, RateLimitState, SecretStore, StateStore};
 
@@ -130,7 +130,23 @@ where
     let (token_subject, verified) =
         match determine_verified_identity(request, state_store, jwks, now) {
             Ok(Some(identity)) => (identity, true),
-            Ok(None) => (subject.token_subject().to_string(), false),
+            Ok(None) => {
+                // Reject a client-supplied id shaped like an issuer subject
+                // (`{did_web}:users:{user_id}`) — otherwise an anonymous
+                // caller can self-declare exactly the id a verified bearer
+                // would have produced, and the two become indistinguishable
+                // downstream. Guest ids are UUIDs and never contain a colon.
+                if let RateLimitSubject::User(ref id) = subject
+                    && id.contains(":users:")
+                {
+                    return respond_error(
+                        400,
+                        "invalid_user_id",
+                        "client-supplied user id must not use the issuer-subject shape",
+                    );
+                }
+                (subject.token_subject().to_string(), false)
+            }
             Err(resp) => return resp,
         };
 
@@ -183,6 +199,15 @@ where
             "bearer provided but oidc verification is not configured for this tenant",
         ));
     };
+    // An http:// issuer would fetch signing keys in plaintext, letting a
+    // network attacker substitute a JWKS and mint tokens that verify.
+    if !issuer.starts_with("https://") {
+        return Err(respond_error(
+            401,
+            "unauthorized",
+            "oidc_issuer must use https",
+        ));
+    }
     let audience =
         config_str(request, "oidc_audience").unwrap_or_else(|| "webchat-gui".to_string());
     let required_scope = config_str(request, "oidc_required_scope")
@@ -207,6 +232,42 @@ where
             "access token rejected: empty subject",
         )),
         Ok(identity) => Ok(Some(identity.sub)),
+        // The cached JWKS may be stale after the issuer rotated its signing
+        // key. Refetch once, bypassing the cache, and retry verification —
+        // bounded to a single retry so a persistently unknown kid can't turn
+        // into a fetch amplifier.
+        Err(OidcError::UnknownKey) => {
+            let fresh_doc = match refetch_jwks(state_store, jwks, &jwks_url, now) {
+                Ok(doc) => doc,
+                Err(err) => {
+                    return Err(respond_error(
+                        401,
+                        "unauthorized",
+                        format!("jwks unavailable: {err}"),
+                    ));
+                }
+            };
+            match verify_access_token(
+                &bearer,
+                &fresh_doc,
+                &issuer,
+                &audience,
+                &required_scope,
+                now,
+            ) {
+                Ok(identity) if identity.sub.is_empty() => Err(respond_error(
+                    401,
+                    "unauthorized",
+                    "access token rejected: empty subject",
+                )),
+                Ok(identity) => Ok(Some(identity.sub)),
+                Err(err) => Err(respond_error(
+                    401,
+                    "unauthorized",
+                    format!("access token rejected: {err:?}"),
+                )),
+            }
+        }
         Err(err) => Err(respond_error(
             401,
             "unauthorized",
@@ -278,6 +339,10 @@ where
     headers.push(Header {
         name: "X-Greentic-User".to_string(),
         value: claims.sub.clone(),
+    });
+    headers.push(Header {
+        name: "X-Greentic-User-Verified".to_string(),
+        value: claims.verified.to_string(),
     });
     headers.push(Header {
         name: "X-Greentic-ConversationId".to_string(),
@@ -899,10 +964,28 @@ struct CachedJwks {
     fetched_at: i64,
 }
 
-/// Fetches an issuer's JWKS document, caching by issuer-derived URL so a page
-/// reload doesn't cost an outbound round trip on every token mint. Keyed on
-/// the URL, never on the bearer token or its hash — ECDSA signatures are
-/// malleable, so a token-keyed cache would be bypassable by a re-encoded twin.
+// Cache key is the issuer-derived URL, never the bearer token or its hash —
+// ECDSA signatures are malleable, so a token-keyed cache would be
+// bypassable by a re-encoded twin.
+fn jwks_cache_key(jwks_url: &str) -> String {
+    format!("webchat:jwks:{jwks_url}")
+}
+
+/// Caches the fetched document under `jwks_url`. A cache write failure just
+/// costs a refetch next time — failing the mint over it would turn a
+/// degraded state store into a login outage.
+fn store_jwks_cache<S: StateStore>(state_store: &mut S, jwks_url: &str, document: &str, now: i64) {
+    let entry = CachedJwks {
+        document: document.to_string(),
+        fetched_at: now,
+    };
+    if let Ok(bytes) = serde_json::to_vec(&entry) {
+        let _ = state_store.write(&jwks_cache_key(jwks_url), &bytes);
+    }
+}
+
+/// Fetches an issuer's JWKS document, caching by issuer-derived URL so a
+/// page reload doesn't cost an outbound round trip on every token mint.
 fn load_jwks<S, J>(
     state_store: &mut S,
     jwks: &J,
@@ -913,7 +996,7 @@ where
     S: StateStore,
     J: JwksFetcher,
 {
-    let cache_key = format!("webchat:jwks:{jwks_url}");
+    let cache_key = jwks_cache_key(jwks_url);
     if let Ok(Some(bytes)) = state_store.read(&cache_key)
         && let Ok(cached) = serde_json::from_slice::<CachedJwks>(&bytes)
         && now - cached.fetched_at < JWKS_CACHE_TTL_SECONDS
@@ -921,15 +1004,26 @@ where
         return Ok(cached.document);
     }
     let document = jwks.fetch(jwks_url)?;
-    let entry = CachedJwks {
-        document: document.clone(),
-        fetched_at: now,
-    };
-    // A cache write failure just costs a refetch next time — failing the
-    // mint over it would turn a degraded state store into a login outage.
-    if let Ok(bytes) = serde_json::to_vec(&entry) {
-        let _ = state_store.write(&cache_key, &bytes);
-    }
+    store_jwks_cache(state_store, jwks_url, &document, now);
+    Ok(document)
+}
+
+/// Bypasses the cache entirely and overwrites it with a fresh fetch. Used
+/// once, after a verification failure that looks like a rotated signing key
+/// (`OidcError::UnknownKey`) — never called recursively, so it cannot become
+/// a fetch amplifier.
+fn refetch_jwks<S, J>(
+    state_store: &mut S,
+    jwks: &J,
+    jwks_url: &str,
+    now: i64,
+) -> Result<String, String>
+where
+    S: StateStore,
+    J: JwksFetcher,
+{
+    let document = jwks.fetch(jwks_url)?;
+    store_jwks_cache(state_store, jwks_url, &document, now);
     Ok(document)
 }
 
@@ -2120,5 +2214,554 @@ mod tests {
             assert_eq!(response.status, 200);
         }
         assert_eq!(fetcher.calls.get(), 1);
+    }
+
+    // --- C1: anonymous callers must not be able to self-declare an
+    // issuer-subject-shaped id, and the DirectLine → envelope boundary must
+    // carry whether the identity was actually verified. ---
+
+    #[test]
+    fn anonymous_mint_rejects_issuer_shaped_client_user_id() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let request = build_request(
+            "POST",
+            "/v3/directline/tokens/generate",
+            Some("env=default&tenant=default"),
+            Some(&json!({"user": {"id": "acme:users:7"}})),
+            vec![],
+        )
+        .expect("request");
+
+        let response =
+            handle_directline_request_with_jwks(&request, &mut state, &secrets, &NoJwksFetcher);
+        assert_eq!(response.status, 400);
+    }
+
+    #[test]
+    fn verified_conversation_carries_true_verified_header() {
+        let (access_token, jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let mut token_request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+        }));
+        token_request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {access_token}"),
+        });
+        let token_response = handle_directline_request_with_jwks(
+            &token_request,
+            &mut state,
+            &secrets,
+            &StaticJwks(jwks),
+        );
+        assert_eq!(token_response.status, 200);
+        let user_token = decode_body(&token_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+
+        let conv_request = build_request(
+            "POST",
+            "/v3/directline/conversations",
+            None,
+            None,
+            vec![Header {
+                name: "Authorization".into(),
+                value: format!("Bearer {user_token}"),
+            }],
+        )
+        .expect("request");
+        let conv_response = handle_directline_request_with_jwks(
+            &conv_request,
+            &mut state,
+            &secrets,
+            &NoJwksFetcher,
+        );
+        assert_eq!(conv_response.status, 201);
+        assert_eq!(
+            header_value(&conv_response, "X-Greentic-User-Verified"),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn anonymous_conversation_carries_false_verified_header() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let token_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/generate",
+                Some("env=default&tenant=default"),
+                Some(&json!({"user": {"id": "guest-abc"}})),
+                vec![],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(token_response.status, 200);
+        let user_token = decode_body(&token_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        assert_eq!(
+            header_value(&conv_response, "X-Greentic-User-Verified"),
+            Some("false")
+        );
+    }
+
+    // --- I1: a JWKS fetch failure with a bearer present must 401, not fall
+    // back to anonymous. ---
+
+    struct FailingJwks;
+    impl JwksFetcher for FailingJwks {
+        fn fetch(&self, _url: &str) -> Result<String, String> {
+            Err("connection refused".to_string())
+        }
+    }
+
+    #[test]
+    fn jwks_fetch_failure_with_bearer_present_is_rejected_with_401() {
+        let (access_token, _jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {access_token}"),
+        });
+
+        let response =
+            handle_directline_request_with_jwks(&request, &mut state, &secrets, &FailingJwks);
+        assert_eq!(response.status, 401);
+    }
+
+    // --- I4: an http:// issuer must be rejected, not trusted. ---
+
+    #[test]
+    fn bearer_with_non_https_issuer_is_rejected_with_401() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "http://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: "Bearer whatever".into(),
+        });
+
+        let response =
+            handle_directline_request_with_jwks(&request, &mut state, &secrets, &NoJwksFetcher);
+        assert_eq!(response.status, 401);
+    }
+
+    // --- I5: a rotated signing key must not hard-401 every caller until the
+    // cache TTL expires — one bounded retry, bypassing the cache, must
+    // recover. ---
+
+    struct RotatingJwks {
+        old: String,
+        new: String,
+        calls: std::cell::Cell<usize>,
+    }
+    impl JwksFetcher for RotatingJwks {
+        fn fetch(&self, _url: &str) -> Result<String, String> {
+            let n = self.calls.get();
+            self.calls.set(n + 1);
+            Ok(if n == 0 {
+                self.old.clone()
+            } else {
+                self.new.clone()
+            })
+        }
+    }
+
+    #[test]
+    fn jwks_cache_invalidates_and_retries_once_after_key_rotation() {
+        let (token1, jwks1) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:1",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let (token2, jwks2) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:2",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let fetcher = RotatingJwks {
+            old: jwks1,
+            new: jwks2,
+            calls: std::cell::Cell::new(0),
+        };
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let cfg = json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+            "rate_limit_requests": 100,
+        });
+
+        // First mint populates the cache with the pre-rotation JWKS (key 1).
+        let mut req1 = token_request_with_config(cfg.clone());
+        req1.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {token1}"),
+        });
+        let resp1 = handle_directline_request_with_jwks(&req1, &mut state, &secrets, &fetcher);
+        assert_eq!(resp1.status, 200);
+
+        // Second mint presents a token signed by the new (post-rotation)
+        // key. The cached JWKS won't contain it — UnknownKey should trigger
+        // exactly one bounded refetch, which succeeds.
+        let mut req2 = token_request_with_config(cfg);
+        req2.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {token2}"),
+        });
+        let resp2 = handle_directline_request_with_jwks(&req2, &mut state, &secrets, &fetcher);
+        assert_eq!(resp2.status, 200);
+        let body = decode_body(&resp2).expect("json body");
+        let claims = verify_token(b"test-signing-key", body["token"].as_str().expect("token"))
+            .expect("verifies");
+        assert_eq!(claims.sub, "acme:users:2");
+        assert_eq!(fetcher.calls.get(), 2);
+    }
+
+    // --- I2: `verified` must survive re-minting through handle_conversations,
+    // handle_refresh_token, and handle_reconnect_conversation, in both
+    // directions — a verified session must not be downgraded, and an
+    // anonymous session must not be laundered into a verified one. ---
+
+    fn mint_verified_user_token(
+        state: &mut InMemoryStateStore,
+        secrets: &TestSecretStore,
+    ) -> String {
+        let (access_token, jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {access_token}"),
+        });
+        let response =
+            handle_directline_request_with_jwks(&request, state, secrets, &StaticJwks(jwks));
+        assert_eq!(response.status, 200);
+        decode_body(&response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string()
+    }
+
+    fn mint_anonymous_user_token(
+        state: &mut InMemoryStateStore,
+        secrets: &TestSecretStore,
+    ) -> String {
+        let response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/generate",
+                Some("env=default&tenant=default"),
+                Some(&json!({"user": {"id": "guest-abc"}})),
+                vec![],
+            )
+            .expect("request"),
+            state,
+            secrets,
+        );
+        assert_eq!(response.status, 200);
+        decode_body(&response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string()
+    }
+
+    #[test]
+    fn verified_flag_survives_conversation_creation() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let user_token = mint_verified_user_token(&mut state, &secrets);
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        let conv_token = decode_body(&conv_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+        let claims = verify_token(b"test-signing-key", &conv_token).expect("verifies");
+        assert!(claims.verified);
+    }
+
+    #[test]
+    fn unverified_flag_survives_conversation_creation() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let user_token = mint_anonymous_user_token(&mut state, &secrets);
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        let conv_token = decode_body(&conv_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+        let claims = verify_token(b"test-signing-key", &conv_token).expect("verifies");
+        assert!(!claims.verified);
+    }
+
+    #[test]
+    fn verified_flag_survives_token_refresh() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let user_token = mint_verified_user_token(&mut state, &secrets);
+
+        let refresh_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/refresh",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(refresh_response.status, 200);
+        let refreshed_token = decode_body(&refresh_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+        let claims = verify_token(b"test-signing-key", &refreshed_token).expect("verifies");
+        assert!(claims.verified);
+    }
+
+    #[test]
+    fn unverified_flag_survives_token_refresh() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let user_token = mint_anonymous_user_token(&mut state, &secrets);
+
+        let refresh_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/refresh",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(refresh_response.status, 200);
+        let refreshed_token = decode_body(&refresh_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+        let claims = verify_token(b"test-signing-key", &refreshed_token).expect("verifies");
+        assert!(!claims.verified);
+    }
+
+    #[test]
+    fn verified_flag_survives_reconnect() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let user_token = mint_verified_user_token(&mut state, &secrets);
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        let conv_body = decode_body(&conv_response).expect("json body");
+        let conversation_id = conv_body["conversationId"]
+            .as_str()
+            .expect("conversationId");
+        let conv_token = conv_body["token"].as_str().expect("token").to_string();
+
+        let reconnect_response = handle_directline_request(
+            &build_request(
+                "GET",
+                &format!("/v3/directline/conversations/{conversation_id}"),
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {conv_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(reconnect_response.status, 200);
+        let reconnected_token = decode_body(&reconnect_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+        let claims = verify_token(b"test-signing-key", &reconnected_token).expect("verifies");
+        assert!(claims.verified);
+    }
+
+    #[test]
+    fn unverified_flag_survives_reconnect() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let user_token = mint_anonymous_user_token(&mut state, &secrets);
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        let conv_body = decode_body(&conv_response).expect("json body");
+        let conversation_id = conv_body["conversationId"]
+            .as_str()
+            .expect("conversationId");
+        let conv_token = conv_body["token"].as_str().expect("token").to_string();
+
+        let reconnect_response = handle_directline_request(
+            &build_request(
+                "GET",
+                &format!("/v3/directline/conversations/{conversation_id}"),
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {conv_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(reconnect_response.status, 200);
+        let reconnected_token = decode_body(&reconnect_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+        let claims = verify_token(b"test-signing-key", &reconnected_token).expect("verifies");
+        assert!(!claims.verified);
     }
 }
