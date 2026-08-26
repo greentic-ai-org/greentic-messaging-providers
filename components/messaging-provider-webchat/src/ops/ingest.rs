@@ -324,11 +324,20 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
         let body = decode_body_json(&request.body_b64).unwrap_or(Value::Null);
         let text = extract_activity_text(&body);
         let action_value = body.get("value"); // Action.Submit data from AC buttons
-        let user = body
-            .get("from")
-            .and_then(|f| f.get("id"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        // The actor comes from the verified X-Greentic-User response header
+        // (set by handle_post_activities from the JWT claims), never from the
+        // request body's `from.id`, which is entirely client-chosen.
+        let user = out
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-User"))
+            .map(|h| h.value.clone());
+        let user_verified = out
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-User-Verified"))
+            .map(|h| h.value == "true")
+            .unwrap_or(false);
         let conv_id = dl_path
             .strip_prefix("/v3/directline/conversations/")
             .and_then(|rest| rest.split('/').next())
@@ -374,10 +383,16 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
         }
         // Forward ALL Action.Submit data fields to metadata so the
         // operator can handle MCP actions, token saves, card routing, etc.
+        // `user_id`/`user_verified` and any `user_*`/`greentic_*` key are
+        // reserved for server-derived trust signals and are never taken
+        // from client-supplied data — see the overwrite below.
         if let Some(val) = action_value
             && let Some(obj) = val.as_object()
         {
             for (k, v) in obj {
+                if k.starts_with("user_") || k.starts_with("greentic_") {
+                    continue;
+                }
                 let s = match v {
                     Value::String(s) => s.clone(),
                     _ => v.to_string(),
@@ -385,6 +400,16 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
                 envelope.metadata.insert(k.clone(), s);
             }
         }
+        // Stamp the server-verified trust signal after the Action.Submit
+        // copy above so a client-supplied value can never survive it.
+        if let Some(actor) = &envelope.from {
+            envelope
+                .metadata
+                .insert("user_id".to_string(), actor.id.clone());
+        }
+        envelope
+            .metadata
+            .insert("user_verified".to_string(), user_verified.to_string());
         // Forward the persisted flow binding so every activity in the
         // conversation carries the same flow_hint the operator saw on
         // the auto-start envelope.
@@ -626,6 +651,109 @@ mod tests {
         assert!(
             !out.events[0].metadata.contains_key("flow_hint"),
             "flow_hint must not appear when X-Greentic-Flow header is absent"
+        );
+    }
+
+    #[test]
+    fn activity_envelope_takes_actor_from_header_not_body() {
+        let body = json!({
+            "type": "message",
+            "text": "hello",
+            "from": {"id": "attacker-supplied-id"},
+        });
+        let request = build_ingest_request(
+            "POST",
+            "/v3/directline/conversations/conv-1/activities",
+            vec![],
+            Some(&body),
+        );
+        let mut out = build_dl_response_201(vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+            Header {
+                name: "X-Greentic-User".into(),
+                value: "verified-sub".into(),
+            },
+            Header {
+                name: "X-Greentic-User-Verified".into(),
+                value: "false".into(),
+            },
+        ]);
+        stamp_ingest_envelopes(
+            &request,
+            "/v3/directline/conversations/conv-1/activities",
+            &mut out,
+        );
+
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(
+            out.events[0].from.as_ref().map(|a| a.id.as_str()),
+            Some("verified-sub"),
+            "actor must come from the X-Greentic-User response header, not body.from.id"
+        );
+    }
+
+    // C1: a client posting a spoofed `user_verified`/`user_id` in the
+    // Action.Submit value must never override the server-derived trust
+    // signal, on an anonymous (unverified) DirectLine session.
+    #[test]
+    fn activity_envelope_rejects_spoofed_user_verified_from_action_submit_value() {
+        let body = json!({
+            "type": "message",
+            "value": {"user_verified": "true", "user_id": "victim-sub"},
+            "from": {"id": "victim-sub"},
+        });
+        let request = build_ingest_request(
+            "POST",
+            "/v3/directline/conversations/conv-1/activities",
+            vec![],
+            Some(&body),
+        );
+        let mut out = build_dl_response_201(vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+            // Simulates handle_post_activities' output for an anonymous,
+            // unverified DirectLine token.
+            Header {
+                name: "X-Greentic-User".into(),
+                value: "guest-abc".into(),
+            },
+            Header {
+                name: "X-Greentic-User-Verified".into(),
+                value: "false".into(),
+            },
+        ]);
+        stamp_ingest_envelopes(
+            &request,
+            "/v3/directline/conversations/conv-1/activities",
+            &mut out,
+        );
+
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(
+            out.events[0]
+                .metadata
+                .get("user_verified")
+                .map(String::as_str),
+            Some("false"),
+            "a client-supplied user_verified must never survive into envelope metadata"
+        );
+        assert_eq!(
+            out.events[0].metadata.get("user_id").map(String::as_str),
+            Some("guest-abc"),
+            "user_id metadata must be the server-verified actor, not the spoofed value"
         );
     }
 

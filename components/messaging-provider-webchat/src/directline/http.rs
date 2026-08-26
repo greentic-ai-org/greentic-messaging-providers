@@ -595,6 +595,14 @@ where
         name: "X-Greentic-Tenant".to_string(),
         value: claims.ctx.tenant.clone(),
     });
+    headers.push(Header {
+        name: "X-Greentic-User".to_string(),
+        value: claims.sub.clone(),
+    });
+    headers.push(Header {
+        name: "X-Greentic-User-Verified".to_string(),
+        value: claims.verified.to_string(),
+    });
     if let Some(ref flow) = conversation.flow_binding {
         headers.push(Header {
             name: FLOW_HINT_HEADER.to_string(),
@@ -2400,6 +2408,86 @@ mod tests {
         assert_eq!(
             header_value(&conv_response, "X-Greentic-User-Verified"),
             Some("false")
+        );
+    }
+
+    // C1: handle_post_activities must stamp the same X-Greentic-User /
+    // X-Greentic-User-Verified headers handle_conversations does, from the
+    // verified claims — never leaving the per-message envelope to fall back
+    // on a client-supplied actor with no verification flag at all.
+    #[test]
+    fn anonymous_activity_carries_false_verified_header_regardless_of_body() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let token_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/tokens/generate",
+                Some("env=default&tenant=default"),
+                Some(&json!({"user": {"id": "guest-abc"}})),
+                vec![],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(token_response.status, 200);
+        let user_token = decode_body(&token_response).expect("json body")["token"]
+            .as_str()
+            .expect("token")
+            .to_string();
+
+        let conv_response = handle_directline_request(
+            &build_request(
+                "POST",
+                "/v3/directline/conversations",
+                None,
+                None,
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {user_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(conv_response.status, 201);
+        let conv_body = decode_body(&conv_response).expect("json body");
+        let conversation_id = conv_body["conversationId"].as_str().expect("id");
+        let conv_token = conv_body["token"].as_str().expect("conv token").to_string();
+
+        // The activity body tries to self-declare a verified, spoofed actor —
+        // the response headers must reflect the real (anonymous, unverified)
+        // claims regardless.
+        let activity_response = handle_directline_request(
+            &build_request(
+                "POST",
+                &format!("/v3/directline/conversations/{conversation_id}/activities"),
+                None,
+                Some(&json!({
+                    "type": "message",
+                    "value": {"user_verified": "true", "user_id": "victim-sub"},
+                    "from": {"id": "victim-sub"},
+                })),
+                vec![Header {
+                    name: "Authorization".into(),
+                    value: format!("Bearer {conv_token}"),
+                }],
+            )
+            .expect("request"),
+            &mut state,
+            &secrets,
+        );
+        assert_eq!(activity_response.status, 201);
+        assert_eq!(
+            header_value(&activity_response, "X-Greentic-User-Verified"),
+            Some("false")
+        );
+        assert_eq!(
+            header_value(&activity_response, "X-Greentic-User"),
+            Some("guest-abc")
         );
     }
 
