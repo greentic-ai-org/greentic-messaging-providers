@@ -69,6 +69,14 @@ def check_skin(skins_root: Path, skin_dir: Path, errors: list[str]) -> None:
 
     for section, key in PATH_KEYS:
         ref = manifest.get(section, {}).get(key)
+        if isinstance(ref, str) and ref.startswith("/skins/"):
+            errors.append(
+                f"{manifest_path}: {section}.{key} is root-absolute ({ref}); "
+                "use a relative path so the skin can be served from any mount point"
+            )
+
+    for section, key in PATH_KEYS:
+        ref = manifest.get(section, {}).get(key)
         if not isinstance(ref, str):
             continue
         target = resolve(skins_root, skin_dir, ref)
