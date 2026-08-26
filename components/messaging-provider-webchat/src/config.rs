@@ -148,6 +148,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "base_url",
         "oauth_enabled",
         "oauth_providers",
+        // Surfaced via ConfigAwareSecretStore, not parsed into ProviderConfig.
         "oauth_greentic_issuer",
         "oauth_greentic_client_id",
         "oidc_issuer",
@@ -167,6 +168,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "base_url",
         "oauth_enabled",
         "oauth_providers",
+        // Surfaced via ConfigAwareSecretStore, not parsed into ProviderConfig.
         "oauth_greentic_issuer",
         "oauth_greentic_client_id",
         "oidc_issuer",

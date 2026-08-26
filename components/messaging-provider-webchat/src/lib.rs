@@ -291,12 +291,8 @@ fn apply_answers_impl(
         }
     }
 
-    if has("oauth_greentic_issuer") {
-        merged.oidc_issuer = optional_string_from(&answers, "oauth_greentic_issuer");
-    }
-    if has("oauth_greentic_client_id") {
-        merged.oidc_audience = optional_string_from(&answers, "oauth_greentic_client_id");
-    }
+    // oauth_greentic_* answers are intentionally not mapped here: this
+    // pack's schema is additionalProperties: false and has no oidc_* fields.
 
     if let Err(error) = validate_config_out(&merged) {
         return canonical_cbor_bytes(&ApplyAnswersResult {
