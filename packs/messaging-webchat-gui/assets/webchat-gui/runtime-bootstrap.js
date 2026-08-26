@@ -702,8 +702,12 @@ console.log('[runtime-bootstrap] loaded');
     return window.location.origin + guiBase + 'sso-callback.html';
   }
 
+  // No derived default: a greentic provider with no configured `issuer` is
+  // treated as misconfigured and filtered out before this is ever reached
+  // (see applyAuthConfig) — deriving one from the query-string tenant was
+  // the exact spoofable shortcut this branch deliberately removed.
   function greenticSsoIssuer(provider) {
-    return provider.issuer || ('https://' + tenant + '.greentic-id.com');
+    return provider.issuer;
   }
 
   function buildGreenticSsoClient(provider) {
@@ -865,6 +869,17 @@ console.log('[runtime-bootstrap] loaded');
     clearDirectLineCache();
     clearOAuthSession();
     clearAppAuthSession();
+    // The SDK persists its own access/refresh/id tokens to sessionStorage
+    // under 'greentic-sso-session' (persist: true), independently of the
+    // greentic_oauth_* keys clearOAuthSession removes above. Call the SDK's
+    // own logout() and remove that key directly so a refresh token cannot
+    // outlive an explicit logout for the tab's lifetime.
+    var ssoClient = window.__GREENTIC_SSO_CLIENT__;
+    if (ssoClient && typeof ssoClient.logout === 'function') {
+      try { ssoClient.logout().catch(function () {}); } catch (_) {}
+    }
+    try { sessionStorage.removeItem('greentic-sso-session'); } catch (_) {}
+    window.__GREENTIC_SSO_CLIENT__ = null;
     window.location.reload();
   }
 
@@ -1118,6 +1133,19 @@ console.log('[runtime-bootstrap] loaded');
         if (authConfig.providers) {
           authConfig.providers = authConfig.providers
             .filter(function (p) { return p.enabled !== false; })
+            .filter(function (p) {
+              // A greentic provider with no issuer is misconfigured, not a
+              // provider we can safely offer a login button for — deriving
+              // one from the (attacker-controlled) tenant is exactly what
+              // this branch removed. Drop it and tell the operator why.
+              if (p.type === 'greentic' && !p.issuer) {
+                console.error('[oauth] greentic provider "' + (p.id || 'greentic') +
+                  '" has no issuer configured — set oauth_greentic_issuer (or the ' +
+                  'provider\'s "issuer" field) for this tenant. Its login button will not be shown.');
+                return false;
+              }
+              return true;
+            })
             .map(function (p) {
               return {
                 id: p.id,
