@@ -3,15 +3,15 @@
   "mode": "fullpage",
   "brand": {
     "name": "3AIgent",
-    "favicon": "./assets/favicon.ico",
-    "logo": "./assets/3point-jewel-round.png",
+    "favicon": "/skins/3aigent/assets/favicon.ico",
+    "logo": "/skins/3aigent/assets/3point-jewel-round.png",
     "primary": "#06b6d4"
   },
   "directLine": {},
   "webchat": {
-    "styleOptions": "./webchat/styleOptions.json",
+    "styleOptions": "/skins/3aigent/webchat/styleOptions.json",
     "styleOptionsThemed": true,
-    "adaptiveCardsHostConfig": "./webchat/hostconfig.json",
+    "adaptiveCardsHostConfig": "/skins/3aigent/webchat/hostconfig.json",
     "locale": "en-US",
     "localePickerLocales": [
       "en", "id", "es", "fr", "de", "it", "pt", "nl", "ja", "zh", "ko", "ar", "hi", "ru", "tr"
@@ -26,10 +26,10 @@
     }
   },
   "fullpage": {
-    "index": "./fullpage/index.html",
-    "css": "./fullpage/page.css"
+    "index": "/skins/3aigent/fullpage/index.html",
+    "css": "/skins/3aigent/fullpage/page.css"
   },
   "hooks": {
-    "script": "./webchat/hooks.js"
+    "script": "/skins/3aigent/webchat/hooks.js"
   }
 }

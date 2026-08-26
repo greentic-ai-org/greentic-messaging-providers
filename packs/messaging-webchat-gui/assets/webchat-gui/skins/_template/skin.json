@@ -3,14 +3,14 @@
   "mode": "fullpage",
   "brand": {
     "name": "Your Brand",
-    "favicon": "./assets/favicon.ico",
-    "logo": "./assets/logo.svg",
+    "favicon": "/skins/_template/assets/favicon.ico",
+    "logo": "/skins/_template/assets/logo.svg",
     "primary": "#0F62FE"
   },
   "directLine": {},
   "webchat": {
-    "styleOptions": "./webchat/styleOptions.json",
-    "adaptiveCardsHostConfig": "./webchat/hostconfig.json",
+    "styleOptions": "/skins/_template/webchat/styleOptions.json",
+    "adaptiveCardsHostConfig": "/skins/_template/webchat/hostconfig.json",
     "locale": "en-US"
   },
   "statusBar": {
@@ -22,10 +22,10 @@
     }
   },
   "fullpage": {
-    "index": "./fullpage/index.html",
-    "css": "./fullpage/page.css"
+    "index": "/skins/_template/fullpage/index.html",
+    "css": "/skins/_template/fullpage/page.css"
   },
   "hooks": {
-    "script": "./webchat/hooks.js"
+    "script": "/skins/_template/webchat/hooks.js"
   }
 }
