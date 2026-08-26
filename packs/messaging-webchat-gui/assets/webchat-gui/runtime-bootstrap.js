@@ -480,6 +480,8 @@ console.log('[runtime-bootstrap] loaded');
       sessionStorage.removeItem(oauthStorageKey('user_email'));
       sessionStorage.removeItem(oauthStorageKey('user_picture'));
       sessionStorage.removeItem(oauthStorageKey('provider'));
+      sessionStorage.removeItem(oauthStorageKey('greentic_bearer'));
+      sessionStorage.removeItem(oauthStorageKey('greentic_fallback'));
     } catch (_) { /* sessionStorage unavailable */ }
   }
 
@@ -575,7 +577,7 @@ console.log('[runtime-bootstrap] loaded');
         } catch (_) {}
       }
       console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
-      saveOAuthSession(tokens.id_token || tokens.access_token || 'authenticated', 'oauth-code');
+      saveOAuthSession(tokens.access_token || tokens.id_token || 'authenticated', 'oauth-code');
       try {
         if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
         if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
@@ -583,6 +585,10 @@ console.log('[runtime-bootstrap] loaded');
         sessionStorage.removeItem(oauthStorageKey('code_verifier'));
         sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
         sessionStorage.removeItem(oauthStorageKey('state'));
+        if (sessionStorage.getItem(oauthStorageKey('greentic_fallback')) === '1') {
+          sessionStorage.removeItem(oauthStorageKey('greentic_fallback'));
+          sessionStorage.setItem(oauthStorageKey('greentic_bearer'), '1');
+        }
       } catch (_) {}
       removeOAuthOverlay();
       injectLogoutButton();
@@ -732,6 +738,9 @@ console.log('[runtime-bootstrap] loaded');
   // only way those browsers can complete a login.
   function greenticSsoRedirectFallback(provider) {
     var issuer = greenticSsoIssuer(provider);
+    try {
+      sessionStorage.setItem(oauthStorageKey('greentic_fallback'), '1');
+    } catch (_) {}
     initiateOAuthFlow({
       id: provider.id,
       label: provider.label,
@@ -1387,6 +1396,24 @@ console.log('[runtime-bootstrap] loaded');
     };
   }
 
+  function greenticAccessToken() {
+    var client = window.__GREENTIC_SSO_CLIENT__;
+    if (client && client.getAccessToken) {
+      return client.getAccessToken().catch(function () { return null; });
+    }
+    try {
+      // Only the redirect fallback puts a real bearer in the session store; the
+      // SDK path stores a sentinel handle and serves tokens from the client.
+      if (sessionStorage.getItem(oauthStorageKey('greentic_bearer')) === '1') {
+        var session = getOAuthSession();
+        if (session && session.token_handle) {
+          return Promise.resolve(session.token_handle);
+        }
+      }
+    } catch (_) {}
+    return Promise.resolve(null);
+  }
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     var requestUrl = typeof input === 'string' ? input : input.url;
@@ -1411,22 +1438,28 @@ console.log('[runtime-bootstrap] loaded');
         }));
       }
       var nextInit = injectGuestIdIntoBody(init);
-      return originalFetch(input, nextInit).then(function (response) {
-        if (response.status === 429) {
-          var retryAfter = response.headers.get('Retry-After');
-          console.warn('[bootstrap] /token rate-limited; Retry-After=', retryAfter);
-          return response;
+      return greenticAccessToken().then(function (accessToken) {
+        if (accessToken) {
+          nextInit.headers = nextInit.headers || {};
+          nextInit.headers['Authorization'] = 'Bearer ' + accessToken;
         }
-        if (!response.ok) return response;
-        var cloned = response.clone();
-        cloned.json().then(function (data) {
-          if (data && data.token && data.expires_in) {
-            writeCachedToken(data);
-            resetDirectLineAuthRetry();
-            console.log('[bootstrap] cached new token, ttl=', data.expires_in, 's');
+        return originalFetch(input, nextInit).then(function (response) {
+          if (response.status === 429) {
+            var retryAfter = response.headers.get('Retry-After');
+            console.warn('[bootstrap] /token rate-limited; Retry-After=', retryAfter);
+            return response;
           }
-        }).catch(function () {});
-        return response;
+          if (!response.ok) return response;
+          var cloned = response.clone();
+          cloned.json().then(function (data) {
+            if (data && data.token && data.expires_in) {
+              writeCachedToken(data);
+              resetDirectLineAuthRetry();
+              console.log('[bootstrap] cached new token, ttl=', data.expires_in, 's');
+            }
+          }).catch(function () {});
+          return response;
+        });
       });
     }
 

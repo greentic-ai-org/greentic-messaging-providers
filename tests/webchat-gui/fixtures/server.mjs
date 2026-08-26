@@ -18,6 +18,8 @@ for (let index = 2; index < process.argv.length; index += 1) {
 }
 const port = Number(args.get('port') || process.env.WEBCHAT_GUI_TEST_PORT || 8799);
 
+let lastTokenAuthorization = null;
+
 const demoLinks = [
   { id: 'docs', label: 'Docs', url: 'https://docs.greentic.ai' },
   { id: 'playground', label: 'Playground', url: 'https://example.test/playground' },
@@ -175,8 +177,13 @@ const server = http.createServer((req, res) => {
       : { enabled: false });
     return;
   }
+  if (urlPath === '/mock-api/last-token-authorization') {
+    sendJson(res, 200, { authorization: lastTokenAuthorization });
+    return;
+  }
   if (urlPath.endsWith('/token') || urlPath.endsWith('/v3/directline/tokens/generate')) {
     req.resume();
+    lastTokenAuthorization = req.headers['authorization'] || null;
     sendJson(res, 200, {
       conversationId: 'webchat-gui-test',
       token: 'webchat-gui-test-token',

@@ -440,4 +440,19 @@ test.describe('full-screen WebChat', () => {
     expect(buttonText).not.toContain('{{');
     expect(buttonText).toContain('Test Login');
   });
+
+  test('an SSO session attaches a bearer to the token mint', async ({ page, request }) => {
+    await page.addInitScript(() => {
+      (window as any).__GREENTIC_SSO_CLIENT__ = {
+        getAccessToken: () => Promise.resolve('fake-access-token'),
+      };
+    });
+    await page.goto('/v1/web/webchat/default-plain-anon/');
+    await expect
+      .poll(async () => {
+        const res = await request.get('/mock-api/last-token-authorization');
+        return (await res.json()).authorization;
+      })
+      .toBe('Bearer fake-access-token');
+  });
 });
