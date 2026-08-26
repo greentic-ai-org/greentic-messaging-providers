@@ -1,5 +1,8 @@
 pub mod http;
 pub mod jwt;
+pub mod oidc;
+#[cfg(test)]
+mod oidc_test_support;
 pub mod state;
 pub mod store;
 
