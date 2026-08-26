@@ -939,10 +939,13 @@ console.log('[runtime-bootstrap] loaded');
       btnContainer.appendChild(btn);
     });
     if (providers.length === 0) {
+      console.error('[oauth] sign-in is enabled but no provider is configured; ' +
+        'set a client ID and secret for at least one provider in the setup wizard');
       var noP = document.createElement('p');
       noP.setAttribute('data-i18n-key', 'login.noProviders');
-      noP.textContent = uiT('login.noProviders', 'No login providers are configured for this tenant.');
-      noP.style.cssText = 'color:#ef4444;font-size:13px;';
+      noP.textContent = uiT('login.noProviders',
+        'No sign-in provider configured.\nAdd credentials for at least one provider in the setup wizard.');
+      noP.style.cssText = 'color:#ef4444;font-size:13px;line-height:1.5;white-space:pre-line;';
       card.appendChild(noP);
     }
     card.appendChild(btnContainer);

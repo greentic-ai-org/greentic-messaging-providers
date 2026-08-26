@@ -59,11 +59,12 @@
     },
     "oauth_enabled": {
       "type": "boolean",
-      "description": "Require OAuth authentication before the chat loads."
+      "default": false,
+      "description": "Whether OAuth login is offered on the hosted GUI."
     },
     "oauth_providers": {
       "type": "string",
-      "description": "JSON array of configured OAuth providers."
+      "description": "JSON array of OAuth provider configurations, composed from the per-provider setup answers."
     },
     "oauth_greentic_issuer": {
       "type": "string",

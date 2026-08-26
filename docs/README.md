@@ -14,6 +14,7 @@ This folder documents the Greentic messaging provider packs for two audiences:
 | Choose a provider | [Provider catalog](providers/README.md) |
 | Understand one provider's features | Provider files under [docs/providers](providers/) |
 | Embed WebChat GUI in an existing website | [WebChat GUI Web Component guide](guides/webchat-gui-embed-webcomponent.md) |
+| Author or validate a WebChat skin | [WebChat skin authoring guide](guides/webchat-skins.md) |
 | Preview iframe/native/popup WebChat GUI modes | `scripts/test_webchat_gui.sh 3aigent --embedded` |
 | Run provider tests locally | [Messaging tester guide](guides/testing/guide-messaging-tester.md) |
 | Configure nightly live tests | [Provider nightly e2e](provider-e2e.md) |

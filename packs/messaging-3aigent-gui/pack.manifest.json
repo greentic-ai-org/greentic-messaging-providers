@@ -1,0 +1,332 @@
+{
+  "name": "messaging-3aigent-gui",
+  "version": "0.5.11",
+  "kind": "application",
+  "publisher": "Greentic",
+  "description": "Hosted 3AIgent GUI messaging pack with Direct Line backend, 3AIgent skin and SSO enabled by default.",
+  "component_sources": [
+    {
+      "id": "ai.greentic.component-provision",
+      "version": "0.5.11",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/provision/provision.wasm"
+    },
+    {
+      "id": "ai.greentic.component-qa",
+      "version": "0.5.11",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/qa/qa.wasm"
+    },
+    {
+      "id": "ai.greentic.component-templates",
+      "version": "0.5.11",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/templates/templates.wasm"
+    },
+    {
+      "id": "messaging-provider-3aigent-gui",
+      "version": "0.5.11",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging-provider-3aigent-gui.wasm"
+    },
+    {
+      "id": "messaging_provider_3aigent_gui",
+      "version": "0.5.11",
+      "world": "root:component/root",
+      "supports": [
+        "messaging"
+      ],
+      "profiles": {
+        "default": "default",
+        "supported": [
+          "default"
+        ]
+      },
+      "capabilities": {
+        "wasi": {
+          "random": false,
+          "clocks": false
+        },
+        "host": {}
+      },
+      "wasm": "components/messaging_provider_3aigent_gui.wasm"
+    }
+  ],
+  "components": [
+    "ai.greentic.component-templates",
+    "messaging-provider-3aigent-gui"
+  ],
+  "config_schema": {
+    "provider_config": {
+      "format": "json",
+      "path": "schemas/messaging/3aigent-gui/public.config.schema.json"
+    }
+  },
+  "assets": [
+    {
+      "path": "secret-requirements.json"
+    },
+    {
+      "path": "schemas/messaging/3aigent-gui/public.config.schema.json"
+    },
+    {
+      "path": "assets/webchat-gui/index.html"
+    },
+    {
+      "path": "assets/webchat-gui/404.html"
+    },
+    {
+      "path": "assets/webchat-gui/runtime-bootstrap.js"
+    },
+    {
+      "path": "assets/webchat-gui/embed.js"
+    },
+    {
+      "path": "assets/webchat-gui/config/product.json"
+    }
+  ],
+  "extensions": {
+    "greentic.generated-secrets.v1": {
+      "kind": "greentic.generated-secrets.v1",
+      "version": "0.5.11",
+      "inline": {
+        "secrets": [
+          {
+            "key": "jwt_signing_key",
+            "aliases": [
+              "JWT_SIGNING_KEY"
+            ],
+            "required": true,
+            "policy": "random",
+            "length": 20,
+            "encoding": "raw_text",
+            "scope": {
+              "level": "tenant",
+              "team": "_"
+            },
+            "regenerate_if_present": false,
+            "description": "Secret key used for Direct Line JWT token signing and verification."
+          }
+        ]
+      }
+    },
+    "greentic.ext.capabilities.v1": {
+      "kind": "greentic.ext.capabilities.v1",
+      "version": "0.5.11",
+      "inline": {
+        "offers": [
+          {
+            "cap_id": "greentic.cap.messaging.provider.v1",
+            "offer_id": "messaging-3aigent-gui-v1",
+            "priority": 100,
+            "provider": {
+              "component_ref": "messaging-provider-3aigent-gui",
+              "op": "messaging.configure"
+            },
+            "requires_setup": true,
+            "setup": {
+              "qa_ref": "components/messaging-provider-3aigent-gui"
+            },
+            "version": "0.5.11"
+          }
+        ],
+        "schema_version": 1
+      }
+    },
+    "greentic.http-routes.v1": {
+      "kind": "greentic.http-routes.v1",
+      "version": "0.5.11",
+      "inline": {
+        "routes": [
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-auth-config",
+            "methods": [
+              "GET"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/auth/config",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-token",
+            "methods": [
+              "GET",
+              "POST"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/token",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-directline",
+            "methods": [],
+            "pattern": "/v1/messaging/webchat/{tenant}/v3/directline/{path*}",
+            "provider_op": "ingest_http"
+          }
+        ],
+        "schema_version": 1
+      }
+    },
+    "greentic.messaging.validators.v1": {
+      "kind": "greentic.messaging.validators.v1",
+      "version": "0.5.11",
+      "inline": {
+        "validators": [
+          {
+            "component_ref": "oci://ghcr.io/greenticai/validators/messaging:0.4.19",
+            "id": "greentic.validators.messaging",
+            "world": "greentic:pack-validate/pack-validator@0.1.0"
+          }
+        ]
+      }
+    },
+    "greentic.provider-extension.v1": {
+      "kind": "greentic.provider-extension.v1",
+      "version": "0.5.11",
+      "inline": {
+        "providers": [
+          {
+            "provider_type": "messaging.3aigent-gui",
+            "capabilities": [
+              "messaging"
+            ],
+            "ops": [
+              "send",
+              "ingest",
+              "ingest_http",
+              "render_plan",
+              "encode",
+              "send_payload",
+              "qa-spec",
+              "apply-answers",
+              "i18n-keys"
+            ],
+            "config_schema_ref": "schemas/messaging/3aigent-gui/public.config.schema.json",
+            "runtime": {
+              "component_ref": "messaging-provider-3aigent-gui",
+              "export": "schema-core-api",
+              "world": "greentic:provider/schema-core@1.0.0"
+            }
+          }
+        ]
+      }
+    },
+    "greentic.static-routes.v1": {
+      "kind": "greentic.static-routes.v1",
+      "version": "0.5.11",
+      "inline": {
+        "routes": [
+          {
+            "id": "webchat-gui",
+            "index_file": "index.html",
+            "public_path": "/v1/web/webchat/{tenant}",
+            "scope": {
+              "team": false,
+              "tenant": true
+            },
+            "source_root": "assets/webchat-gui",
+            "spa_fallback": "index.html"
+          }
+        ],
+        "version": 1
+      }
+    },
+    "messaging.provider_ingress.v1": {
+      "kind": "messaging.provider_ingress.v1",
+      "version": "0.5.11",
+      "inline": {
+        "capabilities": {
+          "content_types": [
+            "application/json"
+          ],
+          "supports_webhook_validation": false
+        },
+        "component_ref": "messaging-provider-3aigent-gui",
+        "export": "handle-webhook",
+        "world": "provider:common/ingress@0.0.2"
+      }
+    }
+  },
+  "messaging": {
+    "adapters": [
+      {
+        "component": "messaging-provider-3aigent-gui",
+        "kind": "ingress-egress",
+        "name": "messaging.3aigent-gui"
+      }
+    ]
+  },
+  "secret_requirements": [],
+  "capabilities_cache": [
+    {
+      "component": "ai.greentic.component-templates",
+      "version": "v1",
+      "path": "components/ai.greentic.component-templates-capabilities_v1.json"
+    }
+  ]
+}

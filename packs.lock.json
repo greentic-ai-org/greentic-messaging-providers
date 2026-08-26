@@ -1,6 +1,13 @@
 {
   "packs": [
     {
+      "name": "messaging-3aigent-gui",
+      "file": "dist/packs/messaging-3aigent-gui.gtpack",
+      "ref": "ghcr.io/greenticai/packs/messaging/messaging-3aigent-gui:0.5.11",
+      "digest": "sha256:2f9a42d124b31f1a423a54a67fb52ca6ecade0be4ecf6b8be8598c42878fec9d",
+      "built_at": "2026-08-26T13:08:30Z"
+    },
+    {
       "name": "messaging-dummy",
       "file": "dist/packs/messaging-dummy.gtpack",
       "ref": "ghcr.io/greenticai/packs/messaging/messaging-dummy:0.5.1",

@@ -1,0 +1,53 @@
+pack:
+  id: messaging-3aigent-gui
+  name: Messaging 3AIgent GUI
+  version: 0.1.0
+  publisher: Greentic
+  kind: application
+provider:
+  provider_type: messaging.3aigent-gui
+  provider_id: 3aigent-gui
+  ops:
+  - send
+  - ingest
+  - qa-spec
+  - apply-answers
+  - i18n-keys
+  capabilities:
+    render_tiers:
+    - tier-d
+components:
+  adapter:
+    id: messaging-provider-3aigent-gui
+    component_ref: local:../../packs/messaging-3aigent-gui/components/messaging-provider-3aigent-gui.wasm
+    world: greentic:provider/schema-core@1.0.0
+    export: schema-core-api
+flows:
+  include:
+  - default
+  - diagnostics
+  - verify_webhooks
+source:
+  pack_dir: ../../packs/messaging-3aigent-gui
+  extensions:
+    include:
+    - greentic.provider-extension.v1
+    - greentic.messaging.validators.v1
+    - messaging.provider_flow_hints
+    - messaging.provider_ingress.v1
+    - messaging.provider_routes.v1
+    - greentic.static-routes.v1
+contract:
+  ingress:
+    mode: default
+  webhooks:
+    required: false
+  subscriptions:
+    required: false
+requirements:
+  required_args: []
+  optional_args: []
+  examples:
+  - args: {}
+    text: ''
+  notes: ''

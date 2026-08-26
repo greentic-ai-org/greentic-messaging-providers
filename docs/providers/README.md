@@ -24,6 +24,7 @@ scripts/test_webchat_gui.sh 3aigent --embedded
 | [Telegram](telegram.md) | Telegram bot chats | Yes | Yes, Telegram updates | Text fallback | Telegram bot token |
 | [WebChat](webchat.md) | Direct Line-style web chat backend | Yes | Yes, Direct Line/local state | Native Adaptive Cards | JWT signing key |
 | [WebChat GUI](webchat-gui.md) | Hosted or embedded browser chat UI | Yes, via WebChat backend | Yes, via browser Direct Line flow | Native Adaptive Cards | JWT signing key |
+| [3AIgent GUI](3aigent-gui.md) | Hosted or embedded browser chat UI, 3AIgent product default (3aigent skin, OAuth enabled) | Yes, via WebChat backend | Yes, via browser Direct Line flow | Native Adaptive Cards | JWT signing key, OAuth client secrets |
 | [Webex](webex.md) | Cisco Webex rooms and people | Yes | Yes, webhooks with message lookup | Attachment plus fallback text | Webex bot token |
 | [WhatsApp](whatsapp.md) | WhatsApp Business Cloud API | Yes | Yes, Cloud API webhooks | Text/media fallback | Cloud API token, optional verify token |
 
