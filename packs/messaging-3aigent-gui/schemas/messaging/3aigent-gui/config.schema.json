@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "3AIgent GUI Provider-Core Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "enabled",
+    "public_base_url",
+    "mode"
+  ],
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Enable the hosted webchat GUI provider."
+    },
+    "public_base_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Public base URL used to derive backend and GUI routes."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["local_queue", "websocket", "pubsub"],
+      "default": "websocket",
+      "description": "Delivery mode used by the runner."
+    },
+    "route": {
+      "type": "string",
+      "description": "Routing key or channel route used for outbound messages."
+    },
+    "tenant_channel_id": {
+      "type": "string",
+      "description": "Tenant-scoped channel identifier used for webchat routing."
+    },
+    "base_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional host base URL for push/websocket endpoints."
+    },
+    "presentation_mode": {
+      "type": "string",
+      "enum": ["standalone", "embed_webcomponent"],
+      "default": "standalone",
+      "description": "Choose standalone hosted page or framework-independent Web Component embed mode."
+    },
+    "skin": {
+      "type": "string",
+      "default": "3aigent",
+      "description": "Visual theme folder under assets/webchat-gui/skins."
+    },
+    "text_input_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the embedded Web Component should show the text input box."
+    },
+    "nav_links": {
+      "type": "array",
+      "default": [],
+      "description": "Top-menu links used by standalone mode.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "oauth_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether OAuth login is offered on the hosted GUI."
+    }
+  }
+}
