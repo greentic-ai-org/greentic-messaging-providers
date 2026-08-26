@@ -56,6 +56,7 @@ function tenantScenario(tenant) {
     nav: normalized.includes('nav'),
     login: normalized.includes('login'),
     tenantConfigLogin: normalized.includes('tenant-config-login'),
+    ssoLogin: normalized.includes('sso'),
   };
 }
 
@@ -153,6 +154,20 @@ const server = http.createServer((req, res) => {
     const scenario = tenantScenario(tenant);
     if (scenario.tenantConfigLogin) {
       sendJson(res, 404, { error: 'auth config unavailable for tenant-config fallback scenario' });
+      return;
+    }
+    if (scenario.ssoLogin) {
+      sendJson(res, 200, {
+        enabled: true,
+        providers: [{
+          id: 'greentic',
+          label: 'Greentic SSO',
+          type: 'greentic',
+          enabled: true,
+          issuer: `http://127.0.0.1:${port}/mock-idp`,
+          client_id: 'webchat-gui',
+        }],
+      });
       return;
     }
     sendJson(res, 200, scenario.login

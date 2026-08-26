@@ -681,7 +681,94 @@ console.log('[runtime-bootstrap] loaded');
    * Initiate OAuth for a specific provider.
    * Provider object: { id, label, auth_url, token_url, client_id, scopes }
    */
+  window.__GREENTIC_SSO_CLIENT__ = window.__GREENTIC_SSO_CLIENT__ || null;
+
+  function greenticSsoRedirectUri() {
+    return window.location.origin + guiBase + 'sso-callback.html';
+  }
+
+  function greenticSsoIssuer(provider) {
+    return provider.issuer || ('https://' + tenant + '.greentic-id.com');
+  }
+
+  function buildGreenticSsoClient(provider) {
+    return window.GreenticSso.createGreenticWebchatSso({
+      tenant: tenant,
+      issuer: greenticSsoIssuer(provider),
+      clientId: provider.client_id || 'webchat-gui',
+      redirectUri: greenticSsoRedirectUri(),
+      chatApiBase: provider.chat_api_base || backendBase(tenant),
+      // Memory-only sessions die on reload, forcing a fresh popup per page load.
+      persist: true
+    });
+  }
+
+  function restoreGreenticSsoClient() {
+    var provider = null;
+    try {
+      var raw = sessionStorage.getItem(oauthStorageKey('provider'));
+      provider = raw ? JSON.parse(raw) : null;
+    } catch (_) {}
+    if (!provider || provider.type !== 'greentic') return null;
+    if (!window.GreenticSso || !window.GreenticSso.createGreenticWebchatSso) return null;
+    var config = (window.__OAUTH_CONFIG__ && window.__OAUTH_CONFIG__.providers || [])
+      .filter(function (p) { return p.type === 'greentic'; })[0];
+    if (!config) return null;
+    var client = buildGreenticSsoClient(config);
+    return client.isAuthenticated && client.isAuthenticated() ? client : null;
+  }
+
+  // The SDK awaits the PKCE challenge before window.open, which breaks the
+  // user-gesture chain on Safari and Firefox; the legacy redirect flow is the
+  // only way those browsers can complete a login.
+  function greenticSsoRedirectFallback(provider) {
+    var issuer = greenticSsoIssuer(provider);
+    initiateOAuthFlow({
+      id: provider.id,
+      label: provider.label,
+      type: 'oidc',
+      auth_url: issuer + '/oauth/authorize',
+      token_url: issuer + '/oauth/token',
+      client_id: provider.client_id || 'webchat-gui',
+      scopes: provider.scope || 'openid profile email greentic.webchat'
+    });
+  }
+
+  function initiateGreenticSso(provider) {
+    if (!window.GreenticSso || !window.GreenticSso.createGreenticWebchatSso) {
+      greenticSsoRedirectFallback(provider);
+      return;
+    }
+    if (window.__FORCE_POPUP_BLOCKED__) {
+      greenticSsoRedirectFallback(provider);
+      return;
+    }
+    var client = buildGreenticSsoClient(provider);
+    window.__GREENTIC_SSO_CLIENT__ = client;
+    client.login().then(function (identity) {
+      saveOAuthSession('greentic-sso', 'greentic');
+      try {
+        if (identity.name) sessionStorage.setItem(oauthStorageKey('user_name'), identity.name);
+        if (identity.email) sessionStorage.setItem(oauthStorageKey('user_email'), identity.email);
+        sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'greentic' }));
+      } catch (_) {}
+      removeOAuthOverlay();
+      injectLogoutButton();
+    }).catch(function (err) {
+      window.__GREENTIC_SSO_CLIENT__ = null;
+      if (err && err.code === 'popup_blocked') {
+        greenticSsoRedirectFallback(provider);
+        return;
+      }
+      showAuthError(uiT('login.failed', 'Authentication failed') + ': ' + ((err && err.message) || 'unknown'));
+    });
+  }
+
   function initiateOAuthFlow(provider) {
+    if (provider.type === 'greentic') {
+      initiateGreenticSso(provider);
+      return;
+    }
     // Dummy/guest providers skip OAuth — just save session and proceed
     if (provider.type === 'dummy') {
       saveOAuthSession('guest', 'dummy');
@@ -1008,7 +1095,9 @@ console.log('[runtime-bootstrap] loaded');
                 client_id: p.client_id || p.clientId,
                 redirect_uri: p.redirect_uri || p.redirectUri,
                 scope: p.scope || p.scopes,
-                response_type: p.response_type || p.responseType || 'code'
+                response_type: p.response_type || p.responseType || 'code',
+                issuer: p.issuer,
+                chat_api_base: p.chat_api_base || p.chatApiBase
               };
             });
         }
@@ -1038,6 +1127,7 @@ console.log('[runtime-bootstrap] loaded');
         var session = getOAuthSession();
         if (session) {
           console.log('[oauth] existing session found');
+          window.__GREENTIC_SSO_CLIENT__ = window.__GREENTIC_SSO_CLIENT__ || restoreGreenticSsoClient();
           injectLogoutButton();
           return;
         }

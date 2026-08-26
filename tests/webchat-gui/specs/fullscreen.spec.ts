@@ -285,4 +285,31 @@ test.describe('full-screen WebChat', () => {
     );
     expect(hasCompleter).toBe(true);
   });
+
+  test('greentic sso provider renders first and drives the SDK', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+    const overlay = page.locator('#greentic-oauth-overlay');
+    await expect(overlay).toBeVisible();
+    const firstButton = overlay.locator('button').first();
+    await expect(firstButton).toHaveText(/greentic sso/i);
+
+    const built = await page.evaluate(() => {
+      const cfg = (window as any).__OAUTH_CONFIG__;
+      return cfg && cfg.providers && cfg.providers[0] && cfg.providers[0].type;
+    });
+    expect(built).toBe('greentic');
+  });
+
+  test('popup_blocked falls back to the redirect flow', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as any).__FORCE_POPUP_BLOCKED__ = true;
+    });
+    const navigations: string[] = [];
+    page.on('framenavigated', (f) => navigations.push(f.url()));
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+    await page.locator('#greentic-oauth-overlay button').first().click();
+    await expect
+      .poll(() => navigations.some((u) => u.includes('/mock-idp/oauth/authorize')))
+      .toBe(true);
+  });
 });
