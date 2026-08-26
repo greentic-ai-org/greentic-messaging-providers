@@ -279,12 +279,19 @@ config["tenant_id"] = config.get("tenant_id") or skin
 config["skin"] = skin
 config["legacy_skin"] = skin
 if login_required:
+    existing_providers = config.get("auth", {}).get("providers")
+    if not isinstance(existing_providers, list):
+        existing_providers = []
+    other_providers = [
+        p for p in existing_providers
+        if not (isinstance(p, dict) and p.get("id") in ("greentic", "guest"))
+    ]
     config["auth"] = {"providers": [
         {"id": "greentic", "label": "Greentic SSO", "type": "greentic",
          "enabled": True, "clientId": "webchat-gui",
          "scope": "openid profile email greentic.webchat"},
         {"id": "guest", "label": "Continue as Guest", "type": "dummy", "enabled": True},
-    ]}
+    ] + other_providers}
 else:
     config.pop("auth", None)
 webchat = config.setdefault("webchat", {})
