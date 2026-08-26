@@ -232,6 +232,9 @@ if [ "${LOCAL_CHECK_MODE}" = "provider" ]; then
   echo "==> tools/check_op_schemas.py (affected components)"
   COMPONENT_MANIFESTS_JSON="${AFFECTED_COMPONENT_MANIFESTS_JSON}" ./ci/steps/05_check_op_schemas.sh
 
+  echo "==> tools/validate_skins.py"
+  ./ci/steps/05a_validate_skins.sh
+
   echo "==> ci/gen_flows.sh"
   ./ci/steps/06_gen_flows.sh
 
@@ -316,6 +319,11 @@ echo "==> tools/check_op_schemas.py"
 # If this fails, re-run only:
 #   ./ci/steps/05_check_op_schemas.sh
 ./ci/steps/05_check_op_schemas.sh
+
+echo "==> tools/validate_skins.py"
+# If this fails, re-run only:
+#   ./ci/steps/05a_validate_skins.sh
+./ci/steps/05a_validate_skins.sh
 
 echo "==> ci/gen_flows.sh"
 # If this fails, re-run only:

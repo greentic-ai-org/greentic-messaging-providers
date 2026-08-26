@@ -1,21 +1,17 @@
 {
-  "tenant": "3aigent",
+  "tenant": "_template",
   "mode": "fullpage",
   "brand": {
-    "name": "3AIgent",
+    "name": "Your Brand",
     "favicon": "./assets/favicon.ico",
-    "logo": "./assets/3point-jewel-round.png",
-    "primary": "#06b6d4"
+    "logo": "./assets/logo.svg",
+    "primary": "#0F62FE"
   },
   "directLine": {},
   "webchat": {
     "styleOptions": "./webchat/styleOptions.json",
-    "styleOptionsThemed": true,
     "adaptiveCardsHostConfig": "./webchat/hostconfig.json",
-    "locale": "en-US",
-    "localePickerLocales": [
-      "en", "id", "es", "fr", "de", "it", "pt", "nl", "ja", "zh", "ko", "ar", "hi", "ru", "tr"
-    ]
+    "locale": "en-US"
   },
   "statusBar": {
     "show": true,

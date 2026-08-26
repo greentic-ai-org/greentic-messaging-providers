@@ -807,7 +807,11 @@ console.log('[runtime-bootstrap] loaded');
       btnContainer.appendChild(btn);
     });
     if (providers.length === 0) {
-      card.innerHTML += '<p style="color:#ef4444;font-size:13px;">No OAuth providers configured.</p>';
+      console.error('[oauth] sign-in is enabled but no provider is configured; ' +
+        'set a client ID and secret for at least one provider in the setup wizard');
+      card.innerHTML += '<p style="color:#ef4444;font-size:13px;line-height:1.5;">' +
+        'No sign-in provider configured.<br>' +
+        'Add credentials for at least one provider in the setup wizard.</p>';
     }
     card.appendChild(btnContainer);
     overlay.appendChild(card);
@@ -1466,7 +1470,33 @@ console.log('[runtime-bootstrap] loaded');
           var fbResp = await originalFetch(fbUrl);
           if (!fbResp.ok) return fbResp;
           skinData = await fbResp.json();
+          effectiveUrlPath = fbUrl;
         }
+        // Skin manifests carry paths relative to their own folder so a skin can be
+        // served from any mount point. Absolutize against the URL it was fetched from.
+        (function absolutizeSkinPaths() {
+          var skinDir = effectiveUrlPath.replace(/skin\.json$/i, '');
+          function abs(ref) {
+            if (typeof ref !== 'string' || !ref) return ref;
+            if (/^(https?:)?\/\//i.test(ref) || ref.charAt(0) === '/') return ref;
+            return skinDir + ref.replace(/^\.\//, '');
+          }
+          if (skinData.brand) {
+            skinData.brand.favicon = abs(skinData.brand.favicon);
+            skinData.brand.logo = abs(skinData.brand.logo);
+          }
+          if (skinData.webchat) {
+            skinData.webchat.styleOptions = abs(skinData.webchat.styleOptions);
+            skinData.webchat.adaptiveCardsHostConfig = abs(skinData.webchat.adaptiveCardsHostConfig);
+          }
+          if (skinData.fullpage) {
+            skinData.fullpage.index = abs(skinData.fullpage.index);
+            skinData.fullpage.css = abs(skinData.fullpage.css);
+          }
+          if (skinData.hooks) {
+            skinData.hooks.script = abs(skinData.hooks.script);
+          }
+        })();
         skinData.directLine = skinData.directLine || {};
         var ctxParams = 'env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
         var skinDlPrefix = '/v1/messaging/webchat/' + encodeURIComponent(tenant);

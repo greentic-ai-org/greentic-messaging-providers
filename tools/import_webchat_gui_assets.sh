@@ -21,13 +21,32 @@ rsync -a --delete "${SRC_DIR}/js/" "${DEST_DIR}/js/"
 # Import skins from SPA without --delete to preserve pack-specific customizations.
 rsync -a "${SRC_DIR}/skins/" "${DEST_DIR}/skins/"
 
-# The provider pack intentionally exposes only the production Greentic default
-# skin and the 3AIgent skin. The upstream SPA still carries template/demo skins
-# for development; prune them after import so they cannot be selected by URL.
-find "${DEST_DIR}/skins" -mindepth 1 -maxdepth 1 -type d \
-  ! -name default \
-  ! -name 3aigent \
-  -exec rm -rf {} +
+# The pack exposes only skins committed to this repo. The upstream SPA still
+# carries template/demo skins for development; drop anything the import brought
+# in that git does not track, so a new pack-local skin survives future imports.
+python3 - "${ROOT_DIR}" "${DEST_DIR}/skins" <<'PY'
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+skins_dir = Path(sys.argv[2])
+
+tracked = subprocess.run(
+    ["git", "ls-files", str(skins_dir.relative_to(root))],
+    cwd=root, text=True, capture_output=True, check=True,
+).stdout.split()
+allowed = {Path(line).parts[len(skins_dir.relative_to(root).parts)] for line in tracked if line}
+
+if not allowed:
+    raise SystemExit(f"no tracked skins found under {skins_dir}; refusing to prune")
+
+for entry in sorted(skins_dir.iterdir()):
+    if entry.is_dir() and entry.name not in allowed:
+        print(f"pruning untracked skin: {entry.name}")
+        shutil.rmtree(entry)
+PY
 
 # Keep only tenant configs that are valid entry points for this pack.
 find "${DEST_DIR}/config/tenants" -mindepth 1 -maxdepth 1 -type f \
