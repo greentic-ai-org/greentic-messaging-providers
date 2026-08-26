@@ -840,6 +840,9 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function performLogout() {
+    // Must run before clearOAuthSession — clearing the cache reads the
+    // identity-scoped key, which needs the session still in place.
+    clearDirectLineCache();
     clearOAuthSession();
     clearAppAuthSession();
     window.location.reload();
@@ -1155,8 +1158,10 @@ console.log('[runtime-bootstrap] loaded');
   // server ever reduces TTL below the buffer, we just always refetch (which
   // is the same behaviour as having no cache).
   // Local storage cache key, not credential material. Include origin, tenant,
-  // env, token URL, and Direct Line domain so bundles sharing 127.0.0.1:8080
-  // cannot reuse credentials signed by another bundle's jwt_signing_key.
+  // env, token URL, Direct Line domain, and authenticated identity so bundles
+  // sharing 127.0.0.1:8080 cannot reuse credentials signed by another
+  // bundle's jwt_signing_key, and one browser user can't inherit another's
+  // cached token.
   // foxguard: ignore[js/no-hardcoded-secret]
   var DIRECT_LINE_CACHE_VERSION = 'v2';
   // foxguard: ignore[js/no-hardcoded-secret]
@@ -1181,6 +1186,17 @@ console.log('[runtime-bootstrap] loaded');
     return base + '/v3/directline';
   }
 
+  function directLineIdentityPart() {
+    try {
+      var sub = sessionStorage.getItem(oauthStorageKey('user_email'))
+        || sessionStorage.getItem(oauthStorageKey('user_name'));
+      if (sub) return sub;
+      var session = getOAuthSession();
+      if (session && session.token_handle) return session.token_handle;
+    } catch (_) {}
+    return 'anonymous';
+  }
+
   function directLineCacheKey(kind) {
     return [
       'greentic',
@@ -1192,13 +1208,14 @@ console.log('[runtime-bootstrap] loaded');
       stableCachePart(env),
       stableCachePart(directLineTokenUrl()),
       stableCachePart(directLineDomain()),
-      stableCachePart(flowId)
+      stableCachePart(flowId),
+      stableCachePart(directLineIdentityPart())
     ].join(':');
   }
 
-  var TOKEN_CACHE_KEY = directLineCacheKey('token');
-  var CONVERSATION_CACHE_KEY = directLineCacheKey('conversation');
-  var DIRECT_LINE_AUTH_RETRY_KEY = directLineCacheKey('auth-retry');
+  function tokenCacheKey() { return directLineCacheKey('token'); }
+  function conversationCacheKey() { return directLineCacheKey('conversation'); }
+  function directLineAuthRetryKey() { return directLineCacheKey('auth-retry'); }
 
   function clearLegacyDirectLineCache() {
     try { localStorage.removeItem(LEGACY_TOKEN_CACHE_KEY); } catch (_) {}
@@ -1209,7 +1226,7 @@ console.log('[runtime-bootstrap] loaded');
 
   function readCachedToken() {
     try {
-      var raw = localStorage.getItem(TOKEN_CACHE_KEY);
+      var raw = localStorage.getItem(tokenCacheKey());
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       if (!parsed || !parsed.token || !parsed.expires_at) return null;
@@ -1229,13 +1246,13 @@ console.log('[runtime-bootstrap] loaded');
         expires_in: payload.expires_in,
         expires_at: Date.now() + ttlMs,
       };
-      localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify(record));
+      localStorage.setItem(tokenCacheKey(), JSON.stringify(record));
     } catch (_) {}
   }
 
   function readCachedConversation() {
     try {
-      var raw = localStorage.getItem(CONVERSATION_CACHE_KEY);
+      var raw = localStorage.getItem(conversationCacheKey());
       if (!raw) return null;
       var conv = JSON.parse(raw);
       if (!conv || !conv.conversationId || !conv.streamUrl || !conv.timestamp) return null;
@@ -1250,25 +1267,25 @@ console.log('[runtime-bootstrap] loaded');
     try {
       if (!payload || !payload.conversationId) return;
       payload.timestamp = Date.now();
-      localStorage.setItem(CONVERSATION_CACHE_KEY, JSON.stringify(payload));
+      localStorage.setItem(conversationCacheKey(), JSON.stringify(payload));
     } catch (_) {}
   }
 
   function clearDirectLineCache() {
-    try { localStorage.removeItem(TOKEN_CACHE_KEY); } catch (_) {}
-    try { localStorage.removeItem(CONVERSATION_CACHE_KEY); } catch (_) {}
+    try { localStorage.removeItem(tokenCacheKey()); } catch (_) {}
+    try { localStorage.removeItem(conversationCacheKey()); } catch (_) {}
     clearLegacyDirectLineCache();
   }
 
   function resetDirectLineAuthRetry() {
-    try { sessionStorage.removeItem(DIRECT_LINE_AUTH_RETRY_KEY); } catch (_) {}
+    try { sessionStorage.removeItem(directLineAuthRetryKey()); } catch (_) {}
   }
 
   function reloadOnceAfterDirectLineAuthFailure() {
     clearDirectLineCache();
     try {
-      if (sessionStorage.getItem(DIRECT_LINE_AUTH_RETRY_KEY) === '1') return false;
-      sessionStorage.setItem(DIRECT_LINE_AUTH_RETRY_KEY, '1');
+      if (sessionStorage.getItem(directLineAuthRetryKey()) === '1') return false;
+      sessionStorage.setItem(directLineAuthRetryKey(), '1');
     } catch (_) {
       if (window.__GREENTIC_DIRECT_LINE_AUTH_RETRY__) return false;
       window.__GREENTIC_DIRECT_LINE_AUTH_RETRY__ = true;

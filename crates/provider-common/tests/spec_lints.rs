@@ -966,6 +966,17 @@ fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
         "webchat-gui Direct Line cache key must include origin, tenant, env, token URL, and domain"
     );
     assert!(
+        runtime.contains("stableCachePart(directLineIdentityPart())"),
+        "webchat-gui Direct Line cache key must include the authenticated identity"
+    );
+    assert!(
+        runtime.contains("clearDirectLineCache();\n    clearOAuthSession();")
+            || runtime.contains(
+                "clearOAuthSession();\n    clearAppAuthSession();\n    clearDirectLineCache();"
+            ),
+        "webchat-gui logout must clear the Direct Line cache"
+    );
+    assert!(
         runtime.contains("LEGACY_TOKEN_CACHE_KEY = 'greentic_dl_token'")
             && runtime.contains("LEGACY_CONVERSATION_CACHE_KEY = 'greentic_dl_conversation'")
             && runtime.contains("clearLegacyDirectLineCache"),
@@ -982,7 +993,7 @@ fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
         runtime.contains("reloadOnceAfterDirectLineAuthFailure")
             && runtime.contains("response.status === 401")
             && runtime.contains("xhr.status === 401")
-            && runtime.contains("sessionStorage.setItem(DIRECT_LINE_AUTH_RETRY_KEY, '1')"),
+            && runtime.contains("sessionStorage.setItem(directLineAuthRetryKey(), '1')"),
         "webchat-gui runtime must clear Direct Line cache and retry once after 401"
     );
 

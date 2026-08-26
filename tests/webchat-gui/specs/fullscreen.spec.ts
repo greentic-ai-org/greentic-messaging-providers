@@ -359,4 +359,37 @@ test.describe('full-screen WebChat', () => {
       .poll(() => navigations.some((u) => u.includes('/mock-idp/oauth/authorize')))
       .toBe(true);
   });
+
+  test('logout clears the cached Direct Line token', async ({ page }) => {
+    await page.goto('/v1/web/webchat/default-plain-login/');
+    await page.getByRole('button', { name: /test login/i }).click();
+    await expect.poll(async () =>
+      page.evaluate(() => Object.keys(localStorage).some((k) => k.includes(':dl:token:'))),
+    ).toBe(true);
+
+    // The widget prefetches a Direct Line token on every page load regardless
+    // of auth state, so a fresh (anonymous-scoped) token key always reappears
+    // after the post-logout reload. What must actually disappear is this
+    // specific identity-scoped entry — reusing it after logout would leak the
+    // previous user's token to whoever uses the browser next.
+    const loggedInTokenKey = await page.evaluate(
+      () => Object.keys(localStorage).find((k) => k.includes(':dl:token:')) as string,
+    );
+
+    await page.evaluate(() => {
+      const btn = document.getElementById('greentic-logout-btn') as HTMLButtonElement | null;
+      btn?.click();
+    });
+
+    // Logout triggers window.location.reload(); page.evaluate() can hit an
+    // in-flight navigation and reject, so treat that as "not settled yet"
+    // instead of failing the poll outright.
+    await expect.poll(async () => {
+      try {
+        return await page.evaluate((key) => localStorage.getItem(key), loggedInTokenKey);
+      } catch (_) {
+        return 'pending';
+      }
+    }).toBeNull();
+  });
 });
