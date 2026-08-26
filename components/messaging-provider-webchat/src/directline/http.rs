@@ -1061,23 +1061,32 @@ struct JwksRefetchAttempt {
 /// missing its own deadline either.
 fn jwks_refetch_allowed<S: StateStore>(state_store: &mut S, jwks_url: &str, now: i64) -> bool {
     let key = jwks_refetch_key(jwks_url);
-    let last_attempt = state_store
-        .read(&key)
-        .ok()
-        .flatten()
-        .and_then(|bytes| serde_json::from_slice::<JwksRefetchAttempt>(&bytes).ok())
-        .map(|attempt| attempt.attempted_at);
-    let allowed = match last_attempt {
-        Some(attempted_at) => now - attempted_at >= JWKS_REFETCH_COOLDOWN_SECONDS,
-        None => true,
+    let allowed = match state_store.read(&key) {
+        // A read error is not evidence that no attempt was made — fail
+        // closed, matching `read_rate_limit_state`/`load_conversation_state`'s
+        // convention elsewhere in this file. A store an attacker can make
+        // unhealthy must not become a way to switch this control off.
+        Err(_) => false,
+        Ok(None) => true,
+        Ok(Some(bytes)) => match serde_json::from_slice::<JwksRefetchAttempt>(&bytes) {
+            Ok(attempt) => now - attempt.attempted_at >= JWKS_REFETCH_COOLDOWN_SECONDS,
+            // Corrupt data isn't a store failure — self-heal by allowing
+            // once (the write below overwrites it) rather than blocking
+            // rotation recovery forever.
+            Err(_) => true,
+        },
     };
-    if allowed {
-        let attempt = JwksRefetchAttempt { attempted_at: now };
-        if let Ok(bytes) = serde_json::to_vec(&attempt) {
-            let _ = state_store.write(&key, &bytes);
-        }
+    if !allowed {
+        return false;
     }
-    allowed
+    // Record-then-fetch: if the attempt can't be persisted, the fetch must
+    // not happen either — a store that accepts reads but rejects writes
+    // would otherwise be an uncapped amplifier again.
+    let attempt = JwksRefetchAttempt { attempted_at: now };
+    match serde_json::to_vec(&attempt) {
+        Ok(bytes) => state_store.write(&key, &bytes).is_ok(),
+        Err(_) => false,
+    }
 }
 
 /// Load the JWT signing key from either injected config or secrets store.
@@ -2945,6 +2954,161 @@ mod tests {
             fetcher.calls.get(),
             2,
             "a request after the cooldown elapsed must refetch again"
+        );
+    }
+
+    // --- The cooldown gate must fail closed on state-store errors, not just
+    // cap the healthy-store case. `Err(_)` from a read is not evidence that
+    // no attempt was made, and a write failure means the attempt can't be
+    // recorded — either way the fetch must not happen, or a store an
+    // attacker can make unhealthy becomes a way to switch the cap off. ---
+
+    /// Wraps `InMemoryStateStore` but can be told to fail `read` and/or
+    /// `write` for keys matching a given prefix, leaving every other key
+    /// unaffected — lets a test fail only the refetch-cooldown record while
+    /// the JWKS document cache continues to behave normally.
+    struct SelectiveFailStore {
+        inner: InMemoryStateStore,
+        fail_read_prefix: Option<&'static str>,
+        fail_write_prefix: Option<&'static str>,
+    }
+
+    impl SelectiveFailStore {
+        fn new() -> Self {
+            Self {
+                inner: InMemoryStateStore::new(),
+                fail_read_prefix: None,
+                fail_write_prefix: None,
+            }
+        }
+    }
+
+    impl StateStore for SelectiveFailStore {
+        fn read(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
+            if self
+                .fail_read_prefix
+                .is_some_and(|prefix| key.starts_with(prefix))
+            {
+                return Err("simulated read failure".to_string());
+            }
+            self.inner.read(key)
+        }
+
+        fn write(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
+            if self
+                .fail_write_prefix
+                .is_some_and(|prefix| key.starts_with(prefix))
+            {
+                return Err("simulated write failure".to_string());
+            }
+            self.inner.write(key, value)
+        }
+    }
+
+    #[test]
+    fn cooldown_read_error_denies_refetch_and_produces_zero_fetches() {
+        let (token, _own_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let (_, wrong_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "someone-else",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+
+        let mut store = SelectiveFailStore::new();
+        let jwks_url = "https://acme.greentic-id.com/jwks.json";
+        // Seed the JWKS document cache before turning on the failure, so the
+        // document read (a different key prefix) keeps succeeding — this
+        // isolates the assertion to the refetch-cooldown read path only.
+        store_jwks_cache(&mut store, jwks_url, &wrong_jwks, Utc::now().timestamp());
+        store.fail_read_prefix = Some("webchat:jwks:refetch:");
+
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let fetcher = CountingJwks {
+            document: wrong_jwks,
+            calls: std::cell::Cell::new(0),
+        };
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+            "rate_limit_requests": 100,
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {token}"),
+        });
+
+        for _ in 0..5 {
+            let response =
+                handle_directline_request_with_jwks(&request, &mut store, &secrets, &fetcher);
+            assert_eq!(response.status, 401);
+        }
+        assert_eq!(
+            fetcher.calls.get(),
+            0,
+            "a cooldown-record read error must deny the refetch, not fail open"
+        );
+    }
+
+    #[test]
+    fn cooldown_write_error_denies_refetch_and_produces_zero_fetches() {
+        let (token, _own_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let (_, wrong_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "someone-else",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+
+        let mut store = SelectiveFailStore::new();
+        let jwks_url = "https://acme.greentic-id.com/jwks.json";
+        store_jwks_cache(&mut store, jwks_url, &wrong_jwks, Utc::now().timestamp());
+        // Reads still succeed (including the "no prior attempt" read on the
+        // cooldown key) — only persisting the attempt fails.
+        store.fail_write_prefix = Some("webchat:jwks:refetch:");
+
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let fetcher = CountingJwks {
+            document: wrong_jwks,
+            calls: std::cell::Cell::new(0),
+        };
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+            "rate_limit_requests": 100,
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {token}"),
+        });
+
+        for _ in 0..5 {
+            let response =
+                handle_directline_request_with_jwks(&request, &mut store, &secrets, &fetcher);
+            assert_eq!(response.status, 401);
+        }
+        assert_eq!(
+            fetcher.calls.get(),
+            0,
+            "an unrecordable attempt must deny the refetch, not fail open"
         );
     }
 }
