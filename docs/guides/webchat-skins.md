@@ -12,9 +12,11 @@ field and falls back to `skins/default/` if the fetch misses.
 ```
 
 This copies `skins/_template/` to `skins/acme/` and sets `tenant` to `acme`.
-Then replace the artwork in `skins/acme/assets/`, set `brand.name` and
-`brand.primary`, and adjust `webchat/styleOptions.json` and
-`webchat/hostconfig.json`.
+The copied `skin.json` still points at `/skins/_template/...` — the generator
+does not rewrite this — so update every path in `skins/acme/skin.json` to
+`/skins/acme/...` before validating. Then replace the artwork in
+`skins/acme/assets/`, set `brand.name` and `brand.primary`, and adjust
+`webchat/styleOptions.json` and `webchat/hostconfig.json`.
 
 Validate before committing:
 
@@ -31,20 +33,34 @@ directory name, and that every referenced file exists.
 `tools/validate_skins.py` requires the `jsonschema` Python package, which no
 requirements file or workflow installs: `pip install jsonschema`.
 
-## Paths must be relative
+## Paths are root-absolute, under your own skin's directory
 
-Write `"./webchat/hooks.js"`, not `"/skins/acme/webchat/hooks.js"`. This is
+Write `"/skins/acme/webchat/hooks.js"`, not `"./webchat/hooks.js"`. This is
 enforced, not just a convention: `tools/validate_skins.py` rejects any
-manifest path that starts with `/skins/`.
+manifest path that does not start with `/skins/<this-skin's-directory-name>/`.
 
-`runtime-bootstrap.js` absolutizes relative refs against the URL the manifest
-was actually fetched from, so a skin with relative paths is servable from any
-mount point. That absolutization also runs on the fallback-to-default path —
-if a tenant has no skin folder of its own, the borrowed `default` manifest's
-relative paths resolve against `default`'s own URL, not the missing tenant's,
-which is what makes a tenant without a skin folder work at all. Root-absolute
-paths still work (the fetch interceptor passes them through unchanged) but pin
-the skin to one mount point; the validator rejects them for new skins.
+The SPA never serves a skin from the literal path `/skins/...` — it mounts
+under a per-tenant base path such as `/v1/web/webchat/{tenant}/`, and its own
+URL resolver (`hn()` in the bundled SPA JS) strips any leading slashes from a
+ref and prepends that base path before fetching. A root-absolute ref is
+therefore *not* pinned to one mount point — the SPA's resolver already makes
+it location-independent, the same way it does for every other asset path the
+SPA fetches. This is also why refs must NOT be relative (`./...`) or manually
+"absolutized" against the manifest's own fetch URL: either of those bakes the
+mount point into the ref, and once the SPA's resolver prepends the base path
+on top, the mount point is duplicated in the resulting URL (a 404 on every
+asset). Root-absolute is the one form that is safe for the SPA to resolve
+exactly once.
+
+The fallback-to-default path works the same way: if a tenant has no skin
+folder of its own, the borrowed `default` manifest's `/skins/default/...`
+refs resolve under the SPA's base path exactly like any other skin's, which
+is what makes a tenant without a skin folder work at all.
+
+Requiring the ref's directory segment to match the skin's own directory name
+(enforced by the validator) exists to catch a different mistake: a skin whose
+manifest was copied from another skin and still points at that skin's
+folder — the ref would resolve to a real file, just the wrong skin's file.
 
 ## Delivery
 
@@ -66,7 +82,8 @@ mount at a sibling namespace such as `/v1/web/webchat-skins/{tenant}`, because
 route as an ambiguous overlap and refuses to activate the whole bundle. It was
 deferred because a skin pack still has to be added to the bundle, so it costs a
 publish pipeline per skin and buys only a versioned OCI artifact over the overlay.
-Relative skin paths (above) are what would make this a drop-in change later.
+Root-absolute skin paths (above) are what already make a skin
+mount-independent, so this would be a drop-in change later.
 
 ## Assets are imported from upstream
 
@@ -84,9 +101,9 @@ Anything under `i18n/`, `config/`, `js/` and `assets/` is rsynced with
 `skins/` IS rsynced too, unlike root-level files such as `runtime-bootstrap.js`
 which the import never touches. It runs without `--delete`, so an import
 cannot remove a repo-owned skin, but it still overwrites every file upstream
-ships for a skin of the same name. If upstream's `greentic-webchat` still
-ships `default/skin.json` or `3aigent/skin.json` with root-absolute paths,
-the next import silently reverts this repo's relativization of those
-manifests, and `tools/publish_packs_oci.sh` runs the import without running
+ships for a skin of the same name. If upstream's `greentic-webchat` ever
+ships `default/skin.json` or `3aigent/skin.json` with relative (`./...`)
+paths, the next import would silently reintroduce the double-prefix bug this
+repo fixed, and `tools/publish_packs_oci.sh` runs the import without running
 the validator, so nothing catches it automatically. Run
 `python3 tools/validate_skins.py` after any import.

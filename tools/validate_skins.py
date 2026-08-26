@@ -38,8 +38,8 @@ PATH_KEYS = [
 def resolve(skins_root: Path, skin_dir: Path, ref: str) -> Path:
     """Resolve a manifest path reference to a file on disk.
 
-    Relative refs (`./webchat/hooks.js`) resolve against the skin directory;
-    legacy root-absolute refs (`/skins/<name>/...`) resolve against the SPA root.
+    Refs are root-absolute (`/skins/<name>/...`), resolved against the SPA root;
+    the SPA's own base-path resolver prepends the mount point at runtime.
     """
     if ref.startswith("/skins/"):
         return skins_root / ref[len("/skins/"):]
@@ -67,12 +67,14 @@ def check_skin(skins_root: Path, skin_dir: Path, errors: list[str]) -> None:
             f"directory {skin_dir.name!r}"
         )
 
+    expected_prefix = f"/skins/{skin_dir.name}/"
     for section, key in PATH_KEYS:
         ref = manifest.get(section, {}).get(key)
-        if isinstance(ref, str) and ref.startswith("/skins/"):
+        if isinstance(ref, str) and not ref.startswith(expected_prefix):
             errors.append(
-                f"{manifest_path}: {section}.{key} is root-absolute ({ref}); "
-                "use a relative path so the skin can be served from any mount point"
+                f"{manifest_path}: {section}.{key} -> {ref!r} must start with "
+                f"{expected_prefix!r} (root-absolute, pointing at this skin's own "
+                "directory)"
             )
 
     for section, key in PATH_KEYS:
