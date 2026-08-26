@@ -467,6 +467,7 @@ console.log('[runtime-bootstrap] loaded');
     try {
       sessionStorage.removeItem(oauthStorageKey('token_handle'));
       sessionStorage.removeItem(oauthStorageKey('flow_id'));
+      sessionStorage.removeItem(oauthStorageKey('user_sub'));
       sessionStorage.removeItem(oauthStorageKey('user_name'));
       sessionStorage.removeItem(oauthStorageKey('user_email'));
       sessionStorage.removeItem(oauthStorageKey('user_picture'));
@@ -744,6 +745,8 @@ console.log('[runtime-bootstrap] loaded');
     client.login().then(function (identity) {
       saveOAuthSession('greentic-sso', 'greentic');
       try {
+        // sub is the only identity field the SDK guarantees; name/email are optional.
+        sessionStorage.setItem(oauthStorageKey('user_sub'), identity.sub);
         if (identity.name) sessionStorage.setItem(oauthStorageKey('user_name'), identity.name);
         if (identity.email) sessionStorage.setItem(oauthStorageKey('user_email'), identity.email);
         sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'greentic' }));
@@ -1188,7 +1191,8 @@ console.log('[runtime-bootstrap] loaded');
 
   function directLineIdentityPart() {
     try {
-      var sub = sessionStorage.getItem(oauthStorageKey('user_email'))
+      var sub = sessionStorage.getItem(oauthStorageKey('user_sub'))
+        || sessionStorage.getItem(oauthStorageKey('user_email'))
         || sessionStorage.getItem(oauthStorageKey('user_name'));
       if (sub) return sub;
       var session = getOAuthSession();

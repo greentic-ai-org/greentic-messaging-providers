@@ -291,7 +291,7 @@ test.describe('full-screen WebChat', () => {
   // reassigned in place — instead a property-descriptor trap on window.GreenticSso
   // swaps in a Proxy the instant the bundle assigns the real module object,
   // forwarding everything except the one factory method.
-  function installGreenticSsoStub(stubMode: 'pending' | 'popup_blocked') {
+  function installGreenticSsoStub(stubMode: 'pending' | 'popup_blocked' | 'sub-only') {
     const wrap = (sdk: any) =>
       new Proxy(sdk, {
         get(target, prop, receiver) {
@@ -301,6 +301,11 @@ test.describe('full-screen WebChat', () => {
                 (window as any).__SSO_LOGIN_CALLED__ = true;
                 if (stubMode === 'popup_blocked') {
                   return Promise.reject(Object.assign(new Error('popup blocked'), { code: 'popup_blocked' }));
+                }
+                if (stubMode === 'sub-only') {
+                  // Identity carrying only the SDK-guaranteed `sub` field —
+                  // an IdP that omits name/email must still get a distinct cache key.
+                  return Promise.resolve({ sub: 'sso-user-42' });
                 }
                 return new Promise(() => {});
               },
@@ -360,21 +365,46 @@ test.describe('full-screen WebChat', () => {
       .toBe(true);
   });
 
+  test('SSO identity with only a sub scopes the Direct Line cache to that sub, not the shared token_handle', async ({ page }) => {
+    await page.addInitScript(installGreenticSsoStub, 'sub-only');
+    await page.goto('/v1/web/webchat/default-plain-sso/');
+    await page.locator('#greentic-oauth-overlay button').first().click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__SSO_LOGIN_CALLED__ === true))
+      .toBe(true);
+
+    // Every SSO identity here shares the same token_handle ('greentic-sso');
+    // only `sub` distinguishes users. Poll for the sub-scoped key specifically
+    // rather than "any" dl:token key, since an anonymous prefetch key can
+    // also be present.
+    await expect.poll(async () =>
+      page.evaluate(() => Object.keys(localStorage).some((k) => k.includes(':dl:token:') && k.endsWith(':sso-user-42'))),
+    ).toBe(true);
+
+    const hasSharedTokenHandleKey = await page.evaluate(() =>
+      Object.keys(localStorage).some((k) => k.includes(':dl:token:') && k.endsWith(':greentic-sso')),
+    );
+    expect(hasSharedTokenHandleKey).toBe(false);
+  });
+
   test('logout clears the cached Direct Line token', async ({ page }) => {
     await page.goto('/v1/web/webchat/default-plain-login/');
     await page.getByRole('button', { name: /test login/i }).click();
-    await expect.poll(async () =>
-      page.evaluate(() => Object.keys(localStorage).some((k) => k.includes(':dl:token:'))),
-    ).toBe(true);
 
     // The widget prefetches a Direct Line token on every page load regardless
-    // of auth state, so a fresh (anonymous-scoped) token key always reappears
-    // after the post-logout reload. What must actually disappear is this
-    // specific identity-scoped entry — reusing it after logout would leak the
-    // previous user's token to whoever uses the browser next.
+    // of auth state, so an anonymous-scoped token key can appear (and later
+    // reappear post-logout) independent of login. Poll for the identity-scoped
+    // key specifically — the dummy 'test login' provider always sets user_name
+    // to 'Guest', so the key's trailing segment is ':guest' — rather than "any"
+    // dl:token key, so this doesn't race the anonymous prefetch's own key.
+    await expect.poll(async () =>
+      page.evaluate(() => Object.keys(localStorage).some((k) => k.includes(':dl:token:') && k.endsWith(':guest'))),
+    ).toBe(true);
+
     const loggedInTokenKey = await page.evaluate(
-      () => Object.keys(localStorage).find((k) => k.includes(':dl:token:')) as string,
+      () => Object.keys(localStorage).find((k) => k.includes(':dl:token:') && k.endsWith(':guest')) as string,
     );
+    expect(loggedInTokenKey).toBeTruthy();
 
     await page.evaluate(() => {
       const btn = document.getElementById('greentic-logout-btn') as HTMLButtonElement | null;

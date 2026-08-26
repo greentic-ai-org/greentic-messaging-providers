@@ -969,12 +969,21 @@ fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
         runtime.contains("stableCachePart(directLineIdentityPart())"),
         "webchat-gui Direct Line cache key must include the authenticated identity"
     );
+    let logout_body = runtime
+        .split_once("function performLogout()")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map(|(body, _)| body)
+        .expect("webchat-gui runtime must define performLogout");
+    let clears_cache_at = logout_body.find("clearDirectLineCache()");
+    let clears_oauth_at = logout_body.find("clearOAuthSession()");
     assert!(
-        runtime.contains("clearDirectLineCache();\n    clearOAuthSession();")
-            || runtime.contains(
-                "clearOAuthSession();\n    clearAppAuthSession();\n    clearDirectLineCache();"
-            ),
-        "webchat-gui logout must clear the Direct Line cache"
+        matches!(
+            (clears_cache_at, clears_oauth_at),
+            (Some(cache_idx), Some(oauth_idx)) if cache_idx < oauth_idx
+        ),
+        "webchat-gui logout must clear the Direct Line cache before clearing the OAuth \
+         session — clearing after would compute the cache key against the already-cleared \
+         (anonymous) identity and leave the real user's token behind"
     );
     assert!(
         runtime.contains("LEGACY_TOKEN_CACHE_KEY = 'greentic_dl_token'")
