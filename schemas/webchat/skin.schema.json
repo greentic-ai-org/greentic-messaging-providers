@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WebChat Skin",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tenant", "mode", "brand", "webchat", "fullpage"],
+  "properties": {
+    "tenant": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Skin folder name. Must equal the directory this file lives in."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["fullpage", "widget", "embed"]
+    },
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "logo", "primary"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "favicon": { "type": "string", "minLength": 1 },
+        "logo": { "type": "string", "minLength": 1 },
+        "primary": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+      }
+    },
+    "directLine": {
+      "type": "object",
+      "description": "Populated at runtime by runtime-bootstrap.js. Ship it empty."
+    },
+    "webchat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["styleOptions", "adaptiveCardsHostConfig", "locale"],
+      "properties": {
+        "styleOptions": { "type": "string", "minLength": 1 },
+        "styleOptionsThemed": { "type": "boolean" },
+        "adaptiveCardsHostConfig": { "type": "string", "minLength": 1 },
+        "locale": { "type": "string", "minLength": 2 },
+        "localePickerLocales": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 2 }
+        }
+      }
+    },
+    "statusBar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "show": { "type": "boolean" },
+        "brand": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ok": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+            "warn": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+            "err": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+          }
+        }
+      }
+    },
+    "fullpage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "css"],
+      "properties": {
+        "index": { "type": "string", "minLength": 1 },
+        "css": { "type": "string", "minLength": 1 }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "script": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

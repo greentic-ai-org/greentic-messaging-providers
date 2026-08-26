@@ -1,0 +1,31 @@
+{
+  "tenant": "_template",
+  "mode": "fullpage",
+  "brand": {
+    "name": "Your Brand",
+    "favicon": "./assets/favicon.ico",
+    "logo": "./assets/logo.svg",
+    "primary": "#0F62FE"
+  },
+  "directLine": {},
+  "webchat": {
+    "styleOptions": "./webchat/styleOptions.json",
+    "adaptiveCardsHostConfig": "./webchat/hostconfig.json",
+    "locale": "en-US"
+  },
+  "statusBar": {
+    "show": true,
+    "brand": {
+      "ok": "#22c55e",
+      "warn": "#f59e0b",
+      "err": "#ef4444"
+    }
+  },
+  "fullpage": {
+    "index": "./fullpage/index.html",
+    "css": "./fullpage/page.css"
+  },
+  "hooks": {
+    "script": "./webchat/hooks.js"
+  }
+}
