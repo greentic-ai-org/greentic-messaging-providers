@@ -235,8 +235,17 @@ where
         // The cached JWKS may be stale after the issuer rotated its signing
         // key. Refetch once, bypassing the cache, and retry verification —
         // bounded to a single retry so a persistently unknown kid can't turn
-        // into a fetch amplifier.
+        // into a fetch amplifier, and gated by a per-issuer cooldown so a
+        // flood of cheap forged tokens can't force an outbound fetch per
+        // request (see `jwks_refetch_allowed`).
         Err(OidcError::UnknownKey) => {
+            if !jwks_refetch_allowed(state_store, &jwks_url, now) {
+                return Err(respond_error(
+                    401,
+                    "unauthorized",
+                    format!("access token rejected: {:?}", OidcError::UnknownKey),
+                ));
+            }
             let fresh_doc = match refetch_jwks(state_store, jwks, &jwks_url, now) {
                 Ok(doc) => doc,
                 Err(err) => {
@@ -1025,6 +1034,50 @@ where
     let document = jwks.fetch(jwks_url)?;
     store_jwks_cache(state_store, jwks_url, &document, now);
     Ok(document)
+}
+
+/// Minimum interval between `refetch_jwks` calls for the same issuer.
+/// `verify_access_token` returns `UnknownKey` from the kid filter before it
+/// checks the signature, `iss`, `aud`, `exp`, or scope — the cheapest
+/// possible forged token reaches this arm. Without a cooldown, an attacker
+/// could force one outbound HTTPS fetch to the issuer's `/jwks.json` per
+/// request; the existing rate limiter doesn't stop this because it buckets
+/// per subject/IP, both of which an attacker can rotate freely. The issuer,
+/// not us, would be the amplification victim.
+const JWKS_REFETCH_COOLDOWN_SECONDS: i64 = 60;
+
+fn jwks_refetch_key(jwks_url: &str) -> String {
+    format!("webchat:jwks:refetch:{jwks_url}")
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct JwksRefetchAttempt {
+    attempted_at: i64,
+}
+
+/// Returns whether a bounded `refetch_jwks` call is allowed right now for
+/// this issuer, and — if so — immediately records the attempt (before the
+/// fetch itself happens) so a failing issuer can't be hammered by repeatedly
+/// missing its own deadline either.
+fn jwks_refetch_allowed<S: StateStore>(state_store: &mut S, jwks_url: &str, now: i64) -> bool {
+    let key = jwks_refetch_key(jwks_url);
+    let last_attempt = state_store
+        .read(&key)
+        .ok()
+        .flatten()
+        .and_then(|bytes| serde_json::from_slice::<JwksRefetchAttempt>(&bytes).ok())
+        .map(|attempt| attempt.attempted_at);
+    let allowed = match last_attempt {
+        Some(attempted_at) => now - attempted_at >= JWKS_REFETCH_COOLDOWN_SECONDS,
+        None => true,
+    };
+    if allowed {
+        let attempt = JwksRefetchAttempt { attempted_at: now };
+        if let Ok(bytes) = serde_json::to_vec(&attempt) {
+            let _ = state_store.write(&key, &bytes);
+        }
+    }
+    allowed
 }
 
 /// Load the JWT signing key from either injected config or secrets store.
@@ -2763,5 +2816,135 @@ mod tests {
             .to_string();
         let claims = verify_token(b"test-signing-key", &reconnected_token).expect("verifies");
         assert!(!claims.verified);
+    }
+
+    // --- Follow-up on I5: the bounded UnknownKey retry must itself be rate
+    // limited per issuer. Otherwise a flood of cheap forged tokens (bad kid,
+    // no valid signature/claims required to reach UnknownKey) forces one
+    // outbound JWKS fetch per request — the issuer, not us, is the victim. ---
+
+    #[test]
+    fn unknown_kid_requests_within_cooldown_trigger_only_one_refetch() {
+        // A token whose kid the cached JWKS does not carry — every
+        // verification attempt lands on `OidcError::UnknownKey`.
+        let (token, _own_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let (_, wrong_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "someone-else",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let jwks_url = "https://acme.greentic-id.com/jwks.json";
+        let seed_now = Utc::now().timestamp();
+        // Seed the cache directly so the first request's `load_jwks` is a
+        // cache hit, not a fetcher call — isolates the count to only the
+        // gated `refetch_jwks` calls under test.
+        store_jwks_cache(&mut state, jwks_url, &wrong_jwks, seed_now);
+
+        let fetcher = CountingJwks {
+            document: wrong_jwks,
+            calls: std::cell::Cell::new(0),
+        };
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+            "rate_limit_requests": 100,
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {token}"),
+        });
+
+        for _ in 0..5 {
+            let response =
+                handle_directline_request_with_jwks(&request, &mut state, &secrets, &fetcher);
+            assert_eq!(response.status, 401);
+        }
+        assert_eq!(
+            fetcher.calls.get(),
+            1,
+            "only the first UnknownKey should trigger a refetch inside the cooldown window"
+        );
+    }
+
+    #[test]
+    fn unknown_kid_request_after_cooldown_elapsed_does_refetch() {
+        let (token, _own_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let (_, wrong_jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "someone-else",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let jwks_url = "https://acme.greentic-id.com/jwks.json";
+        let now = Utc::now().timestamp();
+        store_jwks_cache(&mut state, jwks_url, &wrong_jwks, now);
+
+        let fetcher = CountingJwks {
+            document: wrong_jwks,
+            calls: std::cell::Cell::new(0),
+        };
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+            "rate_limit_requests": 100,
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {token}"),
+        });
+
+        let first = handle_directline_request_with_jwks(&request, &mut state, &secrets, &fetcher);
+        assert_eq!(first.status, 401);
+        assert_eq!(
+            fetcher.calls.get(),
+            1,
+            "first UnknownKey should refetch once"
+        );
+
+        // `handle_tokens` derives `now` from the real clock, which this test
+        // cannot advance directly. Instead we rewrite the persisted
+        // last-attempt record to look 61 minutes old — equivalent in effect
+        // to advancing the clock past the 60s cooldown from that record's
+        // point of view.
+        let stale_attempt = JwksRefetchAttempt {
+            attempted_at: now - 61 * 60,
+        };
+        let bytes = serde_json::to_vec(&stale_attempt).expect("serialize attempt");
+        state
+            .write(&jwks_refetch_key(jwks_url), &bytes)
+            .expect("seed stale cooldown record");
+
+        let second = handle_directline_request_with_jwks(&request, &mut state, &secrets, &fetcher);
+        assert_eq!(second.status, 401);
+        assert_eq!(
+            fetcher.calls.get(),
+            2,
+            "a request after the cooldown elapsed must refetch again"
+        );
     }
 }
