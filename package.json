@@ -9,7 +9,7 @@
     "build:sso-bundle": "bash tools/build_webchat_sso_bundle.sh"
   },
   "dependencies": {
-    "@greentic/sso": "github:greenticai/greentic-webchat-sdk#2696c1083f90886f82b65aab4573d1b7458925c0"
+    "@greentic/sso": "git+https://git@github.com/greenticai/greentic-webchat-sdk.git#2696c1083f90886f82b65aab4573d1b7458925c0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
