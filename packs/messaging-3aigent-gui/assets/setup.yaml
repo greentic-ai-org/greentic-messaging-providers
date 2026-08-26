@@ -1,0 +1,317 @@
+provider_id: 3aigent-gui
+version: 1
+title: 3AIgent GUI provider setup
+questions:
+  - name: public_base_url
+    title: Public base URL
+    kind: string
+    required: true
+    default: "http://localhost:8080"
+    help: "Auto-replaced by gtc start when using tunnel"
+    placeholder: "https://xxxx.trycloudflare.com"
+    group: Connection
+    validate:
+      regex: "^https?://"
+  - name: mode
+    title: Mode
+    kind: string
+    required: true
+    default: "websocket"
+    help: "WebChat connection mode"
+    placeholder: "websocket"
+    group: Connection
+  - name: route
+    title: Route
+    kind: string
+    required: false
+    default: "webchat"
+    placeholder: "webchat"
+    group: Connection
+  - name: tenant_channel_id
+    title: Tenant channel ID
+    kind: string
+    required: false
+    group: Connection
+  - name: base_url
+    title: Base URL
+    kind: string
+    required: false
+    help: "Optional DirectLine or WebChat server base URL"
+    placeholder: "https://directline.example.com"
+    group: Connection
+    validate:
+      regex: "^https?://"
+
+  # ── OAuth Login ──────────────────────────────────────────
+  - name: oauth_enabled
+    title: Enable OAuth login
+    kind: boolean
+    required: false
+    default: "true"
+    help: "Require users to sign in before accessing the chat"
+    group: OAuth
+
+  # ── Google ───────────────────────────────────────────────
+  - name: oauth_enable_google
+    title: Enable Google login
+    kind: boolean
+    required: false
+    default: "false"
+    help: "Allow users to sign in with their Google account"
+    group: OAuth - Google
+    visible_if:
+      field: oauth_enabled
+      eq: "true"
+  - name: oauth_google_client_id
+    title: Google Client ID
+    kind: string
+    required: false
+    help: "Create OAuth 2.0 Client ID at Google Cloud Console"
+    placeholder: "123456789.apps.googleusercontent.com"
+    group: OAuth - Google
+    docs_url: "https://console.cloud.google.com/apis/credentials"
+    visible_if:
+      field: oauth_enable_google
+      eq: "true"
+  - name: oauth_google_client_secret
+    title: Google Client Secret
+    kind: string
+    required: false
+    secret: true
+    help: "Copy the Client Secret from Google Cloud Console"
+    group: OAuth - Google
+    docs_url: "https://console.cloud.google.com/apis/credentials"
+    visible_if:
+      field: oauth_enable_google
+      eq: "true"
+
+  # ── Microsoft ────────────────────────────────────────────
+  - name: oauth_enable_microsoft
+    title: Enable Microsoft login
+    kind: boolean
+    required: false
+    default: "false"
+    help: "Allow users to sign in with their Microsoft account"
+    group: OAuth - Microsoft
+    visible_if:
+      field: oauth_enabled
+      eq: "true"
+  - name: oauth_microsoft_client_id
+    title: Microsoft Client ID
+    kind: string
+    required: false
+    help: "Application (client) ID from Azure App Registration"
+    placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    group: OAuth - Microsoft
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
+    visible_if:
+      field: oauth_enable_microsoft
+      eq: "true"
+  - name: oauth_microsoft_client_secret
+    title: Microsoft Client Secret
+    kind: string
+    required: false
+    secret: true
+    help: "Client Secret from Azure → Certificates & secrets"
+    group: OAuth - Microsoft
+    docs_url: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps"
+    visible_if:
+      field: oauth_enable_microsoft
+      eq: "true"
+
+  # ── GitHub ───────────────────────────────────────────────
+  - name: oauth_enable_github
+    title: Enable GitHub login
+    kind: boolean
+    required: false
+    default: "false"
+    help: "Allow users to sign in with their GitHub account"
+    group: OAuth - GitHub
+    visible_if:
+      field: oauth_enabled
+      eq: "true"
+  - name: oauth_github_client_id
+    title: GitHub Client ID
+    kind: string
+    required: false
+    help: "Client ID from GitHub OAuth App"
+    placeholder: "Iv1.xxxxxxxxxxxxxxxx"
+    group: OAuth - GitHub
+    docs_url: "https://github.com/settings/developers"
+    visible_if:
+      field: oauth_enable_github
+      eq: "true"
+  - name: oauth_github_client_secret
+    title: GitHub Client Secret
+    kind: string
+    required: false
+    secret: true
+    help: "Client Secret from GitHub OAuth App settings"
+    group: OAuth - GitHub
+    docs_url: "https://github.com/settings/developers"
+    visible_if:
+      field: oauth_enable_github
+      eq: "true"
+
+  # ── Custom OIDC ──────────────────────────────────────────
+  - name: oauth_enable_custom
+    title: Enable custom OIDC provider
+    kind: boolean
+    required: false
+    default: "false"
+    help: "Add a custom OpenID Connect provider (Okta, Auth0, Keycloak, etc.)"
+    group: OAuth - Custom OIDC
+    visible_if:
+      field: oauth_enabled
+      eq: "true"
+  - name: oauth_custom_label
+    title: Provider display name
+    kind: string
+    required: false
+    help: "Name shown on the login button"
+    placeholder: "Company SSO"
+    group: OAuth - Custom OIDC
+    visible_if:
+      field: oauth_enable_custom
+      eq: "true"
+  - name: oauth_custom_auth_url
+    title: Authorization URL
+    kind: string
+    required: false
+    help: "OIDC authorization endpoint"
+    placeholder: "https://your-idp.com/authorize"
+    group: OAuth - Custom OIDC
+    visible_if:
+      field: oauth_enable_custom
+      eq: "true"
+    validate:
+      regex: "^https://"
+  - name: oauth_custom_token_url
+    title: Token URL
+    kind: string
+    required: false
+    help: "OIDC token endpoint"
+    placeholder: "https://your-idp.com/oauth/token"
+    group: OAuth - Custom OIDC
+    visible_if:
+      field: oauth_enable_custom
+      eq: "true"
+    validate:
+      regex: "^https://"
+  - name: oauth_custom_client_id
+    title: Client ID
+    kind: string
+    required: false
+    help: "OAuth client ID from your identity provider"
+    group: OAuth - Custom OIDC
+    visible_if:
+      field: oauth_enable_custom
+      eq: "true"
+  - name: oauth_custom_scopes
+    title: Scopes
+    kind: string
+    required: false
+    default: "openid profile email"
+    help: "Space-separated scopes"
+    placeholder: "openid profile email"
+    group: OAuth - Custom OIDC
+    visible_if:
+      field: oauth_enable_custom
+      eq: "true"
+
+  - name: skin
+    title: Skin
+    kind: string
+    required: false
+    default: "3aigent"
+    placeholder: "default | 3aigent"
+    help: "Visual skin/theme. Must match a skins/<name>/ folder shipped in the pack. Defaults to the 3AIgent brand."
+    group: Branding
+
+  - name: presentation_mode
+    title: Presentation mode
+    kind: string
+    required: false
+    default: "standalone"
+    placeholder: "standalone | embed_webcomponent"
+    help: "Choose standalone to host a full WebChat page, or embed_webcomponent to expose a framework-independent Web Component for an existing website."
+    group: Branding
+    enum:
+      - standalone
+      - embed_webcomponent
+
+  - name: text_input_enabled
+    title: Text input
+    kind: boolean
+    required: false
+    default: "true"
+    help: "Enable the message input box inside the embedded Web Component. Disable it for read-only or button-driven embedded experiences."
+    group: Branding
+    visible_if:
+      field: presentation_mode
+      eq: "embed_webcomponent"
+
+  - name: nav_links
+    title: "Top-menu nav links"
+    kind: table
+    required: false
+    help: |
+      Pills rendered in the topbar between the brand and the locale picker.
+      Each row becomes one pill. Click "+ language" inside Label / Tooltip
+      cells to add per-locale translations — the SPA renders whichever one
+      matches the active locale (with fallback to English).
+
+      Tooltip fields are optional. Fill the Title (and optionally Eyebrow
+      and Description) to make the pill show a hover popover, matching the
+      M1–M4 training-modules pill style. Description supports inline
+      <strong>/<em>/<br> markup.
+    min_rows: 0
+    max_rows: 8
+    visible_if:
+      field: presentation_mode
+      eq: "standalone"
+    columns:
+      - key: label
+        title: "Label"
+        kind: string
+        required: true
+        multilingual: true
+        placeholder: "Help"
+        help: "Pill text. Click + language for translations."
+      - key: url
+        title: "URL"
+        kind: string
+        required: true
+        placeholder: "/help or https://example.com"
+      - key: external
+        title: "Open in new tab"
+        kind: boolean
+        required: false
+      - key: num
+        title: "Num"
+        kind: string
+        required: false
+        placeholder: "M5"
+        help: "Optional small chip prefix shown before the label."
+      - key: tooltip_eyebrow
+        title: "Tooltip — Eyebrow"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "Module 5"
+        help: "Optional small caps line above the tooltip title."
+      - key: tooltip_title
+        title: "Tooltip — Title"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "When One Agent Isn't Enough"
+        help: "Hover-popover heading. Leave blank to disable the tooltip."
+      - key: tooltip_lede
+        title: "Tooltip — Description"
+        kind: string
+        required: false
+        multilingual: true
+        placeholder: "Use a planner and a research agent together."
+        help: "Hover-popover body. Inline <strong>/<em>/<br> allowed."
+    group: Branding

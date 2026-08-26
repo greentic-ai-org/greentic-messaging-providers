@@ -45,4 +45,27 @@ mod variant_tests {
             assert!(super::DEFAULT_OAUTH_ENABLED);
         }
     }
+
+    #[test]
+    fn tenant_template_carries_skin_and_all_oauth_providers() {
+        const TEMPLATE: &str = include_str!(
+            "../../../packs/messaging-3aigent-gui/assets/webchat-gui/config/tenants/default.json"
+        );
+        let cfg: serde_json::Value = serde_json::from_str(TEMPLATE).unwrap();
+
+        assert_eq!(cfg["skin"], "3aigent");
+
+        let ids: Vec<&str> = cfg["auth"]["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["id"].as_str().unwrap())
+            .collect();
+        for expected in ["google", "microsoft", "github", "custom"] {
+            assert!(ids.contains(&expected), "missing provider id {expected}");
+        }
+        for provider in cfg["auth"]["providers"].as_array().unwrap() {
+            assert_eq!(provider["enabled"], false);
+        }
+    }
 }
