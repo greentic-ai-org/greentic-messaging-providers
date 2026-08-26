@@ -31,6 +31,10 @@ pub struct TokenClaims {
     pub ctx: DirectLineContext,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conv: Option<String>,
+    /// True when `sub` was bound from a verified OIDC bearer, not an
+    /// anonymous/self-declared identity.
+    #[serde(default)]
+    pub verified: bool,
 }
 
 #[allow(dead_code)]
@@ -73,6 +77,7 @@ pub fn issue_token(
     ctx: DirectLineContext,
     sub: &str,
     conv: Option<String>,
+    verified: bool,
 ) -> Result<(String, i64), JwtError> {
     let now = Utc::now();
     let iat = now.timestamp();
@@ -86,6 +91,7 @@ pub fn issue_token(
         exp,
         ctx,
         conv,
+        verified,
     };
     let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
     let header_enc = encode_segment(&header)?;
@@ -160,7 +166,7 @@ mod tests {
     fn token_round_trip() -> Result<(), JwtError> {
         let signing_key = b"test-hmac-key";
         let ctx = sample_ctx();
-        let (token, exp) = issue_token(signing_key, ctx.clone(), "user-123", None)?;
+        let (token, exp) = issue_token(signing_key, ctx.clone(), "user-123", None, false)?;
         assert!(token.split('.').count() == 3);
         assert!(exp > Utc::now().timestamp());
         let claims = verify_token(signing_key, &token)?;
@@ -191,7 +197,7 @@ mod tests {
     #[test]
     fn verify_rejects_wrong_signature() -> Result<(), JwtError> {
         let signing_key = b"test-hmac-key";
-        let (token, _) = issue_token(signing_key, sample_ctx(), "user-123", None)?;
+        let (token, _) = issue_token(signing_key, sample_ctx(), "user-123", None, false)?;
 
         assert!(matches!(
             verify_token(b"wrong-hmac-key", &token),
@@ -213,6 +219,7 @@ mod tests {
             exp: now + TTL_SECONDS,
             ctx: sample_ctx(),
             conv: None,
+            verified: false,
         };
 
         let expired = TokenClaims {
@@ -234,6 +241,7 @@ mod tests {
             iss: ISS.to_string(),
             aud: AUD.to_string(),
             sub: "user-123".to_string(),
+            verified: false,
         };
         let future_token = signed_token(signing_key, future)?;
         assert!(matches!(
@@ -251,8 +259,13 @@ mod tests {
             tenant: "tenant-a".into(),
             team: None,
         };
-        let (token, _) =
-            issue_token(signing_key, ctx.clone(), "user-x", Some("conv-99".into()))?;
+        let (token, _) = issue_token(
+            signing_key,
+            ctx.clone(),
+            "user-x",
+            Some("conv-99".into()),
+            true,
+        )?;
         let claims = verify_token(signing_key, &token)?;
         assert_eq!(claims.conv.as_deref(), Some("conv-99"));
         assert_eq!(claims.ctx, ctx);

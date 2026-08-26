@@ -9,8 +9,9 @@ use uuid::Uuid;
 use greentic_types::messaging::universal_dto::{Header, HttpInV1, HttpOutV1};
 
 use super::jwt::{DirectLineContext, TTL_SECONDS, issue_token, verify_token};
+use super::oidc::verify_access_token;
 use super::state::{ConversationState, StoredActivity, conversation_key, sanitize_team};
-use super::store::{RateLimitState, SecretStore, StateStore};
+use super::store::{JwksFetcher, NoJwksFetcher, RateLimitState, SecretStore, StateStore};
 
 const DIRECTLINE_PREFIX: &str = "/v3/directline";
 const JSON_CONTENT_TYPE: &str = "application/json";
@@ -40,6 +41,20 @@ where
     S: StateStore,
     SE: SecretStore,
 {
+    handle_directline_request_with_jwks(request, state_store, secrets, &NoJwksFetcher)
+}
+
+pub fn handle_directline_request_with_jwks<S, SE, J>(
+    request: &HttpInV1,
+    state_store: &mut S,
+    secrets: &SE,
+    jwks: &J,
+) -> HttpOutV1
+where
+    S: StateStore,
+    SE: SecretStore,
+    J: JwksFetcher,
+{
     if !request.path.starts_with(DIRECTLINE_PREFIX) {
         return respond_not_found("missing directline prefix");
     }
@@ -57,7 +72,7 @@ where
 
     match segments.as_slice() {
         ["v3", "directline", "tokens", "generate"] if method_is(request, "POST") => {
-            handle_tokens(request, state_store, secrets)
+            handle_tokens(request, state_store, secrets, jwks)
         }
         ["v3", "directline", "tokens", "generate"] => method_not_allowed(),
         ["v3", "directline", "tokens", "refresh"] if method_is(request, "POST") => {
@@ -88,10 +103,16 @@ where
     }
 }
 
-fn handle_tokens<S, SE>(request: &HttpInV1, state_store: &mut S, secrets: &SE) -> HttpOutV1
+fn handle_tokens<S, SE, J>(
+    request: &HttpInV1,
+    state_store: &mut S,
+    secrets: &SE,
+    jwks: &J,
+) -> HttpOutV1
 where
     S: StateStore,
     SE: SecretStore,
+    J: JwksFetcher,
 {
     let ctx = parse_context(request.query.as_deref());
     let body = match decode_json_body(request) {
@@ -106,12 +127,19 @@ where
         return resp;
     }
 
+    let (token_subject, verified) =
+        match determine_verified_identity(request, state_store, jwks, now) {
+            Ok(Some(identity)) => (identity, true),
+            Ok(None) => (subject.token_subject().to_string(), false),
+            Err(resp) => return resp,
+        };
+
     let signing_key = match load_signing_key(request, secrets) {
         Ok(key) => key,
         Err(resp) => return resp,
     };
 
-    match issue_token(&signing_key, ctx.clone(), subject.token_subject(), None) {
+    match issue_token(&signing_key, ctx.clone(), &token_subject, None, verified) {
         Ok((token, _exp)) => respond_json(
             200,
             json!({
@@ -124,6 +152,66 @@ where
             "token_issue_failed",
             format!("failed to mint token: {err:?}"),
         ),
+    }
+}
+
+/// Resolves the subject of an OIDC bearer, if one was presented.
+///
+/// `Ok(None)` means no bearer was presented and the caller should fall back
+/// to the anonymous/self-declared subject. Any bearer that fails to verify —
+/// including a tenant with no `oidc_issuer` configured to check it against —
+/// returns `Err` (401) rather than silently downgrading to anonymous.
+fn determine_verified_identity<S, J>(
+    request: &HttpInV1,
+    state_store: &mut S,
+    jwks: &J,
+    now: i64,
+) -> Result<Option<String>, HttpOutV1>
+where
+    S: StateStore,
+    J: JwksFetcher,
+{
+    let bearer = extract_bearer(&request.headers);
+    let Some(bearer) = bearer else {
+        return Ok(None);
+    };
+
+    let Some(issuer) = config_str(request, "oidc_issuer") else {
+        return Err(respond_error(
+            401,
+            "unauthorized",
+            "bearer provided but oidc verification is not configured for this tenant",
+        ));
+    };
+    let audience =
+        config_str(request, "oidc_audience").unwrap_or_else(|| "webchat-gui".to_string());
+    let required_scope = config_str(request, "oidc_required_scope")
+        .unwrap_or_else(|| "greentic.webchat".to_string());
+
+    let jwks_url = format!("{}/jwks.json", issuer.trim_end_matches('/'));
+    let jwks_doc = match load_jwks(state_store, jwks, &jwks_url, now) {
+        Ok(doc) => doc,
+        Err(err) => {
+            return Err(respond_error(
+                401,
+                "unauthorized",
+                format!("jwks unavailable: {err}"),
+            ));
+        }
+    };
+
+    match verify_access_token(&bearer, &jwks_doc, &issuer, &audience, &required_scope, now) {
+        Ok(identity) if identity.sub.is_empty() => Err(respond_error(
+            401,
+            "unauthorized",
+            "access token rejected: empty subject",
+        )),
+        Ok(identity) => Ok(Some(identity.sub)),
+        Err(err) => Err(respond_error(
+            401,
+            "unauthorized",
+            format!("access token rejected: {err:?}"),
+        )),
     }
 }
 
@@ -165,6 +253,7 @@ where
         ctx.clone(),
         &claims.sub,
         Some(conversation_id.clone()),
+        claims.verified,
     ) {
         Ok(pair) => pair,
         Err(err) => {
@@ -249,6 +338,7 @@ where
         claims.ctx.clone(),
         &claims.sub,
         claims.conv.clone(),
+        claims.verified,
     ) {
         Ok(pair) => pair,
         Err(err) => {
@@ -323,6 +413,7 @@ where
         ctx,
         &claims.sub,
         Some(conversation_id.to_string()),
+        claims.verified,
     ) {
         Ok(pair) => pair,
         Err(err) => {
@@ -787,6 +878,59 @@ fn hash_client_id(value: &str) -> String {
         let _ = write!(&mut out, "{byte:02x}");
     }
     out
+}
+
+fn config_str(request: &HttpInV1, key: &str) -> Option<String> {
+    request
+        .config
+        .as_ref()
+        .and_then(|cfg| cfg.get(key))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+const JWKS_CACHE_TTL_SECONDS: i64 = 15 * 60;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CachedJwks {
+    document: String,
+    fetched_at: i64,
+}
+
+/// Fetches an issuer's JWKS document, caching by issuer-derived URL so a page
+/// reload doesn't cost an outbound round trip on every token mint. Keyed on
+/// the URL, never on the bearer token or its hash — ECDSA signatures are
+/// malleable, so a token-keyed cache would be bypassable by a re-encoded twin.
+fn load_jwks<S, J>(
+    state_store: &mut S,
+    jwks: &J,
+    jwks_url: &str,
+    now: i64,
+) -> Result<String, String>
+where
+    S: StateStore,
+    J: JwksFetcher,
+{
+    let cache_key = format!("webchat:jwks:{jwks_url}");
+    if let Ok(Some(bytes)) = state_store.read(&cache_key)
+        && let Ok(cached) = serde_json::from_slice::<CachedJwks>(&bytes)
+        && now - cached.fetched_at < JWKS_CACHE_TTL_SECONDS
+    {
+        return Ok(cached.document);
+    }
+    let document = jwks.fetch(jwks_url)?;
+    let entry = CachedJwks {
+        document: document.clone(),
+        fetched_at: now,
+    };
+    // A cache write failure just costs a refetch next time — failing the
+    // mint over it would turn a degraded state store into a login outage.
+    if let Ok(bytes) = serde_json::to_vec(&entry) {
+        let _ = state_store.write(&cache_key, &bytes);
+    }
+    Ok(document)
 }
 
 /// Load the JWT signing key from either injected config or secrets store.
@@ -1814,5 +1958,167 @@ mod tests {
         assert_eq!(activity_response.status, 201);
         assert_eq!(header_value(&activity_response, "X-Greentic-Flow"), None);
         Ok(())
+    }
+
+    struct StaticJwks(String);
+    impl JwksFetcher for StaticJwks {
+        fn fetch(&self, _url: &str) -> Result<String, String> {
+            Ok(self.0.clone())
+        }
+    }
+
+    fn token_request_with_config(config: Value) -> HttpInV1 {
+        HttpInV1 {
+            method: "POST".to_string(),
+            path: "/v3/directline/tokens/generate".to_string(),
+            query: Some("env=default&tenant=default".to_string()),
+            headers: vec![],
+            body_b64: String::new(),
+            route_hint: None,
+            binding_id: None,
+            config: Some(config),
+        }
+    }
+
+    #[test]
+    fn bearer_token_mints_an_identity_bound_direct_line_token() {
+        let (access_token, jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "openid greentic.webchat",
+            4_000_000_000,
+        );
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {access_token}"),
+        });
+
+        let response =
+            handle_directline_request_with_jwks(&request, &mut state, &secrets, &StaticJwks(jwks));
+        assert_eq!(response.status, 200);
+
+        let body = decode_body(&response).expect("json body");
+        let token = body["token"].as_str().expect("token string");
+        let claims = verify_token(b"test-signing-key", token).expect("direct line token verifies");
+        assert_eq!(claims.sub, "acme:users:7");
+        assert!(claims.verified);
+    }
+
+    #[test]
+    fn an_invalid_bearer_is_rejected_with_401() {
+        let (_, jwks) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: "Bearer not-a-jwt".into(),
+        });
+
+        let response =
+            handle_directline_request_with_jwks(&request, &mut state, &secrets, &StaticJwks(jwks));
+        assert_eq!(response.status, 401);
+    }
+
+    #[test]
+    fn no_bearer_still_mints_an_anonymous_token() {
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+        }));
+        let response =
+            handle_directline_request_with_jwks(&request, &mut state, &secrets, &NoJwksFetcher);
+        assert_eq!(response.status, 200);
+        let body = decode_body(&response).expect("json body");
+        let claims = verify_token(b"test-signing-key", body["token"].as_str().expect("token"))
+            .expect("verifies");
+        assert!(!claims.verified);
+    }
+
+    #[test]
+    fn bearer_without_oidc_configured_is_rejected_with_401() {
+        // A stray/leftover Authorization header must not silently downgrade
+        // to an anonymous mint when the tenant has no OIDC issuer configured
+        // to verify against — that would hide a failed verification.
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let mut request = token_request_with_config(json!({}));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: "Bearer whatever".into(),
+        });
+
+        let response =
+            handle_directline_request_with_jwks(&request, &mut state, &secrets, &NoJwksFetcher);
+        assert_eq!(response.status, 401);
+    }
+
+    struct CountingJwks {
+        document: String,
+        calls: std::cell::Cell<usize>,
+    }
+    impl JwksFetcher for CountingJwks {
+        fn fetch(&self, _url: &str) -> Result<String, String> {
+            self.calls.set(self.calls.get() + 1);
+            Ok(self.document.clone())
+        }
+    }
+
+    #[test]
+    fn jwks_is_fetched_once_across_two_mints() {
+        let (access_token, jwks_doc) = crate::directline::oidc_test_support::signed_fixture(
+            "https://acme.greentic-id.com",
+            "webchat-gui",
+            "acme:users:7",
+            "greentic.webchat",
+            4_000_000_000,
+        );
+        let fetcher = CountingJwks {
+            document: jwks_doc,
+            calls: std::cell::Cell::new(0),
+        };
+        let mut state = InMemoryStateStore::new();
+        let mut secrets = TestSecretStore::new();
+        secrets.insert(TOKEN_SECRET_KEY, b"test-signing-key");
+        let mut request = token_request_with_config(json!({
+            "oidc_issuer": "https://acme.greentic-id.com",
+            "oidc_audience": "webchat-gui",
+            "oidc_required_scope": "greentic.webchat",
+            "rate_limit_requests": 100,
+        }));
+        request.headers.push(Header {
+            name: "Authorization".into(),
+            value: format!("Bearer {access_token}"),
+        });
+
+        for _ in 0..2 {
+            let response =
+                handle_directline_request_with_jwks(&request, &mut state, &secrets, &fetcher);
+            assert_eq!(response.status, 200);
+        }
+        assert_eq!(fetcher.calls.get(), 1);
     }
 }

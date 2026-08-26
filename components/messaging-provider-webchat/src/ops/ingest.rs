@@ -19,7 +19,9 @@ use std::collections::BTreeMap;
 
 use crate::PROVIDER_TYPE;
 
-use crate::directline::{ConfigAwareSecretStore, HostStateStore, handle_directline_request};
+use crate::directline::{
+    ConfigAwareSecretStore, HostJwksFetcher, HostStateStore, handle_directline_request_with_jwks,
+};
 
 use super::envelope::{build_webchat_envelope, build_webchat_envelope_with_ctx};
 use super::helpers::{
@@ -91,7 +93,12 @@ pub(crate) fn ingest_http(input_json: &[u8]) -> Vec<u8> {
         };
         let mut state_driver = HostStateStore;
         let secrets_driver = ConfigAwareSecretStore::new(request.config.clone());
-        let out = handle_directline_request(&token_request, &mut state_driver, &secrets_driver);
+        let out = handle_directline_request_with_jwks(
+            &token_request,
+            &mut state_driver,
+            &secrets_driver,
+            &HostJwksFetcher,
+        );
         return http_out_v1_bytes(&out);
     }
 
@@ -155,7 +162,12 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
     // Use ConfigAwareSecretStore to check injected secrets from request config first,
     // falling back to host secrets_store interface if not found.
     let secrets_driver = ConfigAwareSecretStore::new(request.config.clone());
-    let mut out = handle_directline_request(&dl_request, &mut state_driver, &secrets_driver);
+    let mut out = handle_directline_request_with_jwks(
+        &dl_request,
+        &mut state_driver,
+        &secrets_driver,
+        &HostJwksFetcher,
+    );
 
     stamp_ingest_envelopes(request, dl_path, &mut out);
 
