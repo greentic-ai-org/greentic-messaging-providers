@@ -393,6 +393,33 @@
         "tools/import_webchat_gui_assets.sh"
       ]
     },
+    "3aigent-gui": {
+      "pack": "messaging-3aigent-gui",
+      "version": "0.5.11",
+      "ghcr_target": "ghcr.io/greenticai/messaging-3aigent-gui",
+      "shared_crate_dependency": "greentic-messaging-provider-common@0.4.102",
+      "e2e": {
+        "external_service": "3aigent-gui",
+        "required_secrets": [],
+        "optional_secrets": [],
+        "fixture_path": "e2e/providers/webchat",
+        "test_command": "python3 ci/e2e/provider_e2e.py run --provider 3aigent-gui",
+        "operation": "pack load and asset smoke",
+        "readback": "local artifact validation"
+      },
+      "components": [
+        "messaging-provider-3aigent-gui"
+      ],
+      "manifests": [
+        "components/messaging-provider-3aigent-gui/Cargo.toml"
+      ],
+      "paths": [
+        "components/messaging-provider-3aigent-gui/",
+        "components/messaging-provider-webchat-gui/",
+        "packs/messaging-3aigent-gui/",
+        "tools/import_webchat_gui_assets.sh"
+      ]
+    },
     "webex": {
       "pack": "messaging-webex",
       "version": "0.5.17",
