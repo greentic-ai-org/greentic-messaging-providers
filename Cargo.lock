@@ -2291,7 +2291,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-3aigent-gui"
-version = "0.5.17"
+version = "0.5.18"
 dependencies = [
  "base64",
  "chrono",
@@ -2381,7 +2381,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "base64",
  "chrono",
@@ -2400,7 +2400,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat-gui"
-version = "0.5.17"
+version = "0.5.18"
 dependencies = [
  "base64",
  "chrono",
@@ -4645,7 +4645,7 @@ dependencies = [
 
 [[package]]
 name = "webchat"
-version = "0.5.4"
+version = "0.5.6"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
