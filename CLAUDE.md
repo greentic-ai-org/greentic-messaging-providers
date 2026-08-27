@@ -75,9 +75,13 @@ cargo clippy --workspace --all-targets
 
 ### WIT Component Model
 
-All providers export worlds from `greentic:component@0.6.0` (`component`, `component-configurable`, `component-qa-support`, `component-i18n-support`):
+All providers export worlds from `greentic:component@0.6.1` (`component`, `component-configurable`, `component-qa-support`, `component-i18n-support`):
 - **imports:** `http-client`, `secrets-store`
 - **exports:** `descriptor`, `runtime` (CBOR), `qa`, `component-i18n`, `schema-core-api` (JSON compat)
+
+The version above is each component's own vendored `wit/<component>/` tree — that is what
+`cargo component` builds against. The shared `wit/component-v0-6/` tree is still at 0.6.0 and
+is not what providers target.
 
 ### Egress Pipeline (3-step WASM invocation)
 

@@ -1,7 +1,7 @@
 {
   "id": "messaging-provider-3aigent-gui",
   "name": "messaging-provider-3aigent-gui",
-  "version": "0.5.17",
+  "version": "0.5.18",
   "world": "root:component/root",
   "description": "Provider-core 3AIgent GUI messaging provider (Direct Line backend + hosted GUI metadata, 3AIgent skin, SSO on by default).",
   "profiles": {
