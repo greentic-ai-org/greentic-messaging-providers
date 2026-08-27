@@ -15,19 +15,12 @@ fi
 OCI_NAMESPACE="${OCI_NAMESPACE:-greenticai/greentic-messaging-providers}"
 OCI_ORG="${OCI_ORG:-${OCI_NAMESPACE%%/*}}"
 OCI_REPO="${OCI_REPO:-packs}"
+# Explicit override only. When unset, each pack resolves its own version from
+# ci/provider-matrix.json (see tools/resolve_pack_version.py). The workspace
+# version is never a release version - docs/release-policy.md.
 PACK_VERSION="${PACK_VERSION:-}"
-if [ -z "${PACK_VERSION}" ]; then
-  command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
-  PACK_VERSION="$(python3 - <<'PY'
-from pathlib import Path
-import tomllib
-data = tomllib.loads(Path("Cargo.toml").read_text())
-print(data.get("workspace", {}).get("package", {}).get("version", ""))
-PY
-)"
-fi
-PACK_VERSION="${PACK_VERSION:-${GITHUB_REF_NAME:-0.0.0}}"
 PACK_VERSION="${PACK_VERSION#v}"
+command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
 PACKS_DIR="${PACKS_DIR:-packs}"
 OUT_DIR="${OUT_DIR:-dist/packs}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -148,7 +141,7 @@ generate_pack_manifest() {
   python3 "${ROOT_DIR}/tools/generate_pack_metadata.py" \
     --pack-dir "${pack_dir}" \
     --components-dir "${ROOT_DIR}/components" \
-    --version "${PACK_VERSION}" \
+    --version "${resolved_version}" \
     --secrets-out "${secrets_out}"
 }
 
@@ -411,11 +404,43 @@ out_path.write_text("\n".join(lines), encoding="utf-8")
 PY
 }
 
+assert_no_pack_downgrade() {
+  local dir="$1"
+  local next="$2"
+  local current
+  # Compare against what is on disk: pack.yaml is the file about to be overwritten.
+  current="$(python3 "${ROOT_DIR}/tools/resolve_pack_version.py" "${dir}" --root "${ROOT_DIR}" --source pack-yaml 2>/dev/null || true)"
+  [ -n "${current}" ] || return 0
+  [ "${current}" != "${next}" ] || return 0
+  if [ "${ALLOW_PACK_DOWNGRADE:-0}" = "1" ]; then
+    return 0
+  fi
+  # `if !` keeps set -e from killing the script before the message is printed.
+  if ! python3 - "${current}" "${next}" <<'PYVER'
+import sys
+
+def parts(v):
+    return [int(x) if x.isdigit() else x for x in v.replace("-", ".").split(".")]
+
+current, nxt = sys.argv[1], sys.argv[2]
+try:
+    lower = parts(nxt) < parts(current)
+except TypeError:
+    lower = False
+sys.exit(1 if lower else 0)
+PYVER
+  then
+    echo "Refusing to stamp $(basename "${dir}") down from ${current} to ${next}." >&2
+    echo "Set PACK_VERSION explicitly, or ALLOW_PACK_DOWNGRADE=1 if this is intended." >&2
+    exit 1
+  fi
+}
+
 update_pack_yaml_version() {
   local pack_dir="$1"
   local yaml_path="${pack_dir}/pack.yaml"
   [ -f "${yaml_path}" ] || return 0
-  python3 - "$yaml_path" "$PACK_VERSION" <<'PY'
+  python3 - "$yaml_path" "$resolved_version" <<'PY'
 from pathlib import Path
 import sys
 
@@ -542,6 +567,11 @@ for dir in "${pack_dirs[@]}"; do
   pack_out="${ROOT_DIR}/${pack_out_rel}"
   secrets_out="${dir}/.secret_requirements.json"
 
+  if ! resolved_version="$(python3 "${ROOT_DIR}/tools/resolve_pack_version.py" "${dir}" --root "${ROOT_DIR}" --override "${PACK_VERSION}")"; then
+    exit 1
+  fi
+  assert_no_pack_downgrade "${dir}" "${resolved_version}"
+
   update_pack_yaml_version "${dir}"
   python3 "${ROOT_DIR}/tools/normalize_pack_components.py" "${dir}/pack.yaml"
   ensure_pack_manifest_seed "${dir}"
@@ -657,7 +687,7 @@ for dir in "${pack_dirs[@]}"; do
         cp "${manifest_src}" "${manifest_dest}"
       fi
       # Stamp version, world, and profiles on component manifests
-      python3 - "${manifest_dest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
+      python3 - "${manifest_dest}" "${resolved_version}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
 from pathlib import Path
 import json
 import sys
@@ -693,7 +723,7 @@ PY
     [ -z "${comp_id}" ] && continue
     local_manifest="${dir}/components/${comp_id}/component.manifest.json"
     [ -f "${local_manifest}" ] || continue
-    python3 - "${local_manifest}" "${PACK_VERSION}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
+    python3 - "${local_manifest}" "${resolved_version}" "${dir}/pack.yaml" "${comp_id}" <<'PY'
 from pathlib import Path
 import json
 import sys
@@ -719,7 +749,7 @@ if manifest_path.exists():
     manifest_path.write_text(json.dumps(data, indent=2) + "\n")
 PY
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
-  python3 "${ROOT_DIR}/tools/stamp_pack_component_manifests.py" "${dir}" "${PACK_VERSION}"
+  python3 "${ROOT_DIR}/tools/stamp_pack_component_manifests.py" "${dir}" "${resolved_version}"
 
   if [ ! -f "${dir}/pack.yaml" ]; then
     echo "Missing pack.yaml in ${dir}; greentic-pack requires pack.yaml inputs" >&2
@@ -749,8 +779,8 @@ PY
   python3 "${ROOT_DIR}/tools/validate_pack_extensions.py" "${pack_out}"
 
   doctor_json="$(run_pack_doctor_json_tolerant --pack "${pack_out}")"
-  pack_version="$(jq -r '.manifest.meta.packVersion // ""' <<<"${doctor_json}")"
-  if [ "${pack_version}" = "1" ] || [ -z "${pack_version}" ]; then
+  pack_schema_version="$(jq -r '.manifest.meta.packVersion // ""' <<<"${doctor_json}")"
+  if [ "${pack_schema_version}" = "1" ] || [ -z "${pack_schema_version}" ]; then
     echo "warning: greentic-pack produced pack-v1 manifest for ${pack_name}; proceed anyway (upgrade greentic-pack for newer schema) " >&2
   fi
   doctor_version="$(jq -r '.manifest.meta.version // ""' <<<"${doctor_json}")"
@@ -763,14 +793,14 @@ PY
     echo "Pack version drift for ${pack_name}: gtpack=${doctor_version} manifest=${manifest_version}" >&2
     exit 1
   fi
-  if [ -n "${PACK_VERSION}" ] && [ "${doctor_version}" != "${PACK_VERSION}" ]; then
-    echo "Pack version mismatch for ${pack_name}: gtpack=${doctor_version} expected=${PACK_VERSION}" >&2
+  if [ -n "${resolved_version}" ] && [ "${doctor_version}" != "${resolved_version}" ]; then
+    echo "Pack version mismatch for ${pack_name}: gtpack=${doctor_version} expected=${resolved_version}" >&2
     exit 1
   fi
 
   python3 "${ROOT_DIR}/tools/validate_pack_fixtures.py"
 
-  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:${PACK_VERSION}"
+  oci_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:${resolved_version}"
   latest_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:latest"
   stable_ref="${OCI_REGISTRY}/${OCI_ORG}/${OCI_REPO}/messaging/${pack_name}:stable"
   # Compute local content digest (used for dry-run and lockfile regardless of push).
@@ -805,7 +835,7 @@ PY
         --artifact-type "${MEDIA_TYPE}" \
         --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
         --annotation "org.opencontainers.image.revision=${git_sha}" \
-        --annotation "org.opencontainers.image.version=${PACK_VERSION}" \
+        --annotation "org.opencontainers.image.version=${resolved_version}" \
         --annotation "org.opencontainers.image.title=${pack_title}" \
         --annotation "org.opencontainers.image.description=${pack_desc}" \
         "${oci_ref}" \
@@ -818,7 +848,7 @@ PY
           --artifact-type "${MEDIA_TYPE}" \
           --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
           --annotation "org.opencontainers.image.revision=${git_sha}" \
-          --annotation "org.opencontainers.image.version=${PACK_VERSION}" \
+          --annotation "org.opencontainers.image.version=${resolved_version}" \
           --annotation "org.opencontainers.image.title=${pack_title}" \
           --annotation "org.opencontainers.image.description=${pack_desc}" \
           "${latest_ref}" \
@@ -831,7 +861,7 @@ PY
           --artifact-type "${MEDIA_TYPE}" \
           --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-unknown}" \
           --annotation "org.opencontainers.image.revision=${git_sha}" \
-          --annotation "org.opencontainers.image.version=${PACK_VERSION}" \
+          --annotation "org.opencontainers.image.version=${resolved_version}" \
           --annotation "org.opencontainers.image.title=${pack_title}" \
           --annotation "org.opencontainers.image.description=${pack_desc}" \
           "${stable_ref}" \

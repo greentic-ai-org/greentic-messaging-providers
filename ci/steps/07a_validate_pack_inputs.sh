@@ -134,13 +134,10 @@ echo "== Sync packs from checked-in specs and downloaded component artifacts =="
 ALLOW_REMOTE_COMPONENT_FETCH=0 ./ci/steps/07_sync_packs.sh 2>&1 | tee "${LOG_PATH}"
 
 echo "== Early deterministic pack validation =="
-PACK_VERSION="${PACK_VERSION:-$(python3 - <<'PY'
-from pathlib import Path
-import tomllib
-data = tomllib.loads(Path("Cargo.toml").read_text())
-print(data.get("workspace", {}).get("package", {}).get("version", "0.0.0"))
-PY
-)}"
+# PACK_VERSION is an explicit override. Left unset, each pack resolves its own
+# version from ci/provider-matrix.json - never the workspace version.
+# See docs/release-policy.md and tools/resolve_pack_version.py.
+PACK_VERSION="${PACK_VERSION:-}"
 
 ALLOW_REMOTE_COMPONENT_FETCH=0 DRY_RUN=1 PACK_VERSION="${PACK_VERSION}" ./tools/build_packs_only.sh 2>&1 | tee -a "${LOG_PATH}"
 

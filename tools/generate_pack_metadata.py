@@ -236,7 +236,9 @@ def main() -> int:
                 for ext_name, ext in manifest["extensions"].items():
                     if not isinstance(ext, dict):
                         continue
-                    ext["version"] = pack_version
+                    # pack.yaml is authoritative: setup.actions carries a schema
+                    # version, not the release version.
+                    ext.setdefault("version", pack_version)
                     inline = ext.get("inline")
                     if not isinstance(inline, dict):
                         continue

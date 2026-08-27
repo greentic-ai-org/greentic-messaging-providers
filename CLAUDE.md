@@ -158,9 +158,9 @@ scripts/change_provider_version.sh slack 0.5.22   # preferred bump entrypoint
 `ci/provider-matrix.json` is also what `auto-publish-on-version-bump.yml` diffs — a
 bump anywhere else without touching the matrix publishes nothing.
 
-Do **not** run `tools/sync_packs.sh` or `ci/steps/07_sync_packs.sh` without
-`PACK_VERSION` set: they fall back to the workspace version and downbump every pack
-on disk. See Gotchas.
+`PACK_VERSION` is an explicit override. Left unset, every pack-stamping script
+resolves each pack's own version from the matrix via `tools/resolve_pack_version.py`,
+and a downgrade is refused unless `ALLOW_PACK_DOWNGRADE=1`.
 
 ## Adding/Modifying Provider Schemas
 
@@ -213,7 +213,7 @@ Before adding new core types or interfaces, check if they exist in shared Greent
 
 ## Gotchas
 
-- `ci/steps/07_sync_packs.sh` (delegates to `tools/sync_packs.sh`) stamps `PACK_VERSION` into pack manifests, and **falls back to the root `Cargo.toml` workspace version when `PACK_VERSION` is unset** — which downbumps every pack on disk. This fallback is legacy and contradicts `docs/release-policy.md`; always pass `PACK_VERSION`, or edit `pack.yaml` + `manifest.json` by hand for surgical pack-only changes. `ci/local_check.sh` carries a downstream "Restoring provider-specific pack versions" band-aid for this; `tools/build_packs.sh` does not.
+- `tools/sync_packs.sh` and `tools/publish_packs_oci.sh` still rewrite pack artifacts as a side effect of stamping (they re-copy component WASMs and can regress a pack's `public.config.schema.json` from a stale source). Versions themselves are safe now — each pack resolves its own — but check `git status` after running either.
 - Pack `components/` directories are enumerated by the external `greentic-pack update`/`components` CLI, which rewrites `pack.yaml` from whatever `*.wasm` files it finds. Never leave an undeclared `.wasm` in a pack's `components/` dir — that is how a stale duplicate component shipped in published webchat-gui packs. The scripted build path passes `--no-update`, so only out-of-band `greentic-pack` runs are affected.
 - Egress ops (`render_plan`, `encode`, `send_payload`) must be declared in each provider's `pack.yaml` + component manifest op allow-list, or egress fails at runtime with `op 'render_plan' is not declared` (fixed across 6 providers in PR #232).
 

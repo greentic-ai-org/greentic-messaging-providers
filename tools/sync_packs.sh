@@ -28,17 +28,14 @@ if [ -f "${ROOT_DIR}/.env" ]; then
   set +a
 fi
 
-if [ -z "${VERSION}" ]; then
-  VERSION="$(python3 - <<'PY'
-from pathlib import Path
-import tomllib
-data = tomllib.loads(Path("Cargo.toml").read_text())
-print(data.get("workspace", {}).get("package", {}).get("version", "0.0.0"))
-PY
-)"
+# VERSION is an explicit override only. When unset, each pack resolves its own
+# version from ci/provider-matrix.json. The workspace version is never a release
+# version - docs/release-policy.md.
+if [ -n "${VERSION}" ]; then
+  echo "Using version override: ${VERSION}"
+else
+  echo "Resolving each pack version from ci/provider-matrix.json"
 fi
-
-echo "Using version: ${VERSION}"
 
 pack_selected() {
   local pack_name="$1"
@@ -77,10 +74,41 @@ if [ ! -d "${TARGET_COMPONENTS}" ]; then
   "${ROOT_DIR}/tools/build_components.sh"
 fi
 
+assert_no_pack_downgrade() {
+  local dir="$1"
+  local next="$2"
+  local current
+  current="$(python3 "${ROOT_DIR}/tools/resolve_pack_version.py" "${dir}" --root "${ROOT_DIR}" --source pack-yaml 2>/dev/null || true)"
+  [ -n "${current}" ] || return 0
+  [ "${current}" != "${next}" ] || return 0
+  if [ "${ALLOW_PACK_DOWNGRADE:-0}" = "1" ]; then
+    return 0
+  fi
+  # `if !` keeps set -e from killing the script before the message is printed.
+  if ! python3 - "${current}" "${next}" <<'PYVER'
+import sys
+
+def parts(v):
+    return [int(x) if x.isdigit() else x for x in v.replace("-", ".").split(".")]
+
+current, nxt = sys.argv[1], sys.argv[2]
+try:
+    lower = parts(nxt) < parts(current)
+except TypeError:
+    lower = False
+sys.exit(1 if lower else 0)
+PYVER
+  then
+    echo "Refusing to stamp $(basename "${dir}") down from ${current} to ${next}." >&2
+    echo "Set PACK_VERSION explicitly, or ALLOW_PACK_DOWNGRADE=1 if this is intended." >&2
+    exit 1
+  fi
+}
+
 update_pack_yaml_version() {
   local yaml_path="$1"
   [ -f "${yaml_path}" ] || return 0
-  python3 - "$yaml_path" "$VERSION" <<'PY'
+  python3 - "$yaml_path" "$resolved_version" <<'PY'
 from pathlib import Path
 import sys
 
@@ -127,7 +155,7 @@ stamp_manifest_version() {
   local pack_yaml_path="${2:-}"
   local comp_id="${3:-}"
   [ -f "${manifest_path}" ] || return 0
-  python3 - "$manifest_path" "$VERSION" "$pack_yaml_path" "$comp_id" <<'PY'
+  python3 - "$manifest_path" "$resolved_version" "$pack_yaml_path" "$comp_id" <<'PY'
 from pathlib import Path
 import json
 import sys
@@ -414,14 +442,19 @@ for dir in "${PACKS_DIR}"/*; do
     continue
   fi
 
-  echo "Syncing ${pack_name}..."
+  if ! resolved_version="$(python3 "${ROOT_DIR}/tools/resolve_pack_version.py" "${dir}" --root "${ROOT_DIR}" --override "${VERSION}")"; then
+    exit 1
+  fi
+  assert_no_pack_downgrade "${dir}" "${resolved_version}"
+
+  echo "Syncing ${pack_name} at ${resolved_version}..."
   update_pack_yaml_version "${dir}/pack.yaml"
   python3 "${ROOT_DIR}/tools/normalize_pack_components.py" "${dir}/pack.yaml"
   ensure_helper_components_in_pack_yaml "${dir}/pack.yaml"
   python3 "${ROOT_DIR}/tools/generate_pack_metadata.py" \
     --pack-dir "${dir}" \
     --components-dir "${ROOT_DIR}/components" \
-    --version "${VERSION}" \
+    --version "${resolved_version}" \
     --secrets-out "${dir}/.secret_requirements.json" \
     --include-capabilities-cache
   ensure_secret_requirements_asset "${dir}" "${dir}/.secret_requirements.json"
@@ -507,7 +540,7 @@ for dir in "${PACKS_DIR}"/*; do
     [ -z "${comp}" ] && continue
     stamp_manifest_version "${dir}/components/${comp}/component.manifest.json" "${dir}/pack.yaml" "${comp}"
   done < <(jq -r '(.component_sources // .components // [])[] | if type=="string" then . else (.id // "") end' "${dir}/pack.manifest.json")
-  python3 "${ROOT_DIR}/tools/stamp_pack_component_manifests.py" "${dir}" "${VERSION}"
+  python3 "${ROOT_DIR}/tools/stamp_pack_component_manifests.py" "${dir}" "${resolved_version}"
 
   while IFS= read -r schema; do
     [ -z "${schema}" ] && continue
