@@ -259,6 +259,7 @@ jobs:
         if: ${{ needs.resolve-provider.outputs.components_csv != '' }}
         env:
           PACK_FILTER: ${{ needs.resolve-provider.outputs.pack }}
+          PACK_VERSION: ${{ needs.resolve-provider.outputs.version }}
         run: ./ci/steps/07_sync_packs.sh
 
       - name: Build and validate selected pack

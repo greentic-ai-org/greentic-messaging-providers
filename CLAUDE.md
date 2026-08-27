@@ -110,7 +110,7 @@ Each `components/messaging-provider-*` follows this pattern:
   - Provider-specific sub-modules as needed: Slack `blockkit/`, Telegram `ac_to_html.rs`/`ac_inputs.rs`/`ac_helpers.rs`, WebChat `oauth.rs`/`envelope.rs`, etc.
 - `src/ac_converter.rs` — (WhatsApp, Email) Adaptive Card → provider-native converter + `AdaptiveCardConverter` trait impl
 - `src/config.rs` — Config parsing, validation, secret loading
-- `component.manifest.json` — Version and metadata (must match workspace version)
+- `component.manifest.json` — Version and metadata (must match that provider's matrix version)
 - `Cargo.toml` — `[lib] crate-type = ["cdylib"]`
 
 **Capability matrix source of truth:** `crates/greentic-messaging-renderer/src/capabilities.rs` — every provider's `render_plan` calls `greentic_messaging_renderer::capabilities_for(name)` instead of hardcoding `PlannerCapabilities` literals. Adding a new provider requires only registering its capabilities there.
@@ -141,12 +141,26 @@ Four ingress components (`messaging-ingress-{slack,teams,telegram,whatsapp}`) ha
 
 ## Version Management
 
-The workspace version in root `Cargo.toml` must stay in sync with:
-- All `component.manifest.json` files (55 files across `components/` and `packs/`)
-- All `pack.yaml` files (11 files in `packs/`)
-- All `pack.manifest.json` files (11 files in `packs/`)
+Each provider carries its own release version. The workspace version in root
+`Cargo.toml` is **not** the release version and must not be propagated into packs —
+see `docs/release-policy.md`.
 
-Run `./tools/sync_packs.sh` to synchronize versions from `Cargo.toml` to all manifests and pack files. After syncing, update `packs.lock.json` with `python3 tools/update_packs_lock.py`.
+Source of truth per provider: `ci/provider-matrix.json` `providers.<name>.version`.
+It must equal that provider's `packs/<pack>/pack.yaml`, `pack.manifest.json`, and
+component `Cargo.toml` versions.
+
+```bash
+python3 tools/provider_versions.py list           # current versions
+python3 tools/provider_versions.py validate       # all six declarations agree
+scripts/change_provider_version.sh slack 0.5.22   # preferred bump entrypoint
+```
+
+`ci/provider-matrix.json` is also what `auto-publish-on-version-bump.yml` diffs — a
+bump anywhere else without touching the matrix publishes nothing.
+
+Do **not** run `tools/sync_packs.sh` or `ci/steps/07_sync_packs.sh` without
+`PACK_VERSION` set: they fall back to the workspace version and downbump every pack
+on disk. See Gotchas.
 
 ## Adding/Modifying Provider Schemas
 
@@ -199,7 +213,8 @@ Before adding new core types or interfaces, check if they exist in shared Greent
 
 ## Gotchas
 
-- `ci/steps/07_sync_packs.sh` (delegates to `tools/sync_packs.sh`) syncs versions from `Cargo.toml` into pack manifests and can DOWNBUMP pack versions. For surgical pack-only changes, edit `pack.yaml` + `manifest.json` by hand instead of running sync_packs.
+- `ci/steps/07_sync_packs.sh` (delegates to `tools/sync_packs.sh`) stamps `PACK_VERSION` into pack manifests, and **falls back to the root `Cargo.toml` workspace version when `PACK_VERSION` is unset** — which downbumps every pack on disk. This fallback is legacy and contradicts `docs/release-policy.md`; always pass `PACK_VERSION`, or edit `pack.yaml` + `manifest.json` by hand for surgical pack-only changes. `ci/local_check.sh` carries a downstream "Restoring provider-specific pack versions" band-aid for this; `tools/build_packs.sh` does not.
+- Pack `components/` directories are enumerated by the external `greentic-pack update`/`components` CLI, which rewrites `pack.yaml` from whatever `*.wasm` files it finds. Never leave an undeclared `.wasm` in a pack's `components/` dir — that is how a stale duplicate component shipped in published webchat-gui packs. The scripted build path passes `--no-update`, so only out-of-band `greentic-pack` runs are affected.
 - Egress ops (`render_plan`, `encode`, `send_payload`) must be declared in each provider's `pack.yaml` + component manifest op allow-list, or egress fails at runtime with `op 'render_plan' is not declared` (fixed across 6 providers in PR #232).
 
 ## Git Conventions
