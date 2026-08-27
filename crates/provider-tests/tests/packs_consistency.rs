@@ -427,10 +427,12 @@ fn required_setup_questions_do_not_use_placeholder_without_default() -> Result<(
 }
 
 fn assert_unique_component_ids(component_ids: &[&str], context: &str) {
+    // Compare on a `-`/`_`-insensitive key: spelling variants of one id are the
+    // same component, and shipping both put a stale binary in published packs.
     let mut seen = HashSet::new();
     let mut duplicates = Vec::new();
     for component_id in component_ids {
-        if !seen.insert(*component_id) {
+        if !seen.insert(component_id.replace('_', "-")) {
             duplicates.push(*component_id);
         }
     }
