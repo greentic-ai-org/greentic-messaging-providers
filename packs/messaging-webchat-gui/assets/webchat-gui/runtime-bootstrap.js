@@ -141,6 +141,14 @@ console.log('[runtime-bootstrap] loaded');
     return window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant);
   }
 
+  // One tenant can host several bundles, so a tenant-scoped route answers for
+  // whichever bundle the server picks rather than for this deployment.
+  function bundleScopedBackendBase(tenant) {
+    var base = backendBase(tenant);
+    if (bundleId) base += '/' + encodeURIComponent(bundleId);
+    return base;
+  }
+
   function normalizeAdaptiveCardWidth(value) {
     var raw = value == null ? '' : String(value).trim();
     if (!raw) return '70%';
@@ -1078,7 +1086,7 @@ console.log('[runtime-bootstrap] loaded');
    * Blocks SPA rendering until auth is resolved.
    */
   function checkOAuthGate() {
-    var authConfigUrl = sameOriginUrl(backendBase(tenant) + '/auth/config');
+    var authConfigUrl = sameOriginUrl(bundleScopedBackendBase(tenant) + '/auth/config');
     // Backend auth config URL is constrained to the current origin.
     // foxguard: ignore[js/no-ssrf]
     return fetch(authConfigUrl)
@@ -1260,15 +1268,12 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function directLineTokenUrl() {
-    var base = backendBase(tenant);
-    if (bundleId) base += '/' + encodeURIComponent(bundleId);
-    return base + '/token?env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
+    return bundleScopedBackendBase(tenant) +
+      '/token?env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
   }
 
   function directLineDomain() {
-    var base = backendBase(tenant);
-    if (bundleId) base += '/' + encodeURIComponent(bundleId);
-    return base + '/v3/directline';
+    return bundleScopedBackendBase(tenant) + '/v3/directline';
   }
 
   function directLineIdentityPart() {
