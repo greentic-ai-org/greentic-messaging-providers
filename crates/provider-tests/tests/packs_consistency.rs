@@ -774,3 +774,81 @@ fn egress_ops_declared_when_component_implements_them() -> Result<()> {
     }
     Ok(())
 }
+
+fn contains_bytes(haystack: &[u8], needle: &str) -> bool {
+    let needle = needle.as_bytes();
+    haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// A pack's checked-in WASM must know every setup question the current build knows.
+///
+/// Bundles built from a repo checkout ship these binaries verbatim. When one lags the
+/// source, the setup GUI silently renders an older question set — a shipped webchat-gui
+/// pack was two months behind and dropped the whole Greentic SSO group.
+///
+/// Questions absent from both are pack-only additions in setup.yaml, so they need no
+/// allowlist. Skipped when components have not been built.
+#[test]
+fn pack_wasms_are_not_behind_the_current_build() -> Result<()> {
+    let root = workspace_root();
+    let built_dir = root.join("target/components");
+    if !built_dir.is_dir() {
+        eprintln!("skipping: {} not built", built_dir.display());
+        return Ok(());
+    }
+
+    let mut checked = 0usize;
+    for entry in fs::read_dir(root.join("packs"))? {
+        let pack_dir = entry?.path();
+        if !pack_dir.is_dir() {
+            continue;
+        }
+        let questions = setup_question_names(&pack_dir)?;
+        if questions.is_empty() {
+            continue;
+        }
+        let pack_name = pack_dir.file_name().unwrap().to_string_lossy().to_string();
+        let components = pack_dir.join("components");
+        if !components.is_dir() {
+            continue;
+        }
+
+        for component in fs::read_dir(&components)? {
+            let path = component?.path();
+            let Some(id) = path.file_stem().map(|s| s.to_string_lossy().to_string()) else {
+                continue;
+            };
+            if path.extension().and_then(|e| e.to_str()) != Some("wasm") {
+                continue;
+            }
+            let built = built_dir.join(format!("{id}.wasm"));
+            if !built.exists() {
+                continue;
+            }
+
+            let built_bytes = fs::read(&built)?;
+            // The nested copy is the qa_ref target the setup GUI reads.
+            let nested = components.join(&id).join("component.wasm");
+            for candidate in [&path, &nested] {
+                if !candidate.exists() {
+                    continue;
+                }
+                let packed_bytes = fs::read(candidate)?;
+                checked += 1;
+                for question in &questions {
+                    if !contains_bytes(&built_bytes, question) {
+                        continue;
+                    }
+                    assert!(
+                        contains_bytes(&packed_bytes, question),
+                        "{pack_name}: {} is behind the current build — it does not know \
+                         setup question \"{question}\". Rebuild components and re-copy.",
+                        candidate.strip_prefix(&root).unwrap_or(candidate).display(),
+                    );
+                }
+            }
+        }
+    }
+    assert!(checked > 0, "no pack WASMs were checked");
+    Ok(())
+}
