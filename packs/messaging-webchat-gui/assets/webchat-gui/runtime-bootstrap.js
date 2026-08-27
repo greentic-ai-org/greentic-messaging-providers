@@ -1092,6 +1092,17 @@ console.log('[runtime-bootstrap] loaded');
         return response.json();
       })
       .then(function (authConfig) {
+        if (authConfig && authConfig.enabled && (authConfig.providers || []).length) {
+          return authConfig;
+        }
+        // /auth/config is tenant-scoped while a tenant can host several bundles,
+        // so a 200 saying "no providers" may just be a different bundle answering.
+        // The tenant config still knows what this deployment was set up with.
+        return loadAuthFromTenantConfig().then(function (fallback) {
+          return fallback || authConfig || { enabled: false };
+        });
+      })
+      .then(function (authConfig) {
         if (!authConfig) return;
         return applyAuthConfig(authConfig);
       })
@@ -1175,11 +1186,19 @@ console.log('[runtime-bootstrap] loaded');
         }
 
         if (authConfig.source === 'tenant-config') {
-          // The React app renders the skin-aware login page from tenant
-          // config. Do not stack the legacy runtime OAuth overlay on top.
-          window.__OAUTH_SHOW_LOGOUT__ = true;
-          tryInjectLogout();
-          return;
+          var hasGreentic = (authConfig.providers || []).some(function (p) {
+            return p.type === 'greentic';
+          });
+          if (!hasGreentic) {
+            // The React app renders the skin-aware login page from tenant
+            // config. Do not stack the legacy runtime OAuth overlay on top.
+            window.__OAUTH_SHOW_LOGOUT__ = true;
+            tryInjectLogout();
+            return;
+          }
+          // The React login page has no Greentic SSO SDK integration — it routes
+          // every non-dummy provider through the generic OIDC redirect, which
+          // throws on a greentic entry. The runtime login owns this case.
         }
 
         // Step 1: Check if returning from OAuth callback (?code=...&state=...)
