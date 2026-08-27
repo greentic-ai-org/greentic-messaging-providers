@@ -23,7 +23,7 @@
         "id": "greentic",
         "label": "Greentic SSO",
         "type": "greentic",
-        "enabled": true,
+        "enabled": false,
         "clientId": "webchat-gui",
         "scope": "openid profile email greentic.webchat"
       }
