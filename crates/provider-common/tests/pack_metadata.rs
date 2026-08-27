@@ -424,6 +424,64 @@ fn slack_signing_secret_is_registered_not_generated() -> Result<()> {
     Ok(())
 }
 
+// packs_lock_has_digest only pins messaging-telegram, so a rebuilt pack committed
+// without rerunning tools/update_packs_lock.py went unnoticed for every other pack.
+#[test]
+fn packs_lock_digests_match_committed_artifacts() -> Result<()> {
+    use sha2::{Digest, Sha256};
+
+    let root = workspace_root();
+    let lock_path = root.join("packs.lock.json");
+    if !lock_path.exists() {
+        eprintln!("Skipping: {} not found", lock_path.display());
+        return Ok(());
+    }
+
+    let lock_json: Value = serde_json::from_slice(&std::fs::read(&lock_path)?)?;
+    let packs = lock_json
+        .get("packs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("packs.lock.json missing packs array"))?;
+
+    let mut stale = Vec::new();
+    for entry in packs {
+        let name = entry
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("packs.lock.json entry missing name"))?;
+        let file = entry
+            .get("file")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("{name}: packs.lock.json entry missing file"))?;
+        let artifact = root.join(file);
+        // A pack published from a workflow leaves no artifact in the tree to compare.
+        if !artifact.exists() {
+            continue;
+        }
+        let digest = entry
+            .get("digest")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("{name}: packs.lock.json entry missing digest"))?;
+        let mut hasher = Sha256::new();
+        hasher.update(std::fs::read(&artifact)?);
+        let actual = format!("sha256:{}", to_hex(hasher.finalize()));
+        if actual != digest {
+            stale.push(format!(
+                "{name}: lock says {digest}, {file} hashes to {actual}"
+            ));
+        }
+    }
+
+    if !stale.is_empty() {
+        return Err(anyhow!(
+            "packs.lock.json is stale for {} pack(s) — rerun `python3 tools/update_packs_lock.py`:\n  {}",
+            stale.len(),
+            stale.join("\n  ")
+        ));
+    }
+    Ok(())
+}
+
 #[test]
 fn packs_lock_has_digest() -> Result<()> {
     use sha2::{Digest, Sha256};
