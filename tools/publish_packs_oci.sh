@@ -102,7 +102,7 @@ def parse(ver: str):
     for token in ver.split():
         if token[0].isdigit():
             parts = token.split(".")
-            return tuple(int(p) for p in parts[:3])
+            return tuple(int(p.split("-")[0]) for p in parts[:3])
     return (0, 0, 0)
 current = parse(sys.argv[1])
 required = parse(sys.argv[2])
