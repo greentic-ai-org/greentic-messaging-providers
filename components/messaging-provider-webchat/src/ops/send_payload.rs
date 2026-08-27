@@ -14,8 +14,7 @@ use provider_common::redact;
 use provider_common::telemetry::{self, Field, Level, field};
 use serde_json::{Value, json};
 
-const PROVIDER_TYPE: &str = "messaging.webchat";
-
+use crate::PROVIDER_TYPE;
 use crate::directline::HostStateStore;
 use crate::directline::jwt::DirectLineContext;
 use crate::directline::state::{StoredActivity, conversation_key};
@@ -42,7 +41,7 @@ pub(crate) fn send_payload(input_json: &[u8]) -> Vec<u8> {
             return send_payload_error(&format!("invalid send_payload input: {err}"), false);
         }
     };
-    if !send_in.provider_type.starts_with("messaging.webchat") {
+    if send_in.provider_type != PROVIDER_TYPE {
         return send_payload_error("provider type mismatch", false);
     }
     let payload_bytes = match general_purpose::STANDARD.decode(&send_in.payload.body_b64) {
@@ -532,7 +531,60 @@ fn sanitize_outbound_channel_data(value: &Value) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use greentic_types::messaging::universal_dto::ProviderPayloadV1;
     use serde_json::json;
+    use std::collections::BTreeMap;
+
+    fn parse_result(bytes: Vec<u8>) -> Value {
+        serde_json::from_slice(&bytes).expect("json result")
+    }
+
+    fn send_payload_input(provider_type: &str, body_b64: &str) -> Vec<u8> {
+        let input = SendPayloadInV1 {
+            provider_type: provider_type.to_string(),
+            tenant_id: None,
+            auth_user: None,
+            payload: ProviderPayloadV1 {
+                content_type: "application/json".to_string(),
+                body_b64: body_b64.to_string(),
+                metadata: BTreeMap::new(),
+            },
+        };
+        serde_json::to_vec(&input).expect("input")
+    }
+
+    // This file is #[path]-included by every webchat variant crate, so these two
+    // run once per variant and pin each one's own PROVIDER_TYPE past the guard.
+    #[test]
+    fn send_payload_accepts_this_variant_provider_type() {
+        let body = parse_result(send_payload(&send_payload_input(
+            PROVIDER_TYPE,
+            "not base64",
+        )));
+
+        assert_eq!(body["ok"], false);
+        assert_ne!(
+            body["message"], "provider type mismatch",
+            "{PROVIDER_TYPE} must clear its own guard"
+        );
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("payload decode failed")
+        );
+    }
+
+    #[test]
+    fn send_payload_rejects_foreign_provider_type() {
+        let body = parse_result(send_payload(&send_payload_input(
+            "messaging.slack.api",
+            "not base64",
+        )));
+
+        assert_eq!(body["ok"], false);
+        assert_eq!(body["message"], "provider type mismatch");
+    }
 
     #[test]
     fn build_bot_activity_raw_plain_text_only() {
