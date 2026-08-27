@@ -2291,7 +2291,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-3aigent-gui"
-version = "0.5.21"
+version = "0.5.22"
 dependencies = [
  "base64",
  "chrono",
@@ -2400,7 +2400,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-webchat-gui"
-version = "0.5.21"
+version = "0.5.22"
 dependencies = [
  "base64",
  "chrono",
