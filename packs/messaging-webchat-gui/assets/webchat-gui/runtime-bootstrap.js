@@ -1081,7 +1081,7 @@ console.log('[runtime-bootstrap] loaded');
     var authConfigUrl = sameOriginUrl(backendBase(tenant) + '/auth/config');
     // Backend auth config URL is constrained to the current origin.
     // foxguard: ignore[js/no-ssrf]
-    fetch(authConfigUrl)
+    return fetch(authConfigUrl)
       .then(function (response) {
         if (!response.ok) {
           console.log('[oauth] auth/config not available, falling back to tenant config');
@@ -1626,7 +1626,19 @@ console.log('[runtime-bootstrap] loaded');
           payload.webchat.style_options = payload.webchat.style_options || {};
           payload.webchat.style_options.hideSendBox = true;
         }
-        console.log('[bootstrap] tenant config patched:', tenantId, 'auth providers:', (payload.auth && payload.auth.providers || []).length);
+        // The SPA gates the chat on this file alone. The backend owns whether
+        // auth is required, so a listed provider must not gate a deployment
+        // whose oauth_enabled is false.
+        await Promise.resolve(window.__OAUTH_READY__).catch(function () {});
+        if (window.__OAUTH_CHECKED__ &&
+            window.__OAUTH_CONFIG__ &&
+            window.__OAUTH_CONFIG__.enabled === false &&
+            payload.auth && Array.isArray(payload.auth.providers)) {
+          payload.auth.providers = payload.auth.providers.map(function (provider) {
+            return Object.assign({}, provider, { enabled: false });
+          });
+        }
+        console.log('[bootstrap] tenant config patched:', tenantId, 'auth providers:', (payload.auth && payload.auth.providers || []).filter(function (p) { return p.enabled; }).length);
         return new Response(JSON.stringify(payload), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
@@ -1766,7 +1778,7 @@ console.log('[runtime-bootstrap] loaded');
   };
 
   // Run OAuth check AFTER fetch interceptor is installed
-  checkOAuthGate();
+  window.__OAUTH_READY__ = checkOAuthGate();
 
   // ---------------------------------------------------------------------------
   // Locale picker

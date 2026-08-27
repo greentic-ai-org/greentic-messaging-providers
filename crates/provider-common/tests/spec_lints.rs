@@ -115,6 +115,49 @@ fn required_setup_questions_are_not_gated_on_visibility() -> Result<()> {
     Ok(())
 }
 
+// The webchat SPA gates the chat on the tenant file alone — it never consults
+// the backend's /auth/config — so an enabled provider in the default tenant
+// turns every unconfigured deployment into a login wall.
+#[test]
+fn default_tenant_ships_no_enabled_auth_provider() -> Result<()> {
+    let root = workspace_root();
+    let pattern = root
+        .join("packs")
+        .join("*/assets/webchat-gui/config/tenants/default.json");
+    let mut found = false;
+    for entry in glob(pattern.to_str().unwrap())? {
+        let path = entry?;
+        let config: JsonValue = serde_json::from_slice(&fs::read(&path)?)?;
+        found = true;
+        let providers = config
+            .get("auth")
+            .and_then(|auth| auth.get("providers"))
+            .and_then(|providers| providers.as_array());
+        let Some(providers) = providers else {
+            continue;
+        };
+        for provider in providers {
+            if provider.get("enabled").and_then(JsonValue::as_bool) == Some(true) {
+                return Err(anyhow!(
+                    "{}: auth provider '{}' is enabled by default — a tenant that has not \
+                     opted into OAuth would render a login wall instead of the chat",
+                    path.display(),
+                    provider
+                        .get("id")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or("<unnamed>")
+                ));
+            }
+        }
+    }
+    if !found {
+        return Err(anyhow!(
+            "no webchat-gui default tenant config found under packs/"
+        ));
+    }
+    Ok(())
+}
+
 #[test]
 fn specs_parse() -> Result<()> {
     let root = workspace_root();
