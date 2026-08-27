@@ -65,8 +65,8 @@ questions:
   - name: oauth_greentic_issuer
     title: Greentic SSO issuer URL
     kind: string
-    required: true
-    help: "Issuer base URL, e.g. https://acme.greentic-id.com. Must be an https:// URL — required when Greentic SSO is enabled, since a missing issuer means every chat-token mint is rejected."
+    required: false
+    help: "Issuer base URL, e.g. https://acme.greentic-id.com. Must be an https:// URL — setup rejects the config when Greentic SSO is enabled without it, since a missing issuer means every chat-token mint is rejected."
     group: OAuth - Greentic SSO
     visible_if:
       field: oauth_enable_greentic

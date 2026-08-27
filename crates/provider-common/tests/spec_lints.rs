@@ -73,6 +73,48 @@ fn non_provider_packs_ship_no_setup_spec() -> Result<()> {
     Ok(())
 }
 
+// `gtc setup --non-interactive` resolves an unanswered `visible_if` gate as
+// visible, so a gated `required: true` question is unconditionally required for
+// every answers file that omits the gate field. Enforce such fields at apply
+// time instead.
+#[test]
+fn required_setup_questions_are_not_gated_on_visibility() -> Result<()> {
+    let root = workspace_root();
+    let pattern = root.join("packs").join("*/assets/setup.yaml");
+    let mut found = false;
+    for entry in glob(pattern.to_str().unwrap())? {
+        let path = entry?;
+        let spec: Value = serde_yaml_bw::from_str(&fs::read_to_string(&path)?)?;
+        let Some(questions) = spec.get("questions").and_then(Value::as_sequence) else {
+            continue;
+        };
+        found = true;
+        for question in questions {
+            let required = question
+                .get("required")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if required && question.get("visible_if").is_some() {
+                return Err(anyhow!(
+                    "{}: question '{}' is both required and gated by visible_if — \
+                     non-interactive setup fails whenever the gate field is unanswered",
+                    path.display(),
+                    question
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("<unnamed>")
+                ));
+            }
+        }
+    }
+    if !found {
+        return Err(anyhow!(
+            "no setup.yaml files with questions found under packs/"
+        ));
+    }
+    Ok(())
+}
+
 #[test]
 fn specs_parse() -> Result<()> {
     let root = workspace_root();
