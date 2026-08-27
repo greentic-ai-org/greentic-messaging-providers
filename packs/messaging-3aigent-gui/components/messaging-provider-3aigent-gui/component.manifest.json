@@ -1,8 +1,8 @@
 {
   "id": "messaging-provider-3aigent-gui",
   "name": "messaging-provider-3aigent-gui",
-  "version": "0.5.1",
-  "world": "greentic:component/component-v0-v6-v0@0.6.1",
+  "version": "0.5.16",
+  "world": "root:component/root",
   "description": "Provider-core 3AIgent GUI messaging provider (Direct Line backend + hosted GUI metadata, 3AIgent skin, SSO on by default).",
   "profiles": {
     "default": "default",
