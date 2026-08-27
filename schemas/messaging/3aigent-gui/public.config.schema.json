@@ -65,6 +65,28 @@
     "oauth_providers": {
       "type": "string",
       "description": "JSON array of OAuth provider configurations, composed from the per-provider setup answers."
+    },
+    "oauth_greentic_issuer": {
+      "type": "string",
+      "format": "uri",
+      "description": "Issuer base URL for the Greentic identity provider."
+    },
+    "oauth_greentic_client_id": {
+      "type": "string",
+      "description": "Registered public OIDC client ID for the Greentic identity provider."
+    },
+    "oidc_issuer": {
+      "type": "string",
+      "format": "uri",
+      "description": "Pinned OIDC issuer for Direct Line chat-token verification."
+    },
+    "oidc_audience": {
+      "type": "string",
+      "description": "Expected aud claim on the access token."
+    },
+    "oidc_required_scope": {
+      "type": "string",
+      "description": "Scope the access token must carry."
     }
   }
 }
