@@ -2245,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-ingress-slack"
-version = "0.5.18"
+version = "0.5.22"
 dependencies = [
  "greentic-telemetry",
  "greentic-types 1.1.4",
@@ -2340,7 +2340,7 @@ dependencies = [
 
 [[package]]
 name = "messaging-provider-slack"
-version = "0.5.18"
+version = "0.5.22"
 dependencies = [
  "base64",
  "greentic-messaging-provider-common",
@@ -3470,7 +3470,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slack"
-version = "0.5.18"
+version = "0.5.22"
 dependencies = [
  "greentic-messaging-provider-common",
  "greentic-telemetry",
