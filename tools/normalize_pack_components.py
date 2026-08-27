@@ -16,8 +16,14 @@ from typing import Any
 import yaml
 
 
-def component_score(component: dict[str, Any]) -> tuple[int, int, int]:
+def dedupe_key(comp_id: Any) -> str:
+    """Collapse `-`/`_` spellings so variants of one id compete instead of both surviving."""
+    return str(comp_id).replace("_", "-")
+
+
+def component_score(component: dict[str, Any]) -> tuple[int, int, int, int]:
     comp_id = str(component.get("id") or "")
+    id_score = 0 if "_" in comp_id else 1
     wasm = str(component.get("wasm") or "")
     canonical = f"components/{comp_id}.wasm"
 
@@ -34,7 +40,7 @@ def component_score(component: dict[str, Any]) -> tuple[int, int, int]:
         for key in ("world", "supports", "profiles", "capabilities", "oci", "manifest")
         if key in component
     )
-    return (path_score, metadata_score, len(wasm))
+    return (id_score, path_score, metadata_score, len(wasm))
 
 
 def normalize_components(components: Any, version: str | None = None) -> tuple[Any, bool]:
@@ -54,20 +60,20 @@ def normalize_components(components: Any, version: str | None = None) -> tuple[A
             anonymous.append((index, component))
             continue
 
-        previous = selected.get(str(comp_id))
+        previous = selected.get(dedupe_key(comp_id))
         if version and component.get("version") != version:
             component = dict(component)
             component["version"] = version
             changed = True
 
         if previous is None:
-            selected[str(comp_id)] = (index, component)
+            selected[dedupe_key(comp_id)] = (index, component)
             continue
 
         changed = True
         _, previous_component = previous
         if component_score(component) > component_score(previous_component):
-            selected[str(comp_id)] = (index, component)
+            selected[dedupe_key(comp_id)] = (index, component)
 
     if not changed:
         return components, False
