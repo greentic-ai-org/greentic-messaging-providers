@@ -15,13 +15,10 @@ fi
 # selection. Namespace resolution is handled in tools/sync_packs.sh via
 # TEMPLATES_NAMESPACE/GHCR_NAMESPACE/OCI_ORG.
 
-PACK_VERSION="${PACK_VERSION:-$(python3 - <<'PY'
-from pathlib import Path
-import tomllib
-data = tomllib.loads(Path("Cargo.toml").read_text())
-print(data.get("workspace", {}).get("package", {}).get("version", "0.0.0"))
-PY
-)}"
+# PACK_VERSION is an explicit override. Left unset, each pack resolves its own
+# version from ci/provider-matrix.json - never the workspace version.
+# See docs/release-policy.md and tools/resolve_pack_version.py.
+PACK_VERSION="${PACK_VERSION:-}"
 export PACK_VERSION
 
 "${ROOT_DIR}/ci/lib/stage_local_components.sh"
