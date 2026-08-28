@@ -451,6 +451,23 @@ mod tests {
         }
     }
 
+    // An unanswered gate resolves as visible in non-interactive setup, so a
+    // required question behind skip_if becomes unconditionally mandatory.
+    #[test]
+    fn qa_spec_has_no_required_question_gated_by_skip_if() {
+        use bindings::exports::greentic::component::qa::Mode;
+
+        for mode in [Mode::Default, Mode::Setup, Mode::Upgrade, Mode::Remove] {
+            for question in build_qa_spec(mode).questions {
+                assert!(
+                    !(question.required && question.skip_if.is_some()),
+                    "question '{}' is both required and gated by skip_if",
+                    question.id
+                );
+            }
+        }
+    }
+
     #[test]
     fn qa_default_asks_required_minimum() {
         use bindings::exports::greentic::component::qa::Mode;

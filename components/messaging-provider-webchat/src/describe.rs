@@ -284,11 +284,14 @@ fn oauth_questions() -> Vec<QaQuestionSpec> {
             "webchat.qa.oauth.greentic.enable.help",
             skip_unless_oauth(),
         ),
+        // Not required here: validate_config_out enforces the https:// issuer
+        // when Greentic SSO is on, and a gated required question breaks
+        // non-interactive setup.
         oauth_question(
             "oauth_greentic_issuer",
             "webchat.qa.oauth.greentic.issuer",
             "webchat.qa.oauth.greentic.issuer.help",
-            true,
+            false,
             skip_unless_provider("oauth_enable_greentic"),
         ),
         oauth_question(
