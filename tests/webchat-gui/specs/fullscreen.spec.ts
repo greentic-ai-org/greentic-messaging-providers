@@ -84,6 +84,33 @@ test.describe('full-screen WebChat', () => {
     })).resolves.toBe(true);
   });
 
+  /**
+   * `/auth/config` is the only surface that reads the operator's own
+   * `oauth_enabled` answer. The static tenant JSON is a pack scaffold, and
+   * messaging-webchat-gui 0.5.17 shipped it carrying an ENABLED Greentic SSO
+   * provider nobody asked for.
+   *
+   * The SPA gates on `providers.filter(p => p.enabled).length > 0` and never
+   * consults `/auth/config` at all, so that scaffold locked every visitor of
+   * every deployment built from that pack behind a sign-in page -- while the
+   * answers said `oauth_enabled: false` and `/auth/config` agreed, and no
+   * layer reported a thing.
+   *
+   * The backend answer wins. It is what the operator actually configured.
+   */
+  test('a disabled auth config beats an enabled provider left in the tenant scaffold', async ({ page }) => {
+    const webchat = new WebChatGuiPage(page);
+    await webchat.installMockWebChat();
+    await page.goto('/v1/web/webchat/stale-auth/acme-customer-service/');
+
+    // Chat first: it is the assertion that WAITS. Asserting the absence of the
+    // login chrome ahead of it passes on an empty page and would go green
+    // against the very bug this pins.
+    await webchat.expectChatReady();
+    await expect(page.locator('[data-i18n-key="login.title"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /greentic sso/i })).toHaveCount(0);
+  });
+
   test('anonymous mode skips the login page', async ({ page }) => {
     const webchat = new WebChatGuiPage(page);
     await webchat.openFullscreen({ skin: 'default', nav: false, login: false });

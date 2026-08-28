@@ -62,6 +62,12 @@ function tenantScenario(tenant) {
     login: normalized.includes('login'),
     tenantConfigLogin: normalized.includes('tenant-config-login'),
     ssoLogin: normalized.includes('sso'),
+    // The shipped pack scaffold carries an enabled provider the operator never
+    // asked for, while /auth/config -- which DOES honour `oauth_enabled` --
+    // answers `{enabled:false}`. Every other scenario here either deletes the
+    // static auth block or takes /auth/config away, so this disagreement was
+    // the one shape nothing modelled.
+    staleAuthProvider: normalized.includes('stale-auth'),
   };
 }
 
@@ -91,6 +97,22 @@ function tenantConfig(tenant) {
     base.auth = {
       providers: [
         { id: 'guest', label: 'Continue as Guest', type: 'dummy', enabled: true },
+      ],
+    };
+  }
+  if (scenario.staleAuthProvider) {
+    // Verbatim from messaging-webchat-gui 0.5.17's own
+    // config/tenants/default.json.
+    base.auth = {
+      providers: [
+        {
+          id: 'greentic',
+          label: 'Greentic SSO',
+          type: 'greentic',
+          enabled: true,
+          clientId: 'webchat-gui',
+          scope: 'openid profile email greentic.webchat',
+        },
       ],
     };
   }
@@ -126,7 +148,18 @@ function appAssetPath(urlPath) {
   const match = urlPath.match(/^\/v1\/web\/webchat\/[^/]+\/?(.*)$/);
   if (!match) return null;
   const rest = match[1] || 'index.html';
-  return safeJoin(assetRoot, rest || 'index.html');
+  const direct = safeJoin(assetRoot, rest || 'index.html');
+  if (direct && fs.existsSync(direct)) return direct;
+  // gtc addresses one deployment of a tenant as
+  // /v1/web/webchat/{tenant}/{bundle_id}[/{flow_id}], and every asset the page
+  // pulls is relative to that, so the bundle segment prefixes them all. The
+  // pack's own runtime-bootstrap parses those segments off the page URL; the
+  // fixture served only the bundle-less shape, so nothing here could exercise
+  // a bundle-scoped deployment -- which is the shape gtc actually ships.
+  const segments = (rest || '').split('/').filter(Boolean);
+  if (segments.length === 0) return safeJoin(assetRoot, 'index.html');
+  const withoutBundle = segments.slice(1).join('/');
+  return safeJoin(assetRoot, withoutBundle || 'index.html');
 }
 
 const server = http.createServer((req, res) => {
@@ -201,20 +234,26 @@ const server = http.createServer((req, res) => {
     sendJson(res, 200, { activities: [], watermark: '0', id: 'mock-activity' });
     return;
   }
-  const tenantConfigMatch = urlPath.match(/^\/v1\/web\/webchat\/([^/]+)\/config\/tenants\/([^/]+)\.json$/);
+  // Every route below is reachable both bare and under a {bundle_id}, because
+  // gtc addresses one deployment of a tenant as /v1/web/webchat/{tenant}/{bundle_id}
+  // and the SPA resolves all of its own URLs relative to that. The optional group
+  // backtracks out of the way on the bare shape, so both spell the same route.
+  const tenantConfigMatch = urlPath.match(
+    /^\/v1\/web\/webchat\/([^/]+)(?:\/([^/]+))?\/config\/tenants\/([^/]+)\.json$/,
+  );
   if (tenantConfigMatch) {
-    if (tenantConfigMatch[2].includes('missing-config')) {
+    if (tenantConfigMatch[3].includes('missing-config')) {
       serveFile(res, path.join(assetRoot, 'index.html'));
       return;
     }
-    sendJson(res, 200, tenantConfig(tenantConfigMatch[2]));
+    sendJson(res, 200, tenantConfig(tenantConfigMatch[3]));
     return;
   }
-  if (/^\/v1\/web\/webchat\/[^/]+\/i18n\/_manifest\.json$/.test(urlPath)) {
+  if (/^\/v1\/web\/webchat\/[^/]+(?:\/[^/]+)?\/i18n\/_manifest\.json$/.test(urlPath)) {
     sendJson(res, 200, { locales: ['en'] });
     return;
   }
-  if (/^\/v1\/web\/webchat\/[^/]+\/i18n\/en-US\.json$/.test(urlPath)) {
+  if (/^\/v1\/web\/webchat\/[^/]+(?:\/[^/]+)?\/i18n\/en-US\.json$/.test(urlPath)) {
     serveFile(res, path.join(assetRoot, 'i18n/en.json'));
     return;
   }
