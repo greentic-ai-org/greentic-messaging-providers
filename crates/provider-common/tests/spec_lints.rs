@@ -1202,3 +1202,101 @@ fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
 
     Ok(())
 }
+
+// The three faults that together made a correctly configured Greentic SSO login
+// impossible to complete. Each is one line of source, and each is invisible
+// until someone turns SSO on, so pin them here rather than in an e2e run.
+#[test]
+fn webchat_gui_runtime_completes_the_sso_login_path() -> Result<()> {
+    let root = workspace_root();
+    let runtime = fs::read_to_string(
+        root.join("packs")
+            .join("messaging-webchat-gui")
+            .join("assets")
+            .join("webchat-gui")
+            .join("runtime-bootstrap.js"),
+    )?;
+
+    // 1. The fetch wrapper matches the Direct Line token endpoint on pathname
+    //    alone, so an IdP's `https://<issuer>/oauth/token` matches too. Left
+    //    unguarded it answers the PKCE code exchange from the chat-token cache.
+    let wrapper = runtime
+        .split_once("window.fetch = function (input, init)")
+        .map(|(_, rest)| rest)
+        .ok_or_else(|| anyhow!("webchat-gui runtime must wrap window.fetch"))?;
+    let bypass_at = wrapper
+        .find("if (url.origin !== window.location.origin)")
+        .ok_or_else(|| {
+            anyhow!(
+                "the fetch wrapper must pass cross-origin requests straight through — \
+                 without it the identity provider's /oauth/token is answered from the \
+                 Direct Line token cache and the PKCE exchange can never complete"
+            )
+        })?;
+    let first_rule_at = wrapper
+        .find("test(url.pathname)")
+        .ok_or_else(|| anyhow!("the fetch wrapper must route on url.pathname"))?;
+    assert!(
+        bypass_at < first_rule_at,
+        "the cross-origin bypass must come before the first pathname rule"
+    );
+    // The bypass alone is not enough: a same-origin issuer serves /oauth/token
+    // from this very origin, and a bare `/token$` rule swallows it there too.
+    assert!(
+        runtime.contains("/\\/v1\\/messaging\\/webchat\\/[^/]+(?:\\/[^/]+)?\\/token$"),
+        "the Direct Line token rule must be anchored to the webchat backend base, not to a \
+         bare `/token$` suffix that also matches an identity provider's /oauth/token"
+    );
+
+    // 2. Only the SPA's dummy provider ever wrote the key the SPA gates its
+    //    login page on, so a completed SSO login left login on screen.
+    assert!(
+        runtime.contains("function saveAppAuthSession(")
+            && runtime.contains("isAuthenticated: true")
+            && runtime.contains("function completeAppLogin("),
+        "webchat-gui runtime must write the app auth session the SPA reads; nothing \
+         in the SPA bundle writes it outside its dummy provider path"
+    );
+    // Both paths that hand off to the React SPA — the greentic SDK and the
+    // OAuth code exchange — need the reload that makes the write visible.
+    assert!(
+        runtime.matches("if (completeAppLogin(").count() >= 2,
+        "the greentic SDK and the OAuth code exchange both hand the login to the \
+         React SPA, so both must complete the app session"
+    );
+    // Guest finishes in-page and deliberately does not reload, but a write that
+    // never landed must not pass for a login there either.
+    assert!(
+        runtime.contains("if (!saveAppAuthSession(provider.id, 'Guest'))"),
+        "the guest path writes the session without reloading; it still has to check \
+         the write, or a browser blocking site data reports a login that did not happen"
+    );
+    assert!(
+        runtime.contains("return !!getAppAuthSession();"),
+        "saveAppAuthSession must read its own write back — reloading on a write that \
+         silently failed turns every login attempt into a loop with nothing logged"
+    );
+    // A session marked authenticated on a failed exchange holds no token, so
+    // Direct Line is minted anonymously behind a logout button.
+    assert!(
+        !runtime.contains("saveOAuthSession('authenticated', 'oauth-code')"),
+        "a failed token exchange must clear the session and say so, not record the \
+         literal handle 'authenticated' and let Direct Line mint anonymous"
+    );
+
+    // 3. A tenant can host several bundles, so both server calls that carry or
+    //    mint credentials have to name this deployment.
+    assert!(
+        runtime.contains("chatApiBase: provider.chat_api_base || bundleScopedBackendBase(tenant)"),
+        "the SSO client's chat API base must be bundle-scoped, like the Direct Line \
+         token URL — a tenant-scoped mint can resolve to a sibling bundle with no \
+         oidc_issuer and reject a bearer whose issuer config is correct"
+    );
+    assert!(
+        runtime.contains("bundleScopedBackendBase(tenant) + '/oauth/token-exchange'"),
+        "the token-exchange proxy must be bundle-scoped — it needs this deployment's \
+         client secret, not a sibling's"
+    );
+
+    Ok(())
+}

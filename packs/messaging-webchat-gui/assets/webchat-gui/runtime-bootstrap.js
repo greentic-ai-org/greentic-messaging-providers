@@ -514,7 +514,13 @@ console.log('[runtime-bootstrap] loaded');
         providerId: providerId || undefined,
         username: username || undefined
       }));
-    } catch (_) { /* localStorage unavailable */ }
+      return !!getAppAuthSession();
+    } catch (err) {
+      console.error('[oauth] cannot persist the app auth session — this browser is blocking ' +
+        'site data (embedded in a third-party frame?). Sign-in cannot complete:',
+        (err && err.name) || 'unknown', (err && err.message) || err);
+      return false;
+    }
   }
 
   // The SPA snapshots that key once at module load and serves it from memory
@@ -523,7 +529,11 @@ console.log('[runtime-bootstrap] loaded');
   // when the app was not already marked authenticated, so this cannot bounce.
   function completeAppLogin(providerId, username) {
     var wasAuthenticated = !!getAppAuthSession();
-    saveAppAuthSession(providerId, username);
+    if (!saveAppAuthSession(providerId, username)) {
+      showAuthError('Sign-in cannot be saved because this browser is blocking site data for ' +
+        'embedded chat. Allow site data for this page, or open the chat in its own tab.');
+      return true;
+    }
     if (!wasAuthenticated) {
       window.location.reload();
       return true;
@@ -586,11 +596,14 @@ console.log('[runtime-bootstrap] loaded');
     } catch (_) {}
 
     if (!storedProvider || !storedProvider.token_url || !storedProvider.client_id) {
-      // Fallback: save as authenticated without user info
-      console.log('[oauth] no provider info, saving basic session');
-      saveOAuthSession('authenticated', 'oauth-code');
+      // A session marked authenticated here holds no token, so Direct Line mints
+      // anonymous behind a logout button — the downgrade the mint refuses to make.
+      console.error('[oauth] the login callback arrived but the provider record is gone from ' +
+        'session storage; the authorization code cannot be exchanged');
+      clearOAuthSession();
       removeOAuthOverlay();
-      injectLogoutButton();
+      showAuthError('Sign-in could not be completed: the session was lost before the provider ' +
+        'could be contacted. Please sign in again.');
       return true;
     }
 
@@ -620,11 +633,29 @@ console.log('[runtime-bootstrap] loaded');
         sessionStorage.removeItem(oauthStorageKey('code_verifier'));
         sessionStorage.removeItem(oauthStorageKey('redirect_uri'));
         sessionStorage.removeItem(oauthStorageKey('state'));
+      } catch (_) { /* display fields and callback scratch; losing them is cosmetic */ }
+      // Its own block: a quota failure on a display field must not skip the flag
+      // that decides whether Direct Line is minted with a bearer.
+      try {
         if (sessionStorage.getItem(oauthStorageKey('greentic_fallback')) === '1') {
           sessionStorage.removeItem(oauthStorageKey('greentic_fallback'));
           sessionStorage.setItem(oauthStorageKey('greentic_bearer'), '1');
+          if (sessionStorage.getItem(oauthStorageKey('greentic_bearer')) !== '1') {
+            throw new Error('bearer flag write was not durable');
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        console.error('[oauth] could not record the bearer flag; Direct Line would be minted ' +
+          'anonymously despite a completed login:', (err && err.message) || err);
+        clearOAuthSession();
+        removeOAuthOverlay();
+        showAuthError(uiT('login.failed', 'Authentication failed') +
+          ': session storage is full or blocked. Please try again.');
+        return;
+      }
+      // Last, so the reload it may trigger cannot drop the identity above. The
+      // redirect providers hand off to the React SPA the same way greentic does.
+      if (completeAppLogin(storedProvider && storedProvider.id, userInfo.name || userInfo.email)) return;
       removeOAuthOverlay();
       injectLogoutButton();
     }
@@ -652,8 +683,9 @@ console.log('[runtime-bootstrap] loaded');
       }).then(function (resp) { return resp.json(); });
     }
 
-    // Try server proxy first, fall back to direct PKCE exchange
-    var proxyUrl = sameOriginUrl(backendBase(tenant) + '/oauth/token-exchange');
+    // Try server proxy first, fall back to direct PKCE exchange. Bundle-scoped:
+    // the exchange needs THIS deployment's client secret, not a sibling's.
+    var proxyUrl = sameOriginUrl(bundleScopedBackendBase(tenant) + '/oauth/token-exchange');
     console.log('[oauth] exchanging code via proxy');
 
     // Backend proxy URL is constrained to the current origin.
@@ -680,10 +712,12 @@ console.log('[runtime-bootstrap] loaded');
         directTokenExchange()
           .then(handleTokens)
           .catch(function (directErr) {
-            console.warn('[oauth] direct exchange also failed:', directErr.message);
-            saveOAuthSession('authenticated', 'oauth-code');
+            console.error('[oauth] token exchange failed via both the server proxy and direct ' +
+              'PKCE:', proxyErr.message, '/', directErr.message);
+            clearOAuthSession();
             removeOAuthOverlay();
-            injectLogoutButton();
+            showAuthError(uiT('login.failed', 'Authentication failed') +
+              ': the identity provider did not return a token. Please try again.');
           });
       });
 
@@ -751,7 +785,10 @@ console.log('[runtime-bootstrap] loaded');
       issuer: greenticSsoIssuer(provider),
       clientId: provider.client_id || 'webchat-gui',
       redirectUri: greenticSsoRedirectUri(),
-      chatApiBase: provider.chat_api_base || backendBase(tenant),
+      // Bundle-scoped, like the Direct Line token URL. A tenant-scoped mint
+      // resolves to whichever bundle the server picks — a sibling without
+      // oidc_issuer rejects the bearer, naming a config that is correct.
+      chatApiBase: provider.chat_api_base || bundleScopedBackendBase(tenant),
       // Memory-only sessions die on reload, forcing a fresh popup per page load.
       persist: true
     });
@@ -764,7 +801,11 @@ console.log('[runtime-bootstrap] loaded');
       provider = raw ? JSON.parse(raw) : null;
     } catch (_) {}
     if (!provider || provider.type !== 'greentic') return null;
-    if (!window.GreenticSso || !window.GreenticSso.createGreenticWebchatSso) return null;
+    if (!window.GreenticSso || !window.GreenticSso.createGreenticWebchatSso) {
+      console.error('[oauth] a greentic session is stored but greentic-sso.js is not loaded; ' +
+        'Direct Line would be minted anonymously');
+      return null;
+    }
     var config = (window.__OAUTH_CONFIG__ && window.__OAUTH_CONFIG__.providers || [])
       .filter(function (p) { return p.type === 'greentic'; })[0];
     if (!config) return null;
@@ -838,7 +879,11 @@ console.log('[runtime-bootstrap] loaded');
       // No reload here: the runtime overlay finishes a guest login in-page, and
       // reloading would drop the session fields written above before anything
       // reads them.
-      saveAppAuthSession(provider.id, 'Guest');
+      if (!saveAppAuthSession(provider.id, 'Guest')) {
+        showAuthError('Sign-in cannot be saved because this browser is blocking site data for ' +
+          'embedded chat. Allow site data for this page, or open the chat in its own tab.');
+        return;
+      }
       removeOAuthOverlay();
       injectLogoutButton();
       return;
@@ -1547,9 +1592,13 @@ console.log('[runtime-bootstrap] loaded');
     return Promise.resolve(null);
   }
 
+  var DIRECT_LINE_TOKEN_PATH =
+    /\/v1\/messaging\/webchat\/[^/]+(?:\/[^/]+)?\/token$|\/v3\/directline\/tokens\/generate$/i;
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
-    var requestUrl = typeof input === 'string' ? input : input.url;
+    var requestUrl = typeof input === 'string' ? input
+      : (input instanceof URL ? input.href : input.url);
     var url = new URL(requestUrl, window.location.href);
 
     // Every rule below rewrites or short-circuits a request to THIS deployment.
@@ -1565,7 +1614,10 @@ console.log('[runtime-bootstrap] loaded');
     // guest_id body the server uses for per-user rate-limit bucketing, and
     // (b) reuse a still-valid token across reloads instead of minting a
     // fresh one every page load.
-    if (/(?:^|\/)(?:token|v3\/directline\/tokens\/generate)$/i.test(url.pathname)) {
+    // Anchored to the backend base the bootstrap builds every chat-token URL from.
+    // The origin guard above covers a third-party issuer; it does not cover an
+    // issuer served from this origin, where `/oauth/token` still ends in `/token`.
+    if (DIRECT_LINE_TOKEN_PATH.test(url.pathname)) {
       var cached = readCachedToken();
       if (cached) {
         console.log('[bootstrap] reusing cached token (expires in',
