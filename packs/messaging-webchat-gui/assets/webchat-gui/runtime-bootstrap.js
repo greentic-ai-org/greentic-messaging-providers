@@ -1082,22 +1082,47 @@ console.log('[runtime-bootstrap] loaded');
   window.__OAUTH_CHECKED__ = false;
 
   /**
+   * The backend's OWN answer, memoized and never merged with anything.
+   *
+   * `window.__OAUTH_CONFIG__` is not a substitute: `checkOAuthGate` may replace
+   * a `{enabled:false}` backend answer with the tenant config (see below), so
+   * reading it to decide whether to trust the tenant config is circular. Any
+   * caller that needs to know what the DEPLOYMENT was configured with -- rather
+   * than what the overlay settled on -- must come through here.
+   *
+   * Resolves to `null` when the endpoint could not be read at all, which is
+   * deliberately distinct from a body that says `{enabled:false}`.
+   */
+  var backendAuthConfigPromise = null;
+  function backendAuthConfig() {
+    if (backendAuthConfigPromise) return backendAuthConfigPromise;
+    var authConfigUrl = sameOriginUrl(bundleScopedBackendBase(tenant) + '/auth/config');
+    // Backend auth config URL is constrained to the current origin.
+    // foxguard: ignore[js/no-ssrf]
+    backendAuthConfigPromise = fetch(authConfigUrl)
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .catch(function () {
+        return null;
+      });
+    return backendAuthConfigPromise;
+  }
+
+  /**
    * Fetch OAuth config from the backend /auth/config endpoint.
    * Blocks SPA rendering until auth is resolved.
    */
   function checkOAuthGate() {
-    var authConfigUrl = sameOriginUrl(bundleScopedBackendBase(tenant) + '/auth/config');
-    // Backend auth config URL is constrained to the current origin.
-    // foxguard: ignore[js/no-ssrf]
-    return fetch(authConfigUrl)
-      .then(function (response) {
-        if (!response.ok) {
+    return backendAuthConfig()
+      .then(function (authConfig) {
+        if (!authConfig) {
           console.log('[oauth] auth/config not available, falling back to tenant config');
           return loadAuthFromTenantConfig().then(function (fallback) {
             return fallback || { enabled: false };
           });
         }
-        return response.json();
+        return authConfig;
       })
       .then(function (authConfig) {
         if (authConfig && authConfig.enabled && (authConfig.providers || []).length) {
@@ -1631,17 +1656,41 @@ console.log('[runtime-bootstrap] loaded');
           payload.webchat.style_options = payload.webchat.style_options || {};
           payload.webchat.style_options.hideSendBox = true;
         }
-        // The SPA gates the chat on this file alone. The backend owns whether
-        // auth is required, so a listed provider must not gate a deployment
-        // whose oauth_enabled is false.
-        await Promise.resolve(window.__OAUTH_READY__).catch(function () {});
-        if (window.__OAUTH_CHECKED__ &&
-            window.__OAUTH_CONFIG__ &&
-            window.__OAUTH_CONFIG__.enabled === false &&
-            payload.auth && Array.isArray(payload.auth.providers)) {
-          payload.auth.providers = payload.auth.providers.map(function (provider) {
-            return Object.assign({}, provider, { enabled: false });
-          });
+        // The SPA gates the chat on this file alone -- it never reads
+        // /auth/config -- while this file is a pack SCAFFOLD carrying whatever
+        // the pack author last committed. messaging-webchat-gui 0.5.17 shipped
+        // it with an enabled Greentic SSO provider nobody asked for, so every
+        // deployment built from that pack put a sign-in wall in front of every
+        // visitor while the operator's answers said `oauth_enabled: false` and
+        // /auth/config agreed. Nothing reported it at any layer.
+        //
+        // This reconciliation existed already and could not fire: it read
+        // `window.__OAUTH_CONFIG__`, which `checkOAuthGate` has by then
+        // REPLACED with the tenant config whenever the backend answers
+        // "disabled" -- so the scaffold was cited as the evidence for trusting
+        // the scaffold. It has to be the backend's own answer, unmerged.
+        //
+        // Only when we asked a BUNDLE-scoped URL. /auth/config is otherwise
+        // tenant-scoped while a tenant can host several bundles, so a bare
+        // "disabled" may be a sibling deployment answering, and acting on it
+        // would strip the login from a deployment that genuinely requires one.
+        // With a bundle id we asked about exactly this deployment. An
+        // unreachable endpoint (null) changes nothing either way: failing open
+        // here would unlock a chat someone meant to gate.
+        if (bundleId && payload.auth && Array.isArray(payload.auth.providers)) {
+          var backendAuth = await backendAuthConfig();
+          if (backendAuth && backendAuth.enabled === false) {
+            var ignored = payload.auth.providers.filter(function (provider) {
+              return provider && provider.enabled !== false;
+            }).length;
+            if (ignored) {
+              console.warn('[bootstrap] auth is disabled for this deployment; ignoring ' +
+                ignored + ' provider(s) left enabled in the tenant config');
+            }
+            payload.auth.providers = payload.auth.providers.map(function (provider) {
+              return Object.assign({}, provider, { enabled: false });
+            });
+          }
         }
         console.log('[bootstrap] tenant config patched:', tenantId, 'auth providers:', (payload.auth && payload.auth.providers || []).filter(function (p) { return p.enabled; }).length);
         return new Response(JSON.stringify(payload), {
