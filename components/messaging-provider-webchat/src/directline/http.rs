@@ -963,14 +963,39 @@ fn hash_client_id(value: &str) -> String {
 }
 
 fn config_str(request: &HttpInV1, key: &str) -> Option<String> {
-    request
-        .config
-        .as_ref()
-        .and_then(|cfg| cfg.get(key))
+    let cfg = request.config.as_ref()?;
+    let plain = cfg
+        .get(key)
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+        .map(ToOwned::to_owned);
+    if plain.is_some() {
+        return plain;
+    }
+    // The host base64-encodes every config value into `<key>_b64` before it
+    // reaches the component, so the plain key is absent in a real deployment.
+    // Reading only that made oidc_issuer look unconfigured, and every verified
+    // bearer was rejected with "oidc verification is not configured".
+    decode_injected_config_str(cfg, key)
+}
+
+fn decode_injected_config_str(cfg: &Value, key: &str) -> Option<String> {
+    let encoded = cfg.get(format!("{key}_b64"))?.as_str()?.trim();
+    if encoded.is_empty() {
+        return None;
+    }
+    let decoded = general_purpose::STANDARD
+        .decode(encoded)
+        .or_else(|_| general_purpose::URL_SAFE.decode(encoded))
+        .or_else(|_| general_purpose::URL_SAFE_NO_PAD.decode(encoded))
+        .ok()?;
+    let text = String::from_utf8(decoded).ok()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_owned())
 }
 
 const JWKS_CACHE_TTL_SECONDS: i64 = 15 * 60;
@@ -1370,6 +1395,34 @@ fn extract_flow_hint(headers: &[Header]) -> Option<String> {
 mod tests {
     use super::*;
     use base64::engine::general_purpose;
+
+    #[test]
+    fn config_str_reads_the_hosts_base64_injected_form() {
+        // The host hands the component `<key>_b64`, never the plain key, so a
+        // reader that only knows the plain form sees an unconfigured tenant.
+        let request = HttpInV1 {
+            method: "POST".to_string(),
+            path: "/token".to_string(),
+            query: None,
+            headers: Vec::new(),
+            body_b64: String::new(),
+            route_hint: None,
+            binding_id: None,
+            config: Some(serde_json::json!({
+                "oidc_issuer_b64": general_purpose::STANDARD.encode("https://id.example.com"),
+                "oidc_audience": "plain-still-wins"
+            })),
+        };
+        assert_eq!(
+            config_str(&request, "oidc_issuer").as_deref(),
+            Some("https://id.example.com")
+        );
+        assert_eq!(
+            config_str(&request, "oidc_audience").as_deref(),
+            Some("plain-still-wins")
+        );
+        assert_eq!(config_str(&request, "oidc_required_scope"), None);
+    }
     use serde_json::json;
     use std::collections::HashMap;
 
