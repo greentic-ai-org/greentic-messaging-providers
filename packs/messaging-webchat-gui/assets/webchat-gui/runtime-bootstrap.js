@@ -496,6 +496,34 @@ console.log('[runtime-bootstrap] loaded');
     }
   }
 
+  // The React SPA decides whether to render its own login page from this key
+  // alone. Without it a completed SSO login leaves the app showing login while
+  // the OAuth session sits valid in sessionStorage.
+  function saveAppAuthSession(providerId, username) {
+    try {
+      localStorage.setItem('webchat_auth_session', JSON.stringify({
+        isAuthenticated: true,
+        providerId: providerId || undefined,
+        username: username || undefined
+      }));
+    } catch (_) { /* localStorage unavailable */ }
+  }
+
+  // The React SPA snapshots `webchat_auth_session` once at module load and
+  // serves it from memory via useSyncExternalStore — it registers no `storage`
+  // listener, so a write from here is invisible until the document reloads.
+  // Reload once, and only when the app was not already marked authenticated,
+  // so this can never bounce.
+  function completeAppLogin(providerId, username) {
+    var wasAuthenticated = !!getAppAuthSession();
+    saveAppAuthSession(providerId, username);
+    if (!wasAuthenticated) {
+      window.location.reload();
+      return true;
+    }
+    return false;
+  }
+
   function clearAppAuthSession() {
     try {
       localStorage.setItem('webchat_auth_session', JSON.stringify({ isAuthenticated: false }));
@@ -554,6 +582,7 @@ console.log('[runtime-bootstrap] loaded');
       // Fallback: save as authenticated without user info
       console.log('[oauth] no provider info, saving basic session');
       saveOAuthSession('authenticated', 'oauth-code');
+      saveAppAuthSession(storedProvider && storedProvider.id, null);
       removeOAuthOverlay();
       injectLogoutButton();
       return true;
@@ -578,6 +607,7 @@ console.log('[runtime-bootstrap] loaded');
       }
       console.log('[oauth] authenticated:', userInfo.name || userInfo.email || 'user');
       saveOAuthSession(tokens.access_token || tokens.id_token || 'authenticated', 'oauth-code');
+      if (completeAppLogin(storedProvider && storedProvider.id, userInfo.name || userInfo.email)) return;
       try {
         if (userInfo.name) sessionStorage.setItem(oauthStorageKey('user_name'), userInfo.name);
         if (userInfo.email) sessionStorage.setItem(oauthStorageKey('user_email'), userInfo.email);
@@ -647,6 +677,7 @@ console.log('[runtime-bootstrap] loaded');
           .catch(function (directErr) {
             console.warn('[oauth] direct exchange also failed:', directErr.message);
             saveOAuthSession('authenticated', 'oauth-code');
+            saveAppAuthSession(storedProvider && storedProvider.id, null);
             removeOAuthOverlay();
             injectLogoutButton();
           });
@@ -765,6 +796,7 @@ console.log('[runtime-bootstrap] loaded');
     window.__GREENTIC_SSO_CLIENT__ = client;
     client.login().then(function (identity) {
       saveOAuthSession('greentic-sso', 'greentic');
+      if (completeAppLogin(provider.id, identity.name || identity.email || identity.sub)) return;
       try {
         // sub is the only identity field the SDK guarantees; name/email are optional.
         sessionStorage.setItem(oauthStorageKey('user_sub'), identity.sub);
@@ -792,6 +824,7 @@ console.log('[runtime-bootstrap] loaded');
     // Dummy/guest providers skip OAuth — just save session and proceed
     if (provider.type === 'dummy') {
       saveOAuthSession('guest', 'dummy');
+      if (completeAppLogin(provider.id, 'Guest')) return;
       try {
         sessionStorage.setItem(oauthStorageKey('user_name'), 'Guest');
         sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'dummy' }));
@@ -1456,11 +1489,15 @@ console.log('[runtime-bootstrap] loaded');
   function greenticAccessToken() {
     var client = window.__GREENTIC_SSO_CLIENT__;
     if (client && client.getAccessToken) {
-      return client.getAccessToken().catch(function () {
+      return client.getAccessToken().catch(function (err) {
         // A live SSO session existed but its token could not be refreshed.
         // Silently minting anonymous here is the exact hole Task 11 closed
         // server-side — fail visibly instead: clear the session and reload
-        // to the login screen.
+        // to the login screen. Name the reason first: this branch ends the
+        // session and reloads, so without it the operator only sees the login
+        // page reappear with nothing explaining why.
+        console.error('[oauth] SSO session ended — getAccessToken failed:',
+          (err && err.code) || 'unknown', (err && err.message) || err);
         performLogout();
         return GREENTIC_SESSION_DEAD;
       });
@@ -1483,6 +1520,14 @@ console.log('[runtime-bootstrap] loaded');
     var requestUrl = typeof input === 'string' ? input : input.url;
     var url = new URL(requestUrl, window.location.href);
     console.log('[bootstrap] fetch:', url.pathname);
+
+    // Every rule below rewrites or short-circuits a request to THIS deployment.
+    // Cross-origin calls belong to someone else — notably the identity
+    // provider's /oauth/token, which the Direct Line /token rule would
+    // otherwise hijack and answer with a cached chat token.
+    if (url.origin !== window.location.origin) {
+      return originalFetch(input, init);
+    }
 
     // Intercept the Direct Line /token endpoint so we (a) attach the
     // guest_id body the server uses for per-user rate-limit bucketing, and
