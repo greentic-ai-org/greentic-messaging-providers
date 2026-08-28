@@ -69,9 +69,14 @@ mod variant_tests {
         for expected in ["greentic", "google", "microsoft", "github", "custom"] {
             assert!(ids.contains(&expected), "missing provider id {expected}");
         }
+        // greentic leads the list as the default *choice*; enablement is owned by
+        // the runtime /auth/config gate, so the template ships every provider off.
         for provider in providers {
-            let expected_enabled = provider["id"] == "greentic";
-            assert_eq!(provider["enabled"], expected_enabled);
+            assert_eq!(
+                provider["enabled"], false,
+                "provider {} must ship disabled",
+                provider["id"]
+            );
         }
     }
 }
