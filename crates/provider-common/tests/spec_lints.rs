@@ -178,6 +178,95 @@ fn asset_importer_template_ships_no_enabled_auth_provider() -> Result<()> {
     Ok(())
 }
 
+// ops/ingest.rs routes these four suffixes for every webchat variant. An
+// endpoint the router handles but no pack declares is unreachable in the runtime.
+#[test]
+fn webchat_packs_declare_every_routed_endpoint() -> Result<()> {
+    const REQUIRED_SUFFIXES: &[&str] = &[
+        "/auth/config",
+        "/token",
+        "/v3/directline/{path*}",
+        "/oauth/token-exchange",
+    ];
+
+    let root = workspace_root();
+    let mut checked = 0usize;
+    for entry in glob(root.join("packs").join("*/pack.yaml").to_str().unwrap())? {
+        let path = entry?;
+        let pack: Value = serde_yaml_bw::from_str(&fs::read_to_string(&path)?)?;
+        let routes = pack
+            .get("extensions")
+            .and_then(|exts| exts.get("greentic.http-routes.v1"))
+            .and_then(|ext| ext.get("inline"))
+            .and_then(|inline| inline.get("routes"))
+            .and_then(Value::as_sequence);
+        let Some(routes) = routes else {
+            continue;
+        };
+        let patterns: Vec<&str> = routes
+            .iter()
+            .filter_map(|route| route.get("pattern").and_then(Value::as_str))
+            .collect();
+        if !patterns
+            .iter()
+            .any(|pattern| pattern.contains("/v1/messaging/webchat/"))
+        {
+            continue;
+        }
+        checked += 1;
+        for suffix in REQUIRED_SUFFIXES {
+            if !patterns.iter().any(|pattern| pattern.ends_with(suffix)) {
+                return Err(anyhow!(
+                    "{}: ops/ingest.rs handles `{}` but no declared route ends with it",
+                    path.display(),
+                    suffix
+                ));
+            }
+        }
+    }
+    if checked == 0 {
+        return Err(anyhow!(
+            "no webchat packs with http routes found under packs/"
+        ));
+    }
+    Ok(())
+}
+
+// 3aigent-gui mirrors the webchat-gui SPA at build time, so a shared asset
+// missing from its declaration is a drift signal between two copies of one tree.
+#[test]
+fn gui_packs_declare_the_same_shared_spa_assets() -> Result<()> {
+    const PREFIX: &str = "assets/webchat-gui/";
+
+    fn declared_spa_assets(pack_yaml: &std::path::Path) -> Result<Vec<String>> {
+        let pack: Value = serde_yaml_bw::from_str(&fs::read_to_string(pack_yaml)?)?;
+        let Some(assets) = pack.get("assets").and_then(Value::as_sequence) else {
+            return Err(anyhow!("{}: no assets block", pack_yaml.display()));
+        };
+        Ok(assets
+            .iter()
+            .filter_map(|asset| asset.get("path").and_then(Value::as_str))
+            .filter(|path| path.starts_with(PREFIX))
+            .map(str::to_string)
+            .collect())
+    }
+
+    let root = workspace_root();
+    let reference = declared_spa_assets(&root.join("packs/messaging-webchat-gui/pack.yaml"))?;
+    let mirrored = declared_spa_assets(&root.join("packs/messaging-3aigent-gui/pack.yaml"))?;
+
+    for asset in &reference {
+        if !mirrored.contains(asset) {
+            return Err(anyhow!(
+                "packs/messaging-3aigent-gui/pack.yaml: shared SPA asset '{}' is declared by \
+                 messaging-webchat-gui but missing here",
+                asset
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn specs_parse() -> Result<()> {
     let root = workspace_root();
