@@ -158,6 +158,26 @@ fn default_tenant_ships_no_enabled_auth_provider() -> Result<()> {
     Ok(())
 }
 
+// The importer rewrites the default tenant file on every run, so a template
+// that enables a provider re-introduces the login wall the lint above forbids.
+#[test]
+fn asset_importer_template_ships_no_enabled_auth_provider() -> Result<()> {
+    let root = workspace_root();
+    let script = root.join("tools").join("import_webchat_gui_assets.sh");
+    let body = fs::read_to_string(&script)?;
+    for needle in ["\"enabled\": True", "\"enabled\":True"] {
+        if body.contains(needle) {
+            return Err(anyhow!(
+                "{}: default tenant template contains `{}` — re-running the importer \
+                 would turn every unconfigured deployment into a login wall",
+                script.display(),
+                needle
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn specs_parse() -> Result<()> {
     let root = workspace_root();
