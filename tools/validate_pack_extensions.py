@@ -139,6 +139,10 @@ def validate_pack(path: Path) -> None:
     if not isinstance(extensions, dict):
         raise ValueError(f"{path} manifest has no extensions map")
 
+    # The SPA-only pack ships static routes and no provider by design.
+    if path.stem == "messaging-webchat-ui":
+        return
+
     if path.stem == "messaging-teams":
         ingress = extensions.get("messaging.provider_ingress.v1")
         if not isinstance(ingress, dict):
