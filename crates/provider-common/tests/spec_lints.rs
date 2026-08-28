@@ -1203,6 +1203,116 @@ fn webchat_gui_direct_line_cache_is_scoped_and_401_safe() -> Result<()> {
     Ok(())
 }
 
+// pack.yaml is the input; pack.manifest.json is what ships inside the .gtpack
+// and what the runtime reads. The two route lists are maintained by hand, so a
+// route added to one and forgotten in the other is declared but unreachable.
+#[test]
+fn pack_yaml_and_manifest_declare_the_same_http_routes() -> Result<()> {
+    fn routes_of(value: &JsonValue) -> Option<Vec<(String, String)>> {
+        let routes = value
+            .get("extensions")?
+            .get("greentic.http-routes.v1")?
+            .get("inline")?
+            .get("routes")?
+            .as_array()?;
+        let mut out: Vec<(String, String)> = routes
+            .iter()
+            .filter_map(|route| {
+                Some((
+                    route.get("id")?.as_str()?.to_string(),
+                    route.get("pattern")?.as_str()?.to_string(),
+                ))
+            })
+            .collect();
+        out.sort();
+        Some(out)
+    }
+
+    let root = workspace_root();
+    let mut checked = 0usize;
+    for entry in glob(root.join("packs").join("*/pack.yaml").to_str().unwrap())? {
+        let yaml_path = entry?;
+        let manifest_path = yaml_path.with_file_name("pack.manifest.json");
+        if !manifest_path.exists() {
+            continue;
+        }
+        let yaml: JsonValue = serde_yaml_bw::from_str(&fs::read_to_string(&yaml_path)?)?;
+        let manifest: JsonValue = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+        let (Some(from_yaml), Some(from_manifest)) = (routes_of(&yaml), routes_of(&manifest))
+        else {
+            continue;
+        };
+        checked += 1;
+        if from_yaml != from_manifest {
+            return Err(anyhow!(
+                "{}: pack.yaml and pack.manifest.json declare different http routes\n  \
+                 pack.yaml:      {from_yaml:?}\n  pack.manifest:  {from_manifest:?}",
+                yaml_path.parent().unwrap().display()
+            ));
+        }
+    }
+    if checked == 0 {
+        return Err(anyhow!("no packs with http routes found under packs/"));
+    }
+    Ok(())
+}
+
+// The SPA asks bundle-scoped URLs for all four, because one tenant can host
+// several bundles and a tenant-scoped route answers for whichever the server
+// picks. Declaring only the tenant form leaves that working by the grace of a
+// lenient route matcher in greentic-start.
+#[test]
+fn webchat_packs_declare_the_bundle_scoped_form_of_every_route() -> Result<()> {
+    const REQUIRED_PATTERNS: &[&str] = &[
+        "/v1/messaging/webchat/{tenant}/{bundle}/auth/config",
+        "/v1/messaging/webchat/{tenant}/{bundle}/oauth/token-exchange",
+        "/v1/messaging/webchat/{tenant}/{bundle}/token",
+        "/v1/messaging/webchat/{tenant}/{bundle}/v3/directline/{path*}",
+    ];
+
+    let root = workspace_root();
+    let mut checked = 0usize;
+    for entry in glob(root.join("packs").join("*/pack.yaml").to_str().unwrap())? {
+        let path = entry?;
+        let pack: Value = serde_yaml_bw::from_str(&fs::read_to_string(&path)?)?;
+        let routes = pack
+            .get("extensions")
+            .and_then(|exts| exts.get("greentic.http-routes.v1"))
+            .and_then(|ext| ext.get("inline"))
+            .and_then(|inline| inline.get("routes"))
+            .and_then(Value::as_sequence);
+        let Some(routes) = routes else {
+            continue;
+        };
+        let patterns: Vec<&str> = routes
+            .iter()
+            .filter_map(|route| route.get("pattern").and_then(Value::as_str))
+            .collect();
+        if !patterns
+            .iter()
+            .any(|pattern| pattern.contains("/v1/messaging/webchat/"))
+        {
+            continue;
+        }
+        checked += 1;
+        for wanted in REQUIRED_PATTERNS {
+            if !patterns.iter().any(|pattern| pattern == wanted) {
+                return Err(anyhow!(
+                    "{}: the SPA requests `{}` but no route declares it",
+                    path.display(),
+                    wanted
+                ));
+            }
+        }
+    }
+    if checked == 0 {
+        return Err(anyhow!(
+            "no webchat packs with http routes found under packs/"
+        ));
+    }
+    Ok(())
+}
+
 // The three faults that together made a correctly configured Greentic SSO login
 // impossible to complete. Each is one line of source, and each is invisible
 // until someone turns SSO on, so pin them here rather than in an e2e run.

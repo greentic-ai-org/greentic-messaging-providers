@@ -220,6 +220,41 @@
             "methods": [],
             "pattern": "/v1/messaging/webchat/{tenant}/v3/directline/{path*}",
             "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-auth-config-bundle",
+            "methods": [
+              "GET"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/auth/config",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-oauth-token-exchange-bundle",
+            "methods": [
+              "POST"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/oauth/token-exchange",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-token-bundle",
+            "methods": [
+              "GET",
+              "POST"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/token",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-directline-bundle",
+            "methods": [],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/v3/directline/{path*}",
+            "provider_op": "ingest_http"
           }
         ],
         "schema_version": 1
