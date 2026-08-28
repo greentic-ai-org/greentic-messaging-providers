@@ -504,6 +504,33 @@ console.log('[runtime-bootstrap] loaded');
     }
   }
 
+  // The React SPA decides whether to render its own login page from this key
+  // alone. Without it a completed SSO login leaves the app showing login while
+  // the OAuth session sits valid in sessionStorage.
+  function saveAppAuthSession(providerId, username) {
+    try {
+      localStorage.setItem('webchat_auth_session', JSON.stringify({
+        isAuthenticated: true,
+        providerId: providerId || undefined,
+        username: username || undefined
+      }));
+    } catch (_) { /* localStorage unavailable */ }
+  }
+
+  // The SPA snapshots that key once at module load and serves it from memory
+  // via useSyncExternalStore — it registers no `storage` listener, so a write
+  // from here is invisible until the document reloads. Reload once, and only
+  // when the app was not already marked authenticated, so this cannot bounce.
+  function completeAppLogin(providerId, username) {
+    var wasAuthenticated = !!getAppAuthSession();
+    saveAppAuthSession(providerId, username);
+    if (!wasAuthenticated) {
+      window.location.reload();
+      return true;
+    }
+    return false;
+  }
+
   function clearAppAuthSession() {
     try {
       localStorage.setItem('webchat_auth_session', JSON.stringify({ isAuthenticated: false }));
@@ -780,6 +807,10 @@ console.log('[runtime-bootstrap] loaded');
         if (identity.email) sessionStorage.setItem(oauthStorageKey('user_email'), identity.email);
         sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'greentic' }));
       } catch (_) {}
+      // Only now: completeAppLogin reloads, and the identity fields above must
+      // survive it — directLineIdentityPart() scopes the chat-token cache on
+      // user_sub.
+      if (completeAppLogin(provider.id, identity.name || identity.email || identity.sub)) return;
       removeOAuthOverlay();
       injectLogoutButton();
     }).catch(function (err) {
@@ -804,6 +835,10 @@ console.log('[runtime-bootstrap] loaded');
         sessionStorage.setItem(oauthStorageKey('user_name'), 'Guest');
         sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'dummy' }));
       } catch (_) {}
+      // No reload here: the runtime overlay finishes a guest login in-page, and
+      // reloading would drop the session fields written above before anything
+      // reads them.
+      saveAppAuthSession(provider.id, 'Guest');
       removeOAuthOverlay();
       injectLogoutButton();
       return;
@@ -1486,7 +1521,11 @@ console.log('[runtime-bootstrap] loaded');
   function greenticAccessToken() {
     var client = window.__GREENTIC_SSO_CLIENT__;
     if (client && client.getAccessToken) {
-      return client.getAccessToken().catch(function () {
+      return client.getAccessToken().catch(function (err) {
+        // This branch ends the session and reloads, so without naming the
+        // reason the operator sees only the login page reappear.
+        console.error('[oauth] SSO session ended — getAccessToken failed:',
+          (err && err.code) || 'unknown', (err && err.message) || err);
         // A live SSO session existed but its token could not be refreshed.
         // Silently minting anonymous here is the exact hole Task 11 closed
         // server-side — fail visibly instead: clear the session and reload
@@ -1512,6 +1551,14 @@ console.log('[runtime-bootstrap] loaded');
   window.fetch = function (input, init) {
     var requestUrl = typeof input === 'string' ? input : input.url;
     var url = new URL(requestUrl, window.location.href);
+
+    // Every rule below rewrites or short-circuits a request to THIS deployment.
+    // Cross-origin calls belong to someone else — notably the identity
+    // provider's /oauth/token, which the Direct Line /token rule would
+    // otherwise hijack and answer with a cached chat token.
+    if (url.origin !== window.location.origin) {
+      return originalFetch(input, init);
+    }
     console.log('[bootstrap] fetch:', url.pathname);
 
     // Intercept the Direct Line /token endpoint so we (a) attach the

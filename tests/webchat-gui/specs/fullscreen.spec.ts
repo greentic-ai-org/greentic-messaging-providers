@@ -326,6 +326,10 @@ test.describe('full-screen WebChat', () => {
             return () => ({
               login: () => {
                 (window as any).__SSO_LOGIN_CALLED__ = true;
+                // A successful greentic login reloads once, so the React SPA
+                // re-reads webchat_auth_session. Record the call somewhere that
+                // survives that reload, or the assertion races the navigation.
+                try { sessionStorage.setItem('__SSO_LOGIN_CALLED__', '1'); } catch { /* ignore */ }
                 if (stubMode === 'popup_blocked') {
                   return Promise.reject(Object.assign(new Error('popup blocked'), { code: 'popup_blocked' }));
                 }
@@ -375,7 +379,13 @@ test.describe('full-screen WebChat', () => {
 
     await firstButton.click();
     await expect
-      .poll(() => page.evaluate(() => (window as any).__SSO_LOGIN_CALLED__ === true))
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as any).__SSO_LOGIN_CALLED__ === true ||
+            sessionStorage.getItem('__SSO_LOGIN_CALLED__') === '1',
+        ),
+      )
       .toBe(true);
     const clientLive = await page.evaluate(() => !!(window as any).__GREENTIC_SSO_CLIENT__);
     expect(clientLive).toBe(true);
@@ -397,7 +407,13 @@ test.describe('full-screen WebChat', () => {
     await page.goto('/v1/web/webchat/default-plain-sso/');
     await page.locator('#greentic-oauth-overlay button').first().click();
     await expect
-      .poll(() => page.evaluate(() => (window as any).__SSO_LOGIN_CALLED__ === true))
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as any).__SSO_LOGIN_CALLED__ === true ||
+            sessionStorage.getItem('__SSO_LOGIN_CALLED__') === '1',
+        ),
+      )
       .toBe(true);
 
     // Every SSO identity here shares the same token_handle ('greentic-sso');
