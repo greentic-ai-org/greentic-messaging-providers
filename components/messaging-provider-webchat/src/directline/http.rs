@@ -19,6 +19,7 @@ const TOKEN_SECRET_KEY: &str = "jwt_signing_key";
 const RATE_LIMIT_WINDOW_SECONDS_DEFAULT: i64 = 60;
 const RATE_LIMIT_REQUESTS_DEFAULT: u32 = 60;
 const MAX_ATTACHMENT_BYTES: usize = 512 * 1024;
+const MAX_CHANNEL_DATA_BYTES: usize = 64 * 1024;
 const FLOW_HINT_HEADER: &str = "X-Greentic-Flow";
 const FLOW_HINT_MAX_LEN: usize = 256;
 const ALLOWED_ATTACHMENT_TYPES: &[&str] = &[
@@ -558,6 +559,10 @@ where
         return resp;
     }
 
+    if let Err(resp) = validate_channel_data(&body) {
+        return resp;
+    }
+
     let activity = StoredActivity {
         id: Uuid::new_v4().to_string(),
         type_: body
@@ -808,6 +813,23 @@ fn validate_attachments(body: &Value) -> Result<(), HttpOutV1> {
     }
 
     Ok(())
+}
+
+// channelData is stored verbatim on every activity, so an uncapped payload
+// grows conversation state without bound.
+fn validate_channel_data(body: &Value) -> Result<(), HttpOutV1> {
+    let channel_data = match body.get("channelData") {
+        Some(value) if !value.is_null() => value,
+        _ => return Ok(()),
+    };
+
+    match serde_json::to_string(channel_data) {
+        Ok(encoded) if encoded.len() > MAX_CHANNEL_DATA_BYTES => {
+            Err(respond_bad_request("channelData too large"))
+        }
+        Ok(_) => Ok(()),
+        Err(_) => Err(respond_bad_request("channelData is not serialisable")),
+    }
 }
 
 fn parse_watermark(query: Option<&str>) -> Result<Option<u64>, HttpOutV1> {
@@ -3251,5 +3273,31 @@ mod tests {
             0,
             "an unrecordable attempt must deny the refetch, not fail open"
         );
+    }
+
+    #[test]
+    fn validate_channel_data_accepts_ordinary_rag_citations() {
+        let body = json!({
+            "type": "message",
+            "channelData": {
+                "rag": {
+                    "tool_id": "epnm",
+                    "citations": [{"id": "c1", "source": "docs/x.md"}]
+                }
+            }
+        });
+        assert!(validate_channel_data(&body).is_ok());
+    }
+
+    #[test]
+    fn validate_channel_data_rejects_oversized_payload() {
+        let body = json!({
+            "type": "message",
+            "channelData": {
+                "rag": { "answer": "x".repeat(MAX_CHANNEL_DATA_BYTES + 1) }
+            }
+        });
+        let response = validate_channel_data(&body).expect_err("oversized channelData");
+        assert_eq!(response.status, 400);
     }
 }
