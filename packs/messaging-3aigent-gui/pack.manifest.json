@@ -125,6 +125,12 @@
     },
     {
       "path": "assets/webchat-gui/config/product.json"
+    },
+    {
+      "path": "assets/webchat-gui/greentic-sso.js"
+    },
+    {
+      "path": "assets/webchat-gui/sso-callback.html"
     }
   ],
   "extensions": {
@@ -187,6 +193,15 @@
               "GET"
             ],
             "pattern": "/v1/messaging/webchat/{tenant}/auth/config",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-oauth-token-exchange",
+            "methods": [
+              "POST"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/oauth/token-exchange",
             "provider_op": "ingest_http"
           },
           {

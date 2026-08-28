@@ -100,7 +100,9 @@ data = {
                 "id": "greentic",
                 "label": "Greentic SSO",
                 "type": "greentic",
-                "enabled": True,
+                # The SPA gates chat on this file alone; enabling a provider
+                # here walls off every deployment that never opted into OAuth.
+                "enabled": False,
                 "clientId": "webchat-gui",
                 "scope": "openid profile email greentic.webchat",
             }
