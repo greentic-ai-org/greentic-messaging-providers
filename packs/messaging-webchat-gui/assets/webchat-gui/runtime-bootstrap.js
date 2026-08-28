@@ -800,7 +800,6 @@ console.log('[runtime-bootstrap] loaded');
     window.__GREENTIC_SSO_CLIENT__ = client;
     client.login().then(function (identity) {
       saveOAuthSession('greentic-sso', 'greentic');
-      if (completeAppLogin(provider.id, identity.name || identity.email || identity.sub)) return;
       try {
         // sub is the only identity field the SDK guarantees; name/email are optional.
         sessionStorage.setItem(oauthStorageKey('user_sub'), identity.sub);
@@ -808,6 +807,10 @@ console.log('[runtime-bootstrap] loaded');
         if (identity.email) sessionStorage.setItem(oauthStorageKey('user_email'), identity.email);
         sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'greentic' }));
       } catch (_) {}
+      // Only now: completeAppLogin reloads, and the identity fields above must
+      // survive it — directLineIdentityPart() scopes the chat-token cache on
+      // user_sub.
+      if (completeAppLogin(provider.id, identity.name || identity.email || identity.sub)) return;
       removeOAuthOverlay();
       injectLogoutButton();
     }).catch(function (err) {
@@ -828,11 +831,14 @@ console.log('[runtime-bootstrap] loaded');
     // Dummy/guest providers skip OAuth — just save session and proceed
     if (provider.type === 'dummy') {
       saveOAuthSession('guest', 'dummy');
-      if (completeAppLogin(provider.id, 'Guest')) return;
       try {
         sessionStorage.setItem(oauthStorageKey('user_name'), 'Guest');
         sessionStorage.setItem(oauthStorageKey('provider'), JSON.stringify({ id: provider.id, type: 'dummy' }));
       } catch (_) {}
+      // No reload here: the runtime overlay finishes a guest login in-page, and
+      // reloading would drop the session fields written above before anything
+      // reads them.
+      saveAppAuthSession(provider.id, 'Guest');
       removeOAuthOverlay();
       injectLogoutButton();
       return;
