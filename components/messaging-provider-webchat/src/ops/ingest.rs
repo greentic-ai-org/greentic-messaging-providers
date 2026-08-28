@@ -300,8 +300,7 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
         // consumer read "not applicable" where the answer is "not verified".
         debug_assert!(
             !user_verified || envelope.from.is_some(),
-            "a verified flag with no subject would leave a consumer trusting a \
-             client-supplied id for the missing user_id"
+            "a verified flag with no subject would leave a consumer trusting a              client-supplied id for the missing user_id"
         );
         envelope
             .metadata
@@ -905,9 +904,10 @@ mod tests {
             "from": {"id": "bot"},
             "channelData": {
                 "rag": {
+                    "type": "rag",
                     "citations": [
-                        {"id": "c1", "source": "docs/x.md", "snippet": "..."},
-                        {"id": "c2", "source": "docs/y.md", "snippet": "..."}
+                        {"index": 1, "doc": "Metro Design v3.2", "source_file": "metro-design-v3.2.pdf"},
+                        {"index": 2, "doc": "Capacity Review 2026", "source_file": "capacity-2026.pdf"}
                     ]
                 }
             }
@@ -920,6 +920,6 @@ mod tests {
             .and_then(|v| v.as_array())
             .expect("citations preserved inside channel_data");
         assert_eq!(citations.len(), 2);
-        assert_eq!(citations[0]["id"], "c1");
+        assert_eq!(citations[0]["doc"], "Metro Design v3.2");
     }
 }

@@ -656,7 +656,7 @@ mod tests {
         // all DirectLine Bot Framework fields, expecting them preserved verbatim.
         let extensions = json!({
             "adaptive_card": {"type": "AdaptiveCard", "body": []},
-            "channel_data": {"rag": {"citations": [{"id": "c1"}]}, "feature": "x"},
+            "channel_data": {"rag": {"type": "rag", "citations": [{"index": 1, "doc": "Metro Design v3.2"}]}, "feature": "x"},
             "entities": [{"type": "mention", "text": "@bot"}],
             "input_hint": "acceptingInput",
             "speak": "hello there",
@@ -677,7 +677,10 @@ mod tests {
         // Snake_case extensions keys → DirectLine camelCase.
         assert_eq!(
             raw["channelData"],
-            json!({"rag": {"citations": [{"id": "c1"}]}, "feature": "x"})
+            json!({
+                "rag": {"type": "rag", "citations": [{"index": 1, "doc": "Metro Design v3.2"}]},
+                "feature": "x"
+            })
         );
         assert_eq!(raw["entities"][0]["type"], "mention");
         assert_eq!(raw["inputHint"], "acceptingInput");
@@ -695,9 +698,10 @@ mod tests {
             "adaptive_card": {"type": "AdaptiveCard", "body": []},
             "channel_data": {
                 "rag": {
+                    "type": "rag",
                     "citations": [
-                        {"id": "c1", "source": "docs/x.md", "snippet": "..."},
-                        {"id": "c2", "source": "docs/y.md", "snippet": "..."}
+                        {"index": 1, "doc": "Metro Design v3.2", "source_file": "metro-design-v3.2.pdf", "excerpt": "..."},
+                        {"index": 2, "doc": "Capacity Review 2026", "source_file": "capacity-2026.pdf", "excerpt": "..."}
                     ]
                 }
             }
@@ -710,9 +714,9 @@ mod tests {
             .and_then(|v| v.as_array())
             .expect("citations preserved under channelData.rag");
         assert_eq!(citations.len(), 2);
-        assert_eq!(citations[0]["id"], "c1");
-        assert_eq!(citations[0]["source"], "docs/x.md");
-        assert_eq!(citations[1]["id"], "c2");
+        assert_eq!(citations[0]["index"], 1);
+        assert_eq!(citations[0]["source_file"], "metro-design-v3.2.pdf");
+        assert_eq!(citations[1]["index"], 2);
     }
 
     #[test]
@@ -736,12 +740,15 @@ mod tests {
                 "clientActivityID": "abc123",
                 "attachmentSizes": [],
                 "feature": "menu",
-                "rag": {"citations": [{"id": "c1"}]}
+                "rag": {"type": "rag", "citations": [{"index": 1, "doc": "Metro Design v3.2"}]}
             }
         });
         let raw = build_bot_activity_raw("submenu", None, Some(&extensions), None);
         assert_eq!(raw["channelData"]["feature"], "menu");
-        assert_eq!(raw["channelData"]["rag"]["citations"][0]["id"], "c1");
+        assert_eq!(
+            raw["channelData"]["rag"]["citations"][0]["doc"],
+            "Metro Design v3.2"
+        );
         assert!(raw["channelData"].get("postBack").is_none());
         assert!(raw["channelData"].get("clientActivityID").is_none());
         assert!(raw["channelData"].get("attachmentSizes").is_none());
