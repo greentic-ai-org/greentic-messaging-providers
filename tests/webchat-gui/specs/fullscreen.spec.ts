@@ -14,9 +14,6 @@ test.beforeEach(async ({ page }) => {
     if (response.status() >= 400) consoleErrors.push(`${response.status()} ${response.url()}`);
   });
   page.on('pageerror', (error) => consoleErrors.push(error.message));
-  await page.addInitScript(() => {
-    window.addEventListener('beforeunload', () => sessionStorage.clear());
-  });
   await page.exposeFunction('__webchatConsoleErrors', () => consoleErrors);
 });
 
