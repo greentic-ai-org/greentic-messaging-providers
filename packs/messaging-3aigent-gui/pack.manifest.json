@@ -1,13 +1,13 @@
 {
   "name": "messaging-3aigent-gui",
-  "version": "0.5.24",
+  "version": "0.5.25",
   "kind": "application",
   "publisher": "Greentic",
   "description": "Hosted 3AIgent GUI messaging pack with Direct Line backend, 3AIgent skin and SSO enabled by default.",
   "component_sources": [
     {
       "id": "ai.greentic.component-provision",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -29,7 +29,7 @@
     },
     {
       "id": "ai.greentic.component-qa",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -51,7 +51,7 @@
     },
     {
       "id": "ai.greentic.component-templates",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -73,7 +73,7 @@
     },
     {
       "id": "messaging-provider-3aigent-gui",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "world": "root:component/root",
       "supports": [
         "messaging"
@@ -136,7 +136,7 @@
   "extensions": {
     "greentic.generated-secrets.v1": {
       "kind": "greentic.generated-secrets.v1",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "inline": {
         "secrets": [
           {
@@ -160,7 +160,7 @@
     },
     "greentic.ext.capabilities.v1": {
       "kind": "greentic.ext.capabilities.v1",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "inline": {
         "offers": [
           {
@@ -175,7 +175,7 @@
             "setup": {
               "qa_ref": "components/messaging-provider-3aigent-gui"
             },
-            "version": "0.5.24"
+            "version": "0.5.25"
           }
         ],
         "schema_version": 1
@@ -183,7 +183,7 @@
     },
     "greentic.http-routes.v1": {
       "kind": "greentic.http-routes.v1",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "inline": {
         "routes": [
           {
@@ -220,6 +220,41 @@
             "methods": [],
             "pattern": "/v1/messaging/webchat/{tenant}/v3/directline/{path*}",
             "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-auth-config-bundle",
+            "methods": [
+              "GET"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/auth/config",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-oauth-token-exchange-bundle",
+            "methods": [
+              "POST"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/oauth/token-exchange",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-token-bundle",
+            "methods": [
+              "GET",
+              "POST"
+            ],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/token",
+            "provider_op": "ingest_http"
+          },
+          {
+            "domain": "messaging",
+            "id": "webchat-gui-directline-bundle",
+            "methods": [],
+            "pattern": "/v1/messaging/webchat/{tenant}/{bundle}/v3/directline/{path*}",
+            "provider_op": "ingest_http"
           }
         ],
         "schema_version": 1
@@ -227,7 +262,7 @@
     },
     "greentic.messaging.validators.v1": {
       "kind": "greentic.messaging.validators.v1",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "inline": {
         "validators": [
           {
@@ -240,7 +275,7 @@
     },
     "greentic.provider-extension.v1": {
       "kind": "greentic.provider-extension.v1",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "inline": {
         "providers": [
           {
@@ -271,7 +306,7 @@
     },
     "greentic.static-routes.v1": {
       "kind": "greentic.static-routes.v1",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "inline": {
         "routes": [
           {
@@ -291,7 +326,7 @@
     },
     "messaging.provider_ingress.v1": {
       "kind": "messaging.provider_ingress.v1",
-      "version": "0.5.24",
+      "version": "0.5.25",
       "inline": {
         "capabilities": {
           "content_types": [

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.greentic.ai/messaging/channel-data/rag.v1.json",
+  "title": "channelData.rag",
+  "description": "Retrieval context carried alongside a bot reply on the Direct Line activity's channelData.rag. The reply's own text holds the answer and attachments[] holds the Adaptive Card; citations ride here and nowhere else. The provider rejects any channelData over 64 KiB with a 400 rather than truncating, and it counts UTF-8 bytes while maxLength counts code points \u2014 so maxItems and the string limits below are sized for the worst case of three-byte characters throughout, with room left for the other channelData keys.",
+  "type": "object",
+  "required": [
+    "type",
+    "citations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "rag"
+    },
+    "confidence": {
+      "description": "Answer-level confidence, not per citation.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "model": {
+      "description": "Identifier of the LLM that produced the answer.",
+      "type": "string",
+      "maxLength": 128
+    },
+    "search_time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "llm_time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "citations": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "index",
+          "doc"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "description": "1-based marker matching the reference in the answer text.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "doc": {
+            "description": "Human-readable document title, shown on the citation pill.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "source_file": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 512,
+            "pattern": "^https?://"
+          },
+          "source_type": {
+            "enum": [
+              "kb",
+              "web",
+              "file",
+              "db",
+              "tool"
+            ]
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "section": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "excerpt": {
+            "description": "Inline snippet for the citation pill.",
+            "type": "string",
+            "maxLength": 250
+          },
+          "text": {
+            "description": "Full chunk prose, surfaced in the KB-tile modal on click. Omit it and fetch on open when the retrieved chunks are large.",
+            "type": "string",
+            "maxLength": 1024
+          },
+          "relevance_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "type": "rag",
+      "confidence": 0.76,
+      "model": "claude-sonnet-5",
+      "search_time_ms": 412,
+      "llm_time_ms": 1180,
+      "citations": [
+        {
+          "index": 1,
+          "doc": "London Metro Network Design v3.2",
+          "source_file": "metro-design-v3.2.pdf",
+          "source_url": "https://kb.example.com/metro-design-v3.2.pdf",
+          "source_type": "kb",
+          "page": 14,
+          "section": "Capacity planning",
+          "excerpt": "Peak-hour headway is bounded by the junction throat at Farringdon.",
+          "text": "Peak-hour headway is bounded by the junction throat at Farringdon, where the flat crossing limits movements to 24 per hour in each direction.",
+          "relevance_score": 0.83
+        }
+      ]
+    },
+    {
+      "type": "rag",
+      "citations": [
+        {
+          "index": 1,
+          "doc": "Runbook: incident escalation"
+        }
+      ]
+    }
+  ]
+}

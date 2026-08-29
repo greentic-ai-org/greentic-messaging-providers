@@ -3281,8 +3281,9 @@ mod tests {
             "type": "message",
             "channelData": {
                 "rag": {
-                    "tool_id": "epnm",
-                    "citations": [{"id": "c1", "source": "docs/x.md"}]
+                    "type": "rag",
+                    "model": "claude-sonnet-5",
+                    "citations": [{"index": 1, "doc": "Metro Design v3.2", "source_file": "metro-design-v3.2.pdf"}]
                 }
             }
         });
@@ -3294,7 +3295,7 @@ mod tests {
         let body = json!({
             "type": "message",
             "channelData": {
-                "rag": { "answer": "x".repeat(MAX_CHANNEL_DATA_BYTES + 1) }
+                "rag": { "type": "rag", "citations": [{"index": 1, "doc": "Metro Design v3.2", "text": "x".repeat(MAX_CHANNEL_DATA_BYTES + 1)}] }
             }
         });
         let response = validate_channel_data(&body).expect_err("oversized channelData");

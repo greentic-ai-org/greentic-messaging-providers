@@ -404,9 +404,9 @@ mod tests {
                 "session_id": "conv-1",
                 "text": "Answer",
                 "rag": {
-                    "type": "tool",
-                    "tool_id": "epnm",
-                    "citations": [{"id": "c1"}]
+                    "type": "rag",
+                    "model": "claude-sonnet-5",
+                    "citations": [{"index": 1, "doc": "Metro Design v3.2"}]
                 },
                 "metadata": {}
             }
@@ -417,8 +417,11 @@ mod tests {
         let channel_data = body
             .pointer("/extensions/channel_data")
             .expect("channel_data present");
-        assert_eq!(channel_data["rag"]["tool_id"], "epnm");
-        assert_eq!(channel_data["rag"]["citations"][0]["id"], "c1");
+        assert_eq!(channel_data["rag"]["model"], "claude-sonnet-5");
+        assert_eq!(
+            channel_data["rag"]["citations"][0]["doc"],
+            "Metro Design v3.2"
+        );
     }
 
     #[test]

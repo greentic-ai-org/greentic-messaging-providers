@@ -202,7 +202,7 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
             .headers
             .iter()
             .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-User-Verified"))
-            .map(|h| h.value == "true")
+            .map(|h| h.value.trim().eq_ignore_ascii_case("true"))
             .unwrap_or(false);
         let conv_id = out
             .headers
@@ -295,10 +295,16 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
             envelope
                 .metadata
                 .insert("user_id".to_string(), actor.id.clone());
-            envelope
-                .metadata
-                .insert("user_verified".to_string(), user_verified.to_string());
         }
+        // Unconditional, like the activities branch: an absent key would let a
+        // consumer read "not applicable" where the answer is "not verified".
+        debug_assert!(
+            !user_verified || envelope.from.is_some(),
+            "a verified flag with no subject would leave a consumer trusting a              client-supplied id for the missing user_id"
+        );
+        envelope
+            .metadata
+            .insert("user_verified".to_string(), user_verified.to_string());
         // Carry the picker locale through to the runner so the auto-start
         // welcome card is rendered in the user's language. Without this the
         // first card always renders in `en` because POST /conversations has
@@ -336,7 +342,7 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
             .headers
             .iter()
             .find(|h| h.name.eq_ignore_ascii_case("X-Greentic-User-Verified"))
-            .map(|h| h.value == "true")
+            .map(|h| h.value.trim().eq_ignore_ascii_case("true"))
             .unwrap_or(false);
         let conv_id = dl_path
             .strip_prefix("/v3/directline/conversations/")
@@ -575,6 +581,34 @@ mod tests {
         assert!(
             !out.events[0].metadata.contains_key("flow_hint"),
             "flow_hint must not appear when X-Greentic-Flow header is absent"
+        );
+    }
+
+    #[test]
+    fn conversation_envelope_always_carries_user_verified() {
+        // A consumer reading `is_none()` as "not applicable" would treat an
+        // anonymous auto-start as unguarded.
+        let request = build_ingest_request("POST", "/v3/directline/conversations", vec![], None);
+        let mut out = build_dl_response_201(vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+        ]);
+        stamp_ingest_envelopes(&request, "/v3/directline/conversations", &mut out);
+
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(
+            out.events[0]
+                .metadata
+                .get("user_verified")
+                .map(String::as_str),
+            Some("false"),
+            "an auto-start envelope with no verified identity must say so explicitly"
         );
     }
 
@@ -870,9 +904,10 @@ mod tests {
             "from": {"id": "bot"},
             "channelData": {
                 "rag": {
+                    "type": "rag",
                     "citations": [
-                        {"id": "c1", "source": "docs/x.md", "snippet": "..."},
-                        {"id": "c2", "source": "docs/y.md", "snippet": "..."}
+                        {"index": 1, "doc": "Metro Design v3.2", "source_file": "metro-design-v3.2.pdf"},
+                        {"index": 2, "doc": "Capacity Review 2026", "source_file": "capacity-2026.pdf"}
                     ]
                 }
             }
@@ -885,6 +920,6 @@ mod tests {
             .and_then(|v| v.as_array())
             .expect("citations preserved inside channel_data");
         assert_eq!(citations.len(), 2);
-        assert_eq!(citations[0]["id"], "c1");
+        assert_eq!(citations[0]["doc"], "Metro Design v3.2");
     }
 }
