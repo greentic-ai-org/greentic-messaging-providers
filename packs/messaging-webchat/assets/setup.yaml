@@ -11,9 +11,14 @@ questions:
       regex: "^https://"
   - name: mode
     title: Mode
-    kind: string
+    kind: enum
+    choices:
+      - local_queue
+      - websocket
+      - pubsub
     required: true
-    help: "WebChat mode (e.g. directline, embedded)"
+    default: "local_queue"
+    help: "Delivery mode used by the runner"
   - name: route
     title: Route
     kind: string

@@ -14,11 +14,14 @@ questions:
       regex: "^https?://"
   - name: mode
     title: Mode
-    kind: string
+    kind: enum
+    choices:
+      - local_queue
+      - websocket
+      - pubsub
     required: true
     default: "websocket"
     help: "WebChat connection mode"
-    placeholder: "websocket"
     group: Connection
   - name: route
     title: Route
@@ -263,15 +266,14 @@ questions:
 
   - name: presentation_mode
     title: Presentation mode
-    kind: string
-    required: false
-    default: "standalone"
-    placeholder: "standalone | embed_webcomponent"
-    help: "Choose standalone to host a full WebChat page, or embed_webcomponent to expose a framework-independent Web Component for an existing website."
-    group: Branding
-    enum:
+    kind: enum
+    choices:
       - standalone
       - embed_webcomponent
+    required: false
+    default: "standalone"
+    help: "Choose standalone to host a full WebChat page, or embed_webcomponent to expose a framework-independent Web Component for an existing website."
+    group: Branding
 
   - name: text_input_enabled
     title: Text input
