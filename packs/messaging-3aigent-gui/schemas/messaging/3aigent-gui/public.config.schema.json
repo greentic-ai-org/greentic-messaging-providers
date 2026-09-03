@@ -17,7 +17,7 @@
     "mode": {
       "type": "string",
       "enum": ["local_queue", "websocket", "pubsub"],
-      "default": "local_queue",
+      "default": "websocket",
       "description": "Delivery mode used by the runner."
     },
     "route": {

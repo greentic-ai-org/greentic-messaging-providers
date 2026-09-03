@@ -37,11 +37,14 @@ questions:
     group: Connection
   - name: tls_mode
     title: TLS mode
-    kind: string
+    kind: enum
+    choices:
+      - starttls
+      - implicit
+      - none
     required: true
     default: "starttls"
     help: "SMTP TLS mode"
-    placeholder: "starttls"
     group: Connection
   - name: public_base_url
     title: Public base URL
