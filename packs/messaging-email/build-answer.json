@@ -4,7 +4,7 @@
   "provider": {
     "id": "messaging-email",
     "display_name": "Email",
-    "version": "0.5.3",
+    "version": "0.5.4",
     "kind": "application",
     "publisher": "Greentic",
     "description": "Legacy SMTP email messaging provider"
