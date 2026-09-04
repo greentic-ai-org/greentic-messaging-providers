@@ -1,20 +1,66 @@
 {
-  "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  "fontFamily": "Inter, 'Segoe UI', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
   "spacing": {
+    "none": 0,
     "small": 6,
     "default": 12,
     "medium": 16,
-    "large": 20
+    "large": 20,
+    "extraLarge": 28,
+    "padding": 16
+  },
+  "separator": {
+    "lineThickness": 1,
+    "lineColor": "#e9ede9"
+  },
+  "fontSizes": {
+    "small": 12,
+    "default": 14,
+    "medium": 15,
+    "large": 17,
+    "extraLarge": 20
+  },
+  "fontWeights": {
+    "lighter": 400,
+    "default": 400,
+    "bolder": 600
   },
   "actions": {
-    "maxActions": 10
+    "maxActions": 10,
+    "actionsOrientation": "Horizontal",
+    "actionAlignment": "Stretch",
+    "buttonSpacing": 8,
+    "spacing": "Default",
+    "showCard": {
+      "actionMode": "Inline",
+      "inlineTopMargin": 12,
+      "style": "emphasis"
+    },
+    "wrap": true
   },
   "containerStyles": {
     "default": {
+      "backgroundColor": "#ffffff",
       "foregroundColors": {
-        "default": { "default": "#161616", "subtle": "#525252" },
-        "accent": { "default": "#0F62FE", "subtle": "#0F62FE" }
+        "default": { "default": "#101613", "subtle": "#5c655e" },
+        "accent": { "default": "#0b7f5b", "subtle": "#0f9d70" },
+        "good": { "default": "#0b7f5b", "subtle": "#0f9d70" },
+        "warning": { "default": "#8a4b08", "subtle": "#b3660c" },
+        "attention": { "default": "#b3260c", "subtle": "#d1421f" }
+      }
+    },
+    "emphasis": {
+      "backgroundColor": "#f2faf6",
+      "foregroundColors": {
+        "default": { "default": "#101613", "subtle": "#5c655e" },
+        "accent": { "default": "#0b7f5b", "subtle": "#0f9d70" }
       }
     }
-  }
+  },
+  "imageSizes": {
+    "small": 40,
+    "medium": 80,
+    "large": 160
+  },
+  "supportsInteractivity": true
 }
