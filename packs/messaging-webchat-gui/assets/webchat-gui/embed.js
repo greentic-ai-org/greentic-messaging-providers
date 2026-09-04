@@ -9,6 +9,10 @@ template.innerHTML = `
       --greentic-webchat-accent: #10b981;
       --greentic-webchat-accent-hover: #059669;
       --greentic-webchat-radius: 12px;
+      --greentic-webchat-surface: #fff;
+      --greentic-webchat-shadow: 0 18px 50px rgba(15, 23, 42, 0.24);
+      --greentic-webchat-focus: rgba(16, 185, 129, 0.35);
+      --greentic-webchat-spinner: rgba(15, 23, 42, 0.18);
       display: block;
       width: 100%;
       height: 100%;
@@ -17,14 +21,19 @@ template.innerHTML = `
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
+    /* No prefers-color-scheme rule here on purpose: the SPA inside the iframe is
+       light-only, so a dark frame would ring light content and flash on open.
+       Host pages can still theme the chrome by setting the vars above. */
+
     .frame {
       width: min(100%, 420px);
       height: min(680px, 80vh);
       border: 0;
       border-radius: var(--greentic-webchat-radius);
-      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.24);
-      background: #fff;
+      box-shadow: var(--greentic-webchat-shadow);
+      background: var(--greentic-webchat-surface);
       overflow: hidden;
+      display: block;
     }
 
     .dock {
@@ -37,6 +46,50 @@ template.innerHTML = `
 
     .dock[data-open="true"] {
       display: block;
+      animation: gtc-dock-in 160ms cubic-bezier(0.2, 0, 0.2, 1);
+    }
+
+    @keyframes gtc-dock-in {
+      from { opacity: 0; transform: translateY(8px) scale(0.985); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    .surface {
+      position: relative;
+      width: min(100%, 420px);
+      height: min(680px, 80vh);
+    }
+
+    .surface .frame {
+      width: 100%;
+      height: 100%;
+    }
+
+    .loading {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      border-radius: var(--greentic-webchat-radius);
+      background: var(--greentic-webchat-surface);
+      pointer-events: none;
+    }
+
+    .loading[hidden] {
+      display: none;
+    }
+
+    .spinner {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2.5px solid var(--greentic-webchat-spinner);
+      border-top-color: var(--greentic-webchat-accent);
+      animation: gtc-spin 700ms linear infinite;
+    }
+
+    @keyframes gtc-spin {
+      to { transform: rotate(360deg); }
     }
 
     .inline[hidden],
@@ -95,14 +148,20 @@ template.innerHTML = `
       background: var(--greentic-webchat-accent);
       box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
       cursor: pointer;
+      transition: background 140ms ease, transform 140ms ease;
     }
 
     button.launcher:hover {
       background: var(--greentic-webchat-accent-hover);
+      transform: translateY(-1px);
+    }
+
+    button.launcher:active {
+      transform: translateY(0) scale(0.96);
     }
 
     button.launcher:focus-visible {
-      outline: 3px solid rgba(16, 185, 129, 0.35);
+      outline: 3px solid var(--greentic-webchat-focus);
       outline-offset: 3px;
     }
 
@@ -110,28 +169,61 @@ template.innerHTML = `
       width: 28px;
       height: 28px;
       fill: currentColor;
+      grid-area: 1 / 1;
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    button.launcher[data-open="true"] .icon-open,
+    button.launcher:not([data-open="true"]) .icon-close {
+      opacity: 0;
+      transform: rotate(-45deg) scale(0.7);
     }
 
     @media (max-width: 520px) {
       .dock {
         inset: 0;
-        bottom: 0;
-        right: 0;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
       }
 
+      .dock .surface,
       .dock .frame {
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
         border-radius: 0;
+      }
+
+      .dock .loading {
+        border-radius: 0;
+      }
+
+      /* The panel is fullscreen here, so the launcher would land on the composer. */
+      button.launcher[data-open="true"] {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .dock[data-open="true"],
+      .spinner,
+      button.launcher,
+      .icon {
+        animation: none;
+        transition: none;
       }
     }
   </style>
   <div class="inline" part="inline" hidden></div>
   <slot name="native"></slot>
   <div class="dock" part="dock"></div>
-  <button class="launcher" part="launcher" type="button" aria-expanded="false">
-    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+  <button class="launcher" part="launcher" type="button" aria-expanded="false" data-open="false">
+    <svg class="icon icon-open" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 4h16v12H7.4L4 19.4V4Zm2 2v8.6l.6-.6H18V6H6Zm2 3h8v1.8H8V9Zm0 3h5v1.8H8V12Z"/>
+    </svg>
+    <svg class="icon icon-close" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/>
     </svg>
   </button>
 `;
@@ -141,13 +233,13 @@ function boolAttr(value, fallback = false) {
   return value === "" || value === "true" || value === "1";
 }
 
-function normalizeAdaptiveCardWidth(value) {
+function normalizeAdaptiveCardWidth(value, fallback = "70%") {
   const raw = value == null ? "" : String(value).trim();
-  if (!raw) return "70%";
+  if (!raw) return fallback;
   if (/^\d+(?:\.\d+)?$/.test(raw)) return `${raw}%`;
   if (/^\d+(?:\.\d+)?(?:%|px|rem|em|vw|vh)$/.test(raw)) return raw;
   if (raw.toLowerCase() === "auto") return "auto";
-  return "70%";
+  return fallback;
 }
 
 function scriptPublicBaseUrl() {
@@ -311,6 +403,7 @@ class GreenticWebchatElement extends HTMLElement {
       "disable-text-input",
       "adaptive-card-width",
       "title",
+      "close-label",
     ];
   }
 
@@ -322,15 +415,24 @@ class GreenticWebchatElement extends HTMLElement {
     this._inline = this.shadowRoot.querySelector(".inline");
     this._launcher = this.shadowRoot.querySelector(".launcher");
     this._iframe = null;
+    this._surface = null;
+    this._loading = null;
     this._native = null;
     this._nativeMount = null;
     this._nativeToken = 0;
     this._iframeToken = 0;
     this._ready = false;
     this._launcher.addEventListener("click", () => this.toggle());
+    this._onKeyDown = (event) => {
+      if (event.key === "Escape" && this.open && this.launcher) {
+        event.stopPropagation();
+        this.close();
+      }
+    };
   }
 
   connectedCallback() {
+    document.addEventListener("keydown", this._onKeyDown, true);
     this.render();
     queueMicrotask(() => {
       if (!this._ready) {
@@ -341,6 +443,7 @@ class GreenticWebchatElement extends HTMLElement {
   }
 
   disconnectedCallback() {
+    document.removeEventListener("keydown", this._onKeyDown, true);
     this._iframeToken++;
     this.unmountNative();
   }
@@ -392,7 +495,13 @@ class GreenticWebchatElement extends HTMLElement {
   }
 
   get adaptiveCardWidth() {
-    return normalizeAdaptiveCardWidth(this.getAttribute("adaptive-card-width"));
+    const fallback = this.mode === "inline" ? "70%" : "100%";
+    return normalizeAdaptiveCardWidth(this.getAttribute("adaptive-card-width"), fallback);
+  }
+
+  get launcherLabel() {
+    if (this.open) return this.getAttribute("close-label") || "Close chat";
+    return this.getAttribute("title") || "Open chat";
   }
 
   set launcher(value) {
@@ -416,6 +525,9 @@ class GreenticWebchatElement extends HTMLElement {
     if (!this.open) {
       this.open = true;
       this.dispatch("greentic-webchat-open");
+      requestAnimationFrame(() => {
+        if (this.open && this._iframe) this._iframe.focus();
+      });
     }
   }
 
@@ -423,6 +535,7 @@ class GreenticWebchatElement extends HTMLElement {
     if (this.open) {
       this.open = false;
       this.dispatch("greentic-webchat-close");
+      if (this.launcher && !this._launcher.hidden) this._launcher.focus();
     }
   }
 
@@ -435,8 +548,9 @@ class GreenticWebchatElement extends HTMLElement {
       const useLauncher = this.launcher;
       const renderMode = this.renderMode;
       this._launcher.hidden = !useLauncher;
+      this._launcher.dataset.open = String(this.open);
       this._launcher.setAttribute("aria-expanded", String(this.open));
-      this._launcher.setAttribute("aria-label", this.getAttribute("title") || "Open chat");
+      this._launcher.setAttribute("aria-label", this.launcherLabel);
 
       const target = useLauncher ? this._dock : this._inline;
       this._inline.hidden = useLauncher || renderMode === "native";
@@ -444,21 +558,33 @@ class GreenticWebchatElement extends HTMLElement {
 
       if (renderMode === "native") {
         this._iframeToken++;
-        this._iframe && this._iframe.remove();
+        this._surface && this._surface.remove();
+        this._surface = null;
         this._iframe = null;
+        this._loading = null;
         this.mountNative();
         return;
       }
 
       this.unmountNative();
 
-      if (!this._iframe || this._iframe.parentElement !== target) {
-        this._iframe && this._iframe.remove();
+      if (!this._surface || this._surface.parentElement !== target) {
+        this._surface && this._surface.remove();
+        this._surface = document.createElement("div");
+        this._surface.className = "surface";
         this._iframe = document.createElement("iframe");
         this._iframe.className = "frame";
         this._iframe.setAttribute("part", "iframe");
         this._iframe.setAttribute("allow", "clipboard-write");
-        target.append(this._iframe);
+        this._loading = document.createElement("div");
+        this._loading.className = "loading";
+        this._loading.setAttribute("part", "loading");
+        this._loading.append(Object.assign(document.createElement("div"), { className: "spinner" }));
+        this._iframe.addEventListener("load", () => {
+          if (this._loading) this._loading.hidden = true;
+        });
+        this._surface.append(this._iframe, this._loading);
+        target.append(this._surface);
       }
 
       this._iframe.title = this.getAttribute("title") || "Greentic WebChat";
@@ -485,6 +611,7 @@ class GreenticWebchatElement extends HTMLElement {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (token !== this._iframeToken || !this.isConnected || iframe !== this._iframe) return;
+          if (this._loading) this._loading.hidden = false;
           iframe.dataset.greenticSrc = nextUrl;
           iframe.src = nextUrl;
         });
