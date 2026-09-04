@@ -162,9 +162,21 @@ function appAssetPath(urlPath) {
   return safeJoin(assetRoot, withoutBundle || 'index.html');
 }
 
+// The Greentic Designer proxies a running operator environment at
+// /api/operator-env/<id>/proxy/<path> as a byte passthrough: it rewrites no
+// HTML, injects no <base href>, and sets no prefix header. Modelling that here
+// is what lets the suite serve the GUI from somewhere other than the site root
+// — the only condition under which a root-rooted runtime URL is wrong.
+//
+// The prefix is stripped and then discarded, exactly like the real conduit:
+// nothing downstream learns about it, so the page's own URL stays the only
+// evidence it exists. Tests assert on the request URLs the page emits, not on
+// whether this server happened to answer them.
+const MOUNT_PREFIX_PATTERN = /^\/api\/operator-env\/[^/]+\/proxy(?=\/)/;
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
-  const urlPath = url.pathname;
+  const urlPath = url.pathname.replace(MOUNT_PREFIX_PATTERN, '');
 
   if (req.method === 'OPTIONS') {
     send(res, 204, {}, '');
