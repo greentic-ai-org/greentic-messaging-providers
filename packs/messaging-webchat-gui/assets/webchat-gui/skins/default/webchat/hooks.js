@@ -23,7 +23,44 @@ export function createStoreMiddleware() {
 
 export function onBeforeRender(context) {
   console.info('[hooks] rendering tenant', context.skin.tenant);
+  injectEmbedCardStyles();
   setTimeout(injectMicButton, 500);
+}
+
+// ── Adaptive Card fit-up for the embed surface ────────────
+
+// The SPA gives the embed container `embed-webchat-surface tenant-widget-surface`
+// but not `widget-surface`, so the stylesheet's card rules never match and long
+// action labels clip. Durable fix is one word in the SPA; this covers shipped builds.
+var embedStylesInjected = false;
+
+function injectEmbedCardStyles() {
+  if (embedStylesInjected) return;
+  embedStylesInjected = true;
+
+  var css = [
+    '.embed-webchat-surface .webchat__bubble,',
+    '.embed-webchat-surface .webchat__bubble__content,',
+    '.embed-webchat-surface .webchat__stacked-layout__message{max-width:100%}',
+    '.embed-webchat-surface .ac-adaptiveCard,',
+    '.embed-webchat-surface .ac-container,',
+    '.embed-webchat-surface .ac-columnSet,',
+    '.embed-webchat-surface .ac-textBlock{max-width:100%!important}',
+    '.embed-webchat-surface .ac-adaptiveCard{width:100%!important;box-sizing:border-box}',
+    '.embed-webchat-surface .ac-actionSet,',
+    ".embed-webchat-surface .ac-horizontal-separator+div[role='group']",
+    '{display:flex!important;flex-wrap:wrap!important;gap:.5rem;width:100%}',
+    '.embed-webchat-surface .ac-actionSet>button,',
+    '.embed-webchat-surface .ac-actionSet .ac-pushButton,',
+    ".embed-webchat-surface .ac-horizontal-separator+div[role='group']>button",
+    '{flex:1 1 140px;max-width:100%;min-width:0;min-height:40px;',
+    'white-space:normal!important;overflow-wrap:anywhere}'
+  ].join('');
+
+  var style = document.createElement('style');
+  style.id = 'greentic-embed-card-fit';
+  style.textContent = css;
+  document.head.appendChild(style);
 }
 
 // ── Voice input (Web Speech API) ──────────────────────────
@@ -56,7 +93,7 @@ function injectMicButton() {
   btn.style.cssText = [
     'background:none;border:none;cursor:pointer;padding:6px;',
     'display:flex;align-items:center;justify-content:center;',
-    'color:#059669;transition:all .15s;border-radius:50%;',
+    'color:#0b7f5b;transition:all .15s;border-radius:50%;',
     'width:36px;height:36px;flex-shrink:0;'
   ].join('');
   // Static local SVG markup; no user-controlled input reaches this assignment.
