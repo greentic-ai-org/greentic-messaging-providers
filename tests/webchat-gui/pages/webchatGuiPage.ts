@@ -4,8 +4,14 @@ import path from 'node:path';
 
 export type Skin = 'default' | '3aigent';
 
-export function tenantName(options: { skin: Skin; nav?: boolean; login?: boolean }): string {
-  return `${options.skin}-${options.nav ? 'nav' : 'plain'}-${options.login ? 'login' : 'anon'}`;
+// `variant` exists so a spec can claim a tenant of its own without changing
+// the scenario the name encodes. The fixture records the last /token
+// Authorization header PER TENANT, so two specs sharing a name silently
+// overwrite each other's recording — which is a cross-file failure that only
+// shows up in a full parallel run.
+export function tenantName(options: { skin: Skin; nav?: boolean; login?: boolean; variant?: string }): string {
+  const base = `${options.skin}-${options.nav ? 'nav' : 'plain'}-${options.login ? 'login' : 'anon'}`;
+  return options.variant ? `${base}-${options.variant}` : base;
 }
 
 export class WebChatGuiPage {
@@ -27,9 +33,11 @@ export class WebChatGuiPage {
     });
   }
 
-  fullscreenUrl(options: { skin: Skin; nav?: boolean; login?: boolean }) {
+  fullscreenUrl(options: { skin: Skin; nav?: boolean; login?: boolean; variant?: string; mountPrefix?: string; bundle?: string }) {
     const tenant = tenantName(options);
-    return `/v1/web/webchat/${tenant}/?tenant=${tenant}`;
+    const prefix = options.mountPrefix ?? '';
+    const bundle = options.bundle ? `${options.bundle}/` : '';
+    return `${prefix}/v1/web/webchat/${tenant}/${bundle}?tenant=${tenant}`;
   }
 
   hostUrl(options: { skin: Skin; render: 'native' | 'iframe'; mode: 'inline' | 'launcher' | 'popup'; nav?: boolean; login?: boolean; adaptiveCardWidth?: string }) {
@@ -46,7 +54,7 @@ export class WebChatGuiPage {
     return `/test-pages/host.html?${params.toString()}`;
   }
 
-  async openFullscreen(options: { skin: Skin; nav?: boolean; login?: boolean }) {
+  async openFullscreen(options: { skin: Skin; nav?: boolean; login?: boolean; variant?: string; mountPrefix?: string; bundle?: string }) {
     await this.page.goto(this.fullscreenUrl(options));
   }
 

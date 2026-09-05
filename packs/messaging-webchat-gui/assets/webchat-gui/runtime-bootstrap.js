@@ -64,6 +64,52 @@ console.log('[runtime-bootstrap] loaded');
   };
 
   // ---------------------------------------------------------------------------
+  // Mount prefix (reverse-proxy path prefix)
+  // ---------------------------------------------------------------------------
+
+  // A reverse proxy can serve this GUI under a path prefix. The Greentic
+  // Designer does exactly that for a running operator environment, at
+  // /api/operator-env/<id>/proxy/v1/web/webchat/<tenant>/ — and it is a
+  // deliberate byte-passthrough conduit: it rewrites no HTML, injects no
+  // <base href>, and sets no prefix header. So our own URL is the ONLY
+  // evidence the prefix exists, and every runtime URL we build from the site
+  // root instead of from it lands somewhere else entirely.
+  //
+  // That failure is silent rather than loud: the Designer answers an unknown
+  // path from its SPA catch-all with 200 OK and its own index.html, so a
+  // root-rooted i18n fetch sees res.ok === true, never takes the fallback
+  // branch, and fails only in res.json() — leaving the string table empty and
+  // the UI rendering raw keys like `status.experienceUnavailable`.
+  //
+  // The prefix is everything before the route marker. At the site root that is
+  // the empty string, which reproduces the pre-prefix behaviour exactly.
+  //
+  // <base href> is not an option here: fetch() with a root-relative URL ignores
+  // it, and every URL below is consumed by fetch or by Direct Line, not by the
+  // HTML parser.
+  var MOUNT_PREFIX_PATTERN = /^(.*?)\/v1\/(?:web|messaging)\/webchat\//i;
+
+  function mountPrefixFrom(pathname) {
+    var match = String(pathname || '').match(MOUNT_PREFIX_PATTERN);
+    if (!match) return '';
+    // Strip trailing slashes so callers can concatenate a leading-slash path
+    // without ever producing '//'. A pathname of '//v1/web/webchat/...' yields
+    // '/' here, which normalises to ''.
+    return match[1].replace(/\/+$/, '');
+  }
+
+  function resolveMountPrefix() {
+    return mountPrefixFrom(window.location.pathname);
+  }
+
+  var mountPrefix = resolveMountPrefix();
+
+  // Exposed for the test suite and for operator diagnostics; nothing in the
+  // SPA bundle reads it.
+  window.__GREENTIC_MOUNT_PREFIX__ = mountPrefix;
+  window.__greenticMountPrefixFrom__ = mountPrefixFrom;
+
+  // ---------------------------------------------------------------------------
   // Tenant / env / locale resolution
   // ---------------------------------------------------------------------------
 
@@ -129,8 +175,11 @@ console.log('[runtime-bootstrap] loaded');
     return {bundleId: bundleId, flowId: flowId};
   }
 
+  // Both bases carry the mount prefix (empty at the site root), so every URL
+  // derived from them — i18n, tenant config, skins, Direct Line, the SSO
+  // redirect URI — inherits it from one place.
   function resolveGuiBase(tenant, bundleId) {
-    var base = '/v1/web/webchat/' + encodeURIComponent(tenant) + '/';
+    var base = mountPrefix + '/v1/web/webchat/' + encodeURIComponent(tenant) + '/';
     if (bundleId) {
       base += encodeURIComponent(bundleId) + '/';
     }
@@ -138,7 +187,7 @@ console.log('[runtime-bootstrap] loaded');
   }
 
   function backendBase(tenant) {
-    return window.location.origin + '/v1/messaging/webchat/' + encodeURIComponent(tenant);
+    return window.location.origin + mountPrefix + '/v1/messaging/webchat/' + encodeURIComponent(tenant);
   }
 
   // One tenant can host several bundles, so a tenant-scoped route answers for
@@ -1743,7 +1792,7 @@ console.log('[runtime-bootstrap] loaded');
         }
         // Ensure directline config is set — bundle-scoped when a bundle is
         // present so the server routes to the correct deployment.
-        var dlPrefix = '/v1/messaging/webchat/' + encodeURIComponent(tenantId);
+        var dlPrefix = mountPrefix + '/v1/messaging/webchat/' + encodeURIComponent(tenantId);
         if (bundleId) dlPrefix += '/' + encodeURIComponent(bundleId);
         payload.webchat = payload.webchat || {};
         payload.webchat.directline = payload.webchat.directline || {};
@@ -1863,7 +1912,7 @@ console.log('[runtime-bootstrap] loaded');
         }
         skinData.directLine = skinData.directLine || {};
         var ctxParams = 'env=' + encodeURIComponent(env) + '&tenant=' + encodeURIComponent(tenant);
-        var skinDlPrefix = '/v1/messaging/webchat/' + encodeURIComponent(tenant);
+        var skinDlPrefix = mountPrefix + '/v1/messaging/webchat/' + encodeURIComponent(tenant);
         if (bundleId) skinDlPrefix += '/' + encodeURIComponent(bundleId);
         skinData.directLine.tokenUrl = window.location.origin + skinDlPrefix + '/token?' + ctxParams;
         skinData.directLine.domain = window.location.origin + skinDlPrefix + '/v3/directline';
