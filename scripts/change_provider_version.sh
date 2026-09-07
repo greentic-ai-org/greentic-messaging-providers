@@ -65,12 +65,12 @@ python3 tools/provider_versions.py validate --provider "${resolved_provider}"
 
 echo "Changed provider version: ${resolved_provider} -> ${VERSION}"
 
-# Keep Cargo.lock in sync with the bumped Cargo.toml versions. set-provider
-# edits Cargo.toml only; without this the lock drifts and CI's `cargo --locked`
-# clippy/build fails — this bites even with --no-build. --workspace limits the
-# refresh to workspace members so registry deps aren't churned.
-echo "Syncing Cargo.lock to the new version(s)..."
-cargo update --workspace >/dev/null
+# Cargo.lock is kept in sync by `provider_versions.py set-provider` itself, so
+# it is correct for anyone who calls the helper directly too — this wrapper is
+# not the only entry point, and a bump made without it is exactly how PR #390
+# merged a tree that could not build under `--locked`. `validate` above now
+# fails when the lock disagrees, so this script asserts the sync rather than
+# repeating it.
 
 if [ "${BUILD}" -eq 1 ]; then
   scripts/build_providers.sh "${resolved_provider}"

@@ -24,6 +24,25 @@ jobs:
           components: rustfmt, clippy
           targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
+      # Runs BEFORE anything else cargo touches, because every step below
+      # silently rewrites Cargo.lock when it drifts and would hide the failure.
+      #
+      # The publish path reaches cargo through `ci/steps/02_clippy.sh` ->
+      # `tools/sync_wit_deps_from_greentic_interfaces.sh`, which runs
+      # `cargo fetch --locked`. Nothing on the PR path passed `--locked`, so a
+      # release PR that bumped Cargo.toml without Cargo.lock went green here and
+      # then killed `auto-publish-on-version-bump.yml` after the merge -- see
+      # #390. `cargo metadata --locked` reproduces that exact failure in seconds
+      # without building anything.
+      - name: Cargo.lock is in sync (mirrors the --locked publish path)
+        run: |
+          set -euo pipefail
+          if ! cargo metadata --locked --format-version 1 >/dev/null; then
+            echo "::error::Cargo.lock is out of sync with the Cargo.toml files in this PR."
+            echo "::error::Run 'cargo update --workspace --offline' and commit Cargo.lock."
+            echo "::error::A version bump must go through scripts/change_provider_version.sh or tools/provider_versions.py set-provider, both of which now do this for you."
+            exit 1
+          fi
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy (default members only — excludes cdylib WASM components)

@@ -159,6 +159,16 @@ python3 tools/provider_versions.py validate       # all six declarations agree
 scripts/change_provider_version.sh slack 0.5.22   # preferred bump entrypoint
 ```
 
+**`Cargo.lock` is one of those declarations.** `set-provider` / `set-shared`
+re-lock the workspace themselves (`cargo update --workspace --offline`) and
+`validate` fails when a component `Cargo.toml` version is not what `Cargo.lock`
+pins. Before that, a bump left the lock stale: the release PR passed every check
+(none passed `--locked`), merged, and `auto-publish-on-version-bump.yml` then
+died in `ci/steps/02_clippy.sh` on `cargo fetch --locked` having published
+nothing — see #390 / #391 / #392 and `docs/release-policy.md`. `ci.yml`'s
+`build-check` now runs `cargo metadata --locked` first, so the PR fails instead
+of the release.
+
 `ci/provider-matrix.json` is also what `auto-publish-on-version-bump.yml` diffs — a
 bump anywhere else without touching the matrix publishes nothing.
 
