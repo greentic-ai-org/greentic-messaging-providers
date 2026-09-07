@@ -6,13 +6,17 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
+import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX_PATH = ROOT / "ci" / "provider-matrix.json"
 SHARED_MANIFEST = ROOT / "crates" / "provider-common" / "Cargo.toml"
+LOCK_PATH = ROOT / "Cargo.lock"
 VERSION_RE = re.compile(r'^(version\s*=\s*)"([^"]+)"', re.MULTILINE)
 YAML_VERSION_RE = re.compile(r"^(\s*version:\s*)([^\n#]+)", re.MULTILINE)
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
@@ -39,6 +43,138 @@ def write_toml_version(path: Path, version: str) -> None:
     if count != 1:
         raise SystemExit(f"could not update version in {path}")
     path.write_text(updated, encoding="utf-8")
+
+
+# A generated provider's build-answer.json spells its release version
+# `pack_version`; `schema_version` in the same file is unrelated and must never
+# be touched, so the key is looked up by name rather than by suffix.
+JSON_VERSION_KEYS = ("pack_version", "version")
+
+
+def json_version_key(data: dict, path: Path) -> str:
+    for key in JSON_VERSION_KEYS:
+        if key in data:
+            return key
+    raise SystemExit(f"no {' or '.join(JSON_VERSION_KEYS)} key found in {path}")
+
+
+def read_json_version(path: Path) -> str:
+    data = json.loads(path.read_text())
+    return data[json_version_key(data, path)]
+
+
+def write_json_version(path: Path, version: str) -> None:
+    data = json.loads(path.read_text())
+    data[json_version_key(data, path)] = version
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def read_manifest_version(path: Path) -> str:
+    """Read a declared version from a provider manifest.
+
+    A provider's `manifests` entry is usually a Cargo.toml, but the two
+    generated providers point at a `build-answer.json` instead. Reading a JSON
+    file with the TOML regex matches nothing and aborts the whole run, which is
+    why `validate` (with no --provider) has been unusable.
+    """
+    if path.suffix == ".json":
+        return read_json_version(path)
+    return read_toml_version(path)
+
+
+def write_manifest_version(path: Path, version: str) -> None:
+    if path.suffix == ".json":
+        write_json_version(path, version)
+        return
+    write_toml_version(path, version)
+
+
+def read_cargo_package(path: Path) -> tuple[str, str] | None:
+    """Return (name, version) for a Cargo.toml, or None if it inherits either.
+
+    Parsed with tomllib rather than VERSION_RE because the lock check compares
+    against a package identity — a `[lib] name` or a `[[bin]] name` ahead of
+    `[package]` would make a first-match regex compare the wrong crate. A
+    manifest using `version.workspace = true` declares no version of its own,
+    so there is nothing here for the lock to disagree with.
+    """
+    package = tomllib.loads(path.read_text()).get("package", {})
+    name = package.get("name")
+    version = package.get("version")
+    if isinstance(name, str) and isinstance(version, str):
+        return name, version
+    return None
+
+
+def load_lock_versions() -> dict[str, list[str]]:
+    """Map every package name in Cargo.lock to the version(s) locked for it."""
+    if not LOCK_PATH.exists():
+        raise SystemExit(f"{LOCK_PATH} is missing; run `cargo update --workspace --offline`")
+    locked: dict[str, list[str]] = {}
+    for package in tomllib.loads(LOCK_PATH.read_text()).get("package", []):
+        name = package.get("name")
+        version = package.get("version")
+        if name and version:
+            locked.setdefault(name, []).append(version)
+    return locked
+
+
+def check_manifest_against_lock(path: Path, locked: dict[str, list[str]], errors: list[str]) -> None:
+    """Fail when a workspace member's Cargo.toml version is not in Cargo.lock.
+
+    This is the assertion that would have caught PR #390: the version moved in
+    every declaration except the lock, so the PR was green while the tree could
+    not build under `--locked`, and the publish workflow died before shipping
+    anything.
+    """
+    if path.suffix != ".toml":
+        return
+    package = read_cargo_package(path)
+    if package is None:
+        return
+    name, declared = package
+    versions = locked.get(name)
+    relative = path.relative_to(ROOT)
+    if versions is None:
+        errors.append(
+            f"Cargo.lock: no entry for package '{name}' declared in {relative}; "
+            "run `cargo update --workspace --offline`"
+        )
+    elif declared not in versions:
+        errors.append(
+            f"Cargo.lock: '{name}' is locked at {', '.join(versions)} but {relative} "
+            f"declares {declared}; run `cargo update --workspace --offline`"
+        )
+
+
+def sync_cargo_lock() -> None:
+    """Re-lock the workspace members after a version bump.
+
+    `set-provider` / `set-shared` move a package version in Cargo.toml; without
+    this the lock keeps the old version and every `cargo --locked` invocation
+    downstream fails. `--workspace` limits the refresh to workspace members so
+    registry dependencies are not churned; `--offline` keeps the helper usable
+    without network. Verified to touch exactly the bumped members and nothing
+    else.
+    """
+    if shutil.which("cargo") is None:
+        raise SystemExit(
+            "cargo was not found on PATH, so Cargo.lock cannot be updated to match the "
+            "new version. Refusing to leave the lock stale -- install cargo and re-run, "
+            "or run `cargo update --workspace --offline` yourself before committing."
+        )
+    print("syncing Cargo.lock (cargo update --workspace --offline)...")
+    result = subprocess.run(
+        ["cargo", "update", "--workspace", "--offline"],
+        cwd=ROOT,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            "cargo update --workspace --offline failed, so Cargo.lock is now out of sync "
+            "with the bumped Cargo.toml version(s). Fix the failure above (a cold registry "
+            "cache needs a one-off `cargo fetch`) and re-run before committing."
+        )
 
 
 def read_pack_yaml_version(path: Path) -> str:
@@ -188,13 +324,16 @@ def cmd_validate(args: argparse.Namespace) -> int:
     matrix = load_matrix()
     names = sorted(matrix["providers"].keys()) if args.provider == "all" else [args.provider]
     errors: list[str] = []
+    locked = load_lock_versions()
     for name in names:
         provider = matrix["providers"][name]
         expected = provider["version"]
         for manifest in provider["manifests"]:
-            found = read_toml_version(ROOT / manifest)
+            manifest_path = ROOT / manifest
+            found = read_manifest_version(manifest_path)
             if found != expected:
                 errors.append(f"{manifest}: {found} != provider {name} {expected}")
+            check_manifest_against_lock(manifest_path, locked, errors)
         pack_yaml, pack_manifest = pack_paths(provider)
         if pack_yaml.exists():
             found = read_pack_yaml_version(pack_yaml)
@@ -205,6 +344,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
             if found != expected:
                 errors.append(f"{pack_manifest.relative_to(ROOT)}: {found} != provider {name} {expected}")
         validate_answer_owned_pack_version(name, provider["pack"], expected, errors)
+    # The shared crate is bumped by `set-shared`, which had the same lock gap.
+    check_manifest_against_lock(SHARED_MANIFEST, locked, errors)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
@@ -220,7 +361,7 @@ def cmd_set_provider(args: argparse.Namespace) -> int:
     old_version = provider["version"]
     provider["version"] = args.version
     for manifest in provider["manifests"]:
-        write_toml_version(ROOT / manifest, args.version)
+        write_manifest_version(ROOT / manifest, args.version)
     pack_yaml, pack_manifest = pack_paths(provider)
     if pack_yaml.exists():
         write_pack_yaml_version(pack_yaml, args.version, old_version)
@@ -228,12 +369,14 @@ def cmd_set_provider(args: argparse.Namespace) -> int:
         update_manifest_json_versions(pack_manifest, args.version)
     update_answer_owned_pack_version(provider["pack"], args.version, old_version)
     write_matrix(matrix)
+    sync_cargo_lock()
     print(f"set {name} to {args.version}")
     return 0
 
 
 def cmd_set_shared(args: argparse.Namespace) -> int:
     write_toml_version(SHARED_MANIFEST, args.version)
+    sync_cargo_lock()
     print(f"set shared crate to {args.version}")
     return 0
 

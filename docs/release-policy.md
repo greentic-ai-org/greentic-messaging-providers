@@ -28,6 +28,23 @@ validates that the matrix, component manifests, and pack metadata agree, and
 builds that provider locally. Pass `--no-build` when only metadata should be
 updated.
 
+**`Cargo.lock` is the sixth declaration, and it used to be the one nobody
+moved.** `set-provider` and `set-shared` now run `cargo update --workspace
+--offline` themselves (limited to workspace members, so no registry dependency
+is churned) and refuse to finish if cargo is unavailable, and `validate` fails
+when a component `Cargo.toml` version is not the one `Cargo.lock` pins.
+
+That gap was expensive: PR #390 bumped every declaration except the lock. Every
+PR check passed — none of them passed `--locked` — so it merged, and
+`auto-publish-on-version-bump.yml` then died in `ci/steps/02_clippy.sh` (via
+`tools/sync_wit_deps_from_greentic_interfaces.sh`'s `cargo fetch --locked`) with
+`cannot update the lock file ... because --locked was passed`. Nothing
+published, the repo looked released, and the only tell was the run's ~30s
+duration. #391 repaired the lock but changed no version, so it triggered no
+publish; #392 had to burn two further version numbers. The PR path now runs
+`cargo metadata --locked` in `ci.yml`'s `build-check`, which reproduces that
+failure in seconds without building anything.
+
 The current policy uses explicit manual version bumps. We are not deriving
 release versions from commit messages, workspace version, or hidden changeset
 state.
