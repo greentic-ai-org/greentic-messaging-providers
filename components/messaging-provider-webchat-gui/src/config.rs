@@ -26,6 +26,10 @@ pub(crate) fn default_text_input_enabled() -> bool {
     true
 }
 
+pub(crate) fn default_auto_start_on_open() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct ProviderConfig {
@@ -46,6 +50,8 @@ pub(crate) struct ProviderConfig {
     pub(crate) skin: String,
     #[serde(default = "default_text_input_enabled")]
     pub(crate) text_input_enabled: bool,
+    #[serde(default = "default_auto_start_on_open")]
+    pub(crate) auto_start_on_open: bool,
     #[serde(default)]
     pub(crate) nav_links: Vec<Value>,
     #[serde(default = "default_oauth_enabled")]
@@ -74,6 +80,8 @@ pub(crate) struct ProviderConfigOut {
     pub(crate) skin: String,
     #[serde(default = "default_text_input_enabled")]
     pub(crate) text_input_enabled: bool,
+    #[serde(default = "default_auto_start_on_open")]
+    pub(crate) auto_start_on_open: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) nav_links: Vec<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -112,6 +120,7 @@ pub(crate) fn default_config_out() -> ProviderConfigOut {
         presentation_mode: PresentationMode::Standalone,
         skin: default_skin(),
         text_input_enabled: default_text_input_enabled(),
+        auto_start_on_open: default_auto_start_on_open(),
         nav_links: Vec::new(),
         jwt_signing_key_b64: None,
         oauth_enabled: default_oauth_enabled(),
@@ -218,7 +227,7 @@ fn decode_injected_config_field(input: &Value, key: &str) -> Option<Value> {
     }
 
     match key {
-        "enabled" | "oauth_enabled" | "text_input_enabled" => {
+        "enabled" | "oauth_enabled" | "text_input_enabled" | "auto_start_on_open" => {
             trimmed.parse::<bool>().ok().map(Value::Bool)
         }
         "nav_links" => serde_json::from_str(trimmed).ok(),
@@ -241,6 +250,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "presentation_mode",
         "skin",
         "text_input_enabled",
+        "auto_start_on_open",
         "nav_links",
         "oauth_enabled",
         "oauth_providers",
@@ -265,6 +275,7 @@ pub(crate) fn load_config(input: &Value) -> Result<ProviderConfig, String> {
         "presentation_mode",
         "skin",
         "text_input_enabled",
+        "auto_start_on_open",
         "nav_links",
         "oauth_enabled",
         "oauth_providers",

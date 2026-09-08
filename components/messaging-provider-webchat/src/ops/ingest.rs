@@ -174,6 +174,34 @@ fn handle_directline_path(request: &HttpInV1, offset: usize) -> Vec<u8> {
     http_out_v1_bytes(&out)
 }
 
+/// Whether conversation-create should emit the empty auto-start envelope.
+///
+/// A card-led flow absorbs that turn to render a welcome card; an
+/// agent-forward flow (`start → dw.agent`) has nothing to absorb it and the
+/// agent answers an empty message. Absent config keeps the historical
+/// behaviour, so only an explicit `false` switches it off.
+fn auto_start_on_open(config: Option<&Value>) -> bool {
+    let Some(obj) = config.and_then(Value::as_object) else {
+        return true;
+    };
+    if let Some(value) = obj.get("auto_start_on_open") {
+        return bool_from_config_value(value).unwrap_or(true);
+    }
+    // The host may inject non-secret config fields base64-encoded.
+    obj.get("auto_start_on_open_b64")
+        .and_then(Value::as_str)
+        .and_then(|encoded| general_purpose::STANDARD.decode(encoded.trim()).ok())
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .and_then(|text| text.trim().parse::<bool>().ok())
+        .unwrap_or(true)
+}
+
+fn bool_from_config_value(value: &Value) -> Option<bool> {
+    value
+        .as_bool()
+        .or_else(|| value.as_str().and_then(|s| s.trim().parse::<bool>().ok()))
+}
+
 /// Post-process the Direct Line response to emit `ChannelMessageEnvelope`
 /// events for conversation creation and activity forwarding.
 ///
@@ -184,10 +212,19 @@ fn stamp_ingest_envelopes(request: &HttpInV1, dl_path: &str, out: &mut HttpOutV1
     // auto-start the default flow when a new conversation is created.
     // The welcome experience is driven entirely by the flow — the JS-side
     // welcome overlay has been removed in favour of this server-side trigger.
-    if request.method.eq_ignore_ascii_case("POST")
+    let conversation_created = request.method.eq_ignore_ascii_case("POST")
         && dl_path == "/v3/directline/conversations"
-        && out.status == 201
-    {
+        && out.status == 201;
+    let auto_start = auto_start_on_open(request.config.as_ref());
+    if conversation_created && !auto_start {
+        telemetry::emit(
+            Level::Debug,
+            PROVIDER_TYPE,
+            "autoStart envelope suppressed by auto_start_on_open=false",
+            &[],
+        );
+    }
+    if conversation_created && auto_start {
         let (env_id, tenant_id) = extract_context_from_response_headers(&out.headers)
             .unwrap_or_else(|| ("default".to_string(), "default".to_string()));
         let user_id = out
@@ -526,6 +563,93 @@ mod tests {
             body_b64: String::new(),
             events: Vec::new(),
         }
+    }
+
+    fn conversation_create_headers() -> Vec<Header> {
+        vec![
+            Header {
+                name: "X-Greentic-Env".into(),
+                value: "prod".into(),
+            },
+            Header {
+                name: "X-Greentic-Tenant".into(),
+                value: "acme".into(),
+            },
+            Header {
+                name: "X-Greentic-User".into(),
+                value: "alice".into(),
+            },
+            Header {
+                name: "X-Greentic-ConversationId".into(),
+                value: "conv-1".into(),
+            },
+        ]
+    }
+
+    fn stamp_conversation_create(config: Option<Value>) -> HttpOutV1 {
+        let mut request =
+            build_ingest_request("POST", "/v3/directline/conversations", vec![], None);
+        request.config = config;
+        let mut out = build_dl_response_201(conversation_create_headers());
+        stamp_ingest_envelopes(&request, "/v3/directline/conversations", &mut out);
+        out
+    }
+
+    #[test]
+    fn auto_start_envelope_is_emitted_when_the_flag_is_absent_or_true() {
+        assert_eq!(stamp_conversation_create(None).events.len(), 1);
+        assert_eq!(
+            stamp_conversation_create(Some(json!({"auto_start_on_open": true})))
+                .events
+                .len(),
+            1
+        );
+        assert_eq!(
+            stamp_conversation_create(Some(json!({"auto_start_on_open": "true"})))
+                .events
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn auto_start_envelope_is_suppressed_when_the_flag_is_false() {
+        let out = stamp_conversation_create(Some(json!({"auto_start_on_open": false})));
+        assert!(out.events.is_empty());
+        assert_eq!(out.status, 201);
+
+        assert!(
+            stamp_conversation_create(Some(json!({"auto_start_on_open": "false"})))
+                .events
+                .is_empty()
+        );
+
+        let encoded = general_purpose::STANDARD.encode("false");
+        assert!(
+            stamp_conversation_create(Some(json!({"auto_start_on_open_b64": encoded})))
+                .events
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_suppressed_auto_start_still_forwards_user_activities() {
+        let body = json!({"type": "message", "text": "hello", "from": {"id": "alice"}});
+        let mut request = build_ingest_request(
+            "POST",
+            "/v3/directline/conversations/conv-1/activities",
+            vec![],
+            Some(&body),
+        );
+        request.config = Some(json!({"auto_start_on_open": false}));
+        let mut out = build_dl_response_201(conversation_create_headers());
+        stamp_ingest_envelopes(
+            &request,
+            "/v3/directline/conversations/conv-1/activities",
+            &mut out,
+        );
+        assert_eq!(out.events.len(), 1);
+        assert_eq!(out.events[0].text.as_deref(), Some("hello"));
     }
 
     #[test]

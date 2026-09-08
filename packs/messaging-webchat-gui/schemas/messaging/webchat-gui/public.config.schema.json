@@ -49,6 +49,11 @@
       "default": true,
       "description": "Whether the embedded Web Component should show the text input box."
     },
+    "auto_start_on_open": {
+      "type": "boolean",
+      "default": true,
+      "description": "Send an empty opening turn when a conversation is created so the flow can render a welcome card. Switch off for agent-first workers, where nothing absorbs that turn and the agent answers an empty message."
+    },
     "nav_links": {
       "type": "array",
       "default": [],

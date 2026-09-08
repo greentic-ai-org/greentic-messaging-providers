@@ -448,6 +448,10 @@ fn apply_answers_impl(
             .get("text_input_enabled")
             .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
             .unwrap_or(merged.text_input_enabled);
+        merged.auto_start_on_open = answers
+            .get("auto_start_on_open")
+            .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
+            .unwrap_or(merged.auto_start_on_open);
         merged.nav_links = nav_links_from_answers(&answers).unwrap_or(merged.nav_links);
     }
 
@@ -522,6 +526,12 @@ fn apply_answers_impl(
                 .get("text_input_enabled")
                 .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
                 .unwrap_or(merged.text_input_enabled);
+        }
+        if has("auto_start_on_open") {
+            merged.auto_start_on_open = answers
+                .get("auto_start_on_open")
+                .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s == "true")))
+                .unwrap_or(merged.auto_start_on_open);
         }
         if has("nav_links") {
             merged.nav_links = nav_links_from_answers(&answers).unwrap_or_default();
@@ -773,11 +783,23 @@ mod tests {
             crate::DEFAULT_OAUTH_ENABLED
         );
         assert_eq!(value["config"]["text_input_enabled"], true);
+        assert_eq!(value["config"]["auto_start_on_open"], true);
         assert!(value["config"].get("jwt_signing_key_b64").is_none());
         let generated = value["secrets_patch"]["set"]["jwt_signing_key"]
             .as_str()
             .expect("generated jwt signing key");
         assert_eq!(generated.len(), 20);
+    }
+
+    #[test]
+    fn apply_answers_round_trips_auto_start_on_open() {
+        let value = apply_setup(json!({
+            "public_base_url": "https://chat.example.com",
+            "route": "webchat",
+            "auto_start_on_open": false
+        }));
+        assert_eq!(value["ok"], true);
+        assert_eq!(value["config"]["auto_start_on_open"], false);
     }
 
     #[test]

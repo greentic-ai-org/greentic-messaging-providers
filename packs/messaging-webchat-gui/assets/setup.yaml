@@ -286,6 +286,14 @@ questions:
       field: presentation_mode
       eq: "embed_webcomponent"
 
+  - name: auto_start_on_open
+    title: Send an opening turn
+    kind: boolean
+    required: false
+    default: "true"
+    help: "Send an empty opening turn when a conversation is created so the flow can render a welcome card. Switch off for agent-first workers (start -> agent), where nothing absorbs that turn and the agent replies to an empty message before the user has typed."
+    group: Behaviour
+
   - name: nav_links
     title: "Top-menu nav links"
     kind: table
